@@ -1,0 +1,326 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\SubscriberResource\Pages;
+use App\Filament\Resources\SubscriberResource\RelationManagers;
+use App\Models\Subscriber;
+use App\Services\PaymentService;
+use Filament\Forms;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class SubscriberResource extends Resource
+{
+    protected static ?string $model = Subscriber::class;
+
+    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-users';
+
+    protected static string | \UnitEnum | null $navigationGroup = 'إدارة المشتركين';
+
+    protected static ?string $modelLabel = 'مشترك';
+
+    protected static ?string $pluralModelLabel = 'المشتركون';
+
+    protected static ?int $navigationSort = 2;
+
+
+    public static function form(\Filament\Schemas\Schema $form): \Filament\Schemas\Schema
+    {
+        return $form->schema([
+                \Filament\Schemas\Components\Section::make('البيانات الأساسية')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TextInput::make('name')
+                        ->label('اسم المشترك')
+                        ->required()
+                        ->maxLength(255),
+
+                    \Ysfkaya\FilamentPhoneInput\Forms\PhoneInput::make('phone')
+                        ->label('رقم الهاتف')
+                        ->defaultCountry('YE')
+                        ->initialCountry('ye'),
+
+                    Forms\Components\Select::make('square_id')
+                        ->label('المربع السكني')
+                        ->relationship('square', 'name')
+                        ->required()
+                        ->searchable()
+                        ->preload(),
+
+                    Forms\Components\Select::make('status')
+                        ->label('الحالة')
+                        ->options([
+                            'active' => 'نشط',
+                            'inactive' => 'غير نشط',
+                            'suspended' => 'موقوف',
+                        ])
+                        ->default('active')
+                        ->required(),
+
+                    Forms\Components\DatePicker::make('subscription_start_date')
+                        ->label('تاريخ بداية الاشتراك')
+                        ->default(now()),
+
+                    Forms\Components\Textarea::make('address')
+                        ->label('العنوان')
+                        ->columnSpanFull()
+                        ->rows(2),
+                ]),
+
+            \Filament\Schemas\Components\Section::make('الحساب المالي وسجل الحركات')
+                ->visible(fn ($record) => $record !== null)
+                ->schema([
+                    Forms\Components\TextInput::make('credit_balance')
+                        ->label('إجمالي الرصيد الدائن (للمشترك والعدادات)')
+                        ->formatStateUsing(function ($record) {
+                            if (!$record) return 0;
+                            $subscriberCredit = $record->balance > 0 ? $record->balance : 0;
+                            $metersCredit = $record->meters->sum(fn($meter) => $meter->balance > 0 ? $meter->balance : 0);
+                            return number_format($subscriberCredit + $metersCredit, 2);
+                        })
+                        ->suffix('ريال')
+                        ->disabled()
+                        ->dehydrated(false),
+                        
+                    Forms\Components\TextInput::make('debit_balance')
+                        ->label('إجمالي الرصيد المدين (للمشترك والعدادات)')
+                        ->formatStateUsing(function ($record) {
+                            if (!$record) return 0;
+                            $subscriberDebit = $record->getOutstandingBalance();
+                            $metersDebit = $record->meters->sum(fn($meter) => $meter->getOutstandingBalance());
+                            return number_format($subscriberDebit + $metersDebit, 2);
+                        })
+                        ->suffix('ريال')
+                        ->disabled()
+                        ->dehydrated(false),
+                        
+                    Forms\Components\Repeater::make('meters')
+                        ->relationship('meters')
+                        ->label('أرصدة العدادات التابعة')
+                        ->schema([
+                            Forms\Components\TextInput::make('meter_number')
+                                ->label('رقم العداد')
+                                ->formatStateUsing(fn ($record) => $record ? "عداد رقم: " . $record->id . " - " . ($record->tenant_name ?? 'بدون مستأجر') : '-')
+                                ->disabled()
+                                ->dehydrated(false),
+                            Forms\Components\TextInput::make('meter_credit')
+                                ->label('رصيد دائن')
+                                ->formatStateUsing(fn ($record) => $record && $record->balance > 0 ? number_format($record->balance, 2) : 0)
+                                ->suffix('ريال')
+                                ->disabled()
+                                ->dehydrated(false),
+                            Forms\Components\TextInput::make('meter_debit')
+                                ->label('رصيد مدين')
+                                ->formatStateUsing(fn ($record) => $record ? number_format($record->getOutstandingBalance(), 2) : 0)
+                                ->suffix('ريال')
+                                ->disabled()
+                                ->dehydrated(false),
+                        ])
+                        ->columns(3)
+                        ->disableItemCreation()
+                        ->disableItemDeletion()
+                        ->disableItemMovement()
+                        ->columnSpanFull()
+                        ->dehydrated(false)
+                        ->visible(fn ($record) => $record && $record->meters()->count() > 0),
+
+                    \Filament\Schemas\Components\Livewire::make(\App\Livewire\SubscriberTransactionsTable::class)
+                        ->key('transactions-table')
+                        ->columnSpanFull(),
+                ])
+                ->columns(2),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('id')
+                    ->label('#')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('name')
+                    ->label('الاسم')
+                    ->searchable()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('subscription_start_date')
+                    ->label('بداية الاشتراك')
+                    ->date()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('phone')
+                    ->label('الهاتف')
+                    ->extraAttributes(['dir' => 'ltr'])
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('square.name')
+                    ->label('المربع السكني')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('balance')
+                    ->label('الرصيد الدائن')
+                    ->numeric(2)->suffix(' ريال')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('status')
+                    ->label('الحالة')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'active' => 'نشط',
+                        'inactive' => 'غير نشط',
+                        'suspended' => 'موقوف',
+                        default => $state,
+                    })
+                    ->colors([
+                        'success' => 'active',
+                        'warning' => 'suspended',
+                        'danger' => 'inactive',
+                    ]),
+
+                Tables\Columns\TextColumn::make('meters_count')
+                    ->label('العدادات')
+                    ->counts('meters')
+                    ->sortable(),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('square_id')
+                    ->label('المربع السكني')
+                    ->relationship('square', 'name'),
+
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('الحالة')
+                    ->options([
+                        'active' => 'نشط',
+                        'inactive' => 'غير نشط',
+                        'suspended' => 'موقوف',
+                    ]),
+            ])
+            ->actions([
+                \Filament\Actions\Action::make('collect_payment')
+                    ->label('تحصيل دفعة')
+                    ->icon('heroicon-o-banknotes')
+                    ->color('success')
+                    ->form([
+                        Forms\Components\TextInput::make('amount')
+                            ->label('المبلغ')
+                            ->numeric()
+                            ->required()
+                            ->minValue(0.01)
+                            ->prefix('ريال'),
+
+                        Forms\Components\Select::make('invoice_id')
+                            ->label('الفاتورة (اختياري)')
+                            ->options(function ($record) {
+                                return $record->invoices()
+                                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                                    ->pluck('bill_number', 'id');
+                            })
+                            ->placeholder('تطبيق على الأقدم تلقائياً')
+                            ->searchable(),
+
+                        Forms\Components\Select::make('payment_method')
+                            ->label('طريقة الدفع')
+                            ->options([
+                                'cash' => 'نقدي',
+                                'bank_transfer' => 'تحويل بنكي',
+                                'check' => 'شيك',
+                            ])
+                            ->default('cash')
+                            ->required(),
+
+                        Forms\Components\Textarea::make('notes')
+                            ->label('ملاحظات')
+                            ->rows(2),
+                    ])
+                    ->action(function (Subscriber $record, array $data): void {
+                        $service = new PaymentService();
+                        $payment = $service->collectPayment(
+                            subscriber: $record,
+                            amount: (float) $data['amount'],
+                            invoiceId: $data['invoice_id'] ?? null,
+                            paymentMethod: $data['payment_method'],
+                            notes: $data['notes'] ?? null,
+                        );
+
+                        Notification::make()
+                            ->title('تم التحصيل بنجاح')
+                            ->body("سند قبض رقم: {$payment->receipt_number}")
+                            ->success()
+                            ->send();
+                    }),
+
+                \Filament\Actions\Action::make('add_service')
+                    ->label('طلب وايت')
+                    ->icon('heroicon-o-truck')
+                    ->color('info')
+                    ->form([
+                        Forms\Components\TextInput::make('amount')
+                            ->label('سعر الوايت')
+                            ->numeric()
+                            ->required()
+                            ->prefix('ريال'),
+
+                        Forms\Components\DatePicker::make('service_date')
+                            ->label('تاريخ الخدمة')
+                            ->default(now())
+                            ->required(),
+
+                        Forms\Components\Textarea::make('notes')
+                            ->label('ملاحظات')
+                            ->rows(2),
+                    ])
+                    ->action(function (Subscriber $record, array $data): void {
+                        $record->serviceRequests()->create([
+                            'service_type' => 'water_tanker',
+                            'amount' => $data['amount'],
+                            'service_date' => $data['service_date'],
+                            'status' => 'completed',
+                            'notes' => $data['notes'] ?? null,
+                        ]);
+
+                        Notification::make()
+                            ->title('تم إضافة طلب الوايت')
+                            ->success()
+                            ->send();
+                    }),
+
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                \Filament\Actions\BulkActionGroup::make([
+                    \Filament\Actions\DeleteBulkAction::make(),
+                ]),
+            ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            RelationManagers\MetersRelationManager::class,
+            RelationManagers\InvoicesRelationManager::class,
+            RelationManagers\PaymentsRelationManager::class,
+            RelationManagers\SubscriptionFeesRelationManager::class,
+            RelationManagers\ServiceRequestsRelationManager::class,
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListSubscribers::route('/'),
+            'create' => Pages\CreateSubscriber::route('/create'),
+            'edit' => Pages\EditSubscriber::route('/{record}/edit'),
+        ];
+    }
+}
+
+
+
+
+
