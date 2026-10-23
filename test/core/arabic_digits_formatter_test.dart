@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/widgets/app_numeric_field.dart';
+import 'package:water_project/core/widgets/app_numeric_field.dart';
 
 void main() {
   test('converts Arabic and Persian digits to English without changing length', () {
