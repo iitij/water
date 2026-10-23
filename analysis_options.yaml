@@ -4,6 +4,9 @@ analyzer:
   language:
     strict-casts: true
     strict-inference: true
+  exclude:
+    - build/**
+    - .dart_tool/**
   errors:
     invalid_annotation_target: ignore
 
@@ -16,6 +19,7 @@ linter:
     close_sinks: true
     directives_ordering: true
     no_leading_underscores_for_local_identifiers: true
+    prefer_const_constructors: true
     prefer_final_locals: true
     prefer_single_quotes: true
     unawaited_futures: true

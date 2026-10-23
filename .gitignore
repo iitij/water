@@ -35,8 +35,11 @@ whatsapp-server/uploads/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+.pub-cache/
 build/
 coverage/
+*.freezed.dart
+*.g.dart
 *.iml
 
 # تجاهل ملفات النظام المؤقتة
