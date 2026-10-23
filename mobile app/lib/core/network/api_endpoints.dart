@@ -9,6 +9,9 @@ class ApiEndpoints {
   static const legacyUser = 'user';
   static const profile = 'profile';
 
+  // Global search across subscribers, invoices, meters, payments and squares.
+  static const globalSearch = 'search';
+
   // Dashboard and reports.
   static const adminDashboard = 'admin/dashboard';
   static const adminStats = 'admin/stats';

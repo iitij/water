@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,6 +8,10 @@ import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/splash_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
+import '../../features/global_search/data/global_search_remote_datasource.dart';
+import '../../features/global_search/data/global_search_repository.dart';
+import '../../features/global_search/presentation/cubit/global_search_cubit.dart';
+import '../../features/global_search/presentation/pages/global_search_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/home/presentation/services_screen.dart';
 import '../../features/invoices/data/models/invoice_model.dart';
@@ -31,6 +36,7 @@ import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
 import '../finance/finance_locator.dart';
 import '../finance/finance_module.dart';
+import '../fouad/api_client.dart';
 import '../fouad/fouad_module.dart';
 import '../navigation/app_shell.dart';
 import '../navigation/sub_page.dart';
@@ -120,6 +126,16 @@ class AppRouter {
               child: ServicesScreen(
                 autofocus: state.uri.queryParameters['search'] == '1',
               ),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.globalSearch,
+            name: 'global-search',
+            builder: (context, state) => BlocProvider<GlobalSearchCubit>(
+              create: (_) => GlobalSearchCubit(
+                GlobalSearchRepository(GlobalSearchRemoteDatasource(ApiClient())),
+              ),
+              child: const GlobalSearchScreen(),
             ),
           ),
           GoRoute(

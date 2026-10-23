@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\MeterController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReadingController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ServiceRequestController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SquareController;
@@ -29,6 +30,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user'])->name('api.user');
     Route::put('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update');
     Route::post('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update.legacy');
+
+    // Global search across the resources the signed-in user may list.
+    Route::get('/search', [SearchController::class, 'index'])->name('api.search');
 
     // Dashboard and reports.
     Route::get('/admin/dashboard', [AdminController::class, 'dashboard']);
