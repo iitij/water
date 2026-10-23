@@ -95,7 +95,7 @@ class AppNumericField extends StatelessWidget {
             : TextInputType.numberWithOptions(decimal: allowDecimal, signed: false),
         inputFormatters: formatters,
         style: const TextStyle(
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           letterSpacing: .3,
           fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
         ),

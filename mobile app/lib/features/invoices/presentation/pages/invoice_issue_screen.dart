@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/finance_route_names.dart';
+import '../../../../core/ui/app_surfaces.dart';
 
 /// A small, explicit first step instead of dropping users into a manual form.
 /// Reuses the existing Laravel-backed generation engines without duplicating
@@ -35,23 +36,21 @@ class InvoiceIssueScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 const Text('ستراجع البيانات والمبلغ قبل الإصدار.'),
                 const SizedBox(height: 24),
-                for (final option in options) Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    side: BorderSide(color: Theme.of(context).dividerColor),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: ListTile(
+                for (final option in options)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AppCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
                     leading: Icon(option.icon, color: Theme.of(context).colorScheme.primary, size: 28),
-                    title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(option.description),
                     trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
                     onTap: () => context.push(option.route),
+                    ),
                   ),
-                ),
+                  ),
               ],
             ),
           ),

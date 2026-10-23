@@ -6,8 +6,14 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../data/models/reading.dart';
 import '../../data/services/reading_invoice_actions_service.dart';
@@ -337,7 +343,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     const SizedBox(height: 10),
                     const _NoticeBanner(
                       text: 'تعمل دون اتصال — تم حساب الفترة من البيانات المحلية.',
-                      color: Color(0xFF0E7490),
+                      color: AppColors.info,
                       icon: Icons.cloud_off_outlined,
                     ),
                   ],
@@ -360,17 +366,12 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   const SizedBox(height: 16),
                   InkWell(
                     onTap: _selectReadingDate,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     child: InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'تاريخ القراءة الفعلي',
                         prefixIcon: Icon(Icons.calendar_month_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                        ),
+                        suffixIcon: Icon(Icons.expand_more_rounded, size: 20),
                       ),
                       child: Text(_formatDate(_readingDate)),
                     ),
@@ -386,7 +387,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       hintText: 'أدخل الرقم الظاهر على العداد',
                       prefixIcon: const Icon(Icons.speed_outlined),
                       suffixText: 'وحدة',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onChanged: (_) => setState(() {}),
                     validator: (value) {
@@ -406,14 +406,14 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     textDirection: TextDirection.rtl,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
                   if (period.autoIssueInvoice) ...[
                     const SizedBox(height: 18),
                     const _NoticeBanner(
                       text: 'تنبيه الفوترة التلقائية: سيصدر النظام فاتورة فور حفظ هذه القراءة.',
-                      color: Color(0xFFF59E0B),
+                      color: AppColors.warning,
                       icon: Icons.warning_amber_rounded,
                     ),
                     const SizedBox(height: 8),
@@ -438,18 +438,26 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   _imageControl(),
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 12),
-                    Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                    Text(
+                      _errorMessage!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                    ),
                   ],
                   const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _isSaving ? null : _save,
-                    icon: _isSaving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(_isSaving ? 'جارٍ حفظ القراءة…' : 'حفظ القراءة'),
+                  SizedBox(
+                    height: 50,
+                    child: FilledButton.icon(
+                      onPressed: _isSaving ? null : _save,
+                      icon: _isSaving
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_rounded, size: 20),
+                      label: Text(_isSaving ? 'جارٍ حفظ القراءة…' : 'حفظ القراءة'),
+                    ),
                   ),
                 ],
               ),
@@ -460,89 +468,111 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     );
   }
 
-  Widget _meterHeader() => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                child: Icon(Icons.speed, color: Theme.of(context).colorScheme.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_meter.subscriberName ?? 'مشترك', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 3),
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Text(
-                        '${_meter.uniqueCode}${_meter.pathNumber == null ? '' : '  •  المسار ${_meter.pathNumber}'}',
-                        style: Theme.of(context).textTheme.bodyMedium,
+  Widget _meterHeader() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return AppCard(
+      child: Row(
+        children: <Widget>[
+          const AppGlyph(icon: Icons.speed_rounded, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  _meter.subscriberName ?? 'مشترك',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: <Widget>[
+                    LtrNumberText(
+                      _meter.uniqueCode,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurface,
                       ),
                     ),
-                    if (_meter.tenantName?.isNotEmpty == true)
-                      Text('المستأجر: ${_meter.tenantName}'),
+                    if (_meter.pathNumber != null) ...<Widget>[
+                      const SizedBox(width: 6),
+                      Text('· مسار ${_meter.pathNumber}', style: theme.textTheme.labelSmall),
+                    ],
                   ],
                 ),
-              ),
-            ],
+                if (_meter.tenantName?.isNotEmpty == true)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text('المستأجر: ${_meter.tenantName}', style: theme.textTheme.labelSmall),
+                  ),
+              ],
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    );
+  }
 
-  Widget _periodCard(MeterPeriodResponse period) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              const Icon(Icons.date_range_outlined),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('فترة الاستهلاك'),
-                    const SizedBox(height: 4),
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Text(
-                        '${_formatDate(period.periodStart)}  —  ${_formatDate(period.periodEnd)}',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                    ),
-                  ],
+  Widget _periodCard(MeterPeriodResponse period) {
+    final theme = Theme.of(context);
+    return AppCard(
+      child: Row(
+        children: <Widget>[
+          const AppGlyph(icon: Icons.date_range_rounded, size: 38, neutral: true),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('فترة الاستهلاك', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 2),
+                LtrNumberText(
+                  '${_formatDate(period.periodStart)}  —  ${_formatDate(period.periodEnd)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    );
+  }
 
-  Widget _readingValueCard(String title, double value, {bool accent = false}) => Card(
-        color: accent ? Theme.of(context).colorScheme.primaryContainer : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 5),
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(
-                  _formatNumber(value),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
+  Widget _readingValueCard(String title, double value, {bool accent = false}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return AppCard(
+      padding: const EdgeInsetsDirectional.fromSTEB(13, 11, 13, 12),
+      color: accent ? AppTint.soft(scheme.primary, context) : null,
+      borderColor: accent ? scheme.primary.withValues(alpha: .18) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: accent ? scheme.primary : scheme.onSurfaceVariant,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 4),
+          LtrNumberText(
+            _formatNumber(value),
+            style: TextStyle(
+              fontSize: 22,
+              height: 1.15,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -.4,
+              color: accent ? scheme.primary : scheme.onSurface,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _feeOption({
     required String title,
@@ -551,22 +581,31 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     required bool selected,
     required ValueChanged<bool> onChanged,
   }) =>
-      Card(
+      AppCard(
+        padding: EdgeInsets.zero,
         child: Column(
-          children: [
-            SwitchListTile(
+          children: <Widget>[
+            SwitchListTile.adaptive(
               value: selected,
               onChanged: onChanged,
-              title: Text(title),
-              subtitle: Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text('إجمالي المتبقي: ${_formatNumber(maxValue)} ريال'),
+              contentPadding: const EdgeInsetsDirectional.fromSTEB(14, 2, 8, 2),
+              title: Text(
+                title,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
               ),
-              secondary: const Icon(Icons.receipt_long_outlined),
+              subtitle: Text(
+                'إجمالي المتبقي: ${_formatNumber(maxValue)} ريال',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              secondary: const AppGlyph(
+                icon: Icons.receipt_long_rounded,
+                size: 36,
+                neutral: true,
+              ),
             ),
             if (selected)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                padding: const EdgeInsetsDirectional.fromSTEB(14, 0, 14, 14),
                 child: TextFormField(
                   controller: controller,
                   textDirection: TextDirection.ltr,
@@ -574,8 +613,8 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   decoration: InputDecoration(
                     labelText: 'مبلغ القسط المطلوب إضافته للفاتورة',
                     suffixText: 'ريال',
-                    helperText: 'يمكنك تعديل المبلغ لتحصيل قسط جزئي (الحد الأعلى ${_formatNumber(maxValue)} ريال)',
-                    border: const OutlineInputBorder(),
+                    helperText:
+                        'يمكنك تعديل المبلغ لتحصيل قسط جزئي (الحد الأعلى ${_formatNumber(maxValue)} ريال)',
                     isDense: true,
                   ),
                   validator: (val) {
@@ -599,35 +638,53 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
 
   Widget _imageControl() {
     final path = _imagePath;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            if (path == null)
-              const CircleAvatar(child: Icon(Icons.camera_alt_outlined))
-            else
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(File(path), width: 58, height: 58, fit: BoxFit.cover),
-              ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(path == null ? 'صورة العداد (اختياري)' : 'تم إرفاق صورة مضغوطة'),
+    final scheme = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 8, 10),
+      child: Row(
+        children: <Widget>[
+          if (path == null)
+            const AppGlyph(icon: Icons.photo_camera_outlined, size: 42, neutral: true)
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: Image.file(File(path), width: 44, height: 44, fit: BoxFit.cover),
             ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  path == null ? 'صورة العداد' : 'صورة مرفقة',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                Text(
+                  path == null ? 'اختيارية — تساعد على المراجعة' : 'تم ضغط الصورة تلقائياً',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: path == null ? 'التقاط أو اختيار صورة' : 'استبدال الصورة',
+            onPressed: _chooseImage,
+            icon: Icon(
+              path == null ? Icons.add_a_photo_outlined : Icons.sync_rounded,
+              size: 19,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          if (path != null)
             IconButton(
-              tooltip: path == null ? 'التقاط أو اختيار صورة' : 'استبدال الصورة',
-              onPressed: _chooseImage,
-              icon: const Icon(Icons.add_a_photo_outlined),
+              tooltip: 'إزالة الصورة',
+              onPressed: () => setState(() => _imagePath = null),
+              icon: Icon(Icons.close_rounded, size: 19, color: scheme.onSurfaceVariant),
             ),
-            if (path != null)
-              IconButton(
-                tooltip: 'إزالة الصورة',
-                onPressed: () => setState(() => _imagePath = null),
-                icon: const Icon(Icons.close),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -644,34 +701,45 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  color: result.isPendingSync
-                      ? const Color(0xFFFFF3D4)
-                      : const Color(0xFFE7F6EE),
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        Icon(
-                          result.isPendingSync ? Icons.cloud_upload_outlined : Icons.check_circle_outline,
-                          size: 34,
-                          color: result.isPendingSync ? const Color(0xFFB77900) : Colors.green,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                result.isPendingSync ? 'بانتظار المزامنة' : 'تم حفظ القراءة',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                AppCard(
+                  color: AppTint.soft(
+                    result.isPendingSync ? AppColors.warning : AppColors.success,
+                    context,
+                  ),
+                  borderColor: (result.isPendingSync ? AppColors.warning : AppColors.success)
+                      .withValues(alpha: .22),
+                  child: Row(
+                    children: <Widget>[
+                      AppGlyph(
+                        icon: result.isPendingSync
+                            ? Icons.cloud_upload_outlined
+                            : Icons.check_rounded,
+                        tone: result.isPendingSync ? AppColors.warning : AppColors.success,
+                        size: 42,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              result.isPendingSync ? 'بانتظار المزامنة' : 'تم حفظ القراءة',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            if (result.message != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  result.message!,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               ),
-                              if (result.message != null) Text(result.message!),
-                            ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 if (invoice != null && result.invoiceIssued) ...[
@@ -679,18 +747,19 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   _invoiceSummary(invoice),
                 ],
                 const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _summaryRow('العداد', _meter.uniqueCode, ltr: true),
+                AppCard(
+                  child: Column(
+                    children: [
+                      _summaryRow('العداد', _meter.uniqueCode, ltr: true),
                         _summaryRow('القراءة السابقة', _formatNumber(result.reading.previousReading), ltr: true),
                         _summaryRow('القراءة الحالية', _formatNumber(result.reading.currentReading), ltr: true),
                         _summaryRow('الاستهلاك', '${_formatNumber(result.reading.consumptionUnits)} وحدة', ltr: true),
-                        _summaryRow('الفترة', '${_formatDate(result.reading.periodStart)} — ${_formatDate(result.reading.periodEnd)}', ltr: true),
-                      ],
-                    ),
+                      _summaryRow(
+                        'الفترة',
+                        '${_formatDate(result.reading.periodStart)} — ${_formatDate(result.reading.periodEnd)}',
+                        ltr: true,
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -747,74 +816,77 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     );
   }
 
-  Widget _invoiceSummary(InvoiceSummary invoice) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.receipt_long_outlined, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'الفاتورة الصادرة ${invoice.billNumber == null ? '' : '• ${invoice.billNumber}'}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 20),
-              _summaryRow('المشترك', invoice.subscriberName ?? _meter.subscriberName ?? '—'),
-              _summaryRow('كود العداد', invoice.meterCode ?? _meter.uniqueCode, ltr: true),
-              _summaryRow('الاستهلاك', '${_formatNumber(invoice.consumptionUnits ?? _saveResult!.reading.consumptionUnits)} وحدة'),
-              _summaryRow('إجمالي المطلوب', '${_formatNumber(invoice.totalAmount)} ريال', emphasis: true),
-            ],
-          ),
-        ),
-      );
-
-  Widget _summaryRow(String label, String value, {bool ltr = false, bool emphasis = false}) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          children: [
-            Expanded(child: Text(label)),
-            if (ltr)
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(
-                  value,
-                  style: TextStyle(fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500),
+  Widget _invoiceSummary(InvoiceSummary invoice) => AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                AppGlyph(
+                  icon: Icons.receipt_long_rounded,
+                  tone: Theme.of(context).colorScheme.primary,
+                  size: 34,
                 ),
-              )
-            else
-              Text(
-                value,
-                style: TextStyle(fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500),
-              ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'الفاتورة الصادرة ${invoice.billNumber == null ? '' : '• ${invoice.billNumber}'}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Divider(height: 18, color: Theme.of(context).colorScheme.outlineVariant),
+            _summaryRow('المشترك', invoice.subscriberName ?? _meter.subscriberName ?? '—'),
+            _summaryRow('كود العداد', invoice.meterCode ?? _meter.uniqueCode, ltr: true),
+            _summaryRow(
+              'الاستهلاك',
+              '${_formatNumber(invoice.consumptionUnits ?? _saveResult!.reading.consumptionUnits)} وحدة',
+            ),
+            _summaryRow(
+              'إجمالي المطلوب',
+              '${_formatNumber(invoice.totalAmount)} ريال',
+              emphasis: true,
+            ),
           ],
         ),
       );
 
-  Widget _loadErrorView() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 42, color: Colors.red),
-              const SizedBox(height: 12),
-              Text(_errorMessage ?? 'تعذر جلب فترة القراءة.'),
-              const SizedBox(height: 12),
-              FilledButton.tonalIcon(
-                onPressed: _loadPeriod,
-                icon: const Icon(Icons.refresh),
-                label: const Text('إعادة المحاولة'),
-              ),
-            ],
-          ),
+  Widget _summaryRow(String label, String value, {bool ltr = false, bool emphasis = false}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final style = TextStyle(
+      fontSize: emphasis ? 14 : 12.5,
+      height: 1.4,
+      fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500,
+      color: emphasis ? scheme.onSurface : scheme.onSurfaceVariant,
+      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
+          if (ltr)
+            Directionality(textDirection: TextDirection.ltr, child: Text(value, style: style))
+          else
+            Text(value, style: style),
+        ],
+      ),
+    );
+  }
+
+  Widget _loadErrorView() => EmptyStateWidget(
+        icon: Icons.error_outline_rounded,
+        title: 'تعذر جلب فترة القراءة',
+        message: _errorMessage ?? 'تحقق من الاتصال ثم أعد المحاولة.',
+        action: TextButton.icon(
+          onPressed: _loadPeriod,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('إعادة المحاولة'),
         ),
       );
 
@@ -839,21 +911,8 @@ class _NoticeBanner extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withAlpha(32),
-          border: Border.all(color: color.withAlpha(140)),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 9),
-            Expanded(child: Text(text, style: TextStyle(color: color))),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) =>
+      InfoNotice(text: text, icon: icon, color: color);
 }
 
 class RecordReadingSheet {

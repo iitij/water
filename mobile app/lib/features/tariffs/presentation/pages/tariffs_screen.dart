@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/finance/finance_colors.dart';
 import '../../../../core/finance/finance_feedback.dart';
-import '../../../../core/finance/finance_locator.dart';
-import '../../../../core/finance/finance_search.dart';
-import '../../../../core/permissions/finance_permissions.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/tariff_model.dart';
 import '../../domain/repositories/tariffs_repository.dart';
@@ -74,25 +72,25 @@ class _TariffsBodyState extends State<_TariffsBody> {
 
             return Column(
               children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FinanceSearchBar(
-                    controller: _search,
-                    hint: 'ابحث باسم التسعيرة',
-                    onChanged: cubit.search,
-                    trailing: state.search.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _search.clear();
-                              cubit.search('');
-                            },
-                          ),
-                  ),
+                const SizedBox(height: 10),
+                AppFilterBar(
+                  controller: _search,
+                  query: state.search,
+                  hint: 'اسم التسعيرة',
+                  onChanged: cubit.search,
+                ),
+                const SizedBox(height: 8),
+                AppFilterChips(
+                  children: <Widget>[
+                    for (final filter in TariffsTrashFilter.values)
+                      AppFilterChip(
+                        label: filter.label,
+                        selected: state.trashFilter == filter,
+                        onTap: () => cubit.setTrashFilter(filter),
+                      ),
+                  ],
                 ),
                 _ActivePriceHeader(state: state),
-                _TrashFilterRow(cubit: cubit, state: state),
                 Expanded(
                   child: _buildList(context, cubit, state, tariffs),
                 ),
@@ -218,21 +216,31 @@ class _ActivePriceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+      padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        gradient: FinanceColors.headerGradient,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.panelLine),
       ),
       child: Row(
         children: <Widget>[
-          const Icon(Icons.bolt, color: Colors.white, size: 20),
-          const SizedBox(width: 8),
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .08),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Icon(Icons.bolt_rounded, color: AppColors.onPanelSoft, size: 18),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'السعر النشط المستخدم في الفوترة',
-              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
+              style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted),
             ),
           ),
           Text(
@@ -241,8 +249,10 @@ class _ActivePriceHeader extends StatelessWidget {
                 : CurrencyFormatter.withLabel(state.activePrice),
             style: const TextStyle(
               fontSize: 14,
+              height: 1.3,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: AppColors.onPanel,
+              fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -251,35 +261,3 @@ class _ActivePriceHeader extends StatelessWidget {
   }
 }
 
-class _TrashFilterRow extends StatelessWidget {
-  const _TrashFilterRow({required this.cubit, required this.state});
-
-  final TariffsCubit cubit;
-  final TariffsState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: SegmentedButton<TariffsTrashFilter>(
-        segments: TariffsTrashFilter.values
-            .map(
-              (filter) => ButtonSegment<TariffsTrashFilter>(
-                value: filter,
-                label: Text(filter.label),
-                icon: Icon(
-                  filter == TariffsTrashFilter.only
-                      ? Icons.delete_outline
-                      : (filter == TariffsTrashFilter.withTrashed ? Icons.filter_alt : Icons.verified_outlined),
-                ),
-              ),
-            )
-            .toList(),
-        selected: <TariffsTrashFilter>{state.trashFilter},
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        onSelectionChanged: (selection) => cubit.setTrashFilter(selection.first),
-      ),
-    );
-  }
-}

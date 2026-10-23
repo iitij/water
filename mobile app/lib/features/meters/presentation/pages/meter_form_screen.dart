@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
+
 import '../../../../core/utils/compound_search_parser.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
@@ -287,7 +289,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   decoration: const InputDecoration(
                                     labelText: 'رقم العداد',
                                     prefixIcon: Icon(Icons.speed_outlined),
-                                    border: OutlineInputBorder(),
                                   ),
                                   textInputAction: TextInputAction.next,
                                   validator: (value) => value == null || value.trim().isEmpty
@@ -315,17 +316,16 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                             ),
                                           )
                                         : _pathConflict == true
-                                            ? const Icon(Icons.error_outline, color: Colors.red)
+                                            ? Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error)
                                             : _pathConflict == false && _pathController.text.isNotEmpty
-                                                ? const Icon(Icons.check_circle_outline, color: Colors.green)
+                                                ? const Icon(Icons.check_circle_outline, color: AppColors.success)
                                                 : null,
                                     helperText: _pathConflict == true
                                         ? 'رقم المسار مستخدم بالفعل في هذا المربع.'
                                         : 'يجب أن يكون رقم المسار فريداً داخل المربع السكني.',
                                     helperStyle: TextStyle(
-                                      color: _pathConflict == true ? Colors.red : null,
+                                      color: _pathConflict == true ? Theme.of(context).colorScheme.error : null,
                                     ),
-                                    border: const OutlineInputBorder(),
                                   ),
                                   onChanged: _schedulePathValidation,
                                   validator: (value) {
@@ -348,7 +348,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   decoration: InputDecoration(
                                     labelText: 'المشترك المالك',
                                     prefixIcon: const Icon(Icons.person_outline),
-                                    border: const OutlineInputBorder(),
                                     helperText: widget.meter == null
                                         ? null
                                         : 'يمكنك نقل ملكية العداد لمشترك آخر؛ سيتم التحقق من توافر رقم المسار في مربع المشترك الجديد.',
@@ -386,7 +385,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                     decoration: const InputDecoration(
                                       labelText: 'اسم المستأجر',
                                       prefixIcon: Icon(Icons.person_pin_outlined),
-                                      border: OutlineInputBorder(),
                                     ),
                                     onChanged: (_) => setState(() {}),
                                   ),
@@ -399,7 +397,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                       labelText: 'هاتف المستأجر',
                                       prefixIcon: Icon(Icons.phone_outlined),
                                       hintText: '+967…',
-                                      border: OutlineInputBorder(),
                                     ),
                                     onChanged: (_) => setState(() {}),
                                   ),
@@ -411,7 +408,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   decoration: const InputDecoration(
                                     labelText: 'حالة العداد',
                                     prefixIcon: Icon(Icons.toggle_on_outlined),
-                                    border: OutlineInputBorder(),
                                   ),
                                   items: const [
                                     DropdownMenuItem(value: 'active', child: Text('نشط')),

@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../meters/data/models/meter.dart';
+import '../../../../core/theme/app_colors.dart';
 
 class OfflinePackDialog extends StatefulWidget {
   const OfflinePackDialog({
@@ -123,7 +124,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.check_circle, color: Colors.green),
+                        const Icon(Icons.check_circle_rounded, color: AppColors.success),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -157,7 +158,6 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                       decoration: const InputDecoration(
                         labelText: 'نطاق الحزمة',
                         prefixIcon: Icon(Icons.location_city_outlined),
-                        border: OutlineInputBorder(),
                       ),
                       items: [
                         const DropdownMenuItem<int?>(
@@ -200,7 +200,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                     ],
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ],
                   ],
                 ),

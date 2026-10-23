@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
+import '../../../../core/ui/app_surfaces.dart';
 
 /// Unified show/hide + alternate-label editor matching Filament's
 /// buildFieldConfig() for invoice and receipt fields.
@@ -28,16 +29,13 @@ class FieldConfigTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: ExpansionTile(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: ExpansionTile(
         key: ValueKey('field-config-$showKey'),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           visible ? 'ظاهر في $documentLabel' : 'مخفي من $documentLabel',
           style: TextStyle(color: visible ? AdminPalette.success : AdminPalette.neutral),
@@ -61,6 +59,7 @@ class FieldConfigTile extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

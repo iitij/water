@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
-/// A polished filled dropdown used for filters and selectors across the app.
+/// قائمة منسدلة موحّدة تقرأ تنسيقها من الثيم، فلا تكرّر الحدود أو الألوان.
 class FilledDropdown<T> extends StatelessWidget {
   const FilledDropdown({
     super.key,
@@ -37,12 +35,14 @@ class FilledDropdown<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
     return DropdownButtonFormField<T>(
       value: value,
       isExpanded: isExpanded,
       isDense: isDense,
-      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      style: theme.textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w500,
+        color: scheme.onSurface,
+      ),
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
@@ -51,22 +51,7 @@ class FilledDropdown<T> extends StatelessWidget {
         helperStyle: helperStyle,
         prefixIcon: prefixIcon,
         suffixIcon: suffixIcon ??
-            Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: scheme.onSurfaceVariant),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: theme.dividerColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: theme.dividerColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.7),
-        ),
-        filled: true,
-        fillColor: isDark ? const Color(0xFF172338) : const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: scheme.onSurfaceVariant),
       ),
       items: items,
       onChanged: onChanged,

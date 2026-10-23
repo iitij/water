@@ -12,6 +12,7 @@ import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
 import '../widgets/payment_actions.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 /// نتيجة التحصيل الناجحة — تعرض رقم السند والتفقيط والمتبقي، وتوفر الطباعة
 /// الحرارية والواتساب والـ PDF بضغطة واحدة (قاعدة «مسار التالي» §3.4-2).
@@ -121,7 +122,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
               ),
               child: Column(
@@ -172,7 +173,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                         'تم سداد الفاتورة بالكامل ✅',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.success,
                         ),
                       ),
@@ -254,7 +255,7 @@ class _Row extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: tone,
             ),
           ),

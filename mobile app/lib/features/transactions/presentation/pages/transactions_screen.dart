@@ -6,6 +6,7 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../cubit/transactions_cubit.dart';
+import '../../../../core/ui/app_filters.dart';
 
 bool _hasTransactionsCubit(BuildContext context) {
   try {
@@ -74,7 +75,6 @@ class _TransactionsView extends StatelessWidget {
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
                         hintText: 'ابحث عن مشترك بالاسم أو الهاتف...',
-                        border: OutlineInputBorder(),
                       ),
                       onChanged: (v) => setSheetState(() => query = v),
                     ),
@@ -153,7 +153,6 @@ class _TransactionsView extends StatelessWidget {
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search),
                   hintText: 'بحث باسم المشترك أو البيان أو كود العداد...',
-                  border: OutlineInputBorder(),
                 ),
                 onChanged: context.read<TransactionsCubit>().search,
               ),
@@ -162,17 +161,15 @@ class _TransactionsView extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(children: [
-                ActionChip(
-                  avatar: const Icon(Icons.person_search, size: 18),
-                  label: Text(subscriberChipLabel),
-                  onPressed: () => _pickSubscriber(context, state),
+                AppFilterChip(
+                  label: subscriberChipLabel,
+                  icon: Icons.person_search_rounded,
+                  selected: state.subscriberId != null,
+                  onTap: () => _pickSubscriber(context, state),
+                  onRemove: state.subscriberId == null
+                      ? null
+                      : () => context.read<TransactionsCubit>().filterSubscriber(null),
                 ),
-                if (state.subscriberId != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 18),
-                    tooltip: 'إلغاء فلتر المشترك',
-                    onPressed: () => context.read<TransactionsCubit>().filterSubscriber(null),
-                  ),
                 const SizedBox(width: 12),
                 DropdownButton<String?>(
                   value: validMeterValue,

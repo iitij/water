@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../../../../core/ui/app_tokens.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../admin_shared/data/admin_json.dart';
@@ -254,7 +256,6 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                         keyboardType: TextInputType.phone,
                         decoration: const InputDecoration(
                           labelText: 'رقم الجوال (مع مفتاح الدولة، مثل 96777xxxxxxx)',
-                          border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.phone_outlined),
                         ),
                         validator: (val) => val == null || val.trim().length < 7
@@ -268,7 +269,6 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                       maxLines: 4,
                       decoration: const InputDecoration(
                         labelText: 'نص الرسالة التجريبية',
-                        border: OutlineInputBorder(),
                       ),
                       validator: (val) => val == null || val.trim().isEmpty
                           ? 'أدخل نص الرسالة'
@@ -371,14 +371,14 @@ class _StatusMessage extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withAlpha(15),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: color.withAlpha(45)),
       ),
       child: Row(
         children: [
           Icon(icon, color: color),
           const SizedBox(width: 10),
-          Expanded(child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w700))),
+          Expanded(child: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w600))),
           if (showProgress) ...[
             const SizedBox(width: 10),
             const SizedBox(
@@ -413,7 +413,7 @@ class _QrImage extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: isNetwork
@@ -455,14 +455,14 @@ class _TerminalLog extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
         Container(
           height: 220,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AdminPalette.terminal,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
           child: SingleChildScrollView(
             reverse: true,

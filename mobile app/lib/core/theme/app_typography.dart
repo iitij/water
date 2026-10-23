@@ -35,11 +35,11 @@ abstract final class AppTypography {
         );
 
     return TextTheme(
-      displayLarge: style(34, FontWeight.w700, height: 1.18, letterSpacing: -.4),
-      displayMedium: style(30, FontWeight.w700, height: 1.2, letterSpacing: -.3),
-      displaySmall: style(26, FontWeight.w700, height: 1.24, letterSpacing: -.2),
-      headlineLarge: style(24, FontWeight.w700, height: 1.26, letterSpacing: -.2),
-      headlineMedium: style(21, FontWeight.w700, height: 1.3, letterSpacing: -.2),
+      displayLarge: style(34, FontWeight.w600, height: 1.18, letterSpacing: -.4),
+      displayMedium: style(30, FontWeight.w600, height: 1.2, letterSpacing: -.3),
+      displaySmall: style(26, FontWeight.w600, height: 1.24, letterSpacing: -.2),
+      headlineLarge: style(24, FontWeight.w600, height: 1.26, letterSpacing: -.2),
+      headlineMedium: style(21, FontWeight.w600, height: 1.3, letterSpacing: -.2),
       headlineSmall: style(19, FontWeight.w600, height: 1.32),
       titleLarge: style(17, FontWeight.w600, height: 1.34, letterSpacing: -.1),
       titleMedium: style(15, FontWeight.w600, height: 1.4),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/ui/app_tokens.dart';
 
 class StatCard extends StatelessWidget {
   const StatCard({
@@ -23,7 +24,7 @@ class StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
@@ -36,7 +37,7 @@ class StatCard extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Icon(icon, color: color, size: 19),
               ),

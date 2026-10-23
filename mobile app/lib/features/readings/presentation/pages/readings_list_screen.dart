@@ -7,7 +7,11 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/utils/compound_search_parser.dart';
-import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../data/models/reading.dart';
@@ -196,22 +200,34 @@ class _ReadingsListView extends StatelessWidget {
                   else if (state.status == ReadingsLoadStatus.failure && state.readings.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _EmptyReadings(
+                      child: EmptyStateWidget(
+                        icon: Icons.cloud_off_rounded,
                         title: 'تعذر تحميل القراءات',
                         message: state.errorMessage ?? 'تحقق من الاتصال ثم أعد المحاولة.',
                         action: TextButton.icon(
                           onPressed: cubit.load,
-                          icon: const Icon(Icons.refresh),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
                           label: const Text('إعادة المحاولة'),
                         ),
                       ),
                     )
                   else if (state.readings.isEmpty)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _EmptyReadings(
-                        title: 'لا توجد قراءات',
-                        message: 'لم نجد قراءات مطابقة للفلاتر الحالية.',
+                      child: EmptyStateWidget(
+                        icon: Icons.speed_rounded,
+                        title: state.query.isEmpty && state.squareFilter == null
+                            ? 'لا توجد قراءات بعد'
+                            : 'لا نتائج مطابقة',
+                        message: state.query.isEmpty && state.squareFilter == null
+                            ? 'سجّل أول قراءة لعداد من زر الإضافة.'
+                            : 'جرّب تعديل البحث أو إزالة بعض الفلاتر.',
+                        action: state.query.isEmpty && state.squareFilter == null
+                            ? null
+                            : TextButton(
+                                onPressed: cubit.clearAllFilters,
+                                child: const Text('مسح الفلاتر'),
+                              ),
                       ),
                     )
                   else
@@ -313,7 +329,6 @@ class _ReadingsListView extends StatelessWidget {
                           decoration: const InputDecoration(
                             prefixIcon: Icon(Icons.search),
                             hintText: 'ابحث بكود العداد أو المشترك أو رقم المسار…',
-                            border: OutlineInputBorder(),
                           ),
                           onChanged: (val) => setSheetState(() => searchQuery = val),
                         ),
@@ -448,164 +463,8 @@ class _ReadingsListView extends StatelessWidget {
     );
   }
 
-  Widget _filters(BuildContext context, ReadingsState state, ReadingsCubit cubit) {
-    final fromDate = state.fromDate;
-    final toDate = state.toDate;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SearchTextField(
-            query: state.query,
-            hintText: 'ابحث بكود العداد أو المشترك أو المسار',
-            onChanged: cubit.setQuery,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _invoiceFilterChip(
-                context,
-                'الكل',
-                ReadingInvoiceFilter.all,
-                state.invoiceFilter,
-                cubit,
-              ),
-              _invoiceFilterChip(
-                context,
-                'مفوترة',
-                ReadingInvoiceFilter.invoiced,
-                state.invoiceFilter,
-                cubit,
-              ),
-              _invoiceFilterChip(
-                context,
-                'غير مفوترة',
-                ReadingInvoiceFilter.notInvoiced,
-                state.invoiceFilter,
-                cubit,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final squareDropdown = DropdownButtonFormField<int?>(
-                key: ValueKey<String>('square-${state.squareFilter}'),
-                initialValue: state.squareFilter,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'المربع السكني',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
-                  ...state.squares.map((square) => DropdownMenuItem<int?>(
-                        value: square.id,
-                        child: Text(square.name, overflow: TextOverflow.ellipsis),
-                      )),
-                ],
-                onChanged: cubit.setSquareFilter,
-              );
-              final dates = Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _pickDate(context, cubit, from: true),
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                      label: Text(fromDate == null ? 'من تاريخ' : _date(fromDate)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _pickDate(context, cubit, from: false),
-                      icon: const Icon(Icons.event_outlined, size: 18),
-                      label: Text(toDate == null ? 'إلى تاريخ' : _date(toDate)),
-                    ),
-                  ),
-                  if (fromDate != null || toDate != null)
-                    IconButton(
-                      tooltip: 'مسح التاريخ',
-                      onPressed: cubit.clearDateFilters,
-                      icon: const Icon(Icons.clear),
-                    ),
-                ],
-              );
-              if (constraints.maxWidth < 680) {
-                return Column(
-                  children: [squareDropdown, const SizedBox(height: 8), dates],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(flex: 2, child: squareDropdown),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 3, child: dates),
-                ],
-              );
-            },
-          ),
-          if (state.status == ReadingsLoadStatus.loading && state.readings.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-          if (state.isMutating)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _invoiceFilterChip(
-    BuildContext context,
-    String label,
-    ReadingInvoiceFilter value,
-    ReadingInvoiceFilter selected,
-    ReadingsCubit cubit,
-  ) =>
-      ChoiceChip(
-        label: Text(label),
-        selected: selected == value,
-        onSelected: (_) => cubit.setInvoiceFilter(value),
-      );
-
-  Future<void> _pickDate(
-    BuildContext context,
-    ReadingsCubit cubit, {
-    required bool from,
-  }) async {
-    final state = cubit.state;
-    final now = DateTime.now();
-    final tomorrow = now.add(const Duration(days: 1));
-    final firstDate = from ? DateTime(2000) : state.fromDate ?? DateTime(2000);
-    final lastDate = from ? state.toDate ?? tomorrow : tomorrow;
-    final requestedInitial = (from ? state.fromDate : state.toDate) ?? now;
-    final initialDate = requestedInitial.isBefore(firstDate)
-        ? firstDate
-        : requestedInitial.isAfter(lastDate)
-            ? lastDate
-            : requestedInitial;
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-    );
-    if (selected == null) return;
-    if (from) {
-      cubit.setFromDate(selected);
-    } else {
-      cubit.setToDate(selected);
-    }
-  }
+  Widget _filters(BuildContext context, ReadingsState state, ReadingsCubit cubit) =>
+      _ReadingsFilters(state: state, cubit: cubit);
 
   Future<void> _confirmBulkInvoice(BuildContext context, ReadingsCubit cubit) async {
     final accepted = await showDialog<bool>(
@@ -695,7 +554,6 @@ class _ReadingsListView extends StatelessWidget {
                     decoration: InputDecoration(
                       labelText: 'القراءة الحالية',
                       helperText: 'القراءة السابقة: ${_number(reading.previousReading)}',
-                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) {
                       final parsed = double.tryParse(
@@ -722,12 +580,11 @@ class _ReadingsListView extends StatelessWidget {
                         setDialogState(() => editedDate = picked);
                       }
                     },
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                     child: InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'تاريخ القراءة',
                         prefixIcon: Icon(Icons.calendar_month_outlined),
-                        border: OutlineInputBorder(),
                       ),
                       child: Text(_date(editedDate)),
                     ),
@@ -776,6 +633,300 @@ class _ReadingsListView extends StatelessWidget {
   }
 }
 
+class _ReadingsFilters extends StatefulWidget {
+  const _ReadingsFilters({required this.state, required this.cubit});
+
+  final ReadingsState state;
+  final ReadingsCubit cubit;
+
+  @override
+  State<_ReadingsFilters> createState() => _ReadingsFiltersState();
+}
+
+class _ReadingsFiltersState extends State<_ReadingsFilters> {
+  late final TextEditingController _search =
+      TextEditingController(text: widget.state.query);
+
+  @override
+  void didUpdateWidget(covariant _ReadingsFilters oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.query != _search.text) {
+      _search.value = TextEditingValue(
+        text: widget.state.query,
+        selection: TextSelection.collapsed(offset: widget.state.query.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  String? get _squareName {
+    final id = widget.state.squareFilter;
+    if (id == null) return null;
+    for (final square in widget.state.squares) {
+      if (square.id == id) return square.name;
+    }
+    return 'مربع #$id';
+  }
+
+  bool get _hasDates =>
+      widget.state.fromDate != null || widget.state.toDate != null;
+
+  int get _sheetFacets => (_squareName == null ? 0 : 1) + (_hasDates ? 1 : 0);
+
+  String get _dateSummary {
+    String fmt(DateTime? value) => value == null ? '…' : _date(value);
+    return '${fmt(widget.state.fromDate)} ← ${fmt(widget.state.toDate)}';
+  }
+
+  Future<void> _openSheet() async {
+    await AppFilterSheet.show<void>(
+      context: context,
+      builder: (_) => _ReadingsFilterSheet(state: widget.state, cubit: widget.cubit),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    final cubit = widget.cubit;
+    final active = <Widget>[
+      if (_squareName != null)
+        AppFilterChip(
+          label: _squareName!,
+          icon: Icons.grid_view_rounded,
+          selected: true,
+          onRemove: () => cubit.applyFilters(
+            squareId: null,
+            fromDate: state.fromDate,
+            toDate: state.toDate,
+          ),
+        ),
+      if (_hasDates)
+        AppFilterChip(
+          label: _dateSummary,
+          icon: Icons.event_rounded,
+          selected: true,
+          onRemove: () => cubit.applyFilters(
+            squareId: state.squareFilter,
+            fromDate: null,
+            toDate: null,
+          ),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SizedBox(height: 10),
+        AppFilterBar(
+          controller: _search,
+          hint: 'كود العداد، المشترك، أو المربع/المسار',
+          activeCount: _sheetFacets,
+          onOpenFilters: _openSheet,
+          onChanged: cubit.setQuery,
+        ),
+        const SizedBox(height: 8),
+        AppFilterChips(
+          children: <Widget>[
+            AppFilterChip(
+              label: 'الكل',
+              selected: state.invoiceFilter == ReadingInvoiceFilter.all,
+              onTap: () => cubit.setInvoiceFilter(ReadingInvoiceFilter.all),
+            ),
+            AppFilterChip(
+              label: 'مفوترة',
+              selected: state.invoiceFilter == ReadingInvoiceFilter.invoiced,
+              onTap: () => cubit.setInvoiceFilter(ReadingInvoiceFilter.invoiced),
+            ),
+            AppFilterChip(
+              label: 'غير مفوترة',
+              selected: state.invoiceFilter == ReadingInvoiceFilter.notInvoiced,
+              onTap: () => cubit.setInvoiceFilter(ReadingInvoiceFilter.notInvoiced),
+            ),
+          ],
+        ),
+        AppActiveFilters(filters: active, onClearAll: cubit.clearAllFilters),
+        if (state.isMutating ||
+            (state.status == ReadingsLoadStatus.loading && state.readings.isNotEmpty))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(
+              minHeight: 1.5,
+              backgroundColor: Colors.transparent,
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: .5),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 2),
+          child: Row(
+            children: <Widget>[
+              Text(
+                state.status == ReadingsLoadStatus.loading
+                    ? 'جارٍ التحديث…'
+                    : '${state.readings.length} قراءة',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const Spacer(),
+              if (state.isSelecting)
+                Text(
+                  'وضع التحديد',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReadingsFilterSheet extends StatefulWidget {
+  const _ReadingsFilterSheet({required this.state, required this.cubit});
+
+  final ReadingsState state;
+  final ReadingsCubit cubit;
+
+  @override
+  State<_ReadingsFilterSheet> createState() => _ReadingsFilterSheetState();
+}
+
+class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
+  late int? _square = widget.state.squareFilter;
+  late DateTime? _from = widget.state.fromDate;
+  late DateTime? _to = widget.state.toDate;
+
+  Future<void> _pick({required bool from}) async {
+    final now = DateTime.now();
+    final tomorrow = now.add(const Duration(days: 1));
+    final firstDate = from ? DateTime(2000) : (_from ?? DateTime(2000));
+    final lastDate = from ? (_to ?? tomorrow) : tomorrow;
+    final requested = (from ? _from : _to) ?? now;
+    final initial = requested.isBefore(firstDate)
+        ? firstDate
+        : requested.isAfter(lastDate)
+            ? lastDate
+            : requested;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: from ? 'من تاريخ' : 'إلى تاريخ',
+    );
+    if (picked == null) return;
+    setState(() {
+      if (from) {
+        _from = picked;
+      } else {
+        _to = picked;
+      }
+    });
+  }
+
+  void _apply() {
+    widget.cubit.applyFilters(squareId: _square, fromDate: _from, toDate: _to);
+    Navigator.of(context).maybePop();
+  }
+
+  void _reset() {
+    widget.cubit.setInvoiceFilter(ReadingInvoiceFilter.all);
+    setState(() {
+      _square = null;
+      _from = null;
+      _to = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final state = widget.state;
+    return AppFilterSheet(
+      title: 'تصفية سجل القراءات',
+      resultCountLabel: state.status == ReadingsLoadStatus.loading
+          ? 'جارٍ تحديث النتائج…'
+          : '${state.readings.length} قراءة مطابقة',
+      onApply: _apply,
+      onReset: _reset,
+      resetEnabled: _square != null ||
+          _from != null ||
+          _to != null ||
+          state.invoiceFilter != ReadingInvoiceFilter.all,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'حالة الفوترة',
+          child: AppSegmentedFilter<ReadingInvoiceFilter>(
+            value: state.invoiceFilter,
+            onChanged: widget.cubit.setInvoiceFilter,
+            options: const <({ReadingInvoiceFilter value, String label, IconData? icon})>[
+              (value: ReadingInvoiceFilter.all, label: 'الكل', icon: null),
+              (value: ReadingInvoiceFilter.invoiced, label: 'مفوترة', icon: null),
+              (value: ReadingInvoiceFilter.notInvoiced, label: 'غير مفوترة', icon: null),
+            ],
+          ),
+        ),
+        AppFilterSection(
+          title: 'المربع السكني',
+          subtitle: 'اختر مربعاً واحداً أو أبقِ البحث في كل المربعات',
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 216),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: ListView(
+              padding: const EdgeInsets.all(6),
+              shrinkWrap: true,
+              children: <Widget>[
+                AppFilterOptionTile(
+                  label: 'كل المربعات',
+                  icon: Icons.apps_rounded,
+                  selected: _square == null,
+                  onTap: () => setState(() => _square = null),
+                ),
+                const SizedBox(height: 6),
+                for (final square in state.squares) ...<Widget>[
+                  AppFilterOptionTile(
+                    label: square.name,
+                    icon: Icons.grid_view_rounded,
+                    selected: _square == square.id,
+                    onTap: () => setState(() => _square = square.id),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              ],
+            ),
+          ),
+        ),
+        AppFilterSection(
+          title: 'الفترة',
+          subtitle: 'حدّد نطاق القراءات بالتاريخ',
+          child: AppFilterDateRange(
+            fromLabel: _from == null ? 'بدون حد' : _date(_from!),
+            toLabel: _to == null ? 'بدون حد' : _date(_to!),
+            onPickFrom: () => _pick(from: true),
+            onPickTo: () => _pick(from: false),
+            onClear: _from == null && _to == null
+                ? null
+                : () => setState(() {
+                      _from = null;
+                      _to = null;
+                    }),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
 class _ReadingCard extends StatelessWidget {
   const _ReadingCard({
     required this.reading,
@@ -799,196 +950,345 @@ class _ReadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = reading.isInvoiced ? Colors.green : const Color(0xFFF59E0B);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final actualDate = reading.actualReadingDate;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
+    final hasActions =
+        !selectionMode && (onPreviewPhoto != null || onEdit != null || onDelete != null);
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        borderColor: selected ? scheme.primary.withValues(alpha: .45) : null,
+        color: selected ? scheme.primary.withValues(alpha: .04) : scheme.surface,
         onTap: selectionMode ? onTap : null,
-        onLongPress: onLongPress,
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              Container(width: 5, color: color),
-              if (selectionMode)
-                Checkbox(value: selected, onChanged: (_) => onTap()),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(13),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              _Tag(text: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة', color: color),
-                              if (!reading.isSynced)
-                                const _Tag(text: 'بانتظار المزامنة', color: Color(0xFFB77900)),
-                              if (reading.hasPhoto)
-                                InkWell(
-                                  onTap: onPreviewPhoto,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: const _Tag(
-                                    text: 'صورة مرفقة',
-                                    color: Color(0xFF0284C7),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          Directionality(
-                            textDirection: TextDirection.ltr,
-                            child: Text(
-                              reading.meterCode ?? 'عداد ${reading.meterId}',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        child: InkWell(
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (selectionMode) ...<Widget>[
+                      SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: Checkbox(
+                          value: selected,
+                          onChanged: (_) => onTap(),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          LtrNumberText(
+                            reading.meterCode ?? 'عداد ${reading.meterId}',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: .1,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${reading.subscriberName ?? 'مشترك'}${reading.tenantName == null ? '' : ' — ${reading.tenantName}'}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 5,
-                        children: [
-                          _ReadingValue(label: 'تاريخ القراءة', value: _date(reading.readingDate)),
-                          if (actualDate != null)
-                            _ReadingValue(label: 'التاريخ الفعلي', value: _date(actualDate)),
-                          _ReadingValue(
-                            label: 'الفترة',
-                            value: '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
-                            ltr: true,
+                          const SizedBox(height: 2),
+                          Text(
+                            '${reading.subscriberName ?? 'مشترك'}'
+                            '${reading.tenantName == null ? '' : ' · ${reading.tenantName}'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall,
                           ),
-                          _ReadingValue(label: 'السابقة', value: _number(reading.previousReading), ltr: true),
-                          _ReadingValue(label: 'الحالية', value: _number(reading.currentReading), ltr: true),
-                          _ReadingValue(label: 'الاستهلاك', value: '${_number(reading.consumptionUnits)} وحدة', ltr: true),
                         ],
                       ),
-                      if (reading.syncError?.isNotEmpty == true) ...[
-                        const SizedBox(height: 6),
-                        Text(reading.syncError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
-                      ],
-                      if (!selectionMode &&
-                          (onPreviewPhoto != null || onEdit != null || onDelete != null)) ...[
-                        const SizedBox(height: 6),
-                        const Divider(height: 1),
-                        Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 4,
-                          children: [
-                            if (onPreviewPhoto != null)
-                              TextButton.icon(
-                                onPressed: onPreviewPhoto,
-                                icon: const Icon(Icons.photo_outlined, size: 18),
-                                label: const Text('صورة العداد'),
-                              ),
-                            if (onEdit != null)
-                              TextButton.icon(
-                                onPressed: onEdit,
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                label: const Text('تعديل'),
-                              ),
-                            if (onDelete != null)
-                              TextButton.icon(
-                                onPressed: onDelete,
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                icon: const Icon(Icons.delete_outline, size: 18),
-                                label: const Text('حذف'),
-                              ),
-                          ],
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: <Widget>[
+                        StatusBadge(
+                          status: reading.isInvoiced ? 'success' : 'warning',
+                          label: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة',
                         ),
+                        if (!reading.isSynced)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: StatusBadge(
+                              status: 'pending',
+                              label: 'بانتظار المزامنة',
+                            ),
+                          ),
                       ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 11),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _ReadingStat(
+                        label: 'السابقة',
+                        value: _number(reading.previousReading),
+                        muted: true,
+                      ),
+                    ),
+                    _Arrow(context: context),
+                    Expanded(
+                      child: _ReadingStat(
+                        label: 'الحالية',
+                        value: _number(reading.currentReading),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                      color: scheme.outlineVariant,
+                    ),
+                    Expanded(
+                      child: _ReadingStat(
+                        label: 'الاستهلاك',
+                        value: _number(reading.consumptionUnits),
+                        unit: 'وحدة',
+                        accent: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    _ReadingTag(
+                      icon: Icons.event_rounded,
+                      label: _date(actualDate ?? reading.readingDate),
+                    ),
+                    _ReadingTag(
+                      icon: Icons.date_range_rounded,
+                      label: '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
+                      ltr: true,
+                    ),
+                    if (reading.hasPhoto && onPreviewPhoto != null)
+                      _ReadingTag(
+                        icon: Icons.photo_camera_rounded,
+                        label: 'صورة',
+                        onTap: onPreviewPhoto,
+                        tinted: true,
+                      ),
+                  ],
+                ),
+                if (reading.syncError?.isNotEmpty == true) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    reading.syncError!,
+                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                  ),
+                ],
+                if (hasActions) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Container(height: 1, color: scheme.outlineVariant),
+                  Row(
+                    children: <Widget>[
+                      if (onPreviewPhoto != null)
+                        _CardAction(
+                          icon: Icons.photo_outlined,
+                          label: 'الصورة',
+                          onPressed: onPreviewPhoto,
+                        ),
+                      if (onEdit != null)
+                        _CardAction(
+                          icon: Icons.edit_outlined,
+                          label: 'تعديل',
+                          onPressed: onEdit,
+                        ),
+                      const Spacer(),
+                      if (onDelete != null)
+                        _CardAction(
+                          icon: Icons.delete_outline_rounded,
+                          label: 'حذف',
+                          onPressed: onDelete,
+                          danger: true,
+                        ),
                     ],
                   ),
-                ),
-              ),
-            ],
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  static String _date(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-'
-      '${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')}';
-
-  static String _number(num value) => value.toStringAsFixed(value % 1 == 0 ? 0 : 2);
 }
 
-class _ReadingValue extends StatelessWidget {
-  const _ReadingValue({required this.label, required this.value, this.ltr = false});
+class _Arrow extends StatelessWidget {
+  const _Arrow({required this.context});
 
-  final String label;
-  final String value;
-  final bool ltr;
+  final BuildContext context;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$label: ', style: Theme.of(context).textTheme.bodySmall),
-          if (ltr)
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
-            )
-          else
-            Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
-        ],
-      );
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(color: color.withAlpha(35), borderRadius: BorderRadius.circular(20)),
-        child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-      );
-}
-
-class _EmptyReadings extends StatelessWidget {
-  const _EmptyReadings({required this.title, required this.message, this.action});
-
-  final String title;
-  final String message;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.receipt_long_outlined, size: 48),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-              Text(message, textAlign: TextAlign.center),
-              if (action != null) ...[const SizedBox(height: 12), action!],
-            ],
-          ),
+  Widget build(BuildContext _) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Icon(
+          Icons.arrow_back_rounded,
+          size: 13,
+          color: Theme.of(context).colorScheme.outline,
         ),
       );
 }
+
+class _ReadingStat extends StatelessWidget {
+  const _ReadingStat({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.muted = false,
+    this.accent = false,
+  });
+
+  final String label;
+  final String value;
+  final String? unit;
+  final bool muted;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(fontSize: 10)),
+        const SizedBox(height: 2),
+        Row(
+          textDirection: TextDirection.rtl,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Flexible(
+              child: LtrNumberText(
+                value,
+                style: TextStyle(
+                  fontSize: accent ? 17 : 15,
+                  height: 1.2,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -.2,
+                  color: accent
+                      ? scheme.primary
+                      : (muted ? scheme.onSurfaceVariant : scheme.onSurface),
+                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            if (unit != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 0, bottom: 1),
+                child: Text(' $unit', style: theme.textTheme.labelSmall?.copyWith(fontSize: 9.5)),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ReadingTag extends StatelessWidget {
+  const _ReadingTag({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.ltr = false,
+    this.tinted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool ltr;
+  final bool tinted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = tinted ? scheme.primary : scheme.onSurfaceVariant;
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        if (ltr)
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
+            ),
+          )
+        else
+          Text(
+            label,
+            style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
+          ),
+      ],
+    );
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
+          color: tinted ? scheme.primary.withValues(alpha: .28) : scheme.outlineVariant,
+        ),
+      ),
+      child: content,
+    );
+    if (onTap == null) return chip;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: chip,
+    );
+  }
+}
+
+class _CardAction extends StatelessWidget {
+  const _CardAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 32),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: danger ? scheme.error : scheme.onSurfaceVariant,
+        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
+      ),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+    );
+  }
+}
+
 
 String _date(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-'

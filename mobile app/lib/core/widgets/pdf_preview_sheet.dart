@@ -73,7 +73,7 @@ class PdfPreviewSheet extends StatelessWidget {
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                        ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 IconButton(

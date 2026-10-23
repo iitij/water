@@ -297,7 +297,7 @@ class _OverdueTile extends StatelessWidget {
                             AdminFormat.money(invoice.remainingAmount),
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: AppColors.danger,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -335,7 +335,7 @@ class _OverdueTile extends StatelessWidget {
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(0, 40),
                         padding: const EdgeInsets.symmetric(horizontal: 13),
-                        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                       ),
                       icon: const Icon(Icons.chat_outlined, size: 16),
                       label: const Text('تذكير واتساب'),

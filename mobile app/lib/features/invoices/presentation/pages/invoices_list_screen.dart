@@ -4,8 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
-import '../../../../core/finance/finance_search.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/json_utils.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
 import '../../domain/repositories/invoices_repository.dart';
@@ -81,55 +82,102 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
           final cubit = context.read<InvoicesCubit>();
           return Column(
             children: <Widget>[
-              FinanceSearchBar(
+              const SizedBox(height: 10),
+              AppFilterBar(
                 controller: _search,
+                hint: 'رقم الفاتورة، المشترك، أو المربع/المسار',
+                activeCount: state.query.activeFilterCount,
+                onOpenFilters: () => _openFilters(context, cubit, state),
                 onChanged: (value) => cubit.search(value),
-                onSubmitted: (value) => cubit.search(value),
-                filters: <Widget>[
-                  FilterChipButton(
-                    label: 'الحالة',
-                    value: _statusLabel(state.query.status),
-                    selected: state.query.status != null,
-                    onPressed: () => _openFilters(context, cubit, state),
-                  ),
-                  FilterChipButton(
-                    label: 'النوع',
-                    value: _typeLabel(state.query.invoiceType),
-                    selected: state.query.invoiceType != null,
-                    onPressed: () => _cycleOrPickType(context, cubit, state),
-                  ),
-                  FilterChipButton(
-                    label: 'المحذوفات',
-                    value: _trashedLabel(state.query.trashed),
-                    selected: state.query.trashed != 'without',
-                    onPressed: () => _pickTrashedFilter(context, cubit, state),
-                  ),
-                  FilterChipButton(
-                    label: 'فلاتر',
-                    value: state.query.activeFilterCount > 0
-                        ? '${state.query.activeFilterCount}'
-                        : null,
-                    selected: state.query.activeFilterCount > 0,
-                    onPressed: () => _openFilters(context, cubit, state),
-                  ),
-                  if (state.isSelectingMode)
-                    FilterChipButton(
-                      label: 'محدد',
-                      value: '${state.selectedIds.length}',
-                      selected: true,
-                      onPressed: cubit.clearSelection,
-                    ),
-                ],
                 trailing: state.isLoading
-                    ? const Padding(
-                        padding: EdgeInsets.only(right: 14),
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : null,
+              ),
+              const SizedBox(height: 8),
+              AppFilterChips(
+                children: <Widget>[
+                  AppFilterChip(
+                    label: 'الكل',
+                    selected: state.query.status == null,
+                    onTap: () => cubit.applyFilters(
+                      state.query.copyWith(clearStatus: true),
+                    ),
+                  ),
+                  for (final option in const <(String, String)>[
+                    ('issued', 'صادرة'),
+                    ('paid', 'مسددة'),
+                    ('overdue', 'متأخرة'),
+                  ])
+                    AppFilterChip(
+                      label: option.$2,
+                      selected: state.query.status == option.$1,
+                      onTap: () => cubit.applyFilters(
+                        state.query.status == option.$1
+                            ? state.query.copyWith(clearStatus: true)
+                            : state.query.copyWith(status: option.$1),
+                      ),
+                    ),
+                ],
+              ),
+              AppActiveFilters(
+                filters: <Widget>[
+                  if (state.query.status != null)
+                    AppFilterChip(
+                      label: 'الحالة · ${_statusLabel(state.query.status)}',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(clearStatus: true),
+                      ),
+                    ),
+                  if (state.query.invoiceType != null)
+                    AppFilterChip(
+                      label: 'النوع · ${_typeLabel(state.query.invoiceType)}',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(clearInvoiceType: true),
+                      ),
+                    ),
+                  if (state.query.trashed != 'without')
+                    AppFilterChip(
+                      label: _trashedLabel(state.query.trashed) ?? 'المحذوفات',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(trashed: 'without'),
+                      ),
+                    ),
+                  if (state.query.billingPeriod != null)
+                    AppFilterChip(
+                      label: 'الفترة · ${_periodLabel(state, state.query.billingPeriod!)}',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(clearBillingPeriod: true),
+                      ),
+                    ),
+                  if (state.query.squareId != null)
+                    AppFilterChip(
+                      label: 'مربع #${state.query.squareId}',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(clearSquare: true),
+                      ),
+                    ),
+                  if (state.query.subscriberId != null)
+                    AppFilterChip(
+                      label: 'مشترك #${state.query.subscriberId}',
+                      selected: true,
+                      onRemove: () => cubit.applyFilters(
+                        state.query.copyWith(clearSubscriber: true),
+                      ),
+                    ),
+                ],
+                onClearAll: () {
+                  _search.clear();
+                  cubit.applyFilters(const InvoiceQuery());
+                },
               ),
               InvoicesSummaryBar(
                 count: state.invoices.length,
@@ -219,100 +267,6 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     );
   }
 
-  Future<void> _cycleOrPickType(
-    BuildContext context,
-    InvoicesCubit cubit,
-    InvoicesState state,
-  ) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const ListTile(
-              title: Text('فلتر نوع الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.all_inclusive),
-              title: const Text('كل الأنواع'),
-              selected: state.query.invoiceType == null,
-              onTap: () => Navigator.pop(ctx, ''),
-            ),
-            ListTile(
-              leading: const Icon(Icons.speed_outlined),
-              title: const Text('فاتورة عداد (Meter)'),
-              selected: state.query.invoiceType == 'meter',
-              onTap: () => Navigator.pop(ctx, 'meter'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.card_membership_outlined),
-              title: const Text('رسوم اشتراك (Subscription)'),
-              selected: state.query.invoiceType == 'subscription',
-              onTap: () => Navigator.pop(ctx, 'subscription'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.local_shipping_outlined),
-              title: const Text('طلب وايت (Tanker)'),
-              selected: state.query.invoiceType == 'tanker',
-              onTap: () => Navigator.pop(ctx, 'tanker'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return;
-    await cubit.applyFilters(
-      picked.isEmpty
-          ? state.query.copyWith(clearInvoiceType: true)
-          : state.query.copyWith(invoiceType: picked),
-    );
-  }
-
-  Future<void> _pickTrashedFilter(
-    BuildContext context,
-    InvoicesCubit cubit,
-    InvoicesState state,
-  ) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const ListTile(
-              title: Text('سلة المحذوفات (Trashed)', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: const Text('بدون المحذوف'),
-              selected: state.query.trashed == 'without',
-              onTap: () => Navigator.pop(ctx, 'without'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.layers_outlined),
-              title: const Text('مع المحذوف'),
-              selected: state.query.trashed == 'with',
-              onTap: () => Navigator.pop(ctx, 'with'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-              title: const Text('المحذوف فقط (سلة المحذوفات)'),
-              selected: state.query.trashed == 'only',
-              onTap: () => Navigator.pop(ctx, 'only'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return;
-    await cubit.applyFilters(state.query.copyWith(trashed: picked));
-  }
-
   static String? _statusLabel(String? status) {
     if (status == null) return null;
     return switch (status) {
@@ -333,6 +287,15 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
       'tanker' => 'وايت',
       _ => type,
     };
+  }
+
+  static String _periodLabel(InvoicesState state, String wire) {
+    for (final period in state.billingPeriods) {
+      if (period.wireValue == wire) {
+        return '${DateFormat.day(period.start)} ← ${DateFormat.day(period.end)}';
+      }
+    }
+    return wire.replaceAll('|', ' ← ');
   }
 
   static String? _trashedLabel(String trashed) => switch (trashed) {
@@ -367,7 +330,7 @@ class _BulkActionsBar extends StatelessWidget {
             children: <Widget>[
               Text(
                 '${state.selectedIds.length} محدد',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: 8),
               TextButton(
@@ -400,29 +363,29 @@ class _BulkActionsBar extends StatelessWidget {
                   TextButton.icon(
                     onPressed: () => _bulkRestore(context),
                     icon: const Icon(Icons.restore_from_trash_outlined,
-                        size: 18, color: Color(0xFF86EFAC)),
+                        size: 18, color: AppColors.onPanelSoft),
                     label: const Text(
                       'استعادة',
-                      style: TextStyle(color: Color(0xFF86EFAC)),
+                      style: TextStyle(color: AppColors.onPanelSoft),
                     ),
                   ),
                 if (hasActive)
                   TextButton.icon(
                     onPressed: () => _bulkDelete(context),
                     icon: const Icon(Icons.delete_outline,
-                        size: 18, color: Color(0xFFFCA5A5)),
+                        size: 18, color: AppColors.onPanelSoft),
                     label: const Text(
                       'حذف ناعم',
-                      style: TextStyle(color: Color(0xFFFCA5A5)),
+                      style: TextStyle(color: AppColors.onPanelSoft),
                     ),
                   ),
                 TextButton.icon(
                   onPressed: () => _bulkForceDelete(context),
                   icon: const Icon(Icons.delete_forever_outlined,
-                      size: 18, color: Color(0xFFF87171)),
+                      size: 18, color: AppColors.onPanelSoft),
                   label: const Text(
                     'حذف نهائي',
-                    style: TextStyle(color: Color(0xFFF87171)),
+                    style: TextStyle(color: AppColors.onPanelSoft),
                   ),
                 ),
               ],

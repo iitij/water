@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class WhatsAppTemplateEditor extends StatelessWidget {
   const WhatsAppTemplateEditor({
@@ -29,12 +32,9 @@ class WhatsAppTemplateEditor extends StatelessWidget {
           runSpacing: 6,
           children: [
             for (final variable in variables)
-              ActionChip(
-                label: Text(
-                  '{$variable}',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-                ),
-                onPressed: () => _insertVariable(variable),
+              AppFilterChip(
+                label: '{$variable}',
+                onTap: () => _insertVariable(variable),
               ),
           ],
         ),
@@ -64,11 +64,11 @@ class WhatsAppTemplateEditor extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 520),
             padding: const EdgeInsets.all(12),
             decoration: const BoxDecoration(
-              color: Color(0xFFD9FDD3),
+              color: AppColors.whatsapp.withValues(alpha: .16),
               borderRadius: BorderRadius.only(
-                topRight: Radius.circular(14),
-                topLeft: Radius.circular(14),
-                bottomRight: Radius.circular(14),
+                topRight: Radius.circular(AppRadius.md),
+                topLeft: Radius.circular(AppRadius.md),
+                bottomRight: Radius.circular(AppRadius.md),
               ),
             ),
             child: Text(

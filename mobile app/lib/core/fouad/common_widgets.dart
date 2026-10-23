@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_tokens.dart';
 import 'app_colors.dart';
 import 'currency_formatter.dart';
 
@@ -16,7 +17,7 @@ class StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
@@ -80,7 +81,7 @@ class SumBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Wrap(
@@ -91,16 +92,20 @@ class SumBar extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(it.label, style: TextStyle(color: AppColors.neutral, fontSize: 12)),
+                Text(it.label, style: Theme.of(context).textTheme.labelSmall),
                 const SizedBox(height: 3),
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: Text(
                     CurrencyFormatter.format(it.value),
                     style: TextStyle(
-                      color: it.color,
-                      fontSize: 17,
+                      color: it.color == Colors.white
+                          ? Theme.of(context).colorScheme.onSurface
+                          : AppSemantic.resolve(context, it.color),
+                      fontSize: 16,
+                      height: 1.2,
                       fontWeight: FontWeight.w600,
+                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
                     ),
                   ),
                 ),

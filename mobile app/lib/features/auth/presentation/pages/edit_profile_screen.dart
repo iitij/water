@@ -375,31 +375,19 @@ class _ProfileHero extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: .35), width: 1.4),
-                ),
-                child: CircleAvatar(
-                  radius: 34,
-                  backgroundColor: Colors.white.withValues(alpha: .2),
-                  foregroundImage: _avatarImage(),
-                  child: const Icon(Icons.person_rounded, color: Colors.white, size: 38),
-                ),
-              ),
+              _HeroAvatar(image: _avatarImage()),
               PositionedDirectional(
                 bottom: -2,
                 end: -2,
                 child: Material(
-                  color: Colors.white,
+                  color: AppColors.accentOnPanel,
                   shape: const CircleBorder(),
                   child: InkWell(
                     onTap: onEditAvatar,
                     customBorder: const CircleBorder(),
                     child: const Padding(
                       padding: EdgeInsets.all(7),
-                      child: Icon(Icons.edit_rounded, size: 15, color: AppColors.primary),
+                      child: Icon(Icons.edit_rounded, size: 15, color: AppColors.panel),
                     ),
                   ),
                 ),
@@ -467,6 +455,32 @@ class _ProfileCard extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+/// Avatar plate used on the ink hero: a rounded square, not a circle, so it
+/// matches `AppGlyph` and the rest of the interface.
+class _HeroAvatar extends StatelessWidget {
+  const _HeroAvatar({required this.image});
+
+  final ImageProvider<Object>? image;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = this.image;
+    return Container(
+      width: 64,
+      height: 64,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        border: Border.all(color: Colors.white.withValues(alpha: .22)),
+      ),
+      child: image == null
+          ? const Icon(Icons.person_rounded, color: AppColors.onPanelSoft, size: 30)
+          : Image(image: image, fit: BoxFit.cover),
     );
   }
 }

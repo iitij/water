@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../theme/app_colors.dart';
+import '../ui/app_tokens.dart';
+import '../widgets/empty_state_widget.dart' as core;
 
 class ConfirmDialog extends StatelessWidget {
   const ConfirmDialog({
@@ -54,7 +56,7 @@ class ConfirmDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = destructive ? AppColors.danger : AppColors.primary;
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl)),
       title: Row(
         children: <Widget>[
           Icon(destructive ? Icons.warning_amber_rounded : Icons.help_outline,
@@ -137,6 +139,7 @@ class AppFeedback {
   }
 }
 
+/// غلاف متوافق مع نسخة Dev 3: يعرض عنصر الحالة الفارغة الموحّد في `core/widgets`.
 class EmptyStateWidget extends StatelessWidget {
   const EmptyStateWidget({
     super.key,
@@ -157,50 +160,18 @@ class EmptyStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(compact ? 16 : 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              padding: EdgeInsets.all(compact ? 14 : 22),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: compact ? 30 : 42, color: AppColors.primary),
-            ),
-            SizedBox(height: compact ? 10 : 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            if (message != null) ...<Widget>[
-              const SizedBox(height: 6),
-              Text(
-                message!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
-                    ),
-              ),
-            ],
-            if (actionLabel != null && onAction != null) ...<Widget>[
-              const SizedBox(height: 16),
-              FilledButton.tonalIcon(
-                onPressed: onAction,
-                icon: const Icon(Icons.add),
-                label: Text(actionLabel!),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return core.EmptyStateWidget(
+      title: title,
+      message: message ?? '',
+      icon: icon,
+      compact: compact,
+      action: (actionLabel != null && onAction != null)
+          ? TextButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(actionLabel!),
+            )
+          : null,
     );
   }
 }
@@ -235,7 +206,7 @@ class SkeletonBox extends StatelessWidget {
     super.key,
     this.height = 16,
     this.width,
-    this.radius = 8,
+    this.radius = AppRadius.xs,
   });
 
   final double height;
@@ -244,12 +215,11 @@ class SkeletonBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
     return Container(
       height: height,
       width: width,
       decoration: BoxDecoration(
-        color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+        color: Theme.of(context).colorScheme.outlineVariant,
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -273,7 +243,7 @@ class SkeletonCard extends StatelessWidget {
         padding: EdgeInsets.all(dense ? 10 : 14),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
           border: Border.all(color: AppColors.lightBorder),
         ),
         child: Column(

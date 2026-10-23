@@ -56,11 +56,7 @@ class AppSparkline extends StatelessWidget {
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[color.withValues(alpha: .14), color.withValues(alpha: 0)],
-                ),
+                color: color.withValues(alpha: .08),
               ),
             ),
           ],

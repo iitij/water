@@ -338,7 +338,7 @@ class _NavItem extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: selected ? scheme.primary.withValues(alpha: .1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(AppRadius.xs),
             ),
             child: Icon(
               selected ? destination.selectedIcon : destination.icon,

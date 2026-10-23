@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../theme/admin_palette.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 abstract final class AdminFormat {
   static final _number = NumberFormat('#,##0.##', 'en_US');
@@ -62,17 +64,12 @@ class AdminCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      color: color ?? scheme.surface,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: borderColor ?? scheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(padding: padding, child: child),
+    return AppCard(
+      padding: padding,
+      color: color,
+      borderColor: borderColor,
+      radius: AppRadius.lg,
+      child: child,
     );
   }
 }
@@ -217,7 +214,7 @@ class _Skeleton extends StatelessWidget {
         height: height,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
         ),
       );
 }
@@ -286,7 +283,7 @@ class AdminEmptyView extends StatelessWidget {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: effectiveColor,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
           ),
           if (message != null) ...[
@@ -310,7 +307,7 @@ class AdminStatusBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withAlpha(31),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -318,7 +315,7 @@ class AdminStatusBadge extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: color,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
           ),
         ),
       ),

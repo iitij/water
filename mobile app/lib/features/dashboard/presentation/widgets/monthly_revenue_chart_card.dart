@@ -247,7 +247,7 @@ class _RevenueChart extends StatelessWidget {
                     '${labels[spot.x.toInt()]}\n${AdminFormat.money(spot.y)}',
                     const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
                   ),
@@ -278,14 +278,7 @@ class _RevenueChart extends StatelessWidget {
             ),
             belowBarData: BarAreaData(
               show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[
-                  color.withValues(alpha: .12),
-                  color.withValues(alpha: 0),
-                ],
-              ),
+              color: color.withValues(alpha: .07),
             ),
           ),
         ],

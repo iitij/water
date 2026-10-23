@@ -283,7 +283,7 @@ class AppLoader extends StatelessWidget {
 /// Re-exported palette shim so pages can use brand accents without a second
 /// theme import.
 Color brandAccent(BuildContext context) => AppTheme.isDark(context)
-    ? const Color(0xFF5EEAD4)
+    ? AppColors.accentOnPanel
     : AppColors.primary;
 
 /// Solid accent button used inside the ink summary panel.
@@ -305,7 +305,7 @@ class HeroButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final foreground = dark ? const Color(0xFF06201C) : Colors.white;
+    final foreground = dark ? AppColors.panel : Colors.white;
     final radius = BorderRadius.circular(AppRadius.md);
     return SizedBox(
       width: expanded ? double.infinity : null,

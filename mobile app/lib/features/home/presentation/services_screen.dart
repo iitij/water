@@ -7,6 +7,7 @@ import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
 import '../domain/workspace_catalog.dart';
 import 'widgets/workspace_widgets.dart';
+import '../../../core/ui/app_filters.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key, this.autofocus = false});
@@ -115,14 +116,21 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                       ),
                       const SizedBox(height: 16),
                       Wrap(
-                        spacing: 8, runSpacing: 8,
+                        spacing: 6, runSpacing: 6,
                         children: [
-                          ChoiceChip(label: const Text('الكل'), selected: _group == null,
-                            onSelected: (_) => setState(() => _group = null)),
-                          for (final group in groups) ChoiceChip(
-                            label: Text(group.label), selected: _group == group,
-                            onSelected: (selected) => setState(() => _group = selected ? group : null),
+                          AppFilterChip(
+                            label: 'الكل',
+                            selected: _group == null,
+                            onTap: () => setState(() => _group = null),
                           ),
+                          for (final group in groups)
+                            AppFilterChip(
+                              label: group.label,
+                              selected: _group == group,
+                              onTap: () => setState(
+                                () => _group = _group == group ? null : group,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 20),

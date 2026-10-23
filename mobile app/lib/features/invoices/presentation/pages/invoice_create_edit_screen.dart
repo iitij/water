@@ -6,6 +6,8 @@ import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/finance_badges.dart';
@@ -278,14 +280,15 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
             if (isEditing) ...<Widget>[
               const _SectionTitle('الحالة'),
               Wrap(
-                spacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 children: InvoiceStatus.values
                     .where((s) => s != InvoiceStatus.cancelled)
                     .map(
-                      (s) => ChoiceChip(
-                        label: Text(s.label),
+                      (s) => AppFilterChip(
+                        label: s.label,
                         selected: _status == s,
-                        onSelected: (_) => setState(() => _status = s),
+                        onTap: () => setState(() => _status = s),
                       ),
                     )
                     .toList(),
@@ -296,7 +299,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
               child: Row(
                 children: <Widget>[
@@ -357,7 +360,7 @@ class LtrNumberTextTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.lightBorder),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,7 +370,7 @@ class LtrNumberTextTile extends StatelessWidget {
             textDirection: TextDirection.ltr,
             child: Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],

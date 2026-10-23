@@ -83,6 +83,9 @@ abstract final class AppColors {
   static const violet = Color(0xFF4C6470);
   static const coral = Color(0xFF8A5A52);
 
+  /// لون واتساب التجاري — يُستخدم على أيقونة المشاركة فقط.
+  static const whatsapp = Color(0xFF25D366);
+
   // ── Legacy surface aliases ───────────────────────────────────────────────
   static const lightBackground = paper;
   static const lightSurface = surface;

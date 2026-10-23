@@ -7,6 +7,7 @@ import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../data/services/excel_export_service.dart';
 import '../../domain/entities/export_entities.dart';
 import '../cubit/export_cubit.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class ExportCenterScreen extends StatelessWidget {
   const ExportCenterScreen({
@@ -181,7 +182,7 @@ class _ExportStats extends StatelessWidget {
                         child: Text(
                           card.$2 == null ? '—' : AdminFormat.number(card.$2!),
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w600,
                               ),
                         ),
                       ),
@@ -348,12 +349,12 @@ class _ExportCard extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: _color.withAlpha(12),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        LtrText(file.fileName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        LtrText(file.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
                         Text('${_fileSize(file.sizeInBytes)} • محفوظ على الجهاز'),
                         const SizedBox(height: 8),
                         Wrap(
@@ -462,7 +463,7 @@ class _DateField extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Row(

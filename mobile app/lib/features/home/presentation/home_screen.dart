@@ -467,7 +467,7 @@ class _BalancePanel extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             ClipRRect(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 0, end: ratio),
                 duration: AppMotion.slow,
@@ -605,7 +605,7 @@ class _PanelButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(AppRadius.md));
-    final foreground = primary ? const Color(0xFF06211D) : AppColors.onPanelSoft;
+    final foreground = primary ? AppColors.panel : AppColors.onPanelSoft;
     return SizedBox(
       height: 44,
       child: Material(
@@ -614,7 +614,7 @@ class _PanelButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           borderRadius: radius,
-          splashColor: primary ? const Color(0x22000000) : Colors.white12,
+          splashColor: primary ? Colors.black12 : Colors.white12,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,

@@ -8,6 +8,10 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
@@ -68,7 +72,6 @@ Future<bool> launchDefaultSubscriberPayment(
         keyboardType: TextInputType.number,
         decoration: const InputDecoration(
           labelText: 'المبلغ (ريال)',
-          border: OutlineInputBorder(),
         ),
       ),
       actions: [
@@ -323,42 +326,60 @@ class _SubscribersView extends StatelessWidget {
   }
 
   Widget _list(BuildContext context, SubscribersState state) {
+    final cubit = context.read<SubscribersCubit>();
+    final activeCount =
+        (state.squareId == null ? 0 : 1) + (state.status == null ? 0 : 1);
+    final squareName = _squareName(state);
+
     return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        child: TextField(
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'بحث بالاسم / الهاتف / كود العداد...',
-            border: OutlineInputBorder(),
-          ),
-          onChanged: context.read<SubscribersCubit>().search,
-        ),
+      const SizedBox(height: AppSpacing.xs),
+      AppFilterBar(
+        query: state.query,
+        hint: 'بحث بالاسم / الهاتف / كود العداد',
+        activeCount: activeCount,
+        onOpenFilters: () => _openFilters(context, state, cubit),
+        onChanged: cubit.search,
       ),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(children: [
-          DropdownButton<int?>(
-            value: state.squareId,
-            hint: const Text('كل المربعات'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('كل المربعات')),
-              for (final sq in state.squares) DropdownMenuItem(value: sq.id, child: Text(sq.name)),
-            ],
-            onChanged: context.read<SubscribersCubit>().filterSquare,
+      AppFilterChips(
+        children: <Widget>[
+          AppFilterChip(
+            label: 'الكل',
+            selected: state.status == null,
+            onTap: () => cubit.filterStatus(null),
           ),
-          const SizedBox(width: 12),
-          DropdownButton<SubscriberStatus?>(
-            value: state.status,
-            hint: const Text('كل الحالات'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('كل الحالات')),
-              for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label)),
-            ],
-            onChanged: context.read<SubscribersCubit>().filterStatus,
-          ),
-        ]),
+          for (final status in SubscriberStatus.values)
+            AppFilterChip(
+              label: status.label,
+              selected: state.status == status,
+              onTap: () => cubit.filterStatus(
+                state.status == status ? null : status,
+              ),
+            ),
+        ],
+      ),
+      AppActiveFilters(
+        filters: <Widget>[
+          if (squareName != null)
+            AppFilterChip(
+              label: squareName,
+              icon: Icons.grid_view_rounded,
+              selected: true,
+              onRemove: () => cubit.filterSquare(null),
+            ),
+          if (state.status != null)
+            AppFilterChip(
+              label: 'الحالة · ${state.status!.label}',
+              icon: Icons.verified_user_outlined,
+              selected: true,
+              onRemove: () => cubit.filterStatus(null),
+            ),
+        ],
+        onClearAll: activeCount == 0
+            ? null
+            : () {
+                cubit.filterSquare(null);
+                cubit.filterStatus(null);
+              },
       ),
       if (state.selectedIds.isNotEmpty)
         MaterialBanner(
@@ -379,7 +400,26 @@ class _SubscribersView extends StatelessWidget {
       if (state.loading) const LinearProgressIndicator(),
       Expanded(
         child: state.subscribers.isEmpty && !state.loading
-            ? const EmptyState(message: 'لا يوجد مشتركون مطابقون')
+            ? EmptyStateWidget(
+                title: 'لا يوجد مشتركون مطابقون',
+                message: activeCount == 0
+                    ? 'أضف مشتركاً جديداً لتبدأ.'
+                    : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
+                icon: activeCount == 0
+                    ? Icons.people_outline_rounded
+                    : Icons.filter_alt_off_rounded,
+                action: activeCount == 0
+                    ? null
+                    : TextButton.icon(
+                        onPressed: () {
+                          cubit.filterSquare(null);
+                          cubit.filterStatus(null);
+                          cubit.search('');
+                        },
+                        icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                        label: const Text('مسح الفلاتر'),
+                      ),
+              )
             : ListView.builder(
                 itemCount: state.subscribers.length,
                 itemBuilder: (_, i) {
@@ -425,13 +465,17 @@ class _SubscriberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = subscriber;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
-      child: InkWell(
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        color: selected ? scheme.primary.withValues(alpha: .04) : null,
+        borderColor: selected ? scheme.primary.withValues(alpha: .4) : null,
         onTap: onTap,
+        child: InkWell(
         onLongPress: onToggleSelect,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -443,8 +487,12 @@ class _SubscriberCard extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  '#${s.id} • ${s.name}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  '#${s.id} · ${s.name}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: scheme.onSurface,
+                  ),
                 ),
               ),
               StatusBadge(
@@ -468,8 +516,8 @@ class _SubscriberCard extends StatelessWidget {
             ]),
             const SizedBox(height: 4),
             Text(
-              '${s.squareName ?? ''} • ${s.metersCount} عداد • بدء الاشتراك: ${s.subscriptionStartDate ?? '-'}',
-              style: const TextStyle(color: AppColors.neutral, fontSize: 12),
+              '${s.squareName ?? ''} · ${s.metersCount} عداد · بدء ${s.subscriptionStartDate ?? '-'}',
+              style: Theme.of(context).textTheme.labelSmall,
             ),
             if (s.phone != null)
               Directionality(
@@ -478,34 +526,40 @@ class _SubscriberCard extends StatelessWidget {
               ),
             const SizedBox(height: 6),
             Row(children: [
-              const Text('الرصيد الصافي: '),
+              Text('الرصيد الصافي', style: Theme.of(context).textTheme.labelSmall),
+              const SizedBox(width: 6),
               BalanceText(s.netBalance),
               const Spacer(),
               if (s.debitBalance > 0)
                 Text(
-                  'مدين: ${CurrencyFormatter.format(s.debitBalance)}',
-                  style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                  'مدين ${CurrencyFormatter.format(s.debitBalance)}',
+                  style: TextStyle(
+                    color: AppSemantic.resolve(context, AppColors.danger),
+                    fontSize: 11,
+                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  ),
                 ),
             ]),
-            const Divider(),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+            Divider(height: 16, color: scheme.outlineVariant),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               TextButton.icon(
-                icon: const Icon(Icons.payments, color: AppColors.success),
+                icon: Icon(Icons.payments_rounded, size: 17, color: AppSemantic.resolve(context, AppColors.success)),
                 label: const Text('تحصيل دفعة'),
                 onPressed: () => _collect(context),
               ),
               TextButton.icon(
-                icon: const Icon(Icons.local_shipping, color: AppColors.info),
+                icon: Icon(Icons.local_shipping_outlined, size: 17, color: AppSemantic.resolve(context, AppColors.info)),
                 label: const Text('طلب وايت'),
                 onPressed: () => _quickTanker(context),
               ),
               TextButton.icon(
-                icon: const Icon(Icons.folder_open, color: AppColors.primary),
+                icon: Icon(Icons.folder_open_rounded, size: 17, color: scheme.primary),
                 label: const Text('ملف 360°'),
                 onPressed: () => onOpen360(s),
               ),
             ]),
           ]),
+        ),
         ),
       ),
     );
@@ -544,7 +598,6 @@ class _SubscriberCard extends StatelessWidget {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'سعر الوايت (ريال)',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
@@ -568,7 +621,6 @@ class _SubscriberCard extends StatelessWidget {
               controller: notesCtrl,
               decoration: const InputDecoration(
                 labelText: 'ملاحظات',
-                border: OutlineInputBorder(),
               ),
             ),
           ]),
@@ -647,4 +699,117 @@ class _SubscriberPeek extends StatelessWidget {
           ]),
         ]),
       );
+}
+
+String? _squareName(SubscribersState state) {
+  if (state.squareId == null) return null;
+  for (final square in state.squares) {
+    if (square.id == state.squareId) return square.name;
+  }
+  return 'مربع #${state.squareId}';
+}
+
+Future<void> _openFilters(
+  BuildContext context,
+  SubscribersState state,
+  SubscribersCubit cubit,
+) {
+  return AppFilterSheet.show<void>(
+    context: context,
+    builder: (_) => _SubscribersFilterSheet(state: state, cubit: cubit),
+  );
+}
+
+/// تصفية المشتركين — مسودة واحدة تُطبَّق مرة واحدة من تذييل الورقة.
+class _SubscribersFilterSheet extends StatefulWidget {
+  const _SubscribersFilterSheet({required this.state, required this.cubit});
+
+  final SubscribersState state;
+  final SubscribersCubit cubit;
+
+  @override
+  State<_SubscribersFilterSheet> createState() =>
+      _SubscribersFilterSheetState();
+}
+
+class _SubscribersFilterSheetState extends State<_SubscribersFilterSheet> {
+  late int? _square = widget.state.squareId;
+  late SubscriberStatus? _status = widget.state.status;
+
+  void _apply() {
+    widget.cubit.filterSquare(_square);
+    widget.cubit.filterStatus(_status);
+    Navigator.of(context).maybePop();
+  }
+
+  void _reset() => setState(() {
+        _square = null;
+        _status = null;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppFilterSheet(
+      title: 'تصفية المشتركين',
+      resultCountLabel: '${widget.state.subscribers.length} مشترك في القائمة',
+      onApply: _apply,
+      onReset: _reset,
+      resetEnabled: _square != null || _status != null,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'حالة الاشتراك',
+          child: Column(
+            children: <Widget>[
+              AppFilterOptionTile(
+                label: 'كل الحالات',
+                icon: Icons.apps_rounded,
+                selected: _status == null,
+                onTap: () => setState(() => _status = null),
+              ),
+              const SizedBox(height: 6),
+              for (final status in SubscriberStatus.values) ...<Widget>[
+                AppFilterOptionTile(
+                  label: status.label,
+                  icon: status == SubscriberStatus.active
+                      ? Icons.check_circle_outline_rounded
+                      : status == SubscriberStatus.suspended
+                          ? Icons.pause_circle_outline_rounded
+                          : Icons.remove_circle_outline_rounded,
+                  selected: _status == status,
+                  onTap: () => setState(() => _status = status),
+                ),
+                const SizedBox(height: 6),
+              ],
+            ],
+          ),
+        ),
+        AppFilterSection(
+          title: 'المربع السكني',
+          subtitle: 'اختر مربعاً واحداً لعرض مشتركيه فقط',
+          child: AppFilterDropdown<int?>(
+            label: 'المربع',
+            icon: Icons.grid_view_rounded,
+            hint: 'كل المربعات',
+            value: widget.state.squares.any((s) => s.id == _square)
+                ? _square
+                : null,
+            items: <DropdownMenuItem<int?>>[
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('كل المربعات'),
+              ),
+              ...widget.state.squares.map(
+                (square) => DropdownMenuItem<int?>(
+                  value: square.id,
+                  child: Text(square.name, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            onChanged: (value) => setState(() => _square = value),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
 }

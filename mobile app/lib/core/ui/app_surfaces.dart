@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import 'app_tokens.dart';
 
 /// The base surface used across the app.
@@ -59,6 +60,148 @@ class AppCard extends StatelessWidget {
         border: Border.all(color: borderColor ?? scheme.outlineVariant),
       ),
       child: Material(type: MaterialType.transparency, child: content),
+    );
+  }
+}
+
+/// A rounded-square icon holder: the flat replacement for `CircleAvatar`.
+///
+/// The tint is a 7% wash of the semantic colour with a hairline border of the
+/// same hue, so a row of these reads as one family instead of a candy palette.
+class AppGlyph extends StatelessWidget {
+  const AppGlyph({
+    super.key,
+    required this.icon,
+    this.tone,
+    this.size = 40,
+    this.radius,
+    this.neutral = false,
+  });
+
+  final IconData icon;
+  final Color? tone;
+  final double size;
+  final double? radius;
+
+  /// Use the quiet neutral surface instead of a colour wash.
+  final bool neutral;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final base = AppSemantic.resolve(context, tone ?? scheme.primary);
+    final background =
+        neutral ? scheme.surfaceContainerHighest : AppTint.soft(base, context);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(radius ?? (size * .32)),
+        border: Border.all(
+          color: neutral
+              ? scheme.outlineVariant
+              : base.withValues(alpha: AppTheme.isDark(context) ? .22 : .14),
+        ),
+      ),
+      child: Icon(icon, size: size * .46, color: neutral ? scheme.onSurfaceVariant : base),
+    );
+  }
+}
+
+/// Photo or initial holder with the same squircle geometry as [AppGlyph].
+class AppPhotoAvatar extends StatelessWidget {
+  const AppPhotoAvatar({
+    super.key,
+    this.url,
+    this.size = 40,
+    this.icon = Icons.person_outline_rounded,
+  });
+
+  final String? url;
+  final double size;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(size * .32);
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: radius,
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Icon(icon, size: size * .46, color: scheme.onSurfaceVariant),
+    );
+    final url = this.url;
+    if (url == null || url.trim().isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: radius,
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+      ),
+    );
+  }
+}
+
+/// A compact label/value pair, the atom of the detail screens.
+class AppField extends StatelessWidget {
+  const AppField({
+    super.key,
+    required this.label,
+    required this.value,
+    this.icon,
+    this.tone,
+    this.ltr = false,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final Color? tone;
+  final bool ltr;
+  final CrossAxisAlignment crossAxisAlignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = tone == null ? scheme.onSurface : AppSemantic.resolve(context, tone!);
+    return Column(
+      crossAxisAlignment: crossAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (icon != null) ...<Widget>[
+              Icon(icon, size: 12, color: scheme.onSurfaceVariant.withValues(alpha: .8)),
+              const SizedBox(width: 4),
+            ],
+            Text(label, style: theme.textTheme.labelSmall),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Directionality(
+          textDirection: ltr ? TextDirection.ltr : TextDirection.rtl,
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: color,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
