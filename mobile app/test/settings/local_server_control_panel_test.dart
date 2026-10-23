@@ -51,7 +51,9 @@ void main() {
     final api = FakeAdminApiClient();
     api.handlers['GET:/whatsapp/local-status'] = {
       'connected': false,
-      'qr': 'not-valid-base64',
+      // Hyphens are valid in base64url; use genuinely malformed Base64
+      // so this exercises synchronous decoding, not async image codecs.
+      'qr': '%%%not-base64%%%',
     };
     final cache = MemorySettingsCache();
     final repository = SettingsRepositoryImpl(SettingsRemoteDataSource(api), cache);
