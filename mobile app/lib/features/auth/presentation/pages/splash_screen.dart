@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/auth/session_service.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../core/ui/app_brand.dart';
+import '../../../../core/ui/app_motion.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,11 +16,22 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..repeat();
+
   @override
   void initState() {
     super.initState();
     unawaited(GetIt.I<SessionService>().bootstrap());
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
   }
 
   @override
@@ -27,56 +40,73 @@ class _SplashScreenState extends State<SplashScreen> {
     return Scaffold(
       body: Stack(
         children: <Widget>[
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                  colors: <Color>[Color(0xFF0B2B40), AppColors.primary, Color(0xFF0EA5E9)],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: -90,
-            left: -70,
-            child: _GlowCircle(size: 270, color: Colors.white.withValues(alpha: .08)),
-          ),
-          Positioned(
-            bottom: -150,
-            right: -70,
-            child: _GlowCircle(size: 330, color: Colors.white.withValues(alpha: .07)),
-          ),
+          const Positioned.fill(child: AquaBackdrop()),
           SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380),
+                constraints: const BoxConstraints(maxWidth: 400),
                 child: Padding(
                   padding: const EdgeInsets.all(28),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Container(
-                        width: 92,
-                        height: 92,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .13),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: Colors.white.withValues(alpha: .27)),
+                      SizedBox.square(
+                        dimension: 190,
+                        child: AnimatedBuilder(
+                          animation: _pulse,
+                          builder: (context, child) {
+                            final t = Curves.easeOut.transform(_pulse.value);
+                            return Stack(
+                              alignment: Alignment.center,
+                              children: <Widget>[
+                                _Ring(size: 130 + 60 * t, opacity: (1 - t) * .28),
+                                _Ring(size: 110 + 30 * t, opacity: (1 - t) * .18),
+                                child!,
+                              ],
+                            );
+                          },
+                          child: const AppBrandMark(size: 96),
                         ),
-                        child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 46),
                       ),
-                      const SizedBox(height: 24),
-                      Text('مياه الوشاح', style: theme.textTheme.headlineLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 6),
-                      Text('نظام إدارة المشتركين والقراءات', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: .82))),
-                      const SizedBox(height: 34),
-                      const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.4)),
+                      const SizedBox(height: 22),
+                      Text(
+                        AppConfig.appName,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'منصة إدارة المشتركين والقراءات والتحصيل',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: .8),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      SizedBox(
+                        width: 132,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          child: const LinearProgressIndicator(
+                            minHeight: 4,
+                            backgroundColor: Color(0x33FFFFFF),
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 14),
-                      Text('جارٍ تجهيز الجلسة الآمنة…', style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: .78))),
-                      const SizedBox(height: 44),
-                      const ShimmerSkeleton(height: 5, width: 120, radius: 99),
+                      Text(
+                        'جارٍ تجهيز الجلسة الآمنة…',
+                        style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 46),
+                      Text(
+                        'الإصدار 1.0.0',
+                        style: theme.textTheme.labelSmall?.copyWith(color: Colors.white38),
+                      ),
                     ],
                   ),
                 ),
@@ -89,16 +119,25 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-class _GlowCircle extends StatelessWidget {
-  const _GlowCircle({required this.size, required this.color});
+class _Ring extends StatelessWidget {
+  const _Ring({required this.size, required this.opacity});
 
   final double size;
-  final Color color;
+  final double opacity;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: opacity),
+          width: 1.4,
+        ),
+        color: Colors.white.withValues(alpha: opacity * .12),
+      ),
+    );
+  }
 }
