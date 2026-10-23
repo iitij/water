@@ -210,7 +210,7 @@ class MasterDetailLayout extends StatelessWidget {
         Expanded(
           child: hasSelection
               ? detail
-              : EmptyState(message: 'اختر عنصراً من القائمة لعرض تفاصيله', icon: Icons.touch_app_outlined),
+              : const EmptyState(message: 'اختر عنصراً من القائمة لعرض تفاصيله', icon: Icons.touch_app_outlined),
         ),
       ],
     );

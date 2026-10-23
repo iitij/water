@@ -36,7 +36,7 @@ class FilledDropdown<T> extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       isExpanded: isExpanded,
       isDense: isDense,
       style: theme.textTheme.bodyMedium?.copyWith(

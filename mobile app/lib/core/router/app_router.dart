@@ -32,9 +32,9 @@ import '../auth/session_service.dart';
 import '../finance/finance_locator.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
-import '../permissions/permission_service.dart';
 import '../navigation/app_shell.dart';
 import '../navigation/sub_page.dart';
+import '../permissions/permission_service.dart';
 import '../services/whatsapp_launcher_service.dart';
 import 'route_names.dart';
 
