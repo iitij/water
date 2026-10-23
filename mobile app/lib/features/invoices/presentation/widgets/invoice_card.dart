@@ -27,6 +27,7 @@ class InvoiceCard extends StatelessWidget {
     this.onCollect,
     this.onPrint,
     this.onWhatsapp,
+    this.onMoreActions,
     this.canCollect = false,
     this.whatsappEnabled = false,
     this.thermalEnabled = false,
@@ -47,6 +48,7 @@ class InvoiceCard extends StatelessWidget {
   final VoidCallback? onPrint;
   final VoidCallback? onPrintThermal;
   final VoidCallback? onWhatsapp;
+  final VoidCallback? onMoreActions;
   final bool canCollect;
   final bool whatsappEnabled;
   final bool thermalEnabled;
@@ -105,7 +107,26 @@ class InvoiceCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: <Widget>[
-                      InvoiceTypeBadge(type: invoice.invoiceType.wire, compact: dense),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (invoice.isDeleted) ...<Widget>[
+                            const StatusBadge(
+                              status: 'danger',
+                              label: 'محذوفة',
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          InvoiceTypeBadge(type: invoice.invoiceType.wire, compact: dense),
+                          if (onMoreActions != null)
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'خيارات الفاتورة',
+                              icon: const Icon(Icons.more_vert, size: 18),
+                              onPressed: busy ? null : onMoreActions,
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       StatusBadge(
                         status: invoice.status.colorKey,

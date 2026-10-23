@@ -69,7 +69,7 @@ class CollectPaymentRequest extends Equatable {
   Map<String, dynamic> toPayPayload({String? syncUuid}) => <String, dynamic>{
         'amount': amount,
         'payment_method': method.wire,
-        if (paymentDate != null) 'payment_date': DateFormat.day(paymentDate),
+       if (paymentDate != null) 'payment_date': DateFormat.dateTime(paymentDate),
         if (method.requiresReference) 'reference_number': referenceNumber,
         if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
         if (reason != null && reason!.trim().isNotEmpty) 'reason': reason!.trim(),

@@ -310,8 +310,10 @@ class SyncQueueManager extends ChangeNotifier {
 
   Future<void> _send(SyncQueueItem item) async {
     final currentUserId = _session.user?['id']?.toString();
-    if (item.ownerUserId == null ||
-        item.ownerUserId!.isEmpty ||
+    // الصفوف القديمة بلا مالك تُنسب للمستخدم الحالي عند المزامنة (سياسة التبنّي)،
+    // أما أي اختلاف صريح في المالك فيُوقف الإرسال لحماية بيانات الحساب الآخر.
+    if (item.ownerUserId != null &&
+        item.ownerUserId!.isNotEmpty &&
         item.ownerUserId != currentUserId) {
       throw StateError(
         'هذه العملية محفوظة لحساب مستخدم آخر؛ سجّل الدخول بالحساب نفسه لمزامنتها.',

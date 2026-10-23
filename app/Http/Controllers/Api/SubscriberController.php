@@ -119,7 +119,13 @@ class SubscriberController extends ApiController
     public function destroy(int $id)
     {
         $this->authorizeApi(Subscriber::class, 'delete');
-        Subscriber::findOrFail($id)->delete();
+        $subscriber = Subscriber::findOrFail($id);
+        if ($this->hasHistory($subscriber)) {
+            return response()->json([
+                'message' => 'لا يمكن حذف مشترك لديه عدادات أو فواتير أو سندات أو حركات مالية مرتبطة.',
+            ], 409);
+        }
+        $subscriber->delete();
         return response()->json(['message' => 'تم حذف المشترك بنجاح.']);
     }
 
@@ -127,8 +133,33 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:subscribers,id']]);
-        $deleted = Subscriber::whereIn('id', $data['ids'])->delete();
-        return response()->json(['deleted_count' => $deleted]);
+        $deleted = 0;
+        $skipped = [];
+        DB::transaction(function () use ($data, &$deleted, &$skipped) {
+            foreach (Subscriber::whereIn('id', $data['ids'])->lockForUpdate()->get() as $subscriber) {
+                if ($this->hasHistory($subscriber)) {
+                    $skipped[] = $subscriber->id;
+                    continue;
+                }
+                $subscriber->delete();
+                $deleted++;
+            }
+        });
+        return response()->json([
+            'deleted_count' => $deleted,
+            'skipped_count' => count($skipped),
+            'skipped_ids' => $skipped,
+        ]);
+    }
+
+    private function hasHistory(Subscriber $subscriber): bool
+    {
+        return $subscriber->meters()->exists()
+            || $subscriber->invoices()->withTrashed()->exists()
+            || $subscriber->payments()->exists()
+            || $subscriber->subscriptionFees()->exists()
+            || $subscriber->serviceRequests()->exists()
+            || $subscriber->transactions()->exists();
     }
 
     public function summary(int $id)

@@ -23,6 +23,7 @@ abstract class SubscribersRepository {
   Future<Subscriber> createSubscriber(Subscriber draft);
   Future<Subscriber> updateSubscriber(Subscriber subscriber);
   Future<void> deleteSubscriber(int id);
+  Future<int> bulkDelete(List<int> ids);
   Future<List<LedgerEntry>> getStatement(int subscriberId, {PartyFilter party = const PartyAll()});
   Future<List<Square>> getSquaresLookup();
   Future<Map<String, dynamic>> collectPayment(int subscriberId, {required double amount, int? invoiceId, String method = 'cash', String? reason});

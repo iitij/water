@@ -3,6 +3,7 @@
 /// بـ `LocalSyncQueueRepository` كخيار احتياطي للاختبارات المنعزلة فقط.
 import 'dart:convert';
 
+import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/offline_sync/domain/sync_queue_item.dart';
@@ -95,7 +96,7 @@ class UnifiedFinanceSyncQueueAdapter implements FinanceSyncQueueRepository {
 class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
   LocalSyncQueueRepository({SharedPreferences? prefs}) : _prefs = prefs;
 
-  static const String _key = 'sync.queue.pending';
+  static const String storageKey = 'sync.queue.pending';
   SharedPreferences? _prefs;
 
   Future<SharedPreferences> get _store async =>
@@ -103,6 +104,23 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
 
   @override
   Future<void> enqueue(SyncAction action) async {
+    if (GetIt.I.isRegistered<SyncQueueManager>() &&
+        (action.sourceModule == 'payments' ||
+            action.type == 'payment.create' ||
+            action.type == 'invoice.pay')) {
+      try {
+        final payload = Map<String, dynamic>.from(action.payload);
+        // لا نمرّر `REC-LOCAL-...` كـ sync_uuid لأن الخادم يشترط UUID v4 صالحاً؛
+        // يولّد `SyncQueueManager.enqueuePayment` قيمة `sync_uuid` قياسية تلقائياً.
+        if (action.idempotencyKey != null) {
+          payload['local_receipt_number'] = action.idempotencyKey;
+        }
+        await GetIt.I<SyncQueueManager>().enqueuePayment(payload);
+        return;
+      } catch (_) {
+        // في حال عدم اكتمال الجلسة في الاختبارات، نحفظ في المخزن المحلي الاحتياطي.
+      }
+    }
     final list = await _read();
     list.add(action);
     await _write(list);
@@ -110,9 +128,31 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
 
   @override
   Future<List<SyncAction>> pending({String? module}) async {
-    final list = await _read();
-    if (module == null) return list;
-    return list.where((a) => a.sourceModule == module).toList();
+    final localList = await _read();
+    final filteredLocal = module == null
+        ? localList
+        : localList.where((a) => a.sourceModule == module).toList();
+
+    if (GetIt.I.isRegistered<SyncQueueManager>() &&
+        (module == null || module == 'payments')) {
+      final managerItems = GetIt.I<SyncQueueManager>()
+          .items
+          .where((item) => item.type == SyncQueueType.payment)
+          .map(
+            (item) => SyncAction(
+              type: item.payload['invoice_id'] != null
+                  ? 'invoice.pay'
+                  : 'payment.create',
+              payload: item.payload,
+              createdAt: item.createdAt,
+              idempotencyKey:
+                  item.payload['local_receipt_number']?.toString() ?? item.id,
+              sourceModule: 'payments',
+            ),
+          );
+      return <SyncAction>[...filteredLocal, ...managerItems];
+    }
+    return filteredLocal;
   }
 
   @override
@@ -128,7 +168,7 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
 
   Future<List<SyncAction>> _read() async {
     final prefs = await _store;
-    final raw = prefs.getStringList(_key) ?? <String>[];
+    final raw = prefs.getStringList(storageKey) ?? <String>[];
     final list = <SyncAction>[];
     for (final item in raw) {
       try {
@@ -136,9 +176,7 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
         if (decoded is Map) {
           list.add(SyncAction.fromJson(decoded.cast<String, dynamic>()));
         }
-      } catch (_) {
-        // عنصر تالف → يُتجاهل حتى لا ينكسر الطابور كله.
-      }
+      } catch (_) {}
     }
     return list;
   }
@@ -146,7 +184,7 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
   Future<void> _write(List<SyncAction> list) async {
     final prefs = await _store;
     await prefs.setStringList(
-      _key,
+      storageKey,
       list.map((a) => jsonEncode(a.toJson())).toList(),
     );
   }

@@ -21,8 +21,8 @@ class SubscriptionFeesRepositoryImpl implements SubscriptionFeesRepository {
   }
 
   @override
-  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, String? notes}) =>
-      _remote.create({'subscriber_id': subscriberId, 'meter_id': meterId, 'amount': amount, 'status': 'uninvoiced', 'notes': notes});
+  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) =>
+      _remote.create({'subscriber_id': subscriberId, 'meter_id': meterId, 'amount': amount, 'status': status.apiValue, 'notes': notes});
 
   @override
   Future<SubscriptionFee> updateFee(SubscriptionFee f) => _remote.update(f.id, {
@@ -35,6 +35,9 @@ class SubscriptionFeesRepositoryImpl implements SubscriptionFeesRepository {
 
   @override
   Future<void> deleteFee(int id) => _remote.delete(id);
+
+  @override
+  Future<int> bulkDelete(List<int> ids) => _remote.bulkDelete(ids);
 
   @override
   Future<Map<String, dynamic>> invoiceFee(int id) => _remote.invoice(id);

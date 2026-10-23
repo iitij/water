@@ -1,25 +1,35 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 
+import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/search_text_field.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../data/models/reading.dart';
+import '../../data/services/reading_invoice_actions_service.dart';
 import '../../domain/readings_repository.dart';
 import '../cubit/readings_cubit.dart';
+import '../widgets/offline_pack_dialog.dart';
+import '../widgets/record_reading_sheet.dart';
 
 class ReadingsListScreen extends StatelessWidget {
   const ReadingsListScreen({
     required this.readingsRepository,
     required this.metersRepository,
+    this.invoiceActions,
+    this.offlinePackDownloader,
     super.key,
   });
 
   final ReadingsRepository readingsRepository;
   final MetersRepository metersRepository;
+  final ReadingInvoiceActionsService? invoiceActions;
+  final OfflinePackDownloader? offlinePackDownloader;
 
   @override
   Widget build(BuildContext context) => BlocProvider(
@@ -27,12 +37,30 @@ class ReadingsListScreen extends StatelessWidget {
           readingsRepository: readingsRepository,
           metersRepository: metersRepository,
         )..load(),
-        child: const _ReadingsListView(),
+        child: _ReadingsListView(
+          readingsRepository: readingsRepository,
+          metersRepository: metersRepository,
+          invoiceActions: invoiceActions ??
+              (GetIt.I.isRegistered<ReadingInvoiceActionsService>()
+                  ? GetIt.I<ReadingInvoiceActionsService>()
+                  : null),
+          offlinePackDownloader: offlinePackDownloader,
+        ),
       );
 }
 
 class _ReadingsListView extends StatelessWidget {
-  const _ReadingsListView();
+  const _ReadingsListView({
+    required this.readingsRepository,
+    required this.metersRepository,
+    this.invoiceActions,
+    this.offlinePackDownloader,
+  });
+
+  final ReadingsRepository readingsRepository;
+  final MetersRepository metersRepository;
+  final ReadingInvoiceActionsService? invoiceActions;
+  final OfflinePackDownloader? offlinePackDownloader;
 
   @override
   Widget build(BuildContext context) {
@@ -52,9 +80,27 @@ class _ReadingsListView extends StatelessWidget {
             BlocBuilder<ReadingsCubit, ReadingsState>(
               buildWhen: (previous, current) =>
                   previous.selectedKeys != current.selectedKeys ||
-                  previous.isMutating != current.isMutating,
+                  previous.isMutating != current.isMutating ||
+                  previous.squares != current.squares ||
+                  previous.squareFilter != current.squareFilter,
               builder: (context, state) {
-                if (!state.isSelecting) return const SizedBox.shrink();
+                if (!state.isSelecting) {
+                  return IconButton(
+                    tooltip: 'تنزيل حزمة العمل أوفلاين',
+                    onPressed: () async {
+                      final res = await OfflinePackDialog.show(
+                        context,
+                        downloader: offlinePackDownloader,
+                        squares: state.squares,
+                        initialSquareId: state.squareFilter,
+                      );
+                      if (res != null && context.mounted) {
+                        await cubit.load();
+                      }
+                    },
+                    icon: const Icon(Icons.cloud_download_outlined),
+                  );
+                }
                 final selected = cubit.selectedReadings;
                 final canIssue = selected.isNotEmpty &&
                     selected.every((reading) => !reading.isInvoiced && reading.id != null);
@@ -120,6 +166,11 @@ class _ReadingsListView extends StatelessWidget {
             ),
           ],
         ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _openAddReadingPicker(context, cubit),
+          icon: const Icon(Icons.add_chart_outlined),
+          label: const Text('إضافة قراءة'),
+        ),
         body: BlocConsumer<ReadingsCubit, ReadingsState>(
           listenWhen: (previous, current) =>
               previous.errorMessage != current.errorMessage && current.errorMessage != null ||
@@ -172,6 +223,9 @@ class _ReadingsListView extends StatelessWidget {
                         selectionMode: state.isSelecting,
                         onTap: () => cubit.toggleSelection(state.readings[index]),
                         onLongPress: () => cubit.toggleSelection(state.readings[index]),
+                        onPreviewPhoto: state.readings[index].hasPhoto
+                            ? () => _previewReadingPhoto(context, state.readings[index])
+                            : null,
                         onEdit: state.readings[index].isInvoiced
                             ? null
                             : () => _editReading(context, state.readings[index], cubit),
@@ -180,11 +234,215 @@ class _ReadingsListView extends StatelessWidget {
                             : () => _confirmDelete(context, state.readings[index], cubit),
                       ),
                     ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 88)),
                 ],
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddReadingPicker(BuildContext context, ReadingsCubit cubit) async {
+    List<Meter> meters = const [];
+    bool loading = true;
+    String? loadErr;
+    String searchQuery = '';
+
+    final picked = await showModalBottomSheet<Meter>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        var didStartLoad = false;
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            if (!didStartLoad) {
+              didStartLoad = true;
+              metersRepository
+                  .getMeters(
+                    squareId: cubit.state.squareFilter,
+                    status: 'active',
+                  )
+                  .then((list) {
+                if (sheetCtx.mounted) {
+                  setSheetState(() {
+                    meters = list;
+                    loading = false;
+                  });
+                }
+              }).catchError((_) {
+                if (sheetCtx.mounted) {
+                  setSheetState(() {
+                    loadErr = 'تعذر تحميل قائمة العدادات.';
+                    loading = false;
+                  });
+                }
+              });
+            }
+
+            final filtered = meters.where((m) {
+              final q = searchQuery.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return m.uniqueCode.toLowerCase().contains(q) ||
+                  (m.subscriberName ?? '').toLowerCase().contains(q) ||
+                  (m.tenantName ?? '').toLowerCase().contains(q) ||
+                  (m.pathNumber?.toString() ?? '').contains(q);
+            }).toList(growable: false);
+
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: SafeArea(
+                child: FractionallySizedBox(
+                  heightFactor: 0.8,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'اختر العداد لتسجيل قراءة جديدة',
+                          style: Theme.of(sheetCtx)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.search),
+                            hintText: 'ابحث بكود العداد أو المشترك أو رقم المسار…',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (val) => setSheetState(() => searchQuery = val),
+                        ),
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: loading
+                              ? const Center(child: CircularProgressIndicator())
+                              : loadErr != null
+                                  ? Center(child: Text(loadErr!))
+                                  : filtered.isEmpty
+                                      ? const Center(child: Text('لا توجد عدادات نشطة مطابقة.'))
+                                      : ListView.separated(
+                                          itemCount: filtered.length,
+                                          separatorBuilder: (_, __) => const Divider(height: 1),
+                                          itemBuilder: (_, i) {
+                                            final m = filtered[i];
+                                            return ListTile(
+                                              leading: const Icon(Icons.speed_outlined),
+                                              title: Text(
+                                                '${m.uniqueCode} — ${m.subscriberName ?? 'مشترك'}',
+                                              ),
+                                              subtitle: Text(
+                                                '${m.squareName ?? ''}'
+                                                '${m.pathNumber != null ? ' • المسار #${m.pathNumber}' : ''}'
+                                                ' • آخر قراءة: ${_number(m.lastReading)}',
+                                              ),
+                                              onTap: () => Navigator.pop(sheetCtx, m),
+                                            );
+                                          },
+                                        ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (picked == null || !context.mounted) return;
+    await RecordReadingSheet.show(
+      context,
+      meter: picked,
+      readingsRepository: readingsRepository,
+      invoiceActions: invoiceActions,
+      onNextPath: (current) async {
+        final squareId = current.squareId ?? cubit.state.squareFilter;
+        if (squareId == null || current.pathNumber == null) return null;
+        final all = await metersRepository.getMeters(squareId: squareId, status: 'active');
+        final next = all
+            .where((m) => m.pathNumber != null && m.pathNumber! > current.pathNumber!)
+            .toList()
+          ..sort((a, b) => a.pathNumber!.compareTo(b.pathNumber!));
+        return next.isEmpty ? null : next.first;
+      },
+    );
+    if (context.mounted) {
+      await cubit.load();
+    }
+  }
+
+  void _previewReadingPhoto(BuildContext context, Reading reading) {
+    final localPath = reading.imagePath;
+    final hasLocalFile =
+        localPath != null && localPath.trim().isNotEmpty && File(localPath).existsSync();
+    final remoteUrl = reading.imageUrl;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 680),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppBar(
+                  automaticallyImplyLeading: false,
+                  title: Text('صورة قراءة العداد ${reading.meterCode ?? reading.meterId}'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
+                  ],
+                ),
+                Flexible(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: hasLocalFile
+                        ? Image.file(File(localPath), fit: BoxFit.contain)
+                        : (remoteUrl != null && remoteUrl.trim().isNotEmpty)
+                            ? Image.network(
+                                remoteUrl,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (ctx, child, progress) =>
+                                    progress == null
+                                        ? child
+                                        : const Padding(
+                                            padding: EdgeInsets.all(48),
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                errorBuilder: (_, __, ___) => const Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: Text('تعذر تحميل صورة العداد من الخادم.'),
+                                ),
+                              )
+                            : const Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Text('لا تتوفر معاينة للصورة.'),
+                              ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'القراءة: ${_number(reading.currentReading)} • التاريخ الفعلي: ${_date(reading.actualReadingDate ?? reading.readingDate)}',
+                    style: Theme.of(dialogCtx).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -415,54 +673,100 @@ class _ReadingsListView extends StatelessWidget {
   ) async {
     final controller = TextEditingController(text: _number(reading.currentReading));
     final formKey = GlobalKey<FormState>();
-    final updated = await showDialog<double>(
+    DateTime editedDate = reading.readingDate;
+
+    final updated = await showDialog<({double currentReading, DateTime readingDate})>(
       context: context,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('تعديل قراءة غير مفوترة'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: controller,
-              autofocus: true,
-              textDirection: TextDirection.ltr,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'القراءة الحالية',
-                helperText: 'القراءة السابقة: ${_number(reading.previousReading)}',
-              ),
-              validator: (value) {
-                final parsed = double.tryParse(
-                  CompoundSearchQuery.normalizeDigits(value ?? '').replaceAll(',', '.'),
-                );
-                if (parsed == null) return 'أدخل رقماً صحيحاً.';
-                if (parsed < reading.previousReading) return 'لا يمكن أن تقل عن القراءة السابقة.';
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            FilledButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  Navigator.pop(
-                    context,
-                    double.parse(
-                      CompoundSearchQuery.normalizeDigits(controller.text).replaceAll(',', '.'),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تعديل قراءة غير مفوترة'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: controller,
+                    autofocus: true,
+                    textDirection: TextDirection.ltr,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'القراءة الحالية',
+                      helperText: 'القراءة السابقة: ${_number(reading.previousReading)}',
+                      border: const OutlineInputBorder(),
                     ),
-                  );
-                }
-              },
-              child: const Text('حفظ'),
+                    validator: (value) {
+                      final parsed = double.tryParse(
+                        CompoundSearchQuery.normalizeDigits(value ?? '').replaceAll(',', '.'),
+                      );
+                      if (parsed == null) return 'أدخل رقماً صحيحاً.';
+                      if (parsed < reading.previousReading) {
+                        return 'لا يمكن أن تقل عن القراءة السابقة.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: dialogCtx,
+                        initialDate: editedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                        helpText: 'تعديل تاريخ القراءة',
+                      );
+                      if (picked != null) {
+                        setDialogState(() => editedDate = picked);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'تاريخ القراءة',
+                        prefixIcon: Icon(Icons.calendar_month_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(_date(editedDate)),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    Navigator.pop(dialogCtx, (
+                      currentReading: double.parse(
+                        CompoundSearchQuery.normalizeDigits(controller.text)
+                            .replaceAll(',', '.'),
+                      ),
+                      readingDate: editedDate,
+                    ));
+                  }
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
         ),
       ),
     );
     controller.dispose();
-    if (updated != null) await cubit.updateReading(reading, updated);
+    if (updated != null) {
+      await cubit.updateReading(
+        reading,
+        updated.currentReading,
+        newReadingDate: updated.readingDate,
+      );
+    }
   }
 
   void _showIssueUnavailable(BuildContext context) {
@@ -479,6 +783,7 @@ class _ReadingCard extends StatelessWidget {
     required this.selectionMode,
     required this.onTap,
     required this.onLongPress,
+    this.onPreviewPhoto,
     this.onEdit,
     this.onDelete,
   });
@@ -488,12 +793,14 @@ class _ReadingCard extends StatelessWidget {
   final bool selectionMode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onPreviewPhoto;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final color = reading.isInvoiced ? Colors.green : const Color(0xFFF59E0B);
+    final actualDate = reading.actualReadingDate;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       clipBehavior: Clip.antiAlias,
@@ -524,6 +831,15 @@ class _ReadingCard extends StatelessWidget {
                               _Tag(text: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة', color: color),
                               if (!reading.isSynced)
                                 const _Tag(text: 'بانتظار المزامنة', color: Color(0xFFB77900)),
+                              if (reading.hasPhoto)
+                                InkWell(
+                                  onTap: onPreviewPhoto,
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: const _Tag(
+                                    text: 'صورة مرفقة',
+                                    color: Color(0xFF0284C7),
+                                  ),
+                                ),
                             ],
                           ),
                           Directionality(
@@ -545,7 +861,14 @@ class _ReadingCard extends StatelessWidget {
                         spacing: 16,
                         runSpacing: 5,
                         children: [
-                          _ReadingValue(label: 'التاريخ', value: _date(reading.readingDate)),
+                          _ReadingValue(label: 'تاريخ القراءة', value: _date(reading.readingDate)),
+                          if (actualDate != null)
+                            _ReadingValue(label: 'التاريخ الفعلي', value: _date(actualDate)),
+                          _ReadingValue(
+                            label: 'الفترة',
+                            value: '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
+                            ltr: true,
+                          ),
                           _ReadingValue(label: 'السابقة', value: _number(reading.previousReading), ltr: true),
                           _ReadingValue(label: 'الحالية', value: _number(reading.currentReading), ltr: true),
                           _ReadingValue(label: 'الاستهلاك', value: '${_number(reading.consumptionUnits)} وحدة', ltr: true),
@@ -555,12 +878,20 @@ class _ReadingCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(reading.syncError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
                       ],
-                      if (!selectionMode && (onEdit != null || onDelete != null)) ...[
+                      if (!selectionMode &&
+                          (onPreviewPhoto != null || onEdit != null || onDelete != null)) ...[
                         const SizedBox(height: 6),
                         const Divider(height: 1),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
+                        Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 4,
                           children: [
+                            if (onPreviewPhoto != null)
+                              TextButton.icon(
+                                onPressed: onPreviewPhoto,
+                                icon: const Icon(Icons.photo_outlined, size: 18),
+                                label: const Text('صورة العداد'),
+                              ),
                             if (onEdit != null)
                               TextButton.icon(
                                 onPressed: onEdit,

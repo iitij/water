@@ -17,6 +17,7 @@ class FinanceRouteNames {
   static const String invoiceGenerateTanker = '/invoices/generate/tanker';
 
   /// إنشاء/تعديل يدوي.
+  static const String invoiceIssue = '/issue-invoice';
   static const String invoiceCreate = '/invoices/create';
   static const String invoiceEdit = '/invoices/:id/edit';
 

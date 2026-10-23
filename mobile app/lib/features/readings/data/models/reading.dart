@@ -19,6 +19,7 @@ class Reading {
     this.subscriberName,
     this.tenantName,
     this.imagePath,
+    this.imageUrl,
     this.isSynced = true,
     this.syncError,
   });
@@ -43,8 +44,13 @@ class Reading {
   final String? subscriberName;
   final String? tenantName;
   final String? imagePath;
+  final String? imageUrl;
   final bool isSynced;
   final String? syncError;
+
+  bool get hasPhoto =>
+      (imageUrl != null && imageUrl!.trim().isNotEmpty) ||
+      (imagePath != null && imagePath!.trim().isNotEmpty);
 
   String get selectionKey => id == null ? 'local:${localId ?? ''}' : 'server:$id';
 
@@ -77,6 +83,7 @@ class Reading {
       subscriberName: _string(json['subscriber_name'] ?? subscriber?['name']),
       tenantName: _string(json['tenant_name'] ?? meter?['tenant_name']),
       imagePath: _string(json['image_path']),
+      imageUrl: _string(json['image_url']),
       isSynced: json['is_synced'] != false,
       syncError: _string(json['sync_error']),
     );

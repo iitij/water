@@ -15,6 +15,7 @@ import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
 import '../database/app_database.dart';
+import '../database/offline_pack_downloader.dart';
 import '../field_operations/field_operations_module.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
@@ -61,6 +62,7 @@ Future<void> configureDependencies() async {
   getIt.registerSingleton<AppDatabase>(fieldModule.database);
   getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
   getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
+  getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
   getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
 
   // Unified Drift/SQLite Offline Sync Queue (migrates any legacy SharedPreferences items).

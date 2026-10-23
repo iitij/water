@@ -19,7 +19,8 @@ void main() {
 
       expect(payload['amount'], 1200);
       expect(payload['payment_method'], 'cash');
-      expect(payload['payment_date'], '2026-06-20');
+      // عمود `payment_date` أصبح `dateTime` في الخادم، فيُرسل التاريخ مع الوقت.
+      expect(payload['payment_date'], '2026-06-20 00:00');
       expect(payload['sync_uuid'], syncUuid);
       expect(payload['notes'], 'دفعة ميدانية');
       expect(payload.containsKey('reference_number'), isFalse);

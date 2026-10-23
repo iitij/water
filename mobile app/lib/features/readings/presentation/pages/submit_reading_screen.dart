@@ -33,6 +33,8 @@ class SubmitReadingScreen extends StatefulWidget {
 class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _currentReadingController = TextEditingController();
+  final _subscriptionInstallmentController = TextEditingController();
+  final _tankerInstallmentController = TextEditingController();
   final _imagePicker = ImagePicker();
 
   late Meter _meter;
@@ -77,6 +79,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
         _period = period;
         _includeSubscriptionFee = period.hasSubscriptionFee;
         _includeTankerFee = period.hasTankerFee;
+        _subscriptionInstallmentController.text =
+            period.subscriptionInstallment > 0 ? _formatNumber(period.subscriptionInstallment) : '0';
+        _tankerInstallmentController.text =
+            period.tankerInstallment > 0 ? _formatNumber(period.tankerInstallment) : '0';
         _isLoadingPeriod = false;
       });
     } catch (error) {
@@ -166,6 +172,17 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       return;
     }
 
+    final parsedSubInstallment = double.tryParse(
+          CompoundSearchQuery.normalizeDigits(_subscriptionInstallmentController.text.trim())
+              .replaceAll(',', '.'),
+        ) ??
+        _period!.subscriptionInstallment;
+    final parsedTankerInstallment = double.tryParse(
+          CompoundSearchQuery.normalizeDigits(_tankerInstallmentController.text.trim())
+              .replaceAll(',', '.'),
+        ) ??
+        _period!.tankerInstallment;
+
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -184,11 +201,11 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
           hasSubscriptionFee: _period!.autoIssueInvoice && _includeSubscriptionFee,
           subscriptionInstallment:
               _period!.autoIssueInvoice && _includeSubscriptionFee
-                  ? _period!.subscriptionInstallment
+                  ? parsedSubInstallment
                   : 0,
           hasTankerFee: _period!.autoIssueInvoice && _includeTankerFee,
           tankerInstallment: _period!.autoIssueInvoice && _includeTankerFee
-              ? _period!.tankerInstallment
+              ? parsedTankerInstallment
               : 0,
         ),
       );
@@ -271,6 +288,8 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   @override
   void dispose() {
     _currentReadingController.dispose();
+    _subscriptionInstallmentController.dispose();
+    _tankerInstallmentController.dispose();
     super.dispose();
   }
 
@@ -395,14 +414,16 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     if (period.hasSubscriptionFee)
                       _feeOption(
                         title: 'إضافة قسط رسوم الاشتراك',
-                        value: period.subscriptionInstallment,
+                        maxValue: period.subscriptionInstallment,
+                        controller: _subscriptionInstallmentController,
                         selected: _includeSubscriptionFee,
                         onChanged: (value) => setState(() => _includeSubscriptionFee = value),
                       ),
                     if (period.hasTankerFee)
                       _feeOption(
                         title: 'إضافة رسوم الوايت',
-                        value: period.tankerInstallment,
+                        maxValue: period.tankerInstallment,
+                        controller: _tankerInstallmentController,
                         selected: _includeTankerFee,
                         onChanged: (value) => setState(() => _includeTankerFee = value),
                       ),
@@ -519,20 +540,54 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
 
   Widget _feeOption({
     required String title,
-    required double value,
+    required double maxValue,
+    required TextEditingController controller,
     required bool selected,
     required ValueChanged<bool> onChanged,
   }) =>
       Card(
-        child: SwitchListTile(
-          value: selected,
-          onChanged: onChanged,
-          title: Text(title),
-          subtitle: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text('${_formatNumber(value)} ريال'),
-          ),
-          secondary: const Icon(Icons.receipt_long_outlined),
+        child: Column(
+          children: [
+            SwitchListTile(
+              value: selected,
+              onChanged: onChanged,
+              title: Text(title),
+              subtitle: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text('إجمالي المتبقي: ${_formatNumber(maxValue)} ريال'),
+              ),
+              secondary: const Icon(Icons.receipt_long_outlined),
+            ),
+            if (selected)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: TextFormField(
+                  controller: controller,
+                  textDirection: TextDirection.ltr,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'مبلغ القسط المطلوب إضافته للفاتورة',
+                    suffixText: 'ريال',
+                    helperText: 'يمكنك تعديل المبلغ لتحصيل قسط جزئي (الحد الأعلى ${_formatNumber(maxValue)} ريال)',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (val) {
+                    if (!selected) return null;
+                    final parsed = double.tryParse(
+                      CompoundSearchQuery.normalizeDigits(val ?? '').replaceAll(',', '.'),
+                    );
+                    if (parsed == null || parsed < 0) {
+                      return 'أدخل مبلغاً رقمياً صالحاً.';
+                    }
+                    if (maxValue > 0 && parsed > maxValue) {
+                      return 'لا يمكن تجاوز إجمالي المتبقي (${_formatNumber(maxValue)}).';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+          ],
         ),
       );
 

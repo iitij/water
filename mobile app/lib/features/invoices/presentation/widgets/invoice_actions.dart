@@ -210,7 +210,7 @@ Future<void> showInvoiceActionSheet(
   if (!context.mounted) return;
 
   final actions = <_SheetAction>[
-    if (invoice.status.isOpenForCollection)
+    if (!invoice.isDeleted && invoice.status.isOpenForCollection)
       _SheetAction(
         icon: Icons.payments_outlined,
         label: 'تحصيل دفعة',
@@ -227,46 +227,114 @@ Future<void> showInvoiceActionSheet(
       label: 'طباعة حرارية بلوتوث',
       onTap: () => printInvoiceThermal(context, invoice),
     ),
-    if (config.whatsappEnabled)
+    if (!invoice.isDeleted && config.whatsappEnabled)
       _SheetAction(
         icon: Icons.chat_outlined,
         label: config.isApiSend ? 'إرسال واتساب (PDF)' : 'إرسال واتساب',
         color: const Color(0xFF25D366),
         onTap: () => sendInvoiceWhatsapp(context, invoice),
       ),
+    if (!invoice.isDeleted)
+      _SheetAction(
+        icon: Icons.refresh,
+        label: 'إعادة احتساب (Recalculate)',
+        onTap: () async {
+          final ok = await cubit?.recalculate(invoice.id);
+          if (!context.mounted) return;
+          if (ok == null) {
+            AppFeedback.error(context, 'تعذّرت إعادة الاحتساب.');
+          } else {
+            AppFeedback.success(context, 'تمت إعادة الاحتساب وتوزيع الدفعات.');
+          }
+        },
+      ),
+    if (invoice.isDeleted)
+      _SheetAction(
+        icon: Icons.restore_from_trash_outlined,
+        label: 'استعادة الفاتورة (Restore)',
+        color: Colors.green.shade700,
+        onTap: () async {
+          final confirmed = await ConfirmDialog.show(
+            context,
+            title: 'استعادة الفاتورة ${invoice.billNumber}',
+            message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب المرتبط.',
+            confirmLabel: 'استعادة',
+          );
+          if (!confirmed) return;
+          if (cubit != null) {
+            final ok = await cubit.restoreInvoice(invoice.id);
+            if (!context.mounted) return;
+            if (ok) {
+              AppFeedback.success(context, 'تمت استعادة الفاتورة بنجاح.');
+            } else {
+              AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة.');
+            }
+          } else {
+            try {
+              await sl<InvoicesRepository>().restore(invoice.id);
+              if (context.mounted) {
+                AppFeedback.success(context, 'تمت استعادة الفاتورة بنجاح.');
+              }
+            } catch (e) {
+              if (context.mounted) AppFeedback.error(context, 'تعذّرت الاستعادة: $e');
+            }
+          }
+        },
+      ),
+    if (!invoice.isDeleted)
+      _SheetAction(
+        icon: Icons.delete_outline,
+        label: 'حذف الفاتورة (سلة المحذوفات)',
+        color: Colors.red.shade700,
+        onTap: () async {
+          final confirmed = await ConfirmDialog.show(
+            context,
+            title: 'حذف الفاتورة ${invoice.billNumber}',
+            message: 'سيُحذف الحذف الناعم، وتُفكّ ارتباط القراءات والأقساط والوايت، '
+                'وتُعاد توزيع الدفعات تلقائياً.',
+            confirmLabel: 'حذف',
+            destructive: true,
+          );
+          if (!confirmed || cubit == null) return;
+          final ok = await cubit.deleteInvoice(invoice.id);
+          if (!context.mounted) return;
+          if (ok) {
+            AppFeedback.success(context, 'تم حذف الفاتورة.');
+          } else {
+            AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف.');
+          }
+        },
+      ),
     _SheetAction(
-      icon: Icons.refresh,
-      label: 'إعادة احتساب (Recalculate)',
-      onTap: () async {
-        final ok = await cubit?.recalculate(invoice.id);
-        if (!context.mounted) return;
-        if (ok == null) {
-          AppFeedback.error(context, 'تعذّرت إعادة الاحتساب.');
-        } else {
-          AppFeedback.success(context, 'تمت إعادة الاحتساب وتوزيع الدفعات.');
-        }
-      },
-    ),
-    _SheetAction(
-      icon: Icons.delete_outline,
-      label: 'حذف الفاتورة',
-      color: Colors.red.shade700,
+      icon: Icons.delete_forever_outlined,
+      label: 'حذف نهائي (Force Delete)',
+      color: Colors.red.shade900,
       onTap: () async {
         final confirmed = await ConfirmDialog.show(
           context,
-          title: 'حذف الفاتورة ${invoice.billNumber}',
-          message: 'سيُحذف الحذف الناعم، وتُفكّ ارتباط القراءات والأقساط والوايت، '
-              'وتُعاد توزيع الدفعات تلقائياً.',
-          confirmLabel: 'حذف',
+          title: 'حذف نهائي للفاتورة ${invoice.billNumber}',
+          message: 'تحذير: سيُحذف سجل الفاتورة نهائياً من قاعدة البيانات ولا يمكن استعادتها لاحقاً!',
+          confirmLabel: 'حذف نهائي',
           destructive: true,
         );
-        if (!confirmed || cubit == null) return;
-        final ok = await cubit.deleteInvoice(invoice.id);
-        if (!context.mounted) return;
-        if (ok) {
-          AppFeedback.success(context, 'تم حذف الفاتورة.');
+        if (!confirmed) return;
+        if (cubit != null) {
+          final ok = await cubit.forceDeleteInvoice(invoice.id);
+          if (!context.mounted) return;
+          if (ok) {
+            AppFeedback.success(context, 'تم حذف الفاتورة نهائياً.');
+          } else {
+            AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف النهائي.');
+          }
         } else {
-          AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف.');
+          try {
+            await sl<InvoicesRepository>().forceDelete(invoice.id);
+            if (context.mounted) {
+              AppFeedback.success(context, 'تم حذف الفاتورة نهائياً.');
+            }
+          } catch (e) {
+            if (context.mounted) AppFeedback.error(context, 'تعذّر الحذف النهائي: $e');
+          }
         }
       },
     ),
