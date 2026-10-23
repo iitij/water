@@ -16,6 +16,9 @@ import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/service_request.dart';
 import '../cubit/service_requests_cubit.dart';
 import '../widgets/service_request_edit_sheet.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 bool _hasServiceRequestsCubit(BuildContext context) {
   try {
@@ -128,7 +131,6 @@ class _ServiceRequestsView extends StatelessWidget {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'سعر الوايت (ريال) *',
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -151,7 +153,6 @@ class _ServiceRequestsView extends StatelessWidget {
                     initialValue: selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'الحالة',
-                      border: OutlineInputBorder(),
                     ),
                     items: [
                       for (final s in TankerStatus.values)
@@ -164,7 +165,6 @@ class _ServiceRequestsView extends StatelessWidget {
                     controller: notesCtrl,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      border: OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -271,36 +271,29 @@ class _ServiceRequestsView extends StatelessWidget {
                 (label: 'إجمالي مبالغ الطلبات المعروضة', value: state.totalSum, color: Colors.white),
               ]),
             ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(children: [
-                ChoiceChip(
-                  label: const Text('الكل'),
+            AppFilterChips(
+              children: <Widget>[
+                AppFilterChip(
+                  label: 'الكل',
                   selected: state.status == null,
-                  onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(null),
+                  onTap: () => context.read<ServiceRequestsCubit>().filterStatus(null),
                 ),
-                for (final s in TankerStatus.values)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 8),
-                    child: ChoiceChip(
-                      label: Text(s.label),
-                      selected: state.status == s,
-                      onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(s),
-                    ),
+                for (final status in TankerStatus.values)
+                  AppFilterChip(
+                    label: status.label,
+                    selected: state.status == status,
+                    onTap: () => context.read<ServiceRequestsCubit>().filterStatus(status),
                   ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.date_range),
-                  label: Text(state.from == null ? 'نطاق التاريخ' : '${state.from} ← ${state.until}'),
-                  onPressed: () => _pickRange(context, state),
+                AppFilterChip(
+                  label: state.from == null ? 'نطاق التاريخ' : '${state.from} ← ${state.until}',
+                  icon: Icons.date_range_rounded,
+                  selected: state.from != null,
+                  onTap: () => _pickRange(context, state),
+                  onRemove: state.from == null
+                      ? null
+                      : () => context.read<ServiceRequestsCubit>().filterRange(null, null),
                 ),
-                if (state.from != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => context.read<ServiceRequestsCubit>().filterRange(null, null),
-                  ),
-              ]),
+              ],
             ),
             if (state.selectedIds.isNotEmpty && can('Delete:ServiceRequest'))
               MaterialBanner(
@@ -327,9 +320,12 @@ class _ServiceRequestsView extends StatelessWidget {
                       itemBuilder: (_, i) {
                         final r = state.requests[i];
                         final checked = state.selectedIds.contains(r.id);
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          color: checked ? AppColors.primary.withValues(alpha: 0.08) : null,
+                        return Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                          child: AppCard(
+                          padding: EdgeInsets.zero,
+                          color: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .04) : null,
+                          borderColor: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .4) : null,
                           child: ListTile(
                             onLongPress: can('Delete:ServiceRequest')
                                 ? () => context.read<ServiceRequestsCubit>().toggleSelect(r.id)
@@ -424,6 +420,7 @@ class _ServiceRequestsView extends StatelessWidget {
                                     ],
                                   )
                                 : null,
+                          ),
                           ),
                         );
                       },

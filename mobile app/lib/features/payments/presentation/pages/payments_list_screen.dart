@@ -4,7 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
-import '../../../../core/finance/finance_search.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
@@ -114,24 +115,62 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           builder: (context, state) {
             return Column(
               children: <Widget>[
-                FinanceSearchBar(
+                const SizedBox(height: 10),
+                AppFilterBar(
                   controller: _search,
-                  hint: 'ابحث برقم السند أو اسم المشترك أو المحصل',
+                  hint: 'رقم السند، المشترك، أو المحصل',
+                  activeCount: _activeFacets(state),
+                  onOpenFilters: () => _openFilters(context, cubit, state),
                   onChanged: (value) => cubit.search(value),
-                  onSubmitted: (_) => cubit.load(refresh: true),
-                  filters: <Widget>[
-                    _MethodFilter(cubit: cubit, state: state),
-                    _PeriodFilter(cubit: cubit, state: state),
-                  ],
-                  trailing: state.query.search.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _search.clear();
-                            cubit.search('');
-                          },
+                ),
+                const SizedBox(height: 8),
+                AppFilterChips(
+                  children: <Widget>[
+                    AppFilterChip(
+                      label: 'كل الطرق',
+                      selected: state.query.method == null,
+                      onTap: () => cubit.applyFilters(
+                        state.query.copyWith(method: ''),
+                      ),
+                    ),
+                    for (final method in PaymentMethod.values)
+                      AppFilterChip(
+                        label: method.label,
+                        selected: state.query.method == method.wire,
+                        onTap: () => cubit.applyFilters(
+                          state.query.method == method.wire
+                              ? state.query.copyWith(method: '')
+                              : state.query.copyWith(method: method.wire),
                         ),
+                      ),
+                  ],
+                ),
+                AppActiveFilters(
+                  filters: <Widget>[
+                    if (state.query.method != null)
+                      AppFilterChip(
+                        label: PaymentMethod.parse(state.query.method).label,
+                        selected: true,
+                        icon: Icons.payments_rounded,
+                        onRemove: () => cubit.applyFilters(
+                          state.query.copyWith(method: ''),
+                        ),
+                      ),
+                    if (state.query.fromDate != null || state.query.toDate != null)
+                      AppFilterChip(
+                        label: '${DateFormat.day(state.query.fromDate)} ← '
+                            '${DateFormat.day(state.query.toDate)}',
+                        selected: true,
+                        icon: Icons.event_rounded,
+                        onRemove: () => cubit.applyFilters(
+                          state.query.copyWith(clearFilters: true),
+                        ),
+                      ),
+                  ],
+                  onClearAll: () {
+                    _search.clear();
+                    cubit.applyFilters(const PaymentQuery());
+                  },
                 ),
                 _PaymentsSummary(state: state),
                 if (_selecting && state.selectedIds.isNotEmpty)
@@ -158,6 +197,21 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       MaterialPageRoute<bool>(builder: (_) => const PaymentFormScreen()),
     );
     if (created == true) await cubit.load(refresh: true);
+  }
+
+  int _activeFacets(PaymentsState state) =>
+      (state.query.method == null ? 0 : 1) +
+      (state.query.fromDate != null || state.query.toDate != null ? 1 : 0);
+
+  Future<void> _openFilters(
+    BuildContext context,
+    PaymentsCubit cubit,
+    PaymentsState state,
+  ) async {
+    await AppFilterSheet.show<void>(
+      context: context,
+      builder: (_) => _PaymentsFilterSheet(cubit: cubit, state: state),
+    );
   }
 
   Future<void> _bulkDelete(BuildContext context, PaymentsCubit cubit) async {
@@ -296,7 +350,7 @@ class _PaymentsSummary extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.success.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.success.withValues(alpha: 0.18)),
       ),
       child: Row(
@@ -340,7 +394,7 @@ class _Cell extends StatelessWidget {
           value,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             color: tone,
           ),
         ),
@@ -374,7 +428,7 @@ class _SelectionBar extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
@@ -388,10 +442,10 @@ class _SelectionBar extends StatelessWidget {
               ),
               TextButton.icon(
                 onPressed: onBulkDelete,
-                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFCA5A5)),
+                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.onPanelSoft),
                 label: const Text(
                   'حذف المحدد',
-                  style: TextStyle(color: Color(0xFFFCA5A5)),
+                  style: TextStyle(color: AppColors.onPanelSoft),
                 ),
               ),
             ],
@@ -400,98 +454,112 @@ class _SelectionBar extends StatelessWidget {
       );
 }
 
-class _MethodFilter extends StatelessWidget {
-  const _MethodFilter({required this.cubit, required this.state});
+class _PaymentsFilterSheet extends StatefulWidget {
+  const _PaymentsFilterSheet({required this.cubit, required this.state});
 
   final PaymentsCubit cubit;
   final PaymentsState state;
 
   @override
-  Widget build(BuildContext context) {
-    return FilterChipButton(
-      label: 'طريقة الدفع',
-      value: state.query.method,
-      selected: state.query.method != null,
-      onPressed: () async {
-        final method = await showModalBottomSheet<String?>(
-          context: context,
-          showDragHandle: true,
-          builder: (sheetContext) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ListTile(
-                  leading: const Icon(Icons.close),
-                  title: const Text('كل الطرق'),
-                  onTap: () => Navigator.of(sheetContext).pop(''),
-                ),
-                const Divider(height: 1),
-                ...PaymentMethod.values.map(
-                  (m) => ListTile(
-                    leading: Icon(m.icon),
-                    title: Text(m.label),
-                    onTap: () => Navigator.of(sheetContext).pop(m.wire),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-        if (method == null) return;
-        await cubit.applyFilters(
-          state.query.copyWith(method: method.isEmpty ? null : method),
-        );
-      },
+  State<_PaymentsFilterSheet> createState() => _PaymentsFilterSheetState();
+}
+
+class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
+  late String? _method = widget.state.query.method;
+  late DateTime? _from = widget.state.query.fromDate;
+  late DateTime? _to = widget.state.query.toDate;
+
+  Future<void> _pick({required bool from}) async {
+    final now = DateTime.now();
+    final first = from ? DateTime(now.year - 3) : (_from ?? DateTime(now.year - 3));
+    final last = from ? (_to ?? now) : now;
+    final requested = (from ? _from : _to) ?? now;
+    final initial = requested.isBefore(first)
+        ? first
+        : requested.isAfter(last)
+            ? last
+            : requested;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: from ? 'من تاريخ القبض' : 'إلى تاريخ القبض',
     );
+    if (picked == null) return;
+    setState(() {
+      if (from) {
+        _from = picked;
+      } else {
+        _to = picked;
+      }
+    });
   }
-}
-
-extension on PaymentMethod {
-  IconData get icon => switch (this) {
-        PaymentMethod.cash => Icons.payments_outlined,
-        PaymentMethod.bankTransfer => Icons.account_balance_outlined,
-        PaymentMethod.check => Icons.event_note_outlined,
-      };
-}
-
-/// فلتر الفترة (من/إلى) — يطابق `->dateFilter('payment_date')` في Filament.
-class _PeriodFilter extends StatelessWidget {
-  const _PeriodFilter({required this.cubit, required this.state});
-
-  final PaymentsCubit cubit;
-  final PaymentsState state;
 
   @override
   Widget build(BuildContext context) {
-    final label = state.query.fromDate == null
-        ? null
-        : '${DateFormat.day(state.query.fromDate)} ← ${DateFormat.day(state.query.toDate)}';
-
-    return FilterChipButton(
-      label: 'الفترة',
-      value: label,
-      selected: state.query.fromDate != null,
-      icon: Icons.event_outlined,
-      onPressed: () async {
-        final now = DateTime.now();
-        final from = await showDatePicker(
-          context: context,
-          initialDate: state.query.fromDate ?? now.subtract(const Duration(days: 30)),
-          firstDate: DateTime(now.year - 3),
-          lastDate: now,
+    return AppFilterSheet(
+      title: 'تصفية سندات القبض',
+      resultCountLabel: '${widget.state.payments.length} سند في القائمة',
+      applyLabel: 'عرض النتائج',
+      onApply: () {
+        widget.cubit.applyFilters(
+          widget.state.query.copyWith(method: _method ?? '', fromDate: _from, toDate: _to),
         );
-        if (from == null || !context.mounted) return;
-        final to = await showDatePicker(
-          context: context,
-          initialDate: state.query.toDate ?? now,
-          firstDate: from,
-          lastDate: now.add(const Duration(days: 1)),
-        );
-        if (!context.mounted) return;
-        if (to == null) return;
-        await cubit.applyFilters(state.query.copyWith(fromDate: from, toDate: to));
+        Navigator.of(context).maybePop();
       },
+      onReset: () => setState(() {
+        _method = null;
+        _from = null;
+        _to = null;
+      }),
+      resetEnabled: _method != null || _from != null || _to != null,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'طريقة الدفع',
+          child: Column(
+            children: <Widget>[
+              AppFilterOptionTile(
+                label: 'كل الطرق',
+                icon: Icons.apps_rounded,
+                selected: _method == null,
+                onTap: () => setState(() => _method = null),
+              ),
+              const SizedBox(height: 6),
+              for (final method in PaymentMethod.values) ...<Widget>[
+                AppFilterOptionTile(
+                  label: method.label,
+                  icon: method == PaymentMethod.cash
+                      ? Icons.payments_rounded
+                      : method == PaymentMethod.bankTransfer
+                          ? Icons.account_balance_rounded
+                          : Icons.receipt_long_rounded,
+                  selected: _method == method.wire,
+                  onTap: () => setState(() => _method = method.wire),
+                ),
+                const SizedBox(height: 6),
+              ],
+            ],
+          ),
+        ),
+        AppFilterSection(
+          title: 'فترة القبض',
+          subtitle: 'حدّد نطاق السندات بالتاريخ',
+          child: AppFilterDateRange(
+            fromLabel: _from == null ? 'بدون حد' : DateFormat.day(_from),
+            toLabel: _to == null ? 'بدون حد' : DateFormat.day(_to),
+            onPickFrom: () => _pick(from: true),
+            onPickTo: () => _pick(from: false),
+            onClear: _from == null && _to == null
+                ? null
+                : () => setState(() {
+                      _from = null;
+                      _to = null;
+                    }),
+          ),
+        ),
+        const SizedBox(height: 18),
+      ],
     );
   }
 }

@@ -30,11 +30,7 @@ class CollectionProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final percentage = (_rate * 100).round();
-    final rateColor = percentage >= 70
-        ? AppColors.success
-        : percentage >= 40
-            ? AppColors.warning
-            : AppColors.danger;
+    final rateColor = theme.colorScheme.primary;
 
     return AppCard(
       child: Column(
@@ -62,7 +58,7 @@ class CollectionProgressCard extends StatelessWidget {
                       child: Text(
                         '$percentage%',
                         style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                           height: 1.1,
                         ),
                       ),
@@ -151,7 +147,7 @@ class _MetricLine extends StatelessWidget {
           child: Text(
             value,
             maxLines: 1,
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -181,31 +177,18 @@ class InsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-          colors: <Color>[
-            color.withValues(alpha: dark ? .22 : .1),
-            color.withValues(alpha: dark ? .08 : .03),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: color.withValues(alpha: dark ? .3 : .16)),
-      ),
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: <Widget>[
-          AppIconBubble(icon: icon, color: color, size: 44, filled: true),
-          const SizedBox(width: 13),
+          AppIconBubble(icon: icon, color: color, size: 40),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 3),
                 Text(message, style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
               ],

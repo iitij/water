@@ -56,11 +56,7 @@ class AppSparkline extends StatelessWidget {
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[color.withValues(alpha: .26), color.withValues(alpha: 0)],
-                ),
+                color: color.withValues(alpha: .08),
               ),
             ),
           ],
@@ -71,7 +67,7 @@ class AppSparkline extends StatelessWidget {
   }
 }
 
-/// Circular progress ring with a gradient stroke and centred content.
+/// Circular progress ring with a solid stroke and centred content.
 class AppProgressRing extends StatelessWidget {
   const AppProgressRing({
     super.key,
@@ -139,17 +135,11 @@ class _RingPainter extends CustomPainter {
     if (progress <= 0) return;
     final rect = Rect.fromCircle(center: center, radius: radius);
     final sweep = (2 * math.pi * progress).clamp(0.0, 2 * math.pi).toDouble();
-    final gradient = SweepGradient(
-      startAngle: -math.pi / 2,
-      endAngle: 3 * math.pi / 2,
-      colors: <Color>[color.withValues(alpha: .55), color],
-    ).createShader(rect);
-
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round
-      ..shader = gradient;
+      ..color = color;
     canvas.drawArc(rect, -math.pi / 2, sweep, false, paint);
   }
 
@@ -204,14 +194,7 @@ class AppMiniBars extends StatelessWidget {
                           height: (height - 2) * factor.clamp(.05, 1),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(AppRadius.xs),
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: <Color>[
-                                color.withValues(alpha: .45),
-                                color,
-                              ],
-                            ),
+                            color: color.withValues(alpha: .82),
                           ),
                         ),
                       ),

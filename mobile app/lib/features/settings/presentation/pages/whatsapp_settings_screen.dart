@@ -9,6 +9,7 @@ import '../cubit/whatsapp_settings_cubit.dart';
 import '../widgets/local_server_control_panel.dart';
 import '../widgets/settings_form_widgets.dart';
 import '../widgets/whatsapp_template_editor.dart';
+import '../../../../core/ui/app_surfaces.dart';
 
 class WhatsAppSettingsScreen extends StatelessWidget {
   const WhatsAppSettingsScreen({
@@ -320,16 +321,14 @@ class _MetaTemplateGuide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+          children: <Widget>[
             Row(
               children: [
-                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
                 IconButton(
                   tooltip: 'نسخ النص',
                   onPressed: () async {
@@ -340,10 +339,12 @@ class _MetaTemplateGuide extends StatelessWidget {
                 ),
               ],
             ),
-            SelectableText(text, style: const TextStyle(fontFamily: 'monospace', height: 1.5)),
+            SelectableText(
+              text,
+              style: const TextStyle(fontFamily: 'monospace', height: 1.5, fontSize: 11.5),
+            ),
           ],
         ),
-      ),
     );
   }
 }

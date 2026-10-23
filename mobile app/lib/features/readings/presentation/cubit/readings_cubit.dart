@@ -163,6 +163,39 @@ class ReadingsCubit extends Cubit<ReadingsState> {
     load();
   }
 
+  /// Applies several facets in one shot so the list reloads once.
+  void applyFilters({
+    required int? squareId,
+    required DateTime? fromDate,
+    required DateTime? toDate,
+  }) {
+    final unchanged = squareId == state.squareFilter &&
+        fromDate == state.fromDate &&
+        toDate == state.toDate;
+    emit(state.copyWith(
+      squareFilter: squareId,
+      clearSquareFilter: squareId == null,
+      fromDate: fromDate,
+      toDate: toDate,
+      clearFromDate: fromDate == null,
+      clearToDate: toDate == null,
+    ));
+    if (!unchanged) load();
+  }
+
+  /// Clears every facet and the search text in one transition.
+  void clearAllFilters() {
+    _searchTimer?.cancel();
+    emit(state.copyWith(
+      query: '',
+      invoiceFilter: ReadingInvoiceFilter.all,
+      clearSquareFilter: true,
+      clearFromDate: true,
+      clearToDate: true,
+    ));
+    load();
+  }
+
   void clearDateFilters() {
     emit(state.copyWith(clearFromDate: true, clearToDate: true));
     load();

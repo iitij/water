@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ShimmerSkeleton extends StatelessWidget {
@@ -11,8 +13,8 @@ class ShimmerSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final base = dark ? const Color(0xFF243247) : const Color(0xFFE8EEF3);
-    final highlight = dark ? const Color(0xFF33445C) : const Color(0xFFF7FAFC);
+    final base = dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt;
+    final highlight = dark ? AppColors.darkBorder : AppColors.surface;
     return Shimmer.fromColors(
       baseColor: base,
       highlightColor: highlight,

@@ -47,18 +47,18 @@ class _SearchTextFieldState extends State<SearchTextField> {
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: widget.hintText,
-          prefixIcon: Icon(widget.prefixIcon),
+          prefixIcon: Icon(widget.prefixIcon, size: 19),
           suffixIcon: _controller.text.isEmpty
               ? null
               : IconButton(
                   tooltip: 'مسح البحث',
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     _controller.clear();
                     widget.onChanged('');
                   },
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close_rounded, size: 18),
                 ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
           isDense: true,
         ),
       );

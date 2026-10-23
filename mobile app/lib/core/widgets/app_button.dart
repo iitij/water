@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_controls.dart';
+
+/// زر موحّد: الإجراء الأساسي بلون التأكيد المسطّح، والثانوي بحد رفيع.
 class AppButton extends StatelessWidget {
   const AppButton({
     super.key,
@@ -20,23 +23,23 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = loading
-        ? const SizedBox.square(dimension: 19, child: CircularProgressIndicator(strokeWidth: 2.2))
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              if (icon != null) ...<Widget>[Icon(icon, size: 19), const SizedBox(width: 9)],
-              Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-            ],
-          );
-
-    final button = switch (kind) {
-      AppButtonKind.primary => FilledButton(onPressed: loading ? null : onPressed, child: child),
-      AppButtonKind.tonal => FilledButton.tonal(onPressed: loading ? null : onPressed, child: child),
-      AppButtonKind.outline => OutlinedButton(onPressed: loading ? null : onPressed, child: child),
-    };
-    return SizedBox(width: expanded ? double.infinity : null, height: 50, child: button);
+    if (kind == AppButtonKind.outline) {
+      return AppSecondaryButton(
+        label: label,
+        icon: icon,
+        onPressed: loading ? null : onPressed,
+        expand: expanded,
+        height: 48,
+      );
+    }
+    return AppPrimaryButton(
+      label: label,
+      icon: icon,
+      loading: loading,
+      onPressed: onPressed,
+      expand: expanded,
+      height: 48,
+    );
   }
 }
 

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
 import '../../../readings/domain/readings_repository.dart';
 import '../../../readings/presentation/widgets/record_reading_sheet.dart';
@@ -158,10 +160,10 @@ class _MetersListView extends StatelessWidget {
                   else if (state.status == MetersLoadStatus.failure && state.meters.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _EmptyState(
+                      child: EmptyStateWidget(
                         icon: Icons.wifi_off_outlined,
                         title: 'تعذر تحميل العدادات',
-                        subtitle: state.errorMessage ?? 'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
+                        message: state.errorMessage ?? 'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
                         action: TextButton.icon(
                           onPressed: cubit.load,
                           icon: const Icon(Icons.refresh),
@@ -172,10 +174,19 @@ class _MetersListView extends StatelessWidget {
                   else if (state.meters.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _EmptyState(
-                        icon: Icons.speed_outlined,
+                      child: EmptyStateWidget(
+                        icon: Icons.filter_alt_off_rounded,
                         title: 'لا توجد عدادات مطابقة',
-                        subtitle: 'غيّر البحث أو الفلاتر، أو أضف عداداً جديداً.',
+                        message: 'غيّر البحث أو أزل الفلاتر، أو أضف عداداً جديداً.',
+                        action: TextButton.icon(
+                          onPressed: () {
+                            cubit.setQuery('');
+                            cubit.setSquareFilter(null);
+                            cubit.setStatusFilter(null);
+                          },
+                          icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                          label: const Text('مسح الفلاتر'),
+                        ),
                       ),
                     )
                   else
@@ -225,76 +236,74 @@ class _MetersListView extends StatelessWidget {
   }
 
   Widget _filters(BuildContext context, MetersState state, MetersCubit cubit) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Column(
-        children: [
-          SearchTextField(
-            query: state.query,
-            hintText: 'ابحث بالعداد أو المشترك أو المربع/المسار 4/1',
-            onChanged: cubit.setQuery,
-          ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final children = [
-                DropdownButtonFormField<int?>(
-                  key: ValueKey<String>('square-${state.squareFilter}'),
-                  initialValue: state.squareFilter,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'المربع السكني',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
-                    ...state.squares.map((square) => DropdownMenuItem<int?>(
-                          value: square.id,
-                          child: Text(square.name, overflow: TextOverflow.ellipsis),
-                        )),
-                  ],
-                  onChanged: cubit.setSquareFilter,
-                ),
-                DropdownButtonFormField<String?>(
-                  key: ValueKey<String>('status-${state.statusFilter}'),
-                  initialValue: state.statusFilter,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'الحالة',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('كل الحالات')),
-                    DropdownMenuItem<String?>(value: 'active', child: Text('نشط')),
-                    DropdownMenuItem<String?>(value: 'inactive', child: Text('غير نشط')),
-                  ],
-                  onChanged: cubit.setStatusFilter,
-                ),
-              ];
-              if (constraints.maxWidth >= 600) {
-                return Row(
-                  children: [
-                    Expanded(child: children[0]),
-                    const SizedBox(width: 10),
-                    Expanded(child: children[1]),
-                  ],
-                );
-              }
-              return Column(
-                children: [children[0], const SizedBox(height: 10), children[1]],
-              );
-            },
-          ),
-          if ((state.status == MetersLoadStatus.loading && state.meters.isNotEmpty) ||
-              state.isMutating)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: LinearProgressIndicator(minHeight: 2),
+    final activeCount =
+        (state.squareFilter == null ? 0 : 1) + (state.statusFilter == null ? 0 : 1);
+    final squareName = _meterSquareName(state);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SizedBox(height: AppSpacing.xs),
+        AppFilterBar(
+          query: state.query,
+          hint: 'ابحث بالعداد أو المشترك أو المربع/المسار 4/1',
+          activeCount: activeCount,
+          onOpenFilters: () => _openFilterSheet(context, state, cubit),
+          onChanged: cubit.setQuery,
+        ),
+        AppFilterChips(
+          children: <Widget>[
+            AppFilterChip(
+              label: 'كل العدادات',
+              selected: state.statusFilter == null,
+              onTap: () => cubit.setStatusFilter(null),
             ),
-        ],
-      ),
+            AppFilterChip(
+              label: 'نشط',
+              selected: state.statusFilter == 'active',
+              onTap: () => cubit.setStatusFilter(
+                state.statusFilter == 'active' ? null : 'active',
+              ),
+            ),
+            AppFilterChip(
+              label: 'غير نشط',
+              selected: state.statusFilter == 'inactive',
+              onTap: () => cubit.setStatusFilter(
+                state.statusFilter == 'inactive' ? null : 'inactive',
+              ),
+            ),
+          ],
+        ),
+        AppActiveFilters(
+          filters: <Widget>[
+            if (squareName != null)
+              AppFilterChip(
+                label: squareName,
+                icon: Icons.grid_view_rounded,
+                selected: true,
+                onRemove: () => cubit.setSquareFilter(null),
+              ),
+            if (state.statusFilter != null)
+              AppFilterChip(
+                label: 'الحالة · ${state.statusFilter == 'active' ? 'نشط' : 'غير نشط'}',
+                selected: true,
+                onRemove: () => cubit.setStatusFilter(null),
+              ),
+          ],
+          onClearAll: activeCount == 0
+              ? null
+              : () {
+                  cubit.setSquareFilter(null);
+                  cubit.setStatusFilter(null);
+                },
+        ),
+        if ((state.status == MetersLoadStatus.loading && state.meters.isNotEmpty) ||
+            state.isMutating)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
     );
   }
 
@@ -400,34 +409,3 @@ class _MetersListView extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 14),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-              Text(subtitle, textAlign: TextAlign.center),
-              if (action != null) ...[const SizedBox(height: 12), action!],
-            ],
-          ),
-        ),
-      );
-}

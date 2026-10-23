@@ -66,7 +66,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
         child: ListView(padding: const EdgeInsets.all(16), children: [
           TextFormField(
             controller: _name,
-            decoration: const InputDecoration(labelText: 'اسم المشترك الرباعي *', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'اسم المشترك الرباعي *'),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'الاسم مطلوب' : null,
           ),
           const SizedBox(height: 12),
@@ -75,7 +75,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
             child: TextFormField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'رقم الهاتف (+967)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'رقم الهاتف (+967)'),
               onChanged: (v) => _phone.value = TextEditingValue(
                 text: normalizeDigits(v),
                 selection: TextSelection.collapsed(offset: normalizeDigits(v).length),
@@ -86,7 +86,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           DropdownButtonFormField<int>(
             key: ValueKey<int?>(_squareId),
             initialValue: _squareId,
-            decoration: const InputDecoration(labelText: 'المربع السكني *', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'المربع السكني *'),
             items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
             onChanged: (v) => setState(() => _squareId = v),
             validator: (v) => v == null ? 'اختر المربع السكني' : null,
@@ -95,7 +95,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           DropdownButtonFormField<SubscriberStatus>(
             key: ValueKey<SubscriberStatus>(_status),
             initialValue: _status,
-            decoration: const InputDecoration(labelText: 'حالة المشترك', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'حالة المشترك'),
             items: [for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
             onChanged: (v) => setState(() => _status = v ?? _status),
           ),
@@ -118,7 +118,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           TextFormField(
             controller: _address,
             maxLines: 2,
-            decoration: const InputDecoration(labelText: 'العنوان التفصيلي', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'العنوان التفصيلي'),
           ),
           const SizedBox(height: 20),
           FilledButton(

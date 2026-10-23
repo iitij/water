@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models/meter.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class MeterCardWidget extends StatelessWidget {
   const MeterCardWidget({
@@ -28,17 +31,22 @@ class MeterCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: InkWell(
-        onTap: selectionMode && onSelectChanged != null
-            ? () => onSelectChanged!(!selected)
-            : onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        borderColor: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: .45) : null,
+        color: selected
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: .04)
+            : null,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          onTap: selectionMode && onSelectChanged != null
+              ? () => onSelectChanged!(!selected)
+              : onTap,
+          onLongPress: onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.all(13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -68,7 +76,7 @@ class MeterCardWidget extends StatelessWidget {
                             color: meter.isPathMatch
                                 ? colorScheme.primary
                                 : colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
                           ),
                           child: Text(
                             'مسار #${meter.pathNumber}',
@@ -76,7 +84,7 @@ class MeterCardWidget extends StatelessWidget {
                               color: meter.isPathMatch
                                   ? colorScheme.onPrimary
                                   : colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -88,7 +96,7 @@ class MeterCardWidget extends StatelessWidget {
                     child: Text(
                       meter.uniqueCode,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: .2,
                           ),
                     ),
@@ -101,7 +109,7 @@ class MeterCardWidget extends StatelessWidget {
                     ? meter.subscriberName!
                     : 'مشترك غير محدد',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
               ),
               if (meter.tenantName?.isNotEmpty == true) ...[
@@ -157,13 +165,17 @@ class MeterCardWidget extends StatelessWidget {
                       IconButton(
                         tooltip: 'حذف العداد',
                         onPressed: onDelete,
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                   ],
                 ),
               ],
             ],
           ),
+        ),
         ),
       ),
     );
@@ -181,16 +193,22 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? Colors.green : Colors.grey;
+    final color = isActive ? AppColors.success : AppColors.neutral;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withAlpha(31),
-        borderRadius: BorderRadius.circular(20),
+        color: AppTint.soft(color, context),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: color.withValues(alpha: .2)),
       ),
       child: Text(
         isActive ? 'نشط' : 'غير نشط',
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: AppSemantic.resolve(context, color),
+          fontSize: 10.5,
+          height: 1.2,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

@@ -9,6 +9,8 @@ import '../../domain/repositories/settings_repository.dart';
 import '../cubit/general_settings_cubit.dart';
 import '../widgets/setting_image_field.dart';
 import '../widgets/settings_form_widgets.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class GeneralSettingsResourceScreen extends StatelessWidget {
   const GeneralSettingsResourceScreen({
@@ -164,31 +166,28 @@ class _GeneralSettingsView extends StatelessWidget {
                           .read<GeneralSettingsCubit>()
                           .toggleSelected(item.id, val ?? false),
                     )
-                  : CircleAvatar(
-                      child: Icon(
-                        item.type == 'image'
-                            ? Icons.image_outlined
-                            : Icons.text_fields_rounded,
-                      ),
+                  : AppGlyph(
+                      icon: item.type == 'image'
+                          ? Icons.image_outlined
+                          : Icons.text_fields_rounded,
+                      neutral: true,
                     ),
               title: Row(
                 children: [
                   if (can(AdminPermissions.deleteSettings)) ...[
-                    CircleAvatar(
-                      radius: 16,
-                      child: Icon(
-                        item.type == 'image'
-                            ? Icons.image_outlined
-                            : Icons.text_fields_rounded,
-                        size: 16,
-                      ),
+                    AppGlyph(
+                      icon: item.type == 'image'
+                          ? Icons.image_outlined
+                          : Icons.text_fields_rounded,
+                      size: 32,
+                      neutral: true,
                     ),
                     const SizedBox(width: 8),
                   ],
                   Expanded(
                     child: Text(
                       item.label,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],

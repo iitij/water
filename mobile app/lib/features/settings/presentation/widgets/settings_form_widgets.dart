@@ -77,20 +77,6 @@ class SettingsTextField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         helperText: helperText,
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AdminPalette.primary, width: 1.7),
-        ),
         suffixIcon: suffixIcon,
       ),
     );

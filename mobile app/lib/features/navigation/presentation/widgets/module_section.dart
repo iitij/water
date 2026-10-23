@@ -36,8 +36,8 @@ class ModuleGridSection extends StatelessWidget {
     this.title,
     this.subtitle,
     this.trailing,
-    this.minTileWidth = 214,
-    this.tileHeight = 178,
+    this.minTileWidth = 200,
+    this.tileHeight = 152,
   });
 
   final List<AppModule> modules;
@@ -77,8 +77,8 @@ class ModuleRailSection extends StatelessWidget {
     required this.title,
     required this.onViewAll,
     this.subtitle,
-    this.tileWidth = 232,
-    this.tileHeight = 178,
+    this.tileWidth = 208,
+    this.tileHeight = 152,
   });
 
   final List<AppModule> modules;
@@ -207,9 +207,9 @@ class ProcessStepCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  gradient: AppTint.gradient(color, context),
+                  color: AppTint.soft(color, context),
                   borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: color.withValues(alpha: .18)),
+                  border: Border.all(color: color.withValues(alpha: .16)),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
@@ -217,7 +217,7 @@ class ProcessStepCard extends StatelessWidget {
               Text(
                 '$index',
                 style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: color,
                   fontSize: 13,
                 ),

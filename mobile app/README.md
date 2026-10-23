@@ -9,14 +9,16 @@ Android and Windows runners, Dart source, tests and bundled fonts all live insid
 The Flutter client now ships a complete in-house design system:
 
 - **Five-tab navigation** — Overview, Field, Billing, Subscribers and More — with
-  a floating pill bar on phones and a branded side rail on wide screens.
-- **A reusable widget kit** (`lib/core/ui`) for cards, gradient heroes, KPI
+  a flat floating tab bar on phones and a quiet side rail on wide screens.
+- **One accent, no gradients** — a flat, hairline-driven surface system with a
+  single ink panel per page for the headline number (see `DESIGN_SYSTEM.md`).
+- **A reusable widget kit** (`lib/core/ui`) for cards, the ink summary panel, KPI
   cards, module tiles, pills, avatars, progress rings, sparklines and notices.
 - **A catalog-driven module map** (`lib/core/navigation/module_catalog.dart`) so
   new features appear automatically in the correct hub with permission-aware
   visibility.
 - **Light / dark / system themes** persisted across launches, with a one-tap
-  toggle in the header.
+  toggle in `/more` and the desktop rail.
 
 Read [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) for the palette, typography, component
 inventory and navigation map.

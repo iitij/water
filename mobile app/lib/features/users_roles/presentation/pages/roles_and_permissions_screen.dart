@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
@@ -107,16 +108,14 @@ class _RolesView extends StatelessWidget {
           padding: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            leading: CircleAvatar(
-              backgroundColor: role.isSuperAdmin
-                  ? AdminPalette.danger.withAlpha(20)
-                  : AdminPalette.primary.withAlpha(20),
-              child: Icon(
-                role.isSuperAdmin ? Icons.security_rounded : Icons.admin_panel_settings_outlined,
-                color: role.isSuperAdmin ? AdminPalette.danger : AdminPalette.primary,
-              ),
+            leading: AppGlyph(
+              icon: role.isSuperAdmin
+                  ? Icons.security_rounded
+                  : Icons.admin_panel_settings_outlined,
+              tone: role.isSuperAdmin ? AdminPalette.danger : AdminPalette.primary,
+              size: 40,
             ),
-            title: LtrText(role.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+            title: LtrText(role.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Wrap(
               spacing: 8,
               runSpacing: 6,

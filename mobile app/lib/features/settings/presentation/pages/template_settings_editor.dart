@@ -141,7 +141,7 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
                         child: Text(
                           _isInvoice ? 'تبويبات تصميم الفاتورة السبعة' : 'تبويبات تصميم السند الخمسة',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                               ),
                         ),
                       ),

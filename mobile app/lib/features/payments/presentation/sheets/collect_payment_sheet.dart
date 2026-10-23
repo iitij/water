@@ -85,7 +85,7 @@ class CollectPaymentSheet extends StatelessWidget {
                   Expanded(
                     child: Text(
                       invoice == null ? 'تحصيل دفعة' : 'تحصيل فاتورة ${invoice.billNumber}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(

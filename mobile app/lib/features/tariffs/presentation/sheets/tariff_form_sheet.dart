@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/tariff_model.dart';
@@ -135,7 +136,7 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                   Expanded(
                     child: Text(
                       widget.tariff == null ? 'تسعيرة جديدة' : 'تعديل التسعيرة',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
@@ -296,25 +297,19 @@ class TariffCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: AppCard(
+        padding: EdgeInsets.zero,
         onTap: tariff.isTrashed ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: <Widget>[
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: (isActive ? AppColors.success : AppColors.neutral)
-                    .withValues(alpha: 0.12),
-                child: Icon(
-                  isActive ? Icons.bolt : Icons.sell_outlined,
-                  color: isActive ? AppColors.success : AppColors.neutral,
-                  size: 20,
-                ),
+              AppGlyph(
+                icon: isActive ? Icons.bolt_rounded : Icons.sell_outlined,
+                tone: isActive ? AppColors.success : AppColors.neutral,
+                size: 40,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -323,7 +318,7 @@ class TariffCard extends StatelessWidget {
                   children: <Widget>[
                     Text(
                       tariff.name,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -339,7 +334,7 @@ class TariffCard extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     CurrencyFormatter.withLabel(tariff.unitPrice),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   if (busy)

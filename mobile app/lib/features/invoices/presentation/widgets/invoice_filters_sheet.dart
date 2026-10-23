@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/finance/finance_locator.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
@@ -61,10 +62,8 @@ class InvoiceFiltersSheet extends StatefulWidget {
     required ValueChanged<InvoiceQuery> onSubmit,
     Future<List<SubscriberOption>> Function(String search)? subscribersLoader,
   }) =>
-      showModalBottomSheet<void>(
+      AppFilterSheet.show<void>(
         context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
         builder: (_) => InvoiceFiltersSheet(
           query: query,
           billingPeriods: billingPeriods,
@@ -125,250 +124,213 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                'فلاتر الفواتير',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
+    return AppFilterSheet(
+      title: 'تصفية الفواتير',
+      resultCountLabel: _draft.activeFilterCount == 0
+          ? 'كل الفواتير'
+          : '${_draft.activeFilterCount} فلتر مطبّق',
+      applyLabel: 'عرض النتائج',
+      onApply: () {
+        widget.onSubmit(_draft);
+        Navigator.of(context).maybePop();
+      },
+      onReset: () => setState(() => _draft = const InvoiceQuery()),
+      resetEnabled: _draft.activeFilterCount > 0,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'حالة الفاتورة',
+          child: _chipWrap(
+            _statusOptions.map((option) {
+              final value = option.$1.isEmpty ? null : option.$1;
+              return AppFilterChip(
+                label: option.$2,
+                selected: _draft.status == value,
+                onTap: () => setState(
+                  () => _draft = value == null
+                      ? _draft.copyWith(clearStatus: true)
+                      : _draft.copyWith(status: value),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        AppFilterSection(
+          title: 'نوع الفاتورة',
+          child: _chipWrap(
+            _typeOptions.map((option) {
+              final value = option.$1.isEmpty ? null : option.$1;
+              return AppFilterChip(
+                label: option.$2,
+                selected: _draft.invoiceType == value,
+                onTap: () => setState(
+                  () => _draft = value == null
+                      ? _draft.copyWith(clearInvoiceType: true)
+                      : _draft.copyWith(invoiceType: value),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        AppFilterSection(
+          title: 'سلة المحذوفات',
+          child: _chipWrap(
+            _trashedOptions.map(
+              (option) => AppFilterChip(
+                label: option.$2,
+                selected: _draft.trashed == option.$1,
+                onTap: () => setState(
+                  () => _draft = _draft.copyWith(trashed: option.$1),
+                ),
               ),
-              const SizedBox(height: 12),
-              _sectionLabel('حالة الفاتورة'),
-              _statusChips(),
-              const SizedBox(height: 14),
-              _sectionLabel('نوع الفاتورة'),
-              _invoiceTypeChips(),
-              const SizedBox(height: 14),
-              _sectionLabel('سلة المحذوفات (Trashed)'),
-              _trashedChips(),
-              const SizedBox(height: 16),
-              _periodDropdown(),
-              const SizedBox(height: 16),
-              _squareDropdown(),
-              const SizedBox(height: 16),
-              _subscriberPicker(),
-              const SizedBox(height: 20),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        setState(() {
-                          _draft = const InvoiceQuery();
-                        });
-                      },
-                      child: const Text('تصفير الفلاتر'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        widget.onSubmit(_draft);
-                        Navigator.of(context).pop();
-                      },
-                      child: Text(
-                        'تطبيق (${_draft.activeFilterCount})',
-                      ),
-                    ),
-                  ),
-                ],
+            ).toList(),
+          ),
+        ),
+        AppFilterSection(
+          title: 'فترة الفوترة',
+          child: AppFilterDropdown<String?>(
+            label: 'الفترة',
+            icon: Icons.date_range_rounded,
+            value: _draft.billingPeriod,
+            items: <DropdownMenuItem<String?>>[
+              const DropdownMenuItem<String?>(value: null, child: Text('كل الفترات')),
+              ...widget.billingPeriods.map(
+                (period) => DropdownMenuItem<String?>(
+                  value: period.wireValue,
+                  child: Text(period.label, overflow: TextOverflow.ellipsis),
+                ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionLabel(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-      );
-
-  Widget _statusChips() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: _statusOptions.map((option) {
-        final value = option.$1.isEmpty ? null : option.$1;
-        final selected = _draft.status == value;
-        return ChoiceChip(
-          selected: selected,
-          onSelected: (_) => setState(
-            () => _draft = value == null
-                ? _draft.copyWith(clearStatus: true)
-                : _draft.copyWith(status: value),
-          ),
-          label: Text(option.$2),
-          avatar: selected
-              ? const Icon(Icons.check, size: 16, color: AppColors.primary)
-              : null,
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _invoiceTypeChips() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: _typeOptions.map((option) {
-        final value = option.$1.isEmpty ? null : option.$1;
-        final selected = _draft.invoiceType == value;
-        return ChoiceChip(
-          selected: selected,
-          onSelected: (_) => setState(
-            () => _draft = value == null
-                ? _draft.copyWith(clearInvoiceType: true)
-                : _draft.copyWith(invoiceType: value),
-          ),
-          label: Text(option.$2),
-          avatar: selected
-              ? const Icon(Icons.check, size: 16, color: AppColors.primary)
-              : null,
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _trashedChips() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: _trashedOptions.map((option) {
-        final selected = _draft.trashed == option.$1;
-        return ChoiceChip(
-          selected: selected,
-          onSelected: (_) => setState(
-            () => _draft = _draft.copyWith(trashed: option.$1),
-          ),
-          label: Text(option.$2),
-          avatar: selected
-              ? const Icon(Icons.delete_sweep_outlined, size: 16, color: AppColors.danger)
-              : null,
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _periodDropdown() {
-    return DropdownButtonFormField<String?>(
-      initialValue: _draft.billingPeriod,
-      decoration: const InputDecoration(labelText: 'فترة الفوترة'),
-      isExpanded: true,
-      items: <DropdownMenuItem<String?>>[
-        const DropdownMenuItem<String?>(value: null, child: Text('كل الفترات')),
-        ...widget.billingPeriods.map(
-          (period) => DropdownMenuItem<String?>(
-            value: period.wireValue,
-            child: Text(period.label, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-      ],
-      onChanged: (value) => setState(
-        () => value == null
-            ? _draft = _draft.copyWith(clearBillingPeriod: true)
-            : _draft = _draft.copyWith(billingPeriod: value),
-      ),
-    );
-  }
-
-  Widget _squareDropdown() {
-    final squareId =
-        widget.squares.any((s) => s.id == _draft.squareId) ? _draft.squareId : null;
-    return DropdownButtonFormField<int?>(
-      initialValue: squareId,
-      decoration: const InputDecoration(labelText: 'المربع السكني'),
-      isExpanded: true,
-      items: <DropdownMenuItem<int?>>[
-        const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
-        ...widget.squares.map(
-          (square) => DropdownMenuItem<int?>(
-            value: square.id,
-            child: Text(
-              square.subscribersCount == null
-                  ? square.name
-                  : '${square.name} (${square.subscribersCount})',
+            onChanged: (value) => setState(
+              () => value == null
+                  ? _draft = _draft.copyWith(clearBillingPeriod: true)
+                  : _draft = _draft.copyWith(billingPeriod: value),
             ),
           ),
         ),
+        AppFilterSection(
+          title: 'المربع السكني',
+          child: AppFilterDropdown<int?>(
+            label: 'المربع',
+            icon: Icons.grid_view_rounded,
+            value: widget.squares.any((s) => s.id == _draft.squareId)
+                ? _draft.squareId
+                : null,
+            items: <DropdownMenuItem<int?>>[
+              const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
+              ...widget.squares.map(
+                (square) => DropdownMenuItem<int?>(
+                  value: square.id,
+                  child: Text(
+                    square.subscribersCount == null
+                        ? square.name
+                        : '${square.name} (${square.subscribersCount})',
+                  ),
+                ),
+              ),
+            ],
+            onChanged: (value) => setState(
+              () => value == null
+                  ? _draft = _draft.copyWith(clearSquare: true)
+                  : _draft = _draft.copyWith(squareId: value),
+            ),
+          ),
+        ),
+        AppFilterSection(
+          title: 'المشترك',
+          subtitle: 'ابحث بالاسم أو رقم الهاتف',
+          child: _subscriberPicker(),
+        ),
+        const SizedBox(height: 16),
       ],
-      onChanged: (value) => setState(
-        () => value == null
-            ? _draft = _draft.copyWith(clearSquare: true)
-            : _draft = _draft.copyWith(squareId: value),
-      ),
     );
   }
 
-  Widget _subscriberPicker() {
-    final selected = _firstWhereOrNull(
-      _subscribers,
-      (s) => s.id == _draft.subscriberId,
-    );
+  Widget _chipWrap(List<Widget> chips) => Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: chips,
+      );
 
+  Widget _subscriberPicker() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        TextFormField(
+        TextField(
+          onSubmitted: _loadSubscribers,
+          textInputAction: TextInputAction.search,
+          style: const TextStyle(fontSize: 13.5),
           decoration: InputDecoration(
-            labelText: 'المشترك',
-            hintText: 'ابحث بالاسم أو الهاتف',
+            hintText: 'اسم المشترك أو الهاتف',
+            isDense: true,
+            fillColor: scheme.surfaceAlt,
+            contentPadding: const EdgeInsetsDirectional.fromSTEB(0, 12, 0, 12),
+            prefixIcon: Icon(Icons.search_rounded, size: 18, color: scheme.onSurfaceVariant),
+            prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             suffixIcon: _loadingSubscribers
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? const Padding(
+                    padding: EdgeInsets.all(13),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
-                : null,
+                : IconButton(
+                    tooltip: 'بحث',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.arrow_forward_rounded, size: 17, color: scheme.onSurfaceVariant),
+                    onPressed: () => _loadSubscribers(''),
+                  ),
           ),
-          onFieldSubmitted: _loadSubscribers,
-          initialValue: selected?.name ?? '',
         ),
+        if (_draft.subscriberId != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppFilterChip(
+                label: 'مشترك محدد · ${_selectedSubscriberName()}',
+                selected: true,
+                icon: Icons.person_rounded,
+                onRemove: () => setState(
+                  () => _draft = _draft.copyWith(clearSubscriber: true),
+                ),
+              ),
+            ),
+          ),
         if (_subscribers.isNotEmpty) ...<Widget>[
           const SizedBox(height: 8),
-          SizedBox(
-            height: 92,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _subscribers.length,
-              itemBuilder: (context, index) {
-                final subscriber = _subscribers[index];
-                final isSelected = _draft.subscriberId == subscriber.id;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: ActionChip(
-                    onPressed: () => setState(
-                      () => _draft = isSelected
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _subscribers
+                .take(12)
+                .map(
+                  (subscriber) => AppFilterChip(
+                    label: subscriber.name,
+                    selected: _draft.subscriberId == subscriber.id,
+                    icon: Icons.person_outline_rounded,
+                    onTap: () => setState(
+                      () => _draft = _draft.subscriberId == subscriber.id
                           ? _draft.copyWith(clearSubscriber: true)
                           : _draft.copyWith(subscriberId: subscriber.id),
                     ),
-                    avatar: isSelected
-                        ? const Icon(Icons.check_circle, color: AppColors.primary)
-                        : const Icon(Icons.person_outline),
-                    label: SizedBox(
-                      width: 130,
-                      child: Text(subscriber.name, overflow: TextOverflow.ellipsis),
-                    ),
                   ),
-                );
-              },
-            ),
+                )
+                .toList(),
           ),
         ],
       ],
     );
+  }
+
+  String _selectedSubscriberName() {
+    for (final subscriber in _subscribers) {
+      if (subscriber.id == _draft.subscriberId) return subscriber.name;
+    }
+    return '#${_draft.subscriberId}';
   }
 }
 

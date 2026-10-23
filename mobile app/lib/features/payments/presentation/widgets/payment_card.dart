@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
@@ -30,15 +32,16 @@ class PaymentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final amount = CurrencyFormatter.withLabel(payment.amount);
 
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: dense ? 4 : 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: dense ? 3 : 4),
+      child: AppCard(
+        padding: EdgeInsets.zero,
         onTap: onTap,
-        onLongPress: () => showPaymentActionSheet(context, payment: payment),
-        child: Padding(
-          padding: EdgeInsets.all(dense ? 10 : 12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          onLongPress: () => showPaymentActionSheet(context, payment: payment),
+          child: Padding(
+            padding: EdgeInsets.all(dense ? 11 : 13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -49,7 +52,7 @@ class PaymentCard extends StatelessWidget {
                       payment.receiptNumber.isEmpty ? 'سند غير مرقّم' : payment.receiptNumber,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -57,13 +60,13 @@ class PaymentCard extends StatelessWidget {
                     amount,
                     style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.success,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Row(
                 children: <Widget>[
                   Expanded(
@@ -71,7 +74,7 @@ class PaymentCard extends StatelessWidget {
                       payment.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                   PaymentMethodBadge(method: payment.method, compact: true),
@@ -125,6 +128,7 @@ class PaymentCard extends StatelessWidget {
                 ],
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -145,21 +149,28 @@ class _MetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = tone ?? AppColors.neutral;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = tone == null ? scheme.onSurfaceVariant : AppSemantic.resolve(context, tone!);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, size: 13, color: color),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.2,
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),

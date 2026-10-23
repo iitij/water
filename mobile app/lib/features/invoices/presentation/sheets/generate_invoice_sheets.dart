@@ -7,6 +7,9 @@ import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
@@ -45,7 +48,7 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
             padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
               'إصدار فاتورة',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
           _PickerTile(
@@ -125,11 +128,8 @@ class _PickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.12),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      leading: AppGlyph(icon: icon, tone: color, size: 40),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
     );
   }
@@ -313,7 +313,7 @@ class _GenerateSheetBody extends StatelessWidget {
                   Expanded(
                     child: Text(
                       chrome.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
@@ -480,7 +480,7 @@ class LiveSummaryCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
           ),
           child: Column(
@@ -495,7 +495,7 @@ class LiveSummaryCard extends StatelessWidget {
                         row.$2,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: row.$3,
                         ),
                       ),
@@ -509,14 +509,14 @@ class LiveSummaryCard extends StatelessWidget {
                   const Expanded(
                     child: Text(
                       'صافي الفاتورة',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
                   Text(
                     CurrencyFormatter.withLabel(state.netTotal),
                     style: const TextStyle(
                       fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.danger,
                     ),
                   ),
@@ -532,7 +532,7 @@ class LiveSummaryCard extends StatelessWidget {
                       ),
                       Text(
                         CurrencyFormatter.withLabel(state.totalDue),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -564,7 +564,7 @@ Future<void> _afterGenerated(BuildContext context, InvoiceModel invoice) async {
             Text(
               'تم إصدار الفاتورة ${invoice.billNumber}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 4),
             Text(
@@ -717,17 +717,9 @@ class _QuickPickRow extends StatelessWidget {
           final option = visible[index];
           return Padding(
             padding: const EdgeInsets.only(left: 8),
-            child: ActionChip(
-              onPressed: () => onPick(option),
-              label: SizedBox(
-                width: 170,
-                child: Text(
-                  option.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
+            child: AppFilterChip(
+              label: option.label,
+              onTap: () => onPick(option),
             ),
           );
         },
@@ -762,18 +754,11 @@ class MeterPickerField extends StatelessWidget {
               runSpacing: 8,
               children: meters.map((meter) {
                 final selected = state.selectedMeter?.id == meter.id;
-                return ChoiceChip(
+                return AppFilterChip(
+                  label: '${meter.label} — مدين ${CurrencyFormatter.amount(meter.debit)}',
                   selected: selected,
-                  onSelected: (_) => context.read<InvoiceGenerationCubit>().selectMeter(meter),
-                  label: SizedBox(
-                    width: 160,
-                    child: Text(
-                      '${meter.label}\nمدين: ${CurrencyFormatter.amount(meter.debit)}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
+                  onTap: () =>
+                      context.read<InvoiceGenerationCubit>().selectMeter(meter),
                 );
               }).toList(),
             ),

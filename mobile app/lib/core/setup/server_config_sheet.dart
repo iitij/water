@@ -11,6 +11,7 @@ import '../database/app_database.dart';
 import '../finance/finance_api_client.dart';
 import '../network/dio_client.dart';
 import '../theme/app_colors.dart';
+import '../ui/app_tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_text_field.dart';
 import 'server_setup_app.dart';
@@ -202,7 +203,7 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                     height: 42,
                     decoration: BoxDecoration(
                       color: AppColors.primary.withValues(alpha: .1),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
                     ),
                     child: const Icon(
                       Icons.dns_outlined,
@@ -233,7 +234,7 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: AppColors.danger.withValues(alpha: .08),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppRadius.xl),
                     border: Border.all(
                       color: AppColors.danger.withValues(alpha: .28),
                     ),
@@ -253,7 +254,7 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                           'تم قفل تغيير الخادم مؤقتاً حتى تتم مزامنة العمليات مع الخادم الحالي.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: AppColors.danger,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                             height: 1.5,
                           ),
                         ),
@@ -267,7 +268,7 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.warning.withValues(alpha: .09),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     border: Border.all(
                       color: AppColors.warning.withValues(alpha: .28),
                     ),
@@ -314,7 +315,7 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                   _error!,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: AppColors.danger,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

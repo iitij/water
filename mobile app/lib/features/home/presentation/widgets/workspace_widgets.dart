@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../domain/workspace_catalog.dart';
 
 Color workspaceColor(WorkspaceGroup group) => switch (group) {
   WorkspaceGroup.customers => AppColors.info,
   WorkspaceGroup.field => AppColors.primary,
   WorkspaceGroup.finance => AppColors.success,
-  WorkspaceGroup.management => const Color(0xFF7C3AED),
+  WorkspaceGroup.management => AppColors.violet,
   WorkspaceGroup.settings => AppColors.warning,
   WorkspaceGroup.account => AppColors.neutral,
 };
@@ -20,30 +22,41 @@ class WorkspaceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = workspaceColor(entry.group);
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      color: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.dividerColor),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: .10),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(entry.icon, color: color),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 10, 12),
+        child: Row(
+          children: <Widget>[
+            AppGlyph(icon: entry.icon, tone: workspaceColor(entry.group), size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    entry.title,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    entry.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
+          ],
         ),
-        title: Text(entry.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(entry.description),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-        onTap: onTap,
       ),
     );
   }
@@ -82,33 +95,31 @@ class _ShortcutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = workspaceColor(entry.group);
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: theme.dividerColor),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: color.withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(16)),
-                child: Icon(entry.icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 16),
-              Text(entry.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(entry.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ],
-          ),
+    final scheme = theme.colorScheme;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 14, 13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            AppGlyph(icon: entry.icon, tone: workspaceColor(entry.group), size: 36),
+            const SizedBox(height: 12),
+            Text(
+              entry.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              entry.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(height: 1.5),
+            ),
+          ],
         ),
       ),
     );
@@ -120,16 +131,38 @@ class WorkspaceSearchButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-    style: OutlinedButton.styleFrom(
-      alignment: AlignmentDirectional.centerStart,
-      padding: const EdgeInsets.all(18),
-      foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-      side: BorderSide(color: Theme.of(context).dividerColor),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-    ),
-    onPressed: onTap,
-    icon: const Icon(Icons.search_rounded),
-    label: const Text('ابحث عن خدمة…'),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.surfaceAlt,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          height: 46,
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.search_rounded, size: 19, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('ابحث عن خدمة…', style: theme.textTheme.bodySmall),
+              ),
+              Icon(
+                Icons.keyboard_command_key_rounded,
+                size: 15,
+                color: scheme.onSurfaceVariant.withValues(alpha: .6),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

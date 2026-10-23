@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_tokens.dart';
 import 'app_colors.dart';
 import 'currency_formatter.dart';
 
@@ -16,7 +17,7 @@ class StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
@@ -33,7 +34,7 @@ class StatusBadge extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
             ),
           ),
         ],
@@ -79,23 +80,9 @@ class SumBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.centerStart,
-          end: AlignmentDirectional.centerEnd,
-          colors: <Color>[
-            AppColors.primary.withValues(alpha: 0.07),
-            AppColors.primary.withValues(alpha: 0.015),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Wrap(
         spacing: 24,
@@ -105,16 +92,20 @@ class SumBar extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(it.label, style: const TextStyle(color: AppColors.neutral, fontSize: 12)),
+                Text(it.label, style: Theme.of(context).textTheme.labelSmall),
                 const SizedBox(height: 3),
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: Text(
                     CurrencyFormatter.format(it.value),
                     style: TextStyle(
-                      color: it.color,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      color: it.color == Colors.white
+                          ? Theme.of(context).colorScheme.onSurface
+                          : AppSemantic.resolve(context, it.color),
+                      fontSize: 16,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
                     ),
                   ),
                 ),
@@ -179,7 +170,7 @@ Future<bool> confirmAction(BuildContext context, String title, String body) asyn
     context: context,
     builder: (ctx) => AlertDialog(
       icon: const Icon(Icons.help_outline_rounded, size: 30, color: AppColors.primary),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       content: Text(body),
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),

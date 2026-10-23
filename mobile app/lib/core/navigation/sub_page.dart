@@ -25,26 +25,21 @@ class SubPageScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Scaffold(
       body: Column(
         children: <Widget>[
           Container(
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              border: Border(
-                bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: .7)),
-              ),
-            ),
+            color: theme.scaffoldBackgroundColor,
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(10, 8, 14, 10),
+                padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 16, 10),
                 child: Row(
                   children: <Widget>[
                     AppIconButton(
                       icon: Icons.arrow_forward_rounded,
                       tooltip: 'رجوع',
+                      size: 38,
                       onPressed: () {
                         if (context.canPop()) {
                           context.pop();
@@ -64,7 +59,7 @@ class SubPageScaffold extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           if (subtitle != null) ...<Widget>[
@@ -109,23 +104,27 @@ class HeroMetaChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final onDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: onDark ? .12 : .16),
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: Colors.white.withValues(alpha: .18)),
+        border: Border.all(color: Colors.white.withValues(alpha: onDark ? .18 : .16, ), ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: AppColors.onPanelSoft),
+          const SizedBox(width: 5),
           Flexible(
             child: Text(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700, height: 1.2),
+              style: const TextStyle(
+                color: AppColors.onPanelSoft,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
+              ),
             ),
           ),
         ],
@@ -178,21 +177,15 @@ class HeroEyebrow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 7),
         Flexible(
           child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: .78),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
+            style: const TextStyle(
+              color: AppColors.onPanelMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
               letterSpacing: .2,
             ),
           ),
@@ -225,17 +218,18 @@ class HeroCopy extends StatelessWidget {
         Text(
           title,
           style: theme.textTheme.headlineMedium?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            height: 1.24,
+            color: AppColors.onPanel,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+            letterSpacing: -.2,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           subtitle,
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: .8),
-            height: 1.55,
+            color: AppColors.onPanelSoft,
+            height: 1.6,
           ),
         ),
       ],
@@ -289,10 +283,10 @@ class AppLoader extends StatelessWidget {
 /// Re-exported palette shim so pages can use brand accents without a second
 /// theme import.
 Color brandAccent(BuildContext context) => AppTheme.isDark(context)
-    ? const Color(0xFF5EEAD4)
+    ? AppColors.accentOnPanel
     : AppColors.primary;
 
-/// Solid white hero button used on dark gradient panels.
+/// Solid accent button used inside the ink summary panel.
 class HeroButton extends StatelessWidget {
   const HeroButton({
     super.key,
@@ -309,17 +303,21 @@ class HeroButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? AppColors.panel : Colors.white;
     final radius = BorderRadius.circular(AppRadius.md);
     return SizedBox(
       width: expanded ? double.infinity : null,
-      height: 50,
+      height: 48,
       child: Material(
-        color: Colors.white,
+        color: scheme.primary,
         borderRadius: radius,
         elevation: 0,
         child: InkWell(
           onTap: onPressed,
           borderRadius: radius,
+          splashColor: foreground.withValues(alpha: .16),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Row(
@@ -327,7 +325,7 @@ class HeroButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 if (icon != null) ...<Widget>[
-                  Icon(icon, size: 18, color: AppColors.primaryDeep),
+                  Icon(icon, size: 18, color: foreground),
                   const SizedBox(width: 8),
                 ],
                 Flexible(
@@ -335,10 +333,10 @@ class HeroButton extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.primaryDeep,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
+                    style: TextStyle(
+                      color: foreground,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
                     ),
                   ),
                 ),
@@ -351,7 +349,7 @@ class HeroButton extends StatelessWidget {
   }
 }
 
-/// Translucent hero button for secondary actions on gradient panels.
+/// Hairline-outline button for secondary actions on the ink panel.
 class HeroGhostButton extends StatelessWidget {
   const HeroGhostButton({
     super.key,
@@ -371,18 +369,18 @@ class HeroGhostButton extends StatelessWidget {
     final radius = BorderRadius.circular(AppRadius.md);
     return SizedBox(
       width: expanded ? double.infinity : null,
-      height: 50,
+      height: 48,
       child: Material(
-        color: Colors.white.withValues(alpha: .12),
+        color: Colors.transparent,
         borderRadius: radius,
         child: InkWell(
           onTap: onPressed,
           borderRadius: radius,
-          splashColor: Colors.white.withValues(alpha: .14),
+          splashColor: Colors.white.withValues(alpha: .12),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,
-              border: Border.all(color: Colors.white.withValues(alpha: .22)),
+              border: Border.all(color: AppColors.onPanel.withValues(alpha: .18)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -390,7 +388,7 @@ class HeroGhostButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 if (icon != null) ...<Widget>[
-                  Icon(icon, size: 17, color: Colors.white),
+                  Icon(icon, size: 17, color: AppColors.onPanelSoft),
                   const SizedBox(width: 7),
                 ],
                 Flexible(
@@ -399,9 +397,9 @@ class HeroGhostButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
+                      color: AppColors.onPanelSoft,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
                     ),
                   ),
                 ),

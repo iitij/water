@@ -8,6 +8,7 @@ import '../../domain/entities/dashboard_entities.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../cubit/reports_cubit.dart';
 import '../widgets/monthly_revenue_chart_card.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({required this.repository, super.key});
@@ -210,7 +211,7 @@ class _ReportToolbar extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           const Icon(Icons.filter_alt_outlined, color: AdminPalette.primary),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           OutlinedButton.icon(
             onPressed: onSelect,
             icon: const Icon(Icons.date_range_outlined),
@@ -258,7 +259,7 @@ class _ReportMetric extends StatelessWidget {
             child: LtrText(
               value,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
             ),
           ),
@@ -300,7 +301,7 @@ class _BreakdownCard extends StatelessWidget {
                         Expanded(child: Text(item.label)),
                         LtrText(
                           AdminFormat.money(item.value),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -308,7 +309,7 @@ class _BreakdownCard extends StatelessWidget {
                     LinearProgressIndicator(
                       value: fraction,
                       minHeight: 7,
-                      borderRadius: BorderRadius.circular(99),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                   ],
                 ),

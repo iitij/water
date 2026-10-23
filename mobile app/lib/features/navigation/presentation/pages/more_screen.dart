@@ -142,7 +142,7 @@ class MoreScreen extends StatelessWidget {
                         'تسجيل الخروج',
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: AppColors.danger,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -214,7 +214,6 @@ class _IdentityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
     final roleLabel = isAdmin
         ? 'مدير النظام'
         : roles.isEmpty
@@ -224,18 +223,9 @@ class _IdentityCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-          colors: <Color>[
-            AppColors.primary.withValues(alpha: dark ? .24 : .1),
-            AppColors.violet.withValues(alpha: dark ? .16 : .06),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.xxl),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: dark ? .28 : .14),
-        ),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -252,7 +242,7 @@ class _IdentityCard extends StatelessWidget {
                       name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Directionality(

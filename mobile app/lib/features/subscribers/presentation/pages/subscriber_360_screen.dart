@@ -31,6 +31,9 @@ import '../cubit/subscriber360_cubit.dart';
 import '../widgets/statement_pdf_service.dart';
 import 'subscriber_form_screen.dart';
 import 'subscribers_screen.dart'
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
     show CollectPaymentLauncher, launchDefaultSubscriberPayment;
 
 /// منافذ تكامل: أنور (Dev 2) بطاقة عداد + تسجيل قراءة — أكرم (Dev 3) تحصيل/فواتير/مدفوعات.
@@ -474,10 +477,13 @@ class _MetersTab extends StatelessWidget {
                 itemCount: meters.length,
                 itemBuilder: (_, i) {
                   final m = meters[i];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: ListTile(
-                      leading: const Icon(Icons.speed, color: AppColors.primary),
+                  return Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                    child: AppCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                      contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
+                      leading: const AppGlyph(icon: Icons.speed_rounded, size: 38),
                       title: Text(m.title),
                       subtitle: Text('مسار: ${m.pathNumber ?? '-'} • قراءات: ${m.readingsCount} • ${m.status == 'active' ? 'نشط' : 'غير نشط'}'),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -504,6 +510,7 @@ class _MetersTab extends StatelessWidget {
                           ),
                         ],
                       ]),
+                    ),
                     ),
                   );
                 },
@@ -603,9 +610,12 @@ class _InvoicesTab extends StatelessWidget {
         final total = (inv['total_amount'] as num?)?.toDouble() ?? model.totalAmount;
         final paid = (inv['amount_paid'] as num?)?.toDouble() ?? model.amountPaid;
         final isPaid = (inv['status'] ?? model.status.wire) == 'paid';
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: ListTile(
+        return Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+          child: AppCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+            contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
             onTap: model.id > 0 ? () => _openDetails(context, model) : null,
             title: Text('${model.billNumber} • ${inv['bill_date'] ?? ''}'),
             subtitle: Text(
@@ -656,13 +666,14 @@ class _InvoicesTab extends StatelessWidget {
                       PopupMenuItem(value: 'open', child: ListTile(dense: true, leading: Icon(Icons.open_in_new), title: Text('عرض التفاصيل'))),
                       PopupMenuItem(value: 'pdf', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('طباعة / معاينة PDF'))),
                       PopupMenuItem(value: 'thermal', child: ListTile(dense: true, leading: Icon(Icons.print_outlined), title: Text('طباعة حرارية'))),
-                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: Color(0xFF25D366)), title: Text('إرسال واتساب'))),
+                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: AppColors.whatsapp), title: Text('إرسال واتساب'))),
                       PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('تعديل الفاتورة'))),
                       PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline, color: AppColors.danger), title: Text('حذف الفاتورة'))),
                     ],
                   ),
               ],
             ),
+          ),
           ),
         );
       },
@@ -744,9 +755,12 @@ class _PaymentsTab extends StatelessWidget {
       itemBuilder: (_, i) {
         final p = payments[i];
         final model = _toPaymentModel(p);
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: ListTile(
+        return Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+          child: AppCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+            contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
             onTap: hasPaymentsRepo && model.id > 0
                 ? () => showPaymentActionSheet(
                       context,
@@ -754,7 +768,11 @@ class _PaymentsTab extends StatelessWidget {
                       onDeleted: () => _deletePayment(context, model),
                     )
                 : null,
-            leading: const Icon(Icons.receipt, color: AppColors.success),
+            leading: const AppGlyph(
+              icon: Icons.receipt_rounded,
+              tone: AppColors.success,
+              size: 38,
+            ),
             title: Text('${model.receiptNumber} • ${p['payment_date'] ?? ''}'),
             subtitle: Text(model.method.label),
             trailing: Row(
@@ -762,7 +780,12 @@ class _PaymentsTab extends StatelessWidget {
               children: [
                 Text(
                   CurrencyFormatter.format(model.amount),
-                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: AppSemantic.resolve(context, AppColors.success),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  ),
                 ),
                 if (hasPaymentsRepo && model.id > 0)
                   PopupMenuButton<String>(
@@ -784,13 +807,14 @@ class _PaymentsTab extends StatelessWidget {
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'pdf', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('طباعة / معاينة PDF'))),
                       PopupMenuItem(value: 'thermal', child: ListTile(dense: true, leading: Icon(Icons.print_outlined), title: Text('طباعة حرارية'))),
-                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: Color(0xFF25D366)), title: Text('إرسال واتساب'))),
+                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: AppColors.whatsapp), title: Text('إرسال واتساب'))),
                       PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('تعديل السند'))),
                       PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline, color: AppColors.danger), title: Text('حذف السند'))),
                     ],
                   ),
               ],
             ),
+          ),
           ),
         );
       },
@@ -851,7 +875,6 @@ class _FeesTab extends StatelessWidget {
                     initialValue: meters.any((m) => m.meterId == selectedMeterId) ? selectedMeterId : null,
                     decoration: const InputDecoration(
                       labelText: 'العداد (اختياري)',
-                      border: OutlineInputBorder(),
                     ),
                     items: [
                       const DropdownMenuItem<int?>(value: null, child: Text('بدون عداد محدد')),
@@ -868,7 +891,6 @@ class _FeesTab extends StatelessWidget {
                   enabled: existing?.invoiceId == null,
                   decoration: const InputDecoration(
                     labelText: 'المبلغ (ريال)',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -876,7 +898,6 @@ class _FeesTab extends StatelessWidget {
                   initialValue: selectedStatus,
                   decoration: const InputDecoration(
                     labelText: 'الحالة',
-                    border: OutlineInputBorder(),
                   ),
                   items: [
                     for (final s in FeeStatus.values)
@@ -889,7 +910,6 @@ class _FeesTab extends StatelessWidget {
                   controller: notesCtrl,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات',
-                    border: OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -1057,7 +1077,6 @@ class _RequestsTab extends StatelessWidget {
                   enabled: existing?.invoiceId == null,
                   decoration: const InputDecoration(
                     labelText: 'سعر الوايت (ريال)',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1080,7 +1099,6 @@ class _RequestsTab extends StatelessWidget {
                   initialValue: selectedStatus,
                   decoration: const InputDecoration(
                     labelText: 'الحالة',
-                    border: OutlineInputBorder(),
                   ),
                   items: [
                     for (final s in TankerStatus.values)
@@ -1093,7 +1111,6 @@ class _RequestsTab extends StatelessWidget {
                   controller: notesCtrl,
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات',
-                    border: OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -1224,31 +1241,40 @@ class _StatementTab extends StatelessWidget {
           for (final m in detail.summary.meterBalances) PartyMeter(m),
         ];
         return Column(children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(children: [
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
               Expanded(
-                child: DropdownButtonFormField<PartyFilter>(
-                  key: ValueKey<PartyFilter>(state.party),
-                  initialValue: state.party,
-                  decoration: const InputDecoration(labelText: 'فلتر الجهة (الحساب)', border: OutlineInputBorder()),
-                  items: [for (final p in parties) DropdownMenuItem(value: p, child: Text(p.label))],
-                  onChanged: (p) {
-                    if (p != null) context.read<Subscriber360Cubit>().filterParty(p);
-                  },
+                child: AppFilterChips(
+                  padding: const EdgeInsetsDirectional.only(start: 16),
+                  children: <Widget>[
+                    for (final party in parties)
+                      AppFilterChip(
+                        label: party.label,
+                        selected: state.party == party,
+                        onTap: () =>
+                            context.read<Subscriber360Cubit>().filterParty(party),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                tooltip: 'تصدير / مشاركة كشف الحساب PDF',
-                icon: const Icon(Icons.picture_as_pdf),
-                onPressed: () => StatementPdfService.shareStatement(
-                  subscriberName: subscriberName,
-                  summary: detail.summary,
-                  entries: state.statement,
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 4, end: 16),
+                child: IconButton(
+                  tooltip: 'تصدير كشف الحساب PDF',
+                  onPressed: () => StatementPdfService.shareStatement(
+                    subscriberName: subscriberName,
+                    summary: detail.summary,
+                    entries: state.statement,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.surfaceAlt,
+                    minimumSize: const Size(38, 38),
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
                 ),
               ),
-            ]),
+            ],
           ),
           if (state.statementLoading) const LinearProgressIndicator(),
           Expanded(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class SettingImageField extends StatelessWidget {
   const SettingImageField({
@@ -33,7 +34,7 @@ class SettingImageField extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
       child: Row(
         children: [
@@ -43,7 +44,7 @@ class SettingImageField extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: AdminPalette.primary.withAlpha(15),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: imageUrl == null
                 ? const Icon(Icons.image_outlined, color: AdminPalette.primary)
@@ -59,7 +60,7 @@ class SettingImageField extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
                 if (helperText != null)
                   Text(helperText!, style: Theme.of(context).textTheme.bodySmall),
                 if (path.isNotEmpty)

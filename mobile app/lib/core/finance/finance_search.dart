@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../ui/app_tokens.dart';
 
 class FinanceSearchQuery {
   const FinanceSearchQuery({
@@ -107,7 +108,7 @@ class _FinanceSearchBarState extends State<FinanceSearchBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -122,16 +123,16 @@ class _FinanceSearchBarState extends State<FinanceSearchBar> {
             onSubmitted: widget.onSubmitted,
             decoration: InputDecoration(
               hintText: widget.hint,
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: const Icon(Icons.search_rounded, size: 19),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   if (_isCompound)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
                       child: Icon(
-                        Icons.route_outlined,
-                        size: 18,
+                        Icons.alt_route_rounded,
+                        size: 17,
                         color: AppColors.primary,
                       ),
                     ),
@@ -139,7 +140,7 @@ class _FinanceSearchBarState extends State<FinanceSearchBar> {
                     IconButton(
                       tooltip: 'مسح',
                       visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.close, size: 18),
+                      icon: const Icon(Icons.close_rounded, size: 18),
                       onPressed: () {
                         widget.controller.clear();
                         _recompute('');
@@ -153,7 +154,7 @@ class _FinanceSearchBarState extends State<FinanceSearchBar> {
             ),
           ),
           if (widget.filters.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -192,18 +193,42 @@ class FilterChipButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = value == null || value!.isEmpty ? label : '$label: $value';
-    return ActionChip(
-      onPressed: onPressed,
-      backgroundColor: selected ? AppColors.primary.withValues(alpha: 0.10) : null,
-      side: BorderSide(
-        color: selected ? AppColors.primary : AppColors.lightBorder,
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: selected ? scheme.primary.withValues(alpha: .08) : scheme.surface,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: selected ? scheme.primary.withValues(alpha: .32) : scheme.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                icon ?? (selected ? Icons.filter_alt_rounded : Icons.filter_alt_outlined),
+                size: 14,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      avatar: Icon(
-        selected ? Icons.filter_alt : (icon ?? Icons.filter_alt_outlined),
-        size: 18,
-        color: selected ? AppColors.primary : AppColors.neutral,
-      ),
-      label: Text(text, style: const TextStyle(fontSize: 12)),
     );
   }
 }

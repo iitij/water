@@ -45,7 +45,7 @@ class MonthlyRevenueChartCard extends StatelessWidget {
             trailing: AppPill(
               label: AdminFormat.compactMoney(total),
               icon: Icons.account_balance_wallet_outlined,
-              color: AppColors.success,
+              color: AppColors.neutral,
               dense: true,
             ),
           ),
@@ -63,7 +63,7 @@ class MonthlyRevenueChartCard extends StatelessWidget {
                   child: _ChartStat(
                     label: 'إجمالي الفترة',
                     value: AdminFormat.compactMoney(total),
-                    color: AppColors.success,
+                    color: AppColors.neutral,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -71,7 +71,7 @@ class MonthlyRevenueChartCard extends StatelessWidget {
                   child: _ChartStat(
                     label: 'المتوسط الشهري',
                     value: AdminFormat.compactMoney(average),
-                    color: AppColors.info,
+                    color: AppColors.neutral,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -79,7 +79,7 @@ class MonthlyRevenueChartCard extends StatelessWidget {
                   child: _ChartStat(
                     label: 'أعلى شهر',
                     value: labels[bestIndex].split(' ').first,
-                    color: AppColors.violet,
+                    color: AppColors.neutral,
                   ),
                 ),
               ],
@@ -141,7 +141,7 @@ class _ChartStat extends StatelessWidget {
               textAlign: TextAlign.start,
               style: theme.textTheme.titleSmall?.copyWith(
                 color: color,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -247,7 +247,7 @@ class _RevenueChart extends StatelessWidget {
                     '${labels[spot.x.toInt()]}\n${AdminFormat.money(spot.y)}',
                     const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
                   ),
@@ -278,14 +278,7 @@ class _RevenueChart extends StatelessWidget {
             ),
             belowBarData: BarAreaData(
               show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[
-                  color.withValues(alpha: .34),
-                  color.withValues(alpha: .02),
-                ],
-              ),
+              color: color.withValues(alpha: .07),
             ),
           ),
         ],

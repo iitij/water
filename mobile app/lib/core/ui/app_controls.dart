@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'app_tokens.dart';
 
-/// Gradient primary action. Ink effects are painted above the gradient so the
-/// button still feels native while looking custom.
+/// Primary action: a solid accent block with one icon and one label.
+///
+/// No gradient, no glow. The single saturated element per screen is usually
+/// this button (or the selected tab), which is what makes the layout read as
+/// calm.
 class AppPrimaryButton extends StatelessWidget {
   const AppPrimaryButton({
     super.key,
@@ -13,8 +16,8 @@ class AppPrimaryButton extends StatelessWidget {
     this.icon,
     this.loading = false,
     this.expand = true,
-    this.gradient = AppColors.aquaGradient,
-    this.height = 52,
+    this.gradient,
+    this.height = 50,
   });
 
   final String label;
@@ -22,54 +25,57 @@ class AppPrimaryButton extends StatelessWidget {
   final IconData? icon;
   final bool loading;
   final bool expand;
-  final Gradient gradient;
+
+  /// Deprecated: ignored. Kept for compatibility with older call sites.
+  final Gradient? gradient;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final enabled = onPressed != null && !loading;
     final radius = BorderRadius.circular(AppRadius.md);
+    final foreground = dark ? const Color(0xFF06201C) : Colors.white;
+
     return Opacity(
-      opacity: enabled ? 1 : .55,
+      opacity: enabled ? 1 : .45,
       child: Container(
         width: expand ? double.infinity : null,
         height: height,
         clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: radius,
-          boxShadow: enabled ? AppShadows.brand(AppColors.primary, opacity: .22) : null,
-        ),
+        decoration: BoxDecoration(color: scheme.primary, borderRadius: radius),
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
             onTap: enabled ? onPressed : null,
             borderRadius: radius,
-            splashColor: Colors.white.withValues(alpha: .18),
-            highlightColor: Colors.white.withValues(alpha: .08),
+            splashColor: foreground.withValues(alpha: .16),
+            highlightColor: foreground.withValues(alpha: .08),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   if (loading)
-                    const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2.1, color: Colors.white),
+                    SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: foreground),
                     )
                   else if (icon != null)
-                    Icon(icon, size: 19, color: Colors.white),
-                  if (loading || icon != null) const SizedBox(width: 9),
+                    Icon(icon, size: 18, color: foreground),
+                  if (loading || icon != null) const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14.5,
+                      style: TextStyle(
+                        color: foreground,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                        height: 1.2,
                       ),
                     ),
                   ),
@@ -83,7 +89,7 @@ class AppPrimaryButton extends StatelessWidget {
   }
 }
 
-/// Quiet secondary action that sits next to a primary button.
+/// Quiet secondary action: transparent fill, hairline border, ink label.
 class AppSecondaryButton extends StatelessWidget {
   const AppSecondaryButton({
     super.key,
@@ -91,7 +97,7 @@ class AppSecondaryButton extends StatelessWidget {
     this.onPressed,
     this.icon,
     this.expand = true,
-    this.height = 52,
+    this.height = 50,
   });
 
   final String label;
@@ -104,42 +110,46 @@ class AppSecondaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(AppRadius.md);
-    return SizedBox(
-      width: expand ? double.infinity : null,
-      height: height,
-      child: Material(
-        color: scheme.surface.withValues(alpha: .92),
-        borderRadius: radius,
-        child: InkWell(
-          onTap: onPressed,
+    return Opacity(
+      opacity: onPressed == null ? .45 : 1,
+      child: SizedBox(
+        width: expand ? double.infinity : null,
+        height: height,
+        child: Material(
+          color: scheme.surface,
           borderRadius: radius,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (icon != null) ...<Widget>[
-                  Icon(icon, size: 18, color: scheme.primary),
-                  const SizedBox(width: 8),
-                ],
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: radius,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (icon != null) ...<Widget>[
+                    Icon(icon, size: 17, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 7),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        height: 1.2,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -148,7 +158,7 @@ class AppSecondaryButton extends StatelessWidget {
   }
 }
 
-/// Round icon button used in headers and cards.
+/// Quiet icon button used in headers and cards.
 class AppIconButton extends StatelessWidget {
   const AppIconButton({
     super.key,
@@ -156,7 +166,7 @@ class AppIconButton extends StatelessWidget {
     this.onPressed,
     this.tooltip,
     this.color,
-    this.size = 42,
+    this.size = 40,
     this.badge,
   });
 
@@ -170,7 +180,7 @@ class AppIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tint = color ?? scheme.onSurface;
+    final tiny = size <= 32;
     final button = SizedBox.square(
       dimension: size,
       child: Stack(
@@ -178,19 +188,26 @@ class AppIconButton extends StatelessWidget {
         children: <Widget>[
           Positioned.fill(
             child: Material(
-              color: color == null
-                  ? scheme.surface
-                  : tint.withValues(alpha: .12),
-              shape: const CircleBorder(side: BorderSide(color: Colors.transparent)),
+              color: tiny ? Colors.transparent : scheme.surfaceContainerHighest,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(size * .32),
+                side: tiny
+                    ? BorderSide.none
+                    : BorderSide(color: scheme.outlineVariant),
+              ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: onPressed,
-                child: Icon(icon, size: size * .46, color: tint),
+                child: Icon(
+                  icon,
+                  size: size * .46,
+                  color: color ?? scheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
           if (badge != null)
-            PositionedDirectional(top: 2, end: 2, child: badge!),
+            PositionedDirectional(top: -3, end: -3, child: badge!),
         ],
       ),
     );
@@ -198,7 +215,7 @@ class AppIconButton extends StatelessWidget {
   }
 }
 
-/// Circular avatar with a deterministic gradient fallback built from initials.
+/// Square avatar with a deterministic fallback built from the name initials.
 class AppAvatar extends StatelessWidget {
   const AppAvatar({
     super.key,
@@ -214,6 +231,8 @@ class AppAvatar extends StatelessWidget {
   final String name;
   final String? imageUrl;
   final double size;
+
+  /// Optional connection dot: `true` green, `false` amber, `null` hidden.
   final bool? online;
   final Color? ringColor;
   final Color? background;
@@ -232,20 +251,21 @@ class AppAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(size * .36);
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final radius = BorderRadius.circular(size * .32);
+    final bg = background ?? (dark ? AppColors.darkAccentSoft : AppColors.accentSoft);
+    final fg = foreground ?? (dark ? AppColors.darkAccent : AppColors.accentStrong);
+
     final avatar = ClipRRect(
       borderRadius: radius,
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
-          gradient: background == null ? AppColors.oceanGradient : null,
-          color: background,
+          color: bg,
           borderRadius: radius,
-          border: Border.all(
-            color: ringColor ?? Colors.white.withValues(alpha: .5),
-            width: 1.4,
-          ),
+          border: Border.all(color: ringColor ?? scheme.outlineVariant),
         ),
         alignment: Alignment.center,
         child: imageUrl != null && imageUrl!.trim().isNotEmpty
@@ -254,9 +274,9 @@ class AppAvatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
-                errorBuilder: (context, error, stack) => _initialsText(),
+                errorBuilder: (context, error, stack) => _initialsText(fg),
               )
-            : _initialsText(),
+            : _initialsText(fg),
       ),
     );
 
@@ -273,12 +293,12 @@ class AppAvatar extends StatelessWidget {
             bottom: -1,
             start: -1,
             child: Container(
-              width: size * .3,
-              height: size * .3,
+              width: size * .28,
+              height: size * .28,
               decoration: BoxDecoration(
                 color: online! ? AppColors.success : AppColors.warning,
                 shape: BoxShape.circle,
-                border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                border: Border.all(color: scheme.surface, width: 2),
               ),
             ),
           ),
@@ -287,18 +307,21 @@ class AppAvatar extends StatelessWidget {
     );
   }
 
-  Widget _initialsText() => Text(
+  Widget _initialsText(Color color) => Text(
         _initials,
         style: TextStyle(
-          color: foreground ?? Colors.white,
-          fontSize: size * .34,
-          fontWeight: FontWeight.w800,
+          color: color,
+          fontSize: size * .32,
+          fontWeight: FontWeight.w600,
           height: 1,
         ),
       );
 }
 
-/// Rounded tinted label used for statuses, roles and metadata.
+/// Rounded label used for statuses, roles and metadata.
+///
+/// The body stays neutral; [color] is only applied to the icon so status
+/// colour never turns a row into a paint swatch.
 class AppPill extends StatelessWidget {
   const AppPill({
     super.key,
@@ -321,26 +344,26 @@ class AppPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tint = color ?? scheme.primary;
-    final background = filled
-        ? tint
-        : tint.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? .2 : .1);
-    final foreground = filled ? Colors.white : tint;
+    final background = filled ? tint : scheme.surfaceContainerHighest;
+    final foreground = filled
+        ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF06201C) : Colors.white)
+        : scheme.onSurfaceVariant;
 
     final content = Container(
       padding: EdgeInsets.symmetric(
-        horizontal: dense ? 9 : 12,
-        vertical: dense ? 4 : 6.5,
+        horizontal: dense ? 9 : 11,
+        vertical: dense ? 4 : 6,
       ),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: tint.withValues(alpha: filled ? .0 : .22)),
+        border: filled ? null : Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (icon != null) ...<Widget>[
-            Icon(icon, size: dense ? 12 : 14, color: foreground),
+            Icon(icon, size: dense ? 12 : 13, color: filled ? foreground : tint),
             const SizedBox(width: 5),
           ],
           Flexible(
@@ -350,8 +373,8 @@ class AppPill extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: foreground,
-                fontSize: dense ? 11 : 12,
-                fontWeight: FontWeight.w700,
+                fontSize: dense ? 10.5 : 11.5,
+                fontWeight: FontWeight.w500,
                 height: 1.2,
               ),
             ),
@@ -377,7 +400,7 @@ class AppSegmentedOption<T> {
   final IconData? icon;
 }
 
-/// Animated pill segmented control (used for theme mode and filters).
+/// Flat segmented control used for filters and the theme mode.
 class AppSegmentedControl<T> extends StatelessWidget {
   const AppSegmentedControl({
     super.key,
@@ -393,13 +416,12 @@ class AppSegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: dark ? AppColors.darkBackground : AppColors.lightSurfaceAlt,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .7)),
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: options.map((option) {
@@ -407,23 +429,17 @@ class AppSegmentedControl<T> extends StatelessWidget {
           return Expanded(
             child: InkWell(
               onTap: () => onChanged(option.value),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: AnimatedContainer(
                 duration: AppMotion.normal,
                 curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                 decoration: BoxDecoration(
                   color: selected ? scheme.surface : Colors.transparent,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  boxShadow: selected
-                      ? <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: dark ? .35 : .07),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : null,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(
+                    color: selected ? scheme.outlineVariant : Colors.transparent,
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -431,8 +447,8 @@ class AppSegmentedControl<T> extends StatelessWidget {
                     if (option.icon != null) ...<Widget>[
                       Icon(
                         option.icon,
-                        size: 15,
-                        color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                        size: 14,
+                        color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 5),
                     ],
@@ -442,8 +458,8 @@ class AppSegmentedControl<T> extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 12,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                           color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
                         ),
                       ),

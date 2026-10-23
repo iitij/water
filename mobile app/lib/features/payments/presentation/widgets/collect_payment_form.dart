@@ -4,6 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
@@ -95,9 +98,11 @@ class DueHeaderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+        color: AppTint.soft(Theme.of(context).colorScheme.primary, context),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .16),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +112,7 @@ class DueHeaderCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   state.subscriberName ?? '—',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
               if (invoice != null)
@@ -137,7 +142,7 @@ class DueHeaderCard extends StatelessWidget {
                 CurrencyFormatter.debt(state.dueAmount),
                 style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.danger,
                 ),
               ),
@@ -185,24 +190,17 @@ class InvoicePickerRow extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            ChoiceChip(
+            AppFilterChip(
+              label: 'تلقائي (FIFO)',
               selected: state.invoiceId == null,
-              onSelected: (_) => cubit.useFifoAutomatically(),
-              label: const Text('FIFO تلقائي'),
+              onTap: cubit.useFifoAutomatically,
             ),
             ...state.openInvoices.map(
-              (invoice) => ChoiceChip(
+              (invoice) => AppFilterChip(
+                label:
+                    '${invoice.billNumber} · ${CurrencyFormatter.amount(invoice.netPayable)}',
                 selected: state.invoiceId == invoice.id,
-                onSelected: (_) => cubit.selectInvoice(invoice.id),
-                label: SizedBox(
-                  width: 150,
-                  child: Text(
-                    '${invoice.billNumber} — ${CurrencyFormatter.amount(invoice.netPayable)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
+                onTap: () => cubit.selectInvoice(invoice.id),
               ),
             ),
           ],
@@ -266,19 +264,22 @@ class QuickAmountRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       children: <Widget>[
-        ActionChip(
-          label: Text('الكل (${CurrencyFormatter.amount(state.dueAmount)})'),
-          onPressed: state.dueAmount > 0 ? cubit.fillFullDue : null,
+        AppFilterChip(
+          label: 'الكل · ${CurrencyFormatter.amount(state.dueAmount)}',
+          icon: Icons.done_all_rounded,
+          onTap: state.dueAmount > 0 ? cubit.fillFullDue : null,
         ),
-        ActionChip(
-          label: const Text('النصف'),
-          onPressed: state.dueAmount > 0 ? cubit.fillHalfDue : null,
+        AppFilterChip(
+          label: 'النصف',
+          icon: Icons.vertical_split_rounded,
+          onTap: state.dueAmount > 0 ? cubit.fillHalfDue : null,
         ),
-        ActionChip(
-          label: const Text('تصفير'),
-          onPressed: cubit.resetAmount,
+        AppFilterChip(
+          label: 'تصفير',
+          icon: Icons.backspace_outlined,
+          onTap: cubit.resetAmount,
         ),
       ],
     );
@@ -302,11 +303,11 @@ class MethodPickerRow extends StatelessWidget {
           spacing: 8,
           children: PaymentMethod.values
               .map(
-                (method) => ChoiceChip(
+                (method) => AppFilterChip(
+                  label: method.label,
+                  icon: _methodIcon(method),
                   selected: state.method == method,
-                  onSelected: (_) => cubit.setMethod(method),
-                  label: Text(method.label),
-                  avatar: Icon(_methodIcon(method), size: 16),
+                  onTap: () => cubit.setMethod(method),
                 ),
               )
               .toList(),
@@ -455,15 +456,16 @@ class AllocationPreviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.neutral.withValues(alpha: 0.2)),
+        color: Theme.of(context).colorScheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const Text(
             'معاينة التوزيع على الفواتير',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           ...preview.allocations.map((entry) {
@@ -478,7 +480,7 @@ class AllocationPreviewCard extends StatelessWidget {
                   Expanded(child: Text(bill, style: const TextStyle(fontSize: 12))),
                   Text(
                     CurrencyFormatter.withLabel(entry.applied),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),

@@ -13,6 +13,9 @@ import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/subscription_fee.dart';
 import '../cubit/subscription_fees_cubit.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 bool _hasSubscriptionFeesCubit(BuildContext context) {
   try {
@@ -133,7 +136,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                     InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'المشترك',
-                        border: OutlineInputBorder(),
                       ),
                       child: Text(existing.subscriberName ?? 'مشترك #${existing.subscriberId}'),
                     ),
@@ -142,7 +144,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                       initialValue: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
                       decoration: const InputDecoration(
                         labelText: 'العداد',
-                        border: OutlineInputBorder(),
                       ),
                       items: [
                         const DropdownMenuItem<int?>(value: null, child: Text('بدون عداد محدد')),
@@ -159,7 +160,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                     enabled: existing?.invoiceId == null,
                     decoration: const InputDecoration(
                       labelText: 'مبلغ رسوم الاشتراك (ريال) *',
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -167,7 +167,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                     initialValue: selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'الحالة',
-                      border: OutlineInputBorder(),
                     ),
                     items: [
                       for (final s in FeeStatus.values)
@@ -180,7 +179,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                     controller: notesCtrl,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      border: OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -294,25 +292,20 @@ class _SubscriptionFeesView extends StatelessWidget {
                 (label: 'المتبقي غير المفوتر', value: state.remainingSum, color: AppColors.brandAmber),
               ]),
             ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(children: [
-                ChoiceChip(
-                  label: const Text('الكل'),
+            AppFilterChips(
+              children: <Widget>[
+                AppFilterChip(
+                  label: 'الكل',
                   selected: state.status == null,
-                  onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(null),
+                  onTap: () => context.read<SubscriptionFeesCubit>().filterStatus(null),
                 ),
-                for (final s in FeeStatus.values)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 8),
-                    child: ChoiceChip(
-                      label: Text(s.label),
-                      selected: state.status == s,
-                      onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(s),
-                    ),
+                for (final status in FeeStatus.values)
+                  AppFilterChip(
+                    label: status.label,
+                    selected: state.status == status,
+                    onTap: () => context.read<SubscriptionFeesCubit>().filterStatus(status),
                   ),
-              ]),
+              ],
             ),
             if (state.selectedIds.isNotEmpty)
               MaterialBanner(
@@ -339,9 +332,12 @@ class _SubscriptionFeesView extends StatelessWidget {
                       itemBuilder: (_, i) {
                         final f = state.fees[i];
                         final checked = state.selectedIds.contains(f.id);
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          color: checked ? AppColors.primary.withValues(alpha: 0.08) : null,
+                        return Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                          child: AppCard(
+                          padding: EdgeInsets.zero,
+                          color: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .04) : null,
+                          borderColor: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .4) : null,
                           child: ListTile(
                             onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
                             leading: Checkbox(
@@ -356,7 +352,15 @@ class _SubscriptionFeesView extends StatelessWidget {
                               '${f.notes != null && f.notes!.isNotEmpty ? '\n${f.notes}' : ''}',
                             ),
                             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Text(CurrencyFormatter.format(f.amount), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                CurrencyFormatter.format(f.amount),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                                ),
+                              ),
                               const SizedBox(width: 8),
                               StatusBadge(
                                 label: f.status.label,
@@ -390,6 +394,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                                 },
                               ),
                             ]),
+                          ),
                           ),
                         );
                       },

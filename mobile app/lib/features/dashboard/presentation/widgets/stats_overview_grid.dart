@@ -27,6 +27,7 @@ class StatsOverviewGrid extends StatelessWidget {
         AppMetricCard(
           title: 'الديون المستحقة',
           value: AdminFormat.compactMoney(stats.outstandingAmount),
+          unit: 'ر.ي',
           icon: Icons.account_balance_wallet_outlined,
           color: AppColors.danger,
           caption: '${AdminFormat.number(stats.unpaidInvoicesCount)} فاتورة غير مسددة',
@@ -34,6 +35,7 @@ class StatsOverviewGrid extends StatelessWidget {
         AppMetricCard(
           title: 'إيرادات هذا الشهر',
           value: AdminFormat.compactMoney(stats.monthlyCollection),
+          unit: 'ر.ي',
           icon: Icons.payments_rounded,
           color: AppColors.success,
           sparkline: stats.collectionSparkline,

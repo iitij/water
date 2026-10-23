@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/finance/finance_colors.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
@@ -11,9 +12,8 @@ import '../../domain/accounting/invoice_accounting.dart';
 /// بطاقة فاتورة موحّدة — **مكوّن مُسلَّم** لفؤاد (`SCR-05/07/19/20`) ولأسامة
 /// (`SCR-03` ودجة الفواتير المتأخرة)، ولشاشة المحصل السريع `SCR-13`.
 ///
-/// تعرض بدقة الأعمدة المطابقة لجدول Filament في `InvoiceResource::table`:
-/// `beneficiary_name`, `bill_date`, الاستهلاك, المتأخرات, قيمة الفاتورة,
-/// `total_due`, المسدد، والمتبقي (تراكمي للأحدث فقط، وإلا `-`).
+/// التصميم: سطح مسطّح بحد رفيع، رقم الفاتورة أولاً، ثم المستفيد والتصنيف،
+/// ثم سطر «المتبقي» البارز، وأخيراً ثلاثة أرقام ثانوية على سطر واحد مع الإجراءات.
 class InvoiceCard extends StatelessWidget {
   const InvoiceCard({
     super.key,
@@ -54,258 +54,255 @@ class InvoiceCard extends StatelessWidget {
   final bool busy;
   final bool showCheckbox;
 
+  bool get _hasActions =>
+      onCollect != null || onPrint != null || onWhatsapp != null || onPrintThermal != null;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.labelSmall?.color;
     final remainingColor = remainingLabel == '-'
-        ? AppColors.neutral
-        : (invoice.netPayable > 0 ? AppColors.danger : AppColors.success);
+        ? scheme.onSurfaceVariant
+        : (invoice.netPayable > 0 ? scheme.error : AppColors.success);
 
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(dense ? 10 : 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (showCheckbox) ...<Widget>[
-                    Checkbox(
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      borderColor: invoice.isPathMatch ? scheme.primary.withValues(alpha: .35) : null,
+      child: Padding(
+        padding: EdgeInsets.all(dense ? 12 : 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (showCheckbox) ...<Widget>[
+                  SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: Checkbox(
                       value: selected ?? false,
                       onChanged: (_) => onToggleSelect?.call(),
                     ),
-                    const SizedBox(width: 4),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        LtrNumberText(
-                          invoice.billNumber.isEmpty ? '—' : invoice.billNumber,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          invoice.beneficiaryName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          if (invoice.isDeleted) ...<Widget>[
-                            const StatusBadge(
-                              status: 'danger',
-                              label: 'محذوفة',
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          InvoiceTypeBadge(type: invoice.invoiceType.wire, compact: dense),
-                          if (onMoreActions != null)
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              tooltip: 'خيارات الفاتورة',
-                              icon: const Icon(Icons.more_vert, size: 18),
-                              onPressed: busy ? null : onMoreActions,
-                            ),
-                        ],
+                      LtrNumberText(
+                        invoice.billNumber.isEmpty ? '—' : invoice.billNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          letterSpacing: .1,
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      StatusBadge(
-                        status: invoice.status.colorKey,
-                        label: invoice.status.label,
+                      const SizedBox(height: 2),
+                      Text(
+                        invoice.beneficiaryName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: <Widget>[
-                  PathChip(
-                    squareName: invoice.subscriber?.squareName,
-                    pathNumber: invoice.meter?.pathNumber?.toString(),
-                    highlighted: invoice.isPathMatch,
-                  ),
-                  _Pill(
-                    label: 'التاريخ',
-                    value: DateFormat.day(invoice.billDate),
-                  ),
-                  _Pill(
-                    label: 'الفترة',
-                    value: '${DateFormat.day(invoice.periodStart)} ← '
-                        '${DateFormat.day(invoice.periodEnd)}',
-                  ),
-                  if (invoice.previousBalance > 0)
-                    _Pill(
-                      label: 'متأخرات',
-                      value: CurrencyFormatter.amount(invoice.previousBalance),
-                      color: AppColors.warning,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  Expanded(
-                    child: _AmountColumn(
-                      label: 'قيمة الفاتورة',
-                      value: invoice.totalAmount,
-                    ),
-                  ),
-                  Expanded(
-                    child: _AmountColumn(
-                      label: 'إجمالي المطلوب',
-                      value: InvoiceAccounting.totalDue(invoice),
-                      color: AppColors.danger,
-                    ),
-                  ),
-                  Expanded(
-                    child: _AmountColumn(
-                      label: 'المسدد',
-                      value: invoice.amountPaid,
-                      color: AppColors.success,
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        Text(
-                          'المتبقي',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.color
-                                ?.withValues(alpha: 0.7),
-                          ),
+                        if (invoice.isDeleted) ...<Widget>[
+                          const StatusBadge(status: 'danger', label: 'محذوفة'),
+                          const SizedBox(width: 4),
+                        ],
+                        StatusBadge(
+                          status: invoice.status.colorKey,
+                          label: invoice.status.label,
                         ),
-                        const SizedBox(height: 2),
-                        remainingLabel == '-'
-                            ? Text(
-                                '-',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: remainingColor,
-                                ),
-                              )
-                            : LtrNumberText(
-                                remainingLabel,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: remainingColor,
-                                ),
-                              ),
+                        if (onMoreActions != null)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'خيارات الفاتورة',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                            icon: Icon(
+                              Icons.more_horiz_rounded,
+                              size: 19,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            onPressed: busy ? null : onMoreActions,
+                          ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              if (onCollect != null || onPrint != null || onWhatsapp != null) ...<Widget>[
-                const Divider(height: 20),
-                Row(
-                  children: <Widget>[
-                    if (onCollect != null)
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: busy ? null : (canCollect ? onCollect : null),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          icon: const Icon(Icons.payments_outlined, size: 18),
-                          label: Text(dense ? 'تحصيل' : 'تحصيل فوري'),
-                        ),
-                      ),
-                    if (onCollect != null) const SizedBox(width: 8),
-                    if (onPrint != null)
-                      _IconAction(
-                        icon: Icons.picture_as_pdf_outlined,
-                        tooltip: 'طباعة PDF',
-                        onPressed: busy ? null : onPrint,
-                      ),
-                    if (onPrintThermal != null && thermalEnabled)
-                      _IconAction(
-                        icon: Icons.print_outlined,
-                        tooltip: 'طباعة حرارية',
-                        onPressed: busy ? null : onPrintThermal,
-                      ),
-                    if (onWhatsapp != null && whatsappEnabled)
-                      _IconAction(
-                        icon: Icons.chat_outlined,
-                        tooltip: 'إرسال واتساب',
-                        onPressed: busy ? null : onWhatsapp,
-                        color: const Color(0xFF25D366),
-                      ),
+                    const SizedBox(height: 3),
+                    InvoiceTypeBadge(type: invoice.invoiceType.wire, compact: dense),
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: <Widget>[
+                PathChip(
+                  squareName: invoice.subscriber?.squareName,
+                  pathNumber: invoice.meter?.pathNumber?.toString(),
+                  highlighted: invoice.isPathMatch,
+                ),
+                _Meta(label: 'التاريخ', value: DateFormat.day(invoice.billDate)),
+                _Meta(
+                  label: 'الفترة',
+                  value: '${DateFormat.day(invoice.periodStart)} ← ${DateFormat.day(invoice.periodEnd)}',
+                ),
+                if (invoice.previousBalance > 0)
+                  _Meta(
+                    label: 'متأخرات',
+                    value: CurrencyFormatter.amount(invoice.previousBalance),
+                    color: AppColors.warning,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('المتبقي', style: theme.textTheme.labelSmall),
+                      const SizedBox(height: 2),
+                      remainingLabel == '-'
+                          ? Text(
+                              '-',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w600,
+                                color: remainingColor,
+                              ),
+                            )
+                          : Row(
+                              textDirection: TextDirection.rtl,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: <Widget>[
+                                Flexible(
+                                  child: LtrNumberText(
+                                    remainingLabel.replaceAll(' ${CurrencyFormatter.currencyLabel}', ''),
+                                    style: TextStyle(
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.2,
+                                      letterSpacing: -.3,
+                                      color: remainingColor,
+                                      fontFeatures: const <FontFeature>[
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: Text('ر.ي', style: theme.textTheme.labelSmall),
+                                ),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+                if (onTap != null)
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    size: 18,
+                    color: scheme.onSurfaceVariant.withValues(alpha: .7),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(height: 1, color: scheme.outlineVariant),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _MiniAmount(label: 'قيمة الفاتورة', value: invoice.totalAmount),
+                ),
+                Expanded(
+                  child: _MiniAmount(
+                    label: 'المطلوب',
+                    value: InvoiceAccounting.totalDue(invoice),
+                    color: scheme.error,
+                  ),
+                ),
+                Expanded(
+                  child: _MiniAmount(
+                    label: 'المسدد',
+                    value: invoice.amountPaid,
+                    color: AppColors.success,
+                  ),
+                ),
+                if (onCollect != null) ...<Widget>[
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton.icon(
+                      onPressed: busy || !canCollect ? null : onCollect,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        minimumSize: const Size(0, 36),
+                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.payments_rounded, size: 15),
+                      label: Text(dense ? 'تحصيل' : 'تحصيل'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (_hasActions && (onPrint != null || onWhatsapp != null || onPrintThermal != null)) ...<Widget>[
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  if (onPrint != null)
+                    _TextAction(
+                      icon: Icons.picture_as_pdf_outlined,
+                      label: 'PDF',
+                      onPressed: busy ? null : onPrint,
+                    ),
+                  if (onPrintThermal != null && thermalEnabled)
+                    _TextAction(
+                      icon: Icons.print_outlined,
+                      label: 'حرارية',
+                      onPressed: busy ? null : onPrintThermal,
+                    ),
+                  if (onWhatsapp != null && whatsappEnabled)
+                    _TextAction(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      label: 'واتساب',
+                      onPressed: busy ? null : onWhatsapp,
+                    ),
+                  const Spacer(),
+                  if (muted != null && (invoice.subscriber?.phone ?? '').isNotEmpty)
+                    Text(invoice.subscriber!.phone!, style: theme.textTheme.labelSmall),
+                ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _AmountColumn extends StatelessWidget {
-  const _AmountColumn({required this.label, required this.value, this.color});
-
-  final String label;
-  final double value;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
-          ),
-        ),
-        const SizedBox(height: 2),
-        LtrNumberText(
-          CurrencyFormatter.amount(value),
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: color ?? AppColors.primaryDark,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.label, required this.value, this.color});
+class _Meta extends StatelessWidget {
+  const _Meta({required this.label, required this.value, this.color});
 
   final String label;
   final String value;
@@ -313,47 +310,81 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = color ?? AppColors.neutral;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tone = color == null ? scheme.onSurfaceVariant : AppSemantic.resolve(context, color!);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Text(
-        '$label: $value',
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: tone),
+        '$label · $value',
+        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: tone, height: 1.2),
       ),
     );
   }
 }
 
-class _IconAction extends StatelessWidget {
-  const _IconAction({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    this.color,
-  });
+class _MiniAmount extends StatelessWidget {
+  const _MiniAmount({required this.label, required this.value, this.color});
 
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onPressed;
+  final String label;
+  final double value;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      visualDensity: VisualDensity.compact,
-      style: IconButton.styleFrom(minimumSize: const Size(38, 38)),
-      icon: Icon(icon, size: 20, color: color),
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(fontSize: 10)),
+        const SizedBox(height: 1),
+        LtrNumberText(
+          CurrencyFormatter.amount(value),
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.25,
+            fontWeight: FontWeight.w600,
+            color: color == null
+                ? theme.colorScheme.onSurface
+                : AppSemantic.resolve(context, color!),
+            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// شريط ملخّص أعلى القوائم (عدّاد الفواتير/إجمالي المستحق) — مطابق لترويسة Filament.
+class _TextAction extends StatelessWidget {
+  const _TextAction({required this.icon, required this.label, required this.onPressed});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 32),
+        foregroundColor: scheme.onSurfaceVariant,
+        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+      ),
+      icon: Icon(icon, size: 15),
+      label: Text(label),
+    );
+  }
+}
+
+/// شريط ملخّص أعلى القوائم — سطح حبر واحد مضغوط بدل شريط متدرّج.
 class InvoicesSummaryBar extends StatelessWidget {
   const InvoicesSummaryBar({
     super.key,
@@ -370,62 +401,98 @@ class InvoicesSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        gradient: FinanceColors.headerGradient,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.panelLine),
       ),
       child: Row(
         children: <Widget>[
-          _stat(context, 'الفواتير', '$count'),
-          _stat(context, 'مفتوحة', '$openCount'),
-          _stat(context, 'متأخرة', '$overdueCount', color: const Color(0xFFFCA5A5)),
           Expanded(
+            flex: 4,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
                   'إجمالي المستحق',
-                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                  style: TextStyle(color: AppColors.onPanelMuted, fontSize: 10.5, height: 1.3),
                 ),
+                const SizedBox(height: 2),
                 LtrNumberText(
-                  CurrencyFormatter.withLabel(totalDue),
+                  CurrencyFormatter.amount(totalDue),
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
+                    color: AppColors.onPanel,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
+                    height: 1.2,
+                    letterSpacing: -.3,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                   ),
                 ),
               ],
             ),
           ),
+          Container(
+            width: 1,
+            height: 30,
+            color: Colors.white.withValues(alpha: .12),
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          Expanded(flex: 5, child: _Strip(count: 'الفواتير', value: '$count', open: openCount, overdue: overdueCount)),
         ],
       ),
     );
   }
+}
 
-  Widget _stat(BuildContext context, String label, String value, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: color ?? Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
+class _Strip extends StatelessWidget {
+  const _Strip({required this.count, required this.value, required this.open, required this.overdue});
+
+  final String count;
+  final String value;
+  final int open;
+  final int overdue;
+
+  @override
+  Widget build(BuildContext context) {
+    const label = TextStyle(color: AppColors.onPanelMuted, fontSize: 10, height: 1.2);
+    const number = TextStyle(
+      color: AppColors.onPanelSoft,
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: <Widget>[
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[const Text(count, style: label), Text(value, style: number)],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[const Text('مفتوحة', style: label), Text('$open', style: number)],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text('متأخرة', style: label),
+            Text(
+              '$overdue',
+              style: overdue > 0
+                  ? number.copyWith(color: AppSemantic.resolve(context, AppColors.danger))
+                  : number,
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -433,8 +500,7 @@ class InvoicesSummaryBar extends StatelessWidget {
 /// أداة عرض «هل الفاتورة قابلة للتحصيل من هذه الشاشة؟» — مطابقة لشرط
 /// `collect_payment` في `InvoiceResource` (مفتوحة + الأحدث).
 bool canCollectInvoice(InvoiceModel invoice, List<InvoiceModel> siblings) =>
-    invoice.status.isOpenForCollection &&
-    InvoiceAccounting.isLatestInvoice(invoice, siblings);
+    invoice.status.isOpenForCollection && InvoiceAccounting.isLatestInvoice(invoice, siblings);
 
 /// نص متبقي الفاتورة كما يعرضه Filament (`-` للفواتير القديمة).
 String remainingLabelFor(InvoiceModel invoice, List<InvoiceModel> siblings) {

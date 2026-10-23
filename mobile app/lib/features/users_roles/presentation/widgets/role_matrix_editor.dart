@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/rbac_entities.dart';
+import '../../../../core/ui/app_surfaces.dart';
 
 class RoleMatrixEditor extends StatefulWidget {
   const RoleMatrixEditor({
@@ -225,14 +226,11 @@ class _PermissionGroupsList extends StatelessWidget {
         final names = group.permissions.map((permission) => permission.name).toSet();
         final count = names.where(selected.contains).length;
         final checkboxValue = count == 0 ? false : count == names.length ? true : null;
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-          ),
-          child: ExpansionTile(
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: AppCard(
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
             key: ValueKey('permission-group-${group.key}'),
             initiallyExpanded: group.kind != ShieldPermissionKind.resource,
             title: Row(
@@ -246,7 +244,7 @@ class _PermissionGroupsList extends StatelessWidget {
                       : (_) => onChanged(names, checkboxValue != true),
                 ),
                 Expanded(
-                  child: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  child: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 Text('$count/${names.length}', style: const TextStyle(color: AdminPalette.primary)),
               ],
@@ -270,6 +268,7 @@ class _PermissionGroupsList extends StatelessWidget {
                 ),
               ),
             ],
+          ),
           ),
         );
       },

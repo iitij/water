@@ -9,9 +9,12 @@ import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_typography.dart';
 import '../ui/app_brand.dart';
 import '../ui/app_controls.dart';
+import '../ui/app_surfaces.dart';
 import '../ui/app_tokens.dart';
+import '../utils/arabic_date.dart';
 
 class _ShellDestination {
   const _ShellDestination({
@@ -40,7 +43,7 @@ const List<_ShellDestination> _destinations = <_ShellDestination>[
   _ShellDestination(
     label: 'الميدان',
     title: 'العمليات الميدانية',
-    subtitle: 'القراءات والعدادات والمسارات',
+    subtitle: 'القراءات والعدادات',
     icon: Icons.sensors_outlined,
     selectedIcon: Icons.sensors_rounded,
   ),
@@ -54,7 +57,7 @@ const List<_ShellDestination> _destinations = <_ShellDestination>[
   _ShellDestination(
     label: 'المشتركون',
     title: 'المشتركون والخدمات',
-    subtitle: 'الملفات والمربعات وطلبات الخدمة',
+    subtitle: 'الملفات والمربعات والطلبات',
     icon: Icons.groups_2_outlined,
     selectedIcon: Icons.groups_2_rounded,
   ),
@@ -67,8 +70,8 @@ const List<_ShellDestination> _destinations = <_ShellDestination>[
   ),
 ];
 
-/// Application frame: a floating pill navigation bar on phones/tablets and a
-/// branded rail on wide screens. Pages provide their own heroes and sections.
+/// Application frame: a hairline header, a flat floating tab bar on phones and
+/// a quiet rail on wide screens. Pages provide their own panes and sections.
 class AppHomeShell extends StatelessWidget {
   const AppHomeShell({super.key, required this.shell});
 
@@ -99,7 +102,7 @@ class AppHomeShell extends StatelessWidget {
     return Scaffold(
       body: Column(
         children: <Widget>[
-          _TopBar(destination: _destinations[index]),
+          _TopBar(destination: _destinations[index], home: index == 0),
           Expanded(child: shell),
         ],
       ),
@@ -110,33 +113,36 @@ class AppHomeShell extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.destination});
+  const _TopBar({required this.destination, required this.home});
 
   final _ShellDestination destination;
+  final bool home;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final session = GetIt.I<SessionService>();
     final queue = GetIt.I<SyncQueueManager>();
     final user = session.user ?? const <String, dynamic>{};
     final name = user['name']?.toString() ?? 'موظف المشروع';
     final avatar = user['avatar']?.toString();
+    final now = DateTime.now();
+
+    final title = home
+        ? '${ArabicDate.greeting(now)}، ${ArabicDate.firstName(name)}'
+        : destination.title;
+    final subtitle = home ? ArabicDate.full(now) : destination.subtitle;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: theme.brightness == Brightness.dark
           ? SystemUiOverlayStyle.light
           : SystemUiOverlayStyle.dark,
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: .7))),
-        ),
+      child: ColoredBox(
+        color: theme.scaffoldBackgroundColor,
         child: SafeArea(
           bottom: false,
           child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 12, 10),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 14, 8),
             child: Row(
               children: <Widget>[
                 Expanded(
@@ -145,14 +151,14 @@ class _TopBar extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Text(
-                        destination.title,
+                        title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 1),
+                      const SizedBox(height: 2),
                       Text(
-                        destination.subtitle,
+                        subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.labelSmall,
@@ -162,47 +168,13 @@ class _TopBar extends StatelessWidget {
                 ),
                 AnimatedBuilder(
                   animation: queue,
-                  builder: (context, _) => AppIconButton(
-                    icon: queue.isOnline == false ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
-                    tooltip: 'المزامنة',
-                    color: queue.pendingCount > 0 ? AppColors.warning : AppColors.success,
-                    onPressed: () => context.push(RouteNames.offlineSync),
-                    badge: queue.pendingCount > 0
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppColors.warning,
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
-                              border: Border.all(color: scheme.surface, width: 1.5),
-                            ),
-                            child: Text(
-                              '${queue.pendingCount}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                height: 1.3,
-                              ),
-                            ),
-                          )
-                        : null,
+                  builder: (context, _) => _SyncButton(
+                    online: queue.isOnline,
+                    pending: queue.pendingCount,
+                    onTap: () => context.push(RouteNames.offlineSync),
                   ),
                 ),
-                const SizedBox(width: 8),
-                AnimatedBuilder(
-                  animation: GetIt.I<AppThemeController>(),
-                  builder: (context, _) {
-                    final controller = GetIt.I<AppThemeController>();
-                    final isDark = theme.brightness == Brightness.dark;
-                    return AppIconButton(
-                      icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                      tooltip: 'تبديل المظهر',
-                      color: scheme.primary,
-                      onPressed: () => controller.toggle(current: theme.brightness),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 PressableAvatar(
                   name: name,
                   imageUrl: avatar,
@@ -211,6 +183,62 @@ class _TopBar extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cloud glyph with a status dot: the only ambient element in the header.
+class _SyncButton extends StatelessWidget {
+  const _SyncButton({required this.online, required this.pending, required this.onTap});
+
+  final bool? online;
+  final int pending;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final icon = online == false
+        ? Icons.cloud_off_rounded
+        : pending > 0
+            ? Icons.cloud_upload_outlined
+            : Icons.cloud_done_rounded;
+    final dot = online == false
+        ? AppColors.warning
+        : pending > 0
+            ? AppColors.warning
+            : AppColors.success;
+
+    return Semantics(
+      button: true,
+      label: 'المزامنة',
+      child: InkResponse(
+        onTap: onTap,
+        radius: 22,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              Icon(icon, size: 21, color: scheme.onSurfaceVariant),
+              PositionedDirectional(
+                top: 8,
+                end: 6,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: dot,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -236,7 +264,7 @@ class PressableAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AppAvatar(name: name, imageUrl: imageUrl, online: online, size: 42),
+      child: AppAvatar(name: name, imageUrl: imageUrl, online: online, size: 38),
     );
   }
 }
@@ -250,18 +278,17 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(14, 0, 14, 10),
         child: Container(
-          height: 70,
+          height: 62,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: dark ? const Color(0xFF0E2029).withValues(alpha: .97) : Colors.white.withValues(alpha: .98),
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(AppRadius.xl),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: dark ? .9 : .8)),
+            border: Border.all(color: scheme.outlineVariant),
             boxShadow: AppShadows.floating(context),
           ),
           child: Row(
@@ -298,7 +325,7 @@ class _NavItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      splashColor: scheme.primary.withValues(alpha: .06),
+      splashColor: scheme.primary.withValues(alpha: .05),
       highlightColor: Colors.transparent,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -306,14 +333,16 @@ class _NavItem extends StatelessWidget {
           AnimatedContainer(
             duration: AppMotion.normal,
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+            width: 30,
+            height: 22,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? scheme.primary.withValues(alpha: .12) : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
+              color: selected ? scheme.primary.withValues(alpha: .1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.xs),
             ),
             child: Icon(
               selected ? destination.selectedIcon : destination.icon,
-              size: 22,
+              size: 19,
               color: selected ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
@@ -321,9 +350,10 @@ class _NavItem extends StatelessWidget {
           AnimatedDefaultTextStyle(
             duration: AppMotion.fast,
             style: TextStyle(
-              fontSize: 10.5,
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 10,
               height: 1.1,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               color: selected ? scheme.primary : scheme.onSurfaceVariant,
             ),
             child: Text(destination.label),
@@ -352,37 +382,33 @@ class _SideRail extends StatelessWidget {
     final role = _roleLabel(permissions);
 
     return Container(
-      width: 252,
+      width: 244,
       decoration: BoxDecoration(
         color: scheme.surface,
-        border: Border(left: BorderSide(color: scheme.outlineVariant.withValues(alpha: .8))),
+        border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(16, 20, 16, 18),
+          padding: const EdgeInsetsDirectional.fromSTEB(14, 20, 14, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const Row(
-                children: <Widget>[
-                  AppBrandLockup(
-                    markSize: 44,
-                    subtitle: 'منصة إدارة المشروع',
-                    onDark: false,
-                  ),
-                ],
+              const AppBrandLockup(
+                markSize: 38,
+                subtitle: 'منصة إدارة المشروع',
+                onDark: false,
               ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
                 child: Text(
                   'القائمة الرئيسية',
-                  style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .4),
+                  style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
                 ),
               ),
               for (var index = 0; index < _destinations.length; index++)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.only(bottom: 2),
                   child: _RailItem(
                     destination: _destinations[index],
                     selected: index == currentIndex,
@@ -390,65 +416,58 @@ class _SideRail extends StatelessWidget {
                   ),
                 ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: .5),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: scheme.outlineVariant.withValues(alpha: .7)),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    AppAvatar(name: name, imageUrl: avatar, size: 38),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
-                          ),
-                          Text(
-                            role,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'الملف الشخصي',
-                      onPressed: () => context.push(RouteNames.profile),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 15),
-                    ),
-                  ],
-                ),
-              ),
+              const AppDivider(),
               const SizedBox(height: 12),
               Row(
                 children: <Widget>[
+                  AppAvatar(name: name, imageUrl: avatar, size: 36),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      'الإصدار 1.0.0',
-                      style: theme.textTheme.labelSmall,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        Text(
+                          role,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall,
+                        ),
+                      ],
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'الملف الشخصي',
+                    onPressed: () => context.push(RouteNames.profile),
+                    icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text('الإصدار 1.0.0', style: theme.textTheme.labelSmall),
                   ),
                   AnimatedBuilder(
                     animation: GetIt.I<AppThemeController>(),
                     builder: (context, _) {
                       final controller = GetIt.I<AppThemeController>();
-                      return AppIconButton(
-                        icon: theme.brightness == Brightness.dark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
+                      return IconButton(
                         tooltip: 'تبديل المظهر',
-                        color: scheme.primary,
                         onPressed: () => controller.toggle(current: theme.brightness),
-                        size: 38,
+                        icon: Icon(
+                          theme.brightness == Brightness.dark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                          size: 18,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       );
                     },
                   ),
@@ -478,45 +497,38 @@ class _RailItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: AnimatedContainer(
           duration: AppMotion.normal,
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            gradient: selected ? AppColors.aquaGradient : null,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            boxShadow: selected ? AppShadows.brand(AppColors.primary, opacity: .2) : null,
+            color: selected ? scheme.primary.withValues(alpha: .09) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(
             children: <Widget>[
               Icon(
                 selected ? destination.selectedIcon : destination.icon,
-                size: 21,
-                color: selected ? Colors.white : scheme.onSurfaceVariant,
+                size: 19,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   destination.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    color: selected ? Colors.white : scheme.onSurface,
+                    fontSize: 13.5,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? scheme.primary : scheme.onSurface,
                   ),
                 ),
               ),
-              if (selected)
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                ),
             ],
           ),
         ),

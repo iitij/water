@@ -123,7 +123,7 @@ class PermissionRouteShell extends StatelessWidget {
             children: <Widget>[
               const Icon(Icons.lock_outline, size: 40, color: Colors.grey),
               const SizedBox(height: 12),
-              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               Text(
                 'المفتاح المطلوب: $ability',

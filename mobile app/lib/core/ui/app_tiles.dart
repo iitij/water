@@ -6,13 +6,16 @@ import 'app_surfaces.dart';
 import 'app_tokens.dart';
 import 'app_viz.dart';
 
-/// Squircle icon holder with a soft brand wash.
+/// Squircle icon holder with a very light colour wash.
+///
+/// The wash is 6–7% in light mode, so a grid of tiles reads as one neutral
+/// surface with quiet icons rather than a patchwork of colours.
 class AppIconBubble extends StatelessWidget {
   const AppIconBubble({
     super.key,
     required this.icon,
     required this.color,
-    this.size = 46,
+    this.size = 40,
     this.radius,
     this.filled = false,
   });
@@ -25,16 +28,20 @@ class AppIconBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(radius ?? size * .32);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tint = dark ? AppSemantic.resolve(context, color) : color;
+    final borderRadius = BorderRadius.circular(radius ?? size * .3);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: filled ? LinearGradient(colors: <Color>[color, color.withValues(alpha: .75)]) : AppTint.gradient(color, context),
+        color: filled ? tint : AppTint.soft(color, context),
         borderRadius: borderRadius,
-        border: Border.all(color: color.withValues(alpha: filled ? .15 : .18)),
+        border: Border.all(
+          color: filled ? Colors.transparent : tint.withValues(alpha: .16),
+        ),
       ),
-      child: Icon(icon, size: size * .48, color: filled ? Colors.white : color),
+      child: Icon(icon, size: size * .46, color: filled ? Colors.white : tint),
     );
   }
 }
@@ -65,12 +72,12 @@ class AppModuleTile extends StatelessWidget {
     final theme = Theme.of(context);
     if (list) {
       return AppCard(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(13),
         onTap: onTap,
         child: Row(
           children: <Widget>[
             AppIconBubble(icon: icon, color: color),
-            const SizedBox(width: 13),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +96,7 @@ class AppModuleTile extends StatelessWidget {
                       if (badge != null) ...<Widget>[const SizedBox(width: 8), badge!],
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     maxLines: 2,
@@ -99,53 +106,44 @@ class AppModuleTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
           ],
         ),
       );
     }
 
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               AppIconBubble(icon: icon, color: color),
               const Spacer(),
               if (badge != null) badge!,
-              const SizedBox(width: 6),
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .7),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  size: 11,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
             ],
           ),
           const Spacer(),
           Text(
             title,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             subtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
+            style: theme.textTheme.bodySmall?.copyWith(height: 1.45),
           ),
         ],
       ),
@@ -158,9 +156,9 @@ class AppModuleGrid extends StatelessWidget {
   const AppModuleGrid({
     super.key,
     required this.children,
-    this.minTileWidth = 210,
-    this.tileHeight = 178,
-    this.spacing = 12,
+    this.minTileWidth = 200,
+    this.tileHeight = 152,
+    this.spacing = 10,
   });
 
   final List<Widget> children;
@@ -193,9 +191,9 @@ class AppModuleRail extends StatelessWidget {
   const AppModuleRail({
     super.key,
     required this.children,
-    this.tileWidth = 228,
-    this.tileHeight = 178,
-    this.spacing = 12,
+    this.tileWidth = 208,
+    this.tileHeight = 152,
+    this.spacing = 10,
   });
 
   final List<Widget> children;
@@ -224,7 +222,10 @@ class AppModuleRail extends StatelessWidget {
   }
 }
 
-/// Large tap target used for the four primary field actions.
+/// Tap target used for the four primary shortcuts on the home page.
+///
+/// A plain icon and a label — the shortcut strip is one card with hairline
+/// dividers, so the individual actions stay quiet.
 class AppQuickAction extends StatelessWidget {
   const AppQuickAction({
     super.key,
@@ -244,46 +245,45 @@ class AppQuickAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tint = dark ? AppSemantic.resolve(context, color) : color;
     return PressableScale(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              gradient: AppTint.gradient(color, context),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: color.withValues(alpha: .18)),
-            ),
-            child: Icon(icon, color: color, size: 25),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          if (caption != null) ...<Widget>[
-            const SizedBox(height: 1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 22, color: tint),
+            const SizedBox(height: 7),
             Text(
-              caption!,
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
+            if (caption != null) ...<Widget>[
+              const SizedBox(height: 1),
+              Text(
+                caption!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-/// KPI card with optional sparkline and trend.
+/// KPI card: quiet label, dominant figure, one line of context.
 class AppMetricCard extends StatelessWidget {
   const AppMetricCard({
     super.key,
@@ -292,6 +292,7 @@ class AppMetricCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.caption,
+    this.unit,
     this.sparkline = const <double>[],
     this.trend,
     this.onTap,
@@ -302,6 +303,9 @@ class AppMetricCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String? caption;
+
+  /// Optional currency or unit shown, in Arabic, to the left of [value].
+  final String? unit;
   final List<double> sparkline;
   final Widget? trend;
   final VoidCallback? onTap;
@@ -309,8 +313,9 @@ class AppMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -318,38 +323,61 @@ class AppMetricCard extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              AppIconBubble(icon: icon, color: color, size: 40),
-              const Spacer(),
-              if (trend != null) trend!,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+              if (trend != null)
+                trend!
+              else
+                Icon(icon, size: 15, color: scheme.onSurfaceVariant.withValues(alpha: .65)),
             ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.start,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                    letterSpacing: -.2,
+              Row(
+                textDirection: TextDirection.rtl,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          value,
+                          maxLines: 1,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            height: 1.1,
+                            letterSpacing: -.5,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                  if (unit != null) ...<Widget>[
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        unit!,
+                        style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               if (caption != null) ...<Widget>[
-                const SizedBox(height: 1),
+                const SizedBox(height: 3),
                 Text(
                   caption!,
                   maxLines: 1,
@@ -361,11 +389,9 @@ class AppMetricCard extends StatelessWidget {
           ),
           if (sparkline.length > 1)
             SizedBox(
-              height: 22,
-              child: AppSparkline(values: sparkline, color: color, height: 22),
-            )
-          else
-            const SizedBox(height: 2),
+              height: 18,
+              child: AppSparkline(values: sparkline, color: scheme.primary, height: 18),
+            ),
         ],
       ),
     );
@@ -398,12 +424,12 @@ class AppSettingRow extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: <Widget>[
-            AppIconBubble(icon: icon, color: color, size: 40),
+            AppIconBubble(icon: icon, color: color, size: 36),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -426,7 +452,11 @@ class AppSettingRow extends StatelessWidget {
             if (trailing != null)
               trailing!
             else if (showChevron)
-              Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_left_rounded,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+              ),
           ],
         ),
       ),
@@ -434,7 +464,7 @@ class AppSettingRow extends StatelessWidget {
   }
 }
 
-/// Lightweight inline notice (info / warning / success / danger).
+/// Inline notice (info / warning / success / danger).
 class AppNotice extends StatelessWidget {
   const AppNotice({
     super.key,
@@ -453,34 +483,33 @@ class AppNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final tint = dark ? AppSemantic.resolve(context, color) : color;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: dark ? .14 : .07),
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: color.withValues(alpha: dark ? .3 : .18)),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          AppIconBubble(icon: icon, color: color, size: 36, radius: 12),
-          const SizedBox(width: 11),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 17, color: tint),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
+                Text(title, style: theme.textTheme.titleSmall),
                 const SizedBox(height: 2),
-                Text(
-                  message,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
-                ),
-                if (action != null) ...<Widget>[const SizedBox(height: 8), action!],
+                Text(message, style: theme.textTheme.bodySmall?.copyWith(height: 1.55)),
+                if (action != null) ...<Widget>[const SizedBox(height: 6), action!],
               ],
             ),
           ),
@@ -499,14 +528,15 @@ class AppQuickActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (actions.isEmpty) return const SizedBox.shrink();
-    return Row(
-      children: actions
-          .map((action) => Expanded(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: action,
-              )))
-          .toList(growable: false),
-    );
+    final divider = Theme.of(context).colorScheme.outlineVariant;
+    final children = <Widget>[];
+    for (var index = 0; index < actions.length; index++) {
+      if (index > 0) {
+        children.add(Container(width: 1, height: 34, color: divider));
+      }
+      children.add(Expanded(child: actions[index]));
+    }
+    return Row(children: children);
   }
 }
 
@@ -537,7 +567,7 @@ class AppStatStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -554,8 +584,8 @@ class AppStatStrip extends StatelessWidget {
                         width: width,
                         child: Row(
                           children: <Widget>[
-                            AppIconBubble(icon: item.icon, color: item.color, size: 36, radius: 12),
-                            const SizedBox(width: 9),
+                            Icon(item.icon, size: 15, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,9 +595,7 @@ class AppStatStrip extends StatelessWidget {
                                     item.value,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                    style: theme.textTheme.titleSmall,
                                   ),
                                   Text(
                                     item.label,
@@ -588,7 +616,7 @@ class AppStatStrip extends StatelessWidget {
           ),
           if (description != null) ...<Widget>[
             const SizedBox(height: 12),
-            Container(height: 1, color: scheme.outlineVariant.withValues(alpha: .6)),
+            const AppDivider(),
             const SizedBox(height: 10),
             Text(description!, style: theme.textTheme.bodySmall),
           ],
@@ -603,9 +631,9 @@ class AppMetricGrid extends StatelessWidget {
   const AppMetricGrid({
     super.key,
     required this.children,
-    this.minTileWidth = 168,
-    this.tileHeight = 156,
-    this.spacing = 12,
+    this.minTileWidth = 160,
+    this.tileHeight = 118,
+    this.spacing = 10,
   });
 
   final List<Widget> children;

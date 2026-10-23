@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import 'app_tokens.dart';
 
-/// The base surface used across the app: soft radius, hairline border and a
-/// diffuse ambient shadow that separates cards from the tinted background.
+/// The base surface used across the app.
+///
+/// Flat white (or `darkSurface`) with one hairline border and no shadow: the
+/// contrast against the tinted page background is enough to read the card, and
+/// removing shadows keeps long lists calm on low-end screens.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.md + 2),
+    this.padding = const EdgeInsets.all(AppSpacing.md),
     this.onTap,
     this.color,
     this.gradient,
@@ -22,15 +26,19 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
   final Color? color;
+
+  /// Deprecated: gradients were removed from the system. Accepted for
+  /// compatibility and ignored.
   final Gradient? gradient;
   final Color? borderColor;
   final double radius;
+
+  /// Deprecated: cards are flat. Accepted for compatibility and ignored.
   final bool elevated;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final borderRadius = BorderRadius.circular(radius);
 
     Widget content = Padding(padding: padding, child: child);
@@ -38,7 +46,7 @@ class AppCard extends StatelessWidget {
       content = InkWell(
         onTap: onTap,
         borderRadius: borderRadius,
-        splashColor: scheme.primary.withValues(alpha: .06),
+        splashColor: scheme.primary.withValues(alpha: .05),
         highlightColor: scheme.primary.withValues(alpha: .03),
         child: content,
       );
@@ -47,142 +55,206 @@ class AppCard extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: gradient == null ? (color ?? scheme.surface) : null,
-        gradient: gradient,
+        color: color ?? scheme.surface,
         borderRadius: borderRadius,
-        border: Border.all(
-          color: borderColor ??
-              (dark
-                  ? scheme.outlineVariant.withValues(alpha: .85)
-                  : scheme.outlineVariant.withValues(alpha: .95)),
-        ),
-        boxShadow: elevated ? AppShadows.card(context) : null,
+        border: Border.all(color: borderColor ?? scheme.outlineVariant),
       ),
       child: Material(type: MaterialType.transparency, child: content),
     );
   }
 }
 
-/// A bold gradient panel used for page heroes and highlighted summaries.
+/// A rounded-square icon holder: the flat replacement for `CircleAvatar`.
+///
+/// The tint is a 7% wash of the semantic colour with a hairline border of the
+/// same hue, so a row of these reads as one family instead of a candy palette.
+class AppGlyph extends StatelessWidget {
+  const AppGlyph({
+    super.key,
+    required this.icon,
+    this.tone,
+    this.size = 40,
+    this.radius,
+    this.neutral = false,
+  });
+
+  final IconData icon;
+  final Color? tone;
+  final double size;
+  final double? radius;
+
+  /// Use the quiet neutral surface instead of a colour wash.
+  final bool neutral;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final base = AppSemantic.resolve(context, tone ?? scheme.primary);
+    final background =
+        neutral ? scheme.surfaceContainerHighest : AppTint.soft(base, context);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(radius ?? (size * .32)),
+        border: Border.all(
+          color: neutral
+              ? scheme.outlineVariant
+              : base.withValues(alpha: AppTheme.isDark(context) ? .22 : .14),
+        ),
+      ),
+      child: Icon(icon, size: size * .46, color: neutral ? scheme.onSurfaceVariant : base),
+    );
+  }
+}
+
+/// Photo or initial holder with the same squircle geometry as [AppGlyph].
+class AppPhotoAvatar extends StatelessWidget {
+  const AppPhotoAvatar({
+    super.key,
+    this.url,
+    this.size = 40,
+    this.icon = Icons.person_outline_rounded,
+  });
+
+  final String? url;
+  final double size;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(size * .32);
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: radius,
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Icon(icon, size: size * .46, color: scheme.onSurfaceVariant),
+    );
+    final url = this.url;
+    if (url == null || url.trim().isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: radius,
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+      ),
+    );
+  }
+}
+
+/// A compact label/value pair, the atom of the detail screens.
+class AppField extends StatelessWidget {
+  const AppField({
+    super.key,
+    required this.label,
+    required this.value,
+    this.icon,
+    this.tone,
+    this.ltr = false,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final Color? tone;
+  final bool ltr;
+  final CrossAxisAlignment crossAxisAlignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = tone == null ? scheme.onSurface : AppSemantic.resolve(context, tone!);
+    return Column(
+      crossAxisAlignment: crossAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (icon != null) ...<Widget>[
+              Icon(icon, size: 12, color: scheme.onSurfaceVariant.withValues(alpha: .8)),
+              const SizedBox(width: 4),
+            ],
+            Text(label, style: theme.textTheme.labelSmall),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Directionality(
+          textDirection: ltr ? TextDirection.ltr : TextDirection.rtl,
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: color,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The dark "ink" panel used for the one highlighted summary on a page —
+/// outstanding balance, hub introduction, sync status.
+///
+/// It is intentionally flat: solid ink, a hairline inner border and generous
+/// padding. The accent colour appears only inside the panel's primary action.
 class AppHeroPanel extends StatelessWidget {
   const AppHeroPanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.xl),
-    this.gradient = AppColors.oceanGradient,
-    this.accent = AppColors.secondary,
+    this.padding = const EdgeInsets.all(AppSpacing.lg),
+    this.gradient,
+    this.accent,
     this.radius = AppRadius.xxl,
     this.showOrnaments = true,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Gradient gradient;
-  final Color accent;
+
+  /// Deprecated: ignored. Kept so existing call sites compile.
+  final Gradient? gradient;
+
+  /// Deprecated: ignored.
+  final Color? accent;
   final double radius;
+
+  /// Deprecated: ignored (no decorative ornaments).
   final bool showOrnaments;
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(radius);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? AppColors.darkPanel : AppColors.panel;
+    final line = dark ? AppColors.darkBorder : AppColors.panelLine;
+
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: borderRadius,
-        boxShadow: AppShadows.brand(AppColors.primary, opacity: .26),
+        color: background,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: line),
       ),
-      child: Stack(
-        children: <Widget>[
-          if (showOrnaments) ...<Widget>[
-            PositionedDirectional(
-              top: -90,
-              end: -50,
-              child: _Glow(size: 230, color: Colors.white.withValues(alpha: .12)),
-            ),
-            PositionedDirectional(
-              bottom: -120,
-              start: -40,
-              child: _Glow(size: 260, color: accent.withValues(alpha: .32)),
-            ),
-            PositionedDirectional(
-              top: 40,
-              start: 60,
-              child: _Glow(size: 70, color: Colors.white.withValues(alpha: .07)),
-            ),
-            Positioned.fill(
-              bottom: 0,
-              child: IgnorePointer(
-                child: CustomPaint(painter: _HeroWavePainter()),
-              ),
-            ),
-          ],
-          Padding(padding: padding, child: child),
-        ],
-      ),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
 
-class _Glow extends StatelessWidget {
-  const _Glow({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: <Color>[color, color.withValues(alpha: 0)],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroWavePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-    final base = size.height * .74;
-    final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: <Color>[
-          Colors.white.withValues(alpha: .06),
-          Colors.white.withValues(alpha: .015),
-        ],
-      ).createShader(Rect.fromLTWH(0, base - 30, size.width, size.height - base + 30));
-
-    for (var layer = 0; layer < 2; layer++) {
-      final path = Path()..moveTo(0, base + layer * 26);
-      final amplitude = 16.0 - layer * 5;
-      path.cubicTo(
-        size.width * .25,
-        base - amplitude + layer * 22,
-        size.width * .5,
-        base + amplitude + layer * 20,
-        size.width,
-        base - 4 + layer * 24,
-      );
-      path.lineTo(size.width, size.height);
-      path.lineTo(0, size.height);
-      path.close();
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Section title row with an accent bar, optional subtitle and trailing action.
+/// Section title row: a quiet label, an optional one-line description and an
+/// optional trailing action. No accent bars, no icons competing with the title.
 class SectionHeading extends StatelessWidget {
   const SectionHeading({
     super.key,
@@ -200,32 +272,25 @@ class SectionHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Container(
-          width: 4,
-          height: subtitle == null ? 18 : 30,
-          decoration: BoxDecoration(
-            gradient: AppColors.aquaGradient,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-        ),
-        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Row(
                 children: <Widget>[
                   if (icon != null) ...<Widget>[
-                    Icon(icon, size: 18, color: theme.colorScheme.primary),
+                    Icon(icon, size: 16, color: scheme.onSurfaceVariant),
                     const SizedBox(width: 6),
                   ],
                   Flexible(
                     child: Text(
                       title,
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleLarge,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -256,9 +321,9 @@ class AppPageBody extends StatelessWidget {
   const AppPageBody({
     super.key,
     required this.children,
-    this.maxWidth = 1240,
-    this.bottomPadding = 118,
-    this.topPadding = 12,
+    this.maxWidth = 1120,
+    this.bottomPadding = 110,
+    this.topPadding = 14,
     this.scrollController,
     this.onRefresh,
   });
@@ -290,6 +355,23 @@ class AppPageBody extends StatelessWidget {
     );
     if (onRefresh == null) return content;
     return RefreshIndicator(onRefresh: onRefresh!, child: content);
+  }
+}
+
+/// Hairline used to separate rows inside a card.
+class AppDivider extends StatelessWidget {
+  const AppDivider({super.key, this.indent = 0, this.endIndent = 0});
+
+  final double indent;
+  final double endIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      margin: EdgeInsetsDirectional.only(start: indent, end: endIndent),
+      color: Theme.of(context).colorScheme.outlineVariant,
+    );
   }
 }
 

@@ -15,6 +15,8 @@ import '../../../subscribers/presentation/pages/subscriber_form_screen.dart';
 import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/square.dart';
 import '../cubit/squares_cubit.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 bool _hasSquaresCubit(BuildContext context) {
   try {
@@ -53,7 +55,6 @@ class SquaresScreen extends StatelessWidget {
             controller: nameCtrl,
             decoration: const InputDecoration(
               labelText: 'اسم المربع * (100 حرف كحد أقصى)',
-              border: OutlineInputBorder(),
             ),
             maxLength: 100,
           ),
@@ -62,7 +63,6 @@ class SquaresScreen extends StatelessWidget {
             controller: descCtrl,
             decoration: const InputDecoration(
               labelText: 'الوصف (3 أسطر)',
-              border: OutlineInputBorder(),
             ),
             maxLines: 3,
           ),
@@ -184,7 +184,6 @@ class _MasterList extends StatelessWidget {
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
             hintText: 'بحث باسم المربع...',
-            border: OutlineInputBorder(),
           ),
           onChanged: (v) => context.read<SquaresCubit>().load(search: v),
         ),
@@ -221,8 +220,16 @@ class _MasterList extends StatelessWidget {
                       final sq = state.squares[i];
                       final selected = state.selected?.id == sq.id;
                       final checked = state.selectedIds.contains(sq.id);
-                      return Card(
-                        color: (selected || checked) ? AppColors.primary.withValues(alpha: 0.08) : null,
+                      return Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                        child: AppCard(
+                        padding: EdgeInsets.zero,
+                        color: (selected || checked)
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: .04)
+                            : null,
+                        borderColor: (selected || checked)
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: .4)
+                            : null,
                         child: ListTile(
                           leading: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -232,7 +239,11 @@ class _MasterList extends StatelessWidget {
                                 onChanged: (_) => context.read<SquaresCubit>().toggleSelect(sq.id),
                                 visualDensity: VisualDensity.compact,
                               ),
-                              CircleAvatar(radius: 16, child: Text('#${sq.id}')),
+                              AppGlyph(
+                                icon: Icons.grid_view_rounded,
+                                size: 36,
+                                neutral: true,
+                              ),
                             ],
                           ),
                           title: Text(sq.name),
@@ -262,6 +273,7 @@ class _MasterList extends StatelessWidget {
                           ]),
                           onTap: () => _selectSquare(context, sq),
                           onLongPress: () => context.read<SquaresCubit>().toggleSelect(sq.id),
+                        ),
                         ),
                       );
                     },

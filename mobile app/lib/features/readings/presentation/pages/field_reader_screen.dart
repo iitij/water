@@ -13,6 +13,8 @@ import '../../data/services/reading_invoice_actions_service.dart';
 import '../../domain/readings_repository.dart';
 import '../widgets/offline_pack_dialog.dart';
 import 'submit_reading_screen.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class FieldReaderScreen extends StatelessWidget {
   const FieldReaderScreen({
@@ -115,7 +117,6 @@ class _FieldReaderView extends StatelessWidget {
                             decoration: const InputDecoration(
                               labelText: 'فلترة بالمربع السكني',
                               prefixIcon: Icon(Icons.location_city_outlined),
-                              border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             items: [
@@ -235,24 +236,26 @@ class _MeterBarcodeScannerScreenState extends State<MeterBarcodeScannerScreen> {
                     height: 170,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white, width: 3),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                   ),
                 ),
               ),
-              const Positioned(
+              Positioned(
                 left: 24,
                 right: 24,
                 bottom: 36,
-                child: Card(
-                  color: Color(0xDD102A34),
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'وجّه الكاميرا إلى باركود أو QR الموجود على العداد.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white),
-                    ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: AppColors.panel.withValues(alpha: .88),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.panelLine),
+                  ),
+                  child: const Text(
+                    'وجّه الكاميرا إلى باركود أو QR الموجود على العداد.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.onPanel, fontSize: 12),
                   ),
                 ),
               ),

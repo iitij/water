@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -67,7 +70,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
     locale: const Locale('ar'),
     supportedLocales: const [Locale('ar')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(colorSchemeSeed: const Color(0xFF075D73), fontFamily: 'IBMPlexSansArabic'),
+    theme: ThemeData(colorSchemeSeed: AppColors.accent, fontFamily: AppTypography.fontFamily),
     home: Scaffold(
       appBar: AppBar(title: const Text('إعداد خادم مشروع المياه')),
       body: Center(
@@ -80,7 +83,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.water_drop, size: 64, color: Color(0xFF075D73)),
+                  const Icon(Icons.water_drop, size: 64, color: AppColors.accent),
                   const SizedBox(height: 24),
                   const Text('نسخة اختبار — أدخل عنوان API لخادم Laravel.'),
                   const SizedBox(height: 12),
@@ -102,7 +105,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
                   const Text('HTTP للاختبار على شبكة موثوقة فقط؛ استخدم HTTPS للإنتاج. يمكنك تغيير عنوان الخادم لاحقاً من شاشة تسجيل الدخول أو الملف الشخصي بشرط عدم وجود عمليات أوفلاين معلّقة.'),
                   if (_error != null) Padding(
                     padding: const EdgeInsets.only(top: 16),
-                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                    child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(

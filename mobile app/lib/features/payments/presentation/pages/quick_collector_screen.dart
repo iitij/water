@@ -17,6 +17,7 @@ import '../../../invoices/presentation/widgets/invoice_card.dart';
 import '../cubit/quick_collector_cubit.dart';
 import '../cubit/quick_collector_state.dart';
 import '../sheets/collect_payment_sheet.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 /// `SCR-13` — المحصل السريع (Field Collector).
 ///
@@ -233,7 +234,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
               padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Text(
                 'تصفية بالمربع',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
             ListTile(
@@ -293,7 +294,7 @@ class _LastCollectedBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.success.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         children: <Widget>[
@@ -302,7 +303,7 @@ class _LastCollectedBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'آخر سند محصّل: فاتورة $billNumber',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -363,7 +364,7 @@ class _CollectorCard extends StatelessWidget {
             children: <Widget>[
               Text(
                 invoice.beneficiaryName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
               Text(
@@ -420,7 +421,7 @@ class _DetailRow extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: bold ? 14 : 12,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+              fontWeight: bold ? FontWeight.w600 : FontWeight.w600,
               color: tone,
             ),
           ),

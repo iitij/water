@@ -98,7 +98,7 @@ class AppBrandLockup extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: titleColor,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               if (subtitle != null) ...<Widget>[

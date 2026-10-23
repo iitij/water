@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/settings_entities.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class TemplatePreview extends StatelessWidget {
   const TemplatePreview({required this.settings, super.key});
@@ -27,10 +28,9 @@ class _PreviewPaper extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 18)],
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Directionality(
         textDirection: TextDirection.rtl,
@@ -43,7 +43,7 @@ class _PreviewPaper extends StatelessWidget {
               style: const TextStyle(
                 color: AdminPalette.primary,
                 fontSize: 20,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const Divider(height: 28, color: AdminPalette.primary),
@@ -106,7 +106,7 @@ class _InvoicePreview extends StatelessWidget {
           child: Row(
             children: [
               Expanded(child: Text(settings.text('inv_title_total'))),
-              const Text('4,250 ريال', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('4,250 ريال', style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -178,7 +178,7 @@ Widget _previewSection(String title, List<Widget> children) {
     children: [
       Text(
         title,
-        style: const TextStyle(color: AdminPalette.primary, fontWeight: FontWeight.w800),
+        style: const TextStyle(color: AdminPalette.primary, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 8),
       ...children,

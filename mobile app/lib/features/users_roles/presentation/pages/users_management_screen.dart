@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/rbac_entities.dart';
 import '../../domain/repositories/rbac_repository.dart';
 import '../cubit/users_cubit.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class UsersManagementScreen extends StatelessWidget {
   const UsersManagementScreen({
@@ -117,25 +119,18 @@ class _UsersView extends StatelessWidget {
                         ? null
                         : (value) => context.read<UsersCubit>().toggleSelected(user.id, value ?? false),
                   )
-                : CircleAvatar(
-                    foregroundImage: user.avatarUrl == null ? null : NetworkImage(user.avatarUrl!),
-                    child: const Icon(Icons.person_outline),
-                  ),
+                : AppPhotoAvatar(url: user.avatarUrl, size: 40),
             title: Row(
               children: [
                 if (can(AdminPermissions.deleteUsers)) ...[
-                  CircleAvatar(
-                    radius: 18,
-                    foregroundImage: user.avatarUrl == null ? null : NetworkImage(user.avatarUrl!),
-                    child: const Icon(Icons.person_outline, size: 18),
-                  ),
+                  AppPhotoAvatar(url: user.avatarUrl, size: 36),
                   const SizedBox(width: 8),
                 ],
                 Expanded(
                   child: Text(
                     isCurrent ? '${user.name} (أنت)' : user.name,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -282,11 +277,7 @@ class _UsersView extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 32,
-                            foregroundImage: avatarProvider,
-                            child: const Icon(Icons.person_outline, size: 32),
-                          ),
+                          _EditableAvatar(provider: avatarProvider),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Wrap(
@@ -517,3 +508,27 @@ Color _roleColor(String role) => switch (role) {
       'reader' || 'meter_reader' => AdminPalette.info,
       _ => AdminPalette.neutral,
     };
+
+class _EditableAvatar extends StatelessWidget {
+  const _EditableAvatar({required this.provider});
+
+  final ImageProvider<Object>? provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 64,
+      height: 64,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: provider == null
+          ? Icon(Icons.person_outline_rounded, size: 28, color: scheme.onSurfaceVariant)
+          : Image(image: provider, fit: BoxFit.cover),
+    );
+  }
+}

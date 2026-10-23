@@ -13,6 +13,7 @@ import '../../domain/repositories/invoices_repository.dart';
 import '../cubit/invoices_cubit.dart';
 import '../thermal/invoice_thermal_ticket.dart';
 import '../whatsapp/invoice_whatsapp_builder.dart';
+import '../../../../core/theme/app_colors.dart';
 
 /// مجموعة إجراءات الفاتورة (تحصيل / PDF / حراري / واتساب / إعادة احتساب / حذف)
 /// معبّأة في دوال واحدة يستدعيها: `SCR-13`, `SCR-14`, `SCR-15`, وودجات
@@ -215,7 +216,7 @@ Future<void> showInvoiceActionSheet(
       _SheetAction(
         icon: Icons.payments_outlined,
         label: 'تحصيل دفعة',
-        color: Colors.green.shade700,
+        color: Theme.of(context).colorScheme.primary,
         onTap: () => collectInvoicePayment(context, invoice, cubit: cubit),
       ),
     _SheetAction(
@@ -232,7 +233,7 @@ Future<void> showInvoiceActionSheet(
       _SheetAction(
         icon: Icons.chat_outlined,
         label: config.isApiSend ? 'إرسال واتساب (PDF)' : 'إرسال واتساب',
-        color: const Color(0xFF25D366),
+        color: AppColors.whatsapp,
         onTap: () => sendInvoiceWhatsapp(context, invoice),
       ),
     if (!invoice.isDeleted)
@@ -253,7 +254,7 @@ Future<void> showInvoiceActionSheet(
       _SheetAction(
         icon: Icons.restore_from_trash_outlined,
         label: 'استعادة الفاتورة (Restore)',
-        color: Colors.green.shade700,
+        color: Theme.of(context).colorScheme.primary,
         onTap: () async {
           final confirmed = await ConfirmDialog.show(
             context,
@@ -286,7 +287,7 @@ Future<void> showInvoiceActionSheet(
       _SheetAction(
         icon: Icons.delete_outline,
         label: 'حذف الفاتورة (سلة المحذوفات)',
-        color: Colors.red.shade700,
+        color: Theme.of(context).colorScheme.error,
         onTap: () async {
           final confirmed = await ConfirmDialog.show(
             context,
@@ -309,7 +310,7 @@ Future<void> showInvoiceActionSheet(
     _SheetAction(
       icon: Icons.delete_forever_outlined,
       label: 'حذف نهائي (Force Delete)',
-      color: Colors.red.shade900,
+      color: Theme.of(context).colorScheme.error,
       onTap: () async {
         final confirmed = await ConfirmDialog.show(
           context,

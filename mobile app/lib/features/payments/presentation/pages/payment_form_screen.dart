@@ -20,6 +20,8 @@ import '../../domain/repositories/payments_repository.dart';
 import '../cubit/collect_payment_cubit.dart';
 import '../cubit/collect_payment_state.dart';
 import '../widgets/collect_payment_form.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 /// `SCR-18` — شاشة إضافة/تعديل دفعة (`PaymentResource::form`).
 ///
@@ -222,7 +224,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
             margin: const EdgeInsets.only(top: 8),
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.lightBorder),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: ListView.builder(
               shrinkWrap: true,
@@ -387,13 +389,14 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
               const Text('طريقة الدفع', style: TextStyle(fontSize: 12, color: AppColors.neutral)),
               const SizedBox(height: 6),
               Wrap(
-                spacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 children: PaymentMethod.values
                     .map(
-                      (method) => ChoiceChip(
+                      (method) => AppFilterChip(
+                        label: method.label,
                         selected: _method == method,
-                        onSelected: (_) => setState(() => _method = method),
-                        label: Text(method.label),
+                        onTap: () => setState(() => _method = method),
                       ),
                     )
                     .toList(),
@@ -482,7 +485,7 @@ class _ReadOnlyRow extends StatelessWidget {
           Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
           Text(
             value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),

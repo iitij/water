@@ -25,12 +25,6 @@ class CrmHubScreen extends StatelessWidget {
       children: <Widget>[
         AppReveal(
           child: AppHeroPanel(
-            gradient: const LinearGradient(
-              begin: AlignmentDirectional.topStart,
-              end: AlignmentDirectional.bottomEnd,
-              colors: <Color>[Color(0xFF111A38), Color(0xFF2A2C6B), Color(0xFF6D5CE7)],
-            ),
-            accent: AppColors.coral,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
