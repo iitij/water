@@ -2,7 +2,7 @@ class AppConfig {
   const AppConfig._();
 
   /// Set this per environment, e.g. --dart-define=API_BASE_URL=https://water.example.com/api
-  /// Android emulator default; physical devices should use the server's LAN URL.
+  /// Suggested first-launch URL; physical devices need the server's LAN URL.
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
