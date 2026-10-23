@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/rbac_entities.dart';
-import '../../../../core/ui/app_surfaces.dart';
 
 class RoleMatrixEditor extends StatefulWidget {
   const RoleMatrixEditor({

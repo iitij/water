@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../core/ui/app_filters.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
 
 class WhatsAppTemplateEditor extends StatelessWidget {
@@ -63,9 +64,9 @@ class WhatsAppTemplateEditor extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 520),
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.whatsapp.withValues(alpha: .16),
-              borderRadius: BorderRadius.only(
+              borderRadius: const BorderRadius.only(
                 topRight: Radius.circular(AppRadius.md),
                 topLeft: Radius.circular(AppRadius.md),
                 bottomRight: Radius.circular(AppRadius.md),

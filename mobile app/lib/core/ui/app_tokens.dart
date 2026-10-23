@@ -51,6 +51,7 @@ abstract final class AppMotion {
   static const Duration normal = Duration(milliseconds: 220);
   static const Duration slow = Duration(milliseconds: 380);
   static const Duration press = Duration(milliseconds: 90);
+  static const Curve curve = Curves.easeOutCubic;
 }
 
 /// Shadow recipes.

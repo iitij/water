@@ -11,6 +11,7 @@ class AppColors {
   static const danger = Color(0xFFDC2626); // مدين / متأخر
   static const info = Color(0xFF0284C7);
   static const neutral = Color(0xFF64748B);
+  static const whatsapp = Color(0xFF25D366);
   static const background = Color(0xFFF8FAFC);
   static const border = Color(0xFFE2E8F0);
 }

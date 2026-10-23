@@ -7,15 +7,14 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/subscription_fee.dart';
 import '../cubit/subscription_fees_cubit.dart';
-import '../../../../core/ui/app_filters.dart';
-import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 bool _hasSubscriptionFeesCubit(BuildContext context) {
   try {

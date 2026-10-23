@@ -1,15 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-
-import '../theme/app_colors.dart';
-import '../theme/app_typography.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app.dart';
 import '../../bootstrap.dart';
 import '../config/app_config.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 import 'server_config_sheet.dart';
 
 /// Server selection precedes all authenticated clients and offline workers.

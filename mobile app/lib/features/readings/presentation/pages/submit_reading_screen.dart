@@ -382,10 +382,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     autofocus: true,
                     textDirection: TextDirection.ltr,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'القراءة الحالية',
                       hintText: 'أدخل الرقم الظاهر على العداد',
-                      prefixIcon: const Icon(Icons.speed_outlined),
+                      prefixIcon: Icon(Icons.speed_outlined),
                       suffixText: 'وحدة',
                     ),
                     onChanged: (_) => setState(() {}),

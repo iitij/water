@@ -6,6 +6,7 @@ import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../../subscribers/domain/repositories/subscribers_repository.dart';
@@ -15,8 +16,6 @@ import '../../../subscribers/presentation/pages/subscriber_form_screen.dart';
 import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/square.dart';
 import '../cubit/squares_cubit.dart';
-import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 bool _hasSquaresCubit(BuildContext context) {
   try {
@@ -239,7 +238,7 @@ class _MasterList extends StatelessWidget {
                                 onChanged: (_) => context.read<SquaresCubit>().toggleSelect(sq.id),
                                 visualDensity: VisualDensity.compact,
                               ),
-                              AppGlyph(
+                              const AppGlyph(
                                 icon: Icons.grid_view_rounded,
                                 size: 36,
                                 neutral: true,

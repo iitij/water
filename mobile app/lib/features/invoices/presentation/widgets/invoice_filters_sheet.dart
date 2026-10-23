@@ -3,7 +3,6 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/ui/app_filters.dart';
-import '../../../../core/ui/app_tokens.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
@@ -264,7 +263,7 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
           decoration: InputDecoration(
             hintText: 'اسم المشترك أو الهاتف',
             isDense: true,
-            fillColor: scheme.surfaceAlt,
+            fillColor: scheme.surfaceContainerHighest,
             contentPadding: const EdgeInsetsDirectional.fromSTEB(0, 12, 0, 12),
             prefixIcon: Icon(Icons.search_rounded, size: 18, color: scheme.onSurfaceVariant),
             prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -332,11 +331,4 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
     }
     return '#${_draft.subscriberId}';
   }
-}
-
-T? _firstWhereOrNull<T>(Iterable<T> items, bool Function(T) test) {
-  for (final item in items) {
-    if (test(item)) return item;
-  }
-  return null;
 }

@@ -5,13 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/rbac_entities.dart';
 import '../../domain/repositories/rbac_repository.dart';
 import '../cubit/users_cubit.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 class UsersManagementScreen extends StatelessWidget {
   const UsersManagementScreen({
@@ -517,6 +517,7 @@ class _EditableAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final imageProvider = provider;
     return Container(
       width: 64,
       height: 64,
@@ -526,9 +527,9 @@ class _EditableAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.xxl),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: provider == null
+      child: imageProvider == null
           ? Icon(Icons.person_outline_rounded, size: 28, color: scheme.onSurfaceVariant)
-          : Image(image: provider, fit: BoxFit.cover),
+          : Image(image: imageProvider, fit: BoxFit.cover),
     );
   }
 }

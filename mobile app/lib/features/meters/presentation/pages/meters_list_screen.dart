@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/ui/app_filters.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
 import '../../../readings/domain/readings_repository.dart';
 import '../../../readings/presentation/widgets/record_reading_sheet.dart';
@@ -172,7 +172,7 @@ class _MetersListView extends StatelessWidget {
                       ),
                     )
                   else if (state.meters.isEmpty)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
                       child: EmptyStateWidget(
                         icon: Icons.filter_alt_off_rounded,
@@ -406,6 +406,124 @@ class _MetersListView extends StatelessWidget {
     if (changed == true && context.mounted) {
       await context.read<MetersCubit>().load();
     }
+  }
+}
+
+String? _meterSquareName(MetersState state) {
+  if (state.squareFilter == null) return null;
+  for (final square in state.squares) {
+    if (square.id == state.squareFilter) return square.name;
+  }
+  return 'مربع #${state.squareFilter}';
+}
+
+Future<void> _openFilterSheet(
+  BuildContext context,
+  MetersState state,
+  MetersCubit cubit,
+) {
+  return AppFilterSheet.show<void>(
+    context: context,
+    builder: (_) => Directionality(
+      textDirection: TextDirection.rtl,
+      child: _MetersFilterSheet(state: state, cubit: cubit),
+    ),
+  );
+}
+
+class _MetersFilterSheet extends StatefulWidget {
+  const _MetersFilterSheet({required this.state, required this.cubit});
+
+  final MetersState state;
+  final MetersCubit cubit;
+
+  @override
+  State<_MetersFilterSheet> createState() => _MetersFilterSheetState();
+}
+
+class _MetersFilterSheetState extends State<_MetersFilterSheet> {
+  late int? _square = widget.state.squareFilter;
+  late String? _status = widget.state.statusFilter;
+
+  void _apply() {
+    if (_square != widget.state.squareFilter) {
+      widget.cubit.setSquareFilter(_square);
+    }
+    if (_status != widget.state.statusFilter) {
+      widget.cubit.setStatusFilter(_status);
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  void _reset() => setState(() {
+        _square = null;
+        _status = null;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppFilterSheet(
+      title: 'تصفية العدادات',
+      resultCountLabel: '${widget.state.meters.length} عداد في القائمة',
+      onApply: _apply,
+      onReset: _reset,
+      resetEnabled: _square != null || _status != null,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'حالة العداد',
+          child: Column(
+            children: <Widget>[
+              AppFilterOptionTile(
+                label: 'كل العدادات',
+                icon: Icons.apps_rounded,
+                selected: _status == null,
+                onTap: () => setState(() => _status = null),
+              ),
+              const SizedBox(height: 6),
+              AppFilterOptionTile(
+                label: 'نشط',
+                icon: Icons.check_circle_outline_rounded,
+                selected: _status == 'active',
+                onTap: () => setState(() => _status = 'active'),
+              ),
+              const SizedBox(height: 6),
+              AppFilterOptionTile(
+                label: 'غير نشط',
+                icon: Icons.pause_circle_outline_rounded,
+                selected: _status == 'inactive',
+                onTap: () => setState(() => _status = 'inactive'),
+              ),
+            ],
+          ),
+        ),
+        AppFilterSection(
+          title: 'المربع السكني',
+          subtitle: 'اختر مربعاً واحداً لعرض عداداته فقط',
+          child: AppFilterDropdown<int?>(
+            label: 'المربع',
+            icon: Icons.grid_view_rounded,
+            hint: 'كل المربعات',
+            value: widget.state.squares.any((s) => s.id == _square)
+                ? _square
+                : null,
+            items: <DropdownMenuItem<int?>>[
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('كل المربعات'),
+              ),
+              ...widget.state.squares.map(
+                (square) => DropdownMenuItem<int?>(
+                  value: square.id,
+                  child: Text(square.name, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            onChanged: (value) => setState(() => _square = value),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 }
 

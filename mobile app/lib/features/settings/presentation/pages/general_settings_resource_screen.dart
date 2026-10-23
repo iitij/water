@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
@@ -9,8 +10,6 @@ import '../../domain/repositories/settings_repository.dart';
 import '../cubit/general_settings_cubit.dart';
 import '../widgets/setting_image_field.dart';
 import '../widgets/settings_form_widgets.dart';
-import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 class GeneralSettingsResourceScreen extends StatelessWidget {
   const GeneralSettingsResourceScreen({

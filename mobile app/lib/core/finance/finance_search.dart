@@ -128,8 +128,8 @@ class _FinanceSearchBarState extends State<FinanceSearchBar> {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   if (_isCompound)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8),
                       child: Icon(
                         Icons.alt_route_rounded,
                         size: 17,

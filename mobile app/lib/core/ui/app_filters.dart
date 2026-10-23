@@ -139,7 +139,7 @@ class AppFilterChips extends StatelessWidget {
     if (children.isEmpty) return const SizedBox.shrink();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: widget.padding,
+      padding: padding,
       child: Row(
         children: <Widget>[
           for (var index = 0; index < children.length; index++) ...<Widget>[
@@ -404,7 +404,7 @@ class AppActiveFilters extends StatelessWidget {
     if (filters.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     return Padding(
-      padding: widget.padding,
+      padding: padding,
       child: Row(
         children: <Widget>[
           Expanded(

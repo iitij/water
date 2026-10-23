@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/settings_entities.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 class TemplatePreview extends StatelessWidget {
   const TemplatePreview({required this.settings, super.key});

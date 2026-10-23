@@ -8,6 +8,8 @@ import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
@@ -20,8 +22,6 @@ import '../../domain/repositories/payments_repository.dart';
 import '../cubit/collect_payment_cubit.dart';
 import '../cubit/collect_payment_state.dart';
 import '../widgets/collect_payment_form.dart';
-import '../../../../core/ui/app_filters.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 /// `SCR-18` — شاشة إضافة/تعديل دفعة (`PaymentResource::form`).
 ///
