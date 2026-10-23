@@ -42,6 +42,8 @@ class PermissionService {
     'View:Subscriber',
     'ViewAny:Meter',
     'View:Meter',
+    'ViewAny:Square',
+    'View:Square',
   };
 
   static const Set<String> _readerDefaultPermissions = <String>{
@@ -72,12 +74,14 @@ class PermissionService {
     }
 
     final granted = currentPermissions;
-    if (granted.contains('*') || granted.contains(permission)) {
+    bool isGranted(String name) => granted.contains(name) ||
+        granted.contains(_legacyPermission(name));
+    if (granted.contains('*') || isGranted(permission)) {
       return true;
     }
 
     final aliases = _abilityAliases[permission];
-    if (aliases != null && aliases.any(granted.contains)) {
+    if (aliases != null && aliases.any(isGranted)) {
       return true;
     }
 
@@ -91,6 +95,13 @@ class PermissionService {
 
     return false;
   }
+
+  // Match Laravel's authorizeApi/authorizeSystem snake_case compatibility.
+  // ViewAny:SubscriptionFee -> view_any_subscription_fee.
+  static String _legacyPermission(String permission) => permission
+      .replaceAll(':', '_')
+      .replaceAllMapped(RegExp(r'(?<=[a-z0-9])[A-Z]'), (match) => '_${match[0]}')
+      .toLowerCase();
 
   bool hasAnyPermission(Iterable<String> permissions) =>
       permissions.any(hasPermission);

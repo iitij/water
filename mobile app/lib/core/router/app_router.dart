@@ -8,6 +8,7 @@ import '../../features/auth/presentation/pages/splash_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/home/presentation/services_screen.dart';
 import '../../features/invoices/data/models/invoice_model.dart';
 import '../../features/invoices/domain/accounting/finance_enums.dart';
 import '../../features/meters/data/models/meter.dart';
@@ -70,6 +71,16 @@ class AppRouter {
                   GoRoute(
                     path: RouteNames.home,
                     builder: (context, state) => const HomeScreen(),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: RouteNames.services,
+                    builder: (context, state) => ServicesScreen(
+                      autofocus: state.uri.queryParameters['search'] == '1',
+                    ),
                   ),
                 ],
               ),
@@ -212,7 +223,8 @@ class AppRouter {
             ),
           ),
           ...SettingsRoutes.routes(
-            studioBuilder: () => SettingsStudioScreen(
+            sectionBuilder: (section) => SettingsStudioScreen(
+              initialSection: section,
               repository: GetIt.I<SettingsRepository>(),
               can: GetIt.I<PermissionService>().can,
             ),
@@ -249,13 +261,14 @@ class AppHomeShell extends StatelessWidget {
 
   static const _destinations = <AdaptiveDestination>[
     AdaptiveDestination(label: 'الرئيسية', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded),
+    AdaptiveDestination(label: 'الخدمات', icon: Icons.apps_outlined, selectedIcon: Icons.apps_rounded),
     AdaptiveDestination(label: 'المزامنة', icon: Icons.sync_outlined, selectedIcon: Icons.sync_rounded),
-    AdaptiveDestination(label: 'الملف الشخصي', icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded),
+    AdaptiveDestination(label: 'حسابي', icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final titles = <String>['منظومة مشاريع المياه', 'مراقب المزامنة', 'الملف الشخصي'];
+    final titles = <String>['مشروع المياه', 'الخدمات', 'المزامنة', 'حسابي'];
     final currentIndex = shell.currentIndex.clamp(0, titles.length - 1).toInt();
     return AdaptiveScaffold(
       currentIndex: currentIndex,
@@ -267,16 +280,6 @@ class AppHomeShell extends StatelessWidget {
       appBar: AppBar(
         title: Text(titles[currentIndex]),
         actions: <Widget>[
-          IconButton(
-            tooltip: 'القارئ الميداني السريع',
-            onPressed: () => context.push(RouteNames.fieldReader),
-            icon: const Icon(Icons.speed_rounded),
-          ),
-          IconButton(
-            tooltip: 'المحصل الميداني السريع',
-            onPressed: () => context.push(RouteNames.quickCollector),
-            icon: const Icon(Icons.point_of_sale_rounded),
-          ),
           IconButton(
             tooltip: 'تبديل المظهر',
             onPressed: () => GetIt.I<AppThemeController>().toggle(),
