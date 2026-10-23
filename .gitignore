@@ -35,3 +35,11 @@ whatsapp-server/uploads/
 /storage/framework/sessions/
 /storage/framework/views/
 /storage/logs/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
