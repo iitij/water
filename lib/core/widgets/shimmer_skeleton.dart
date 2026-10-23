@@ -1,0 +1,26 @@
+import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
+
+class ShimmerSkeleton extends StatelessWidget {
+  const ShimmerSkeleton({super.key, this.height = 84, this.width = double.infinity, this.radius = 18});
+
+  final double height;
+  final double width;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final base = dark ? const Color(0xFF243247) : const Color(0xFFE8EEF3);
+    final highlight = dark ? const Color(0xFF33445C) : const Color(0xFFF7FAFC);
+    return Shimmer.fromColors(
+      baseColor: base,
+      highlightColor: highlight,
+      child: Container(
+        height: height,
+        width: width,
+        decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(radius)),
+      ),
+    );
+  }
+}

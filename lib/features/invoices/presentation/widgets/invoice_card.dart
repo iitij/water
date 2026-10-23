@@ -6,6 +6,7 @@ import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/invoice_accounting.dart';
+import '../../../../core/finance/finance_colors.dart';
 
 /// بطاقة فاتورة موحّدة — **مكوّن مُسلَّم** لفؤاد (`SCR-05/07/19/20`) ولأسامة
 /// (`SCR-03` ودجة الفواتير المتأخرة)، ولشاشة المحصل السريع `SCR-13`.
@@ -105,7 +106,10 @@ class InvoiceCard extends StatelessWidget {
                     children: <Widget>[
                       InvoiceTypeBadge(type: invoice.invoiceType.wire, compact: dense),
                       const SizedBox(height: 4),
-                      StatusBadge.fromStatus(invoice.status.colorKey, compact: dense),
+                      StatusBadge(
+                        status: invoice.status.colorKey,
+                        label: invoice.status.label,
+                      ),
                     ],
                   ),
                 ],
@@ -349,7 +353,7 @@ class InvoicesSummaryBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: AppColors.headerGradient,
+        gradient: FinanceColors.headerGradient,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(

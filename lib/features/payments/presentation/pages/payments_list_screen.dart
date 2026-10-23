@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/widgets/compound_search_bar.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/loading_skeleton.dart';
-import '../../../../core/responsive/breakpoints.dart';
+import '../../../../core/finance/finance_search.dart';
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/finance/finance_responsive.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
@@ -108,7 +106,7 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           builder: (context, state) {
             return Column(
               children: <Widget>[
-                CompoundSearchBar(
+                FinanceSearchBar(
                   controller: _search,
                   hint: 'ابحث برقم السند أو اسم المشترك أو المحصل',
                   onChanged: (value) => cubit.search(value),

@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
-import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -58,7 +58,7 @@ class QuickCollectorCubit extends Cubit<QuickCollectorState> {
   }
 
   Future<void> searchNow() async {
-    final parsed = CompoundSearchQuery.parse(state.searchText);
+    final parsed = FinanceSearchQuery.parse(state.searchText);
     if (parsed.isEmpty && state.selectedSquareId == null) {
       await loadUnpaid();
       return;

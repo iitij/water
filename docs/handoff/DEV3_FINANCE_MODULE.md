@@ -356,3 +356,50 @@ sendPaymentWhatsapp(context, payment, receiptData: r);
  خادمي فقط.
 * استبدال `SyncQueueRepository` بطبقة Drift عند وصولها من Dev 1.
 * `GET /invoices/search` بترتيب `priority` (اسم المستأجر أولًا) عندما يضيفه الخادم.
+
+## 10. الدمج مع نواة Dev 1 (المراجعة الثانية — بعد PR #2/#4/#5)
+
+`main` تقدّم عليها أربع فروع، فصار لتطبيق Flutter نواتان: `lib/**` (Dev 1/2/5) و
+`mobile/**` (Dev 4). الوحدة المالية مُستضافة في **`lib/**`** لتشارك نفس النواة، ونُفّذ
+الدمج كالتالي (بدون تعديل أي ملف يملكه Dev 1):
+
+**ما حُذف من فرع Dev 3 (ملك Dev 1 الآن، 19 ملفًا كانت متعارضة add/add):**
+`lib/main.dart`, `lib/app.dart`, `lib/bootstrap.dart`, `pubspec.yaml`,
+`analysis_options.yaml`, `core/config/app_config.dart`, `core/di/injection_container.dart`,
+`core/network/network_info.dart`, `core/responsive/{breakpoints,adaptive_scaffold}.dart`,
+`core/router/app_router.dart`, `core/theme/{app_colors,app_theme}.dart`,
+`core/utils/compound_search_parser.dart`,
+`core/widgets/{app_numeric_field,compound_search_bar,confirm_dialog,empty_state_widget,status_badge}.dart`.
+وكذلك حُذفت النسخ التعاقدية: `core/network/api_client.dart`,
+`core/network/auth_token_provider.dart`, `core/auth/session_store.dart`,
+و`core/accounting/account_isolation.dart`. بقيت عند Dev 3 ملفات: `core/error/failures.dart`
+(تعيين الأخطاء)، `core/settings/finance_config.dart`، `core/accounting/`،
+`core/services/` (PDF/حراري/واتساب)، و`core/utils/` (الروفقة/الأرقام/الهاتف/JSON).
+
+**طبقة التوافق التي أضافها Dev 3 في `lib/core/finance/`** (كلها ملك Dev 3):
+
+| الملف | لماذا وُجد | متى يُحذف |
+|---|---|---|
+| `finance_api_client.dart` | `FinanceApiClient` يغلّف `Dio` المشترك عند Dev 1 بواجهة Dev 3 (`getRaw/post/put/delete/downloadBytes`) + `financeApiPath` (تقطيع `/` الأولى لأن `AppConfig.apiBaseUrl` ينتهي بـ `/api/`) + `financeAdminPrintUrl` لروابط Filament الاحتياطية + تعيين `DioException → AppFailure` عبر `core/error/failures.dart` | عند إضافة Dev 1 نفس الواجهة إلى `DioClient` |
+| `finance_module.dart` | نقطة تركيب الوحدة (نمط `FieldOperationsModule` عند Dev 2): تسجيل idempotent داخل `getIt` عند أول استخدام، و`FinanceModule.routes` لتعريض المسارات | عند تحويل التسجيلات إلى `configureDependencies()` |
+| `finance_locator.dart` | `sl<T>()` = `GetIt.I<T>()` بعد `ensure()`، ويُصدِّر `getIt`/`configureDependencies` | عند توحيد الاسم مع Dev 1 (`getIt`) |
+| `finance_session.dart` | `FinanceSession` غلاف فوق `SessionService` + `PermissionService` (لا توكن مخزّن محليًا) | عند اعتماد الشاشات على `SessionService` مباشرة |
+| `finance_feedback.dart` | `ConfirmDialog` بـ `details:`، `AppFeedback`، `EmptyStateWidget`/`ErrorStateWidget` بـ `onRetry:`، `SkeletonList` | عند توحيد عناصر الحالة مع Dev 1 |
+| `finance_fields.dart` | `AppTextField`/`AppNumericField` بنسخة Dev 3 (`labelText`/`onTap`/`readOnly`/`helperText`/`initialValue`/`onSubmitted`) | عند إضافة Dev 1 هذه الخصائص إلى نسخته |
+| `finance_search.dart` | `FinanceSearchQuery` (الأوسع: `isEmpty`/`hasSplitParams` + أرقام عربية) و`FinanceSearchBar` بـ `filters`/`onSubmitted` | عند توسيع `core/utils/compound_search_parser.dart` |
+| `finance_colors.dart` | `meter`/`subscription`/`tanker`/`headerGradient` — غير موجودة في `AppColors` | عند إضافتها إلى `AppColors` |
+| `finance_responsive.dart` | `FinanceBreakpoints` + `context.useMasterDetail/compactWidth/tablet` مبنية على `AppBreakpoints`+`AdaptiveScaffold` | عند إضافة Dev 1 امتدادات السياق |
+| `finance_sync_queue.dart` | طابور محلي (SharedPreferences) بديل عن `SyncQueueManager` (drift) عند غياب شبكة | **يُحذف** عند اعتماد `SyncQueueManager` في التحصيل |
+
+**نقاط يجب أن يقررها Dev 1 (لم يغيّرها Dev 3):**
+1. `core/network/api_endpoints.dart` عند Dev 1 يغطي كل مسارات الفواتير/السندات/التسعيرات
+   (بما فيها `invoices/bulk-recalculate` و`generate-*`) — لذلك `core/network/finance_endpoints.dart`
+   أصبح طبقة أسماء موازية؛ يُستحسن تحويل طبقة Dev 3 إلى `ApiEndpoints` وحذفه.
+2. Dev 1 يعرّف `CompoundSearchQuery` مرتين (`utils/compound_search_parser.dart` و
+   `utils/compound_search_query.dart`) بنفس الاسم — ملف واحد منهما يسبّب `ambiguous_import`
+   لأي ملف يستوردهما معًا. يُنصح بدمجهما.
+3. `StatusBadge` عند Dev 1 أصبح مستعملًا في بطاقات الفواتير (`status: colorKey, label:`)؛
+   `draft`/`cancelled` غير مغطاة في `_label` عنده — أُبقي `label` العربي من `InvoiceStatus`.
+4. لتعريض الشاشات: أضِف `...FinanceModule.routes` إلى `routes:` في
+   `core/router/app_router.dart`، أو أضف فرعًا إلى `AppHomeShell` بـ
+   `AdaptiveDestination` (المحصل: `/collector` أول شاشة).

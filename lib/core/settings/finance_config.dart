@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../error/failures.dart';
-import '../network/api_client.dart';
+import '../finance/finance_api_client.dart';
 import '../network/finance_endpoints.dart';
 
 /// إعدادات الدورة المالية والواتساب التي تحتاجها طبقة Dev 3.
@@ -209,17 +209,22 @@ class FinanceConfig {
 /// مستودع الإعدادات: جلب + كاش محلي (Stale-While-Revalidate) ليعمل المحصل أوفلاين.
 /// الكتابة ملك Dev 5 (`SCR-23`)، وهنا القراءة فقط.
 class FinanceConfigRepository {
-  FinanceConfigRepository({required DioClient client, required SharedPreferences prefs})
-      : _client = client,
-        _prefs = prefs;
+  FinanceConfigRepository({required FinanceApiClient client}) : _client = client;
 
   static const String _cacheKey = 'finance.config.cache';
 
-  final DioClient _client;
-  final SharedPreferences _prefs;
+  final FinanceApiClient _client;
   FinanceConfig? _memory;
 
-  FinanceConfig get cached => _memory ?? _readCache();
+  /// القراءة المتزامنة تعتمد على آخر نسخة معروفة (أو الافتراضيات المصدية من Laravel)؛
+  /// الكاش المحلي يُقرأ في `refresh()`/`loadCached()` عند أول استخدام فعلي.
+  FinanceConfig get cached => _memory ?? const FinanceConfig();
+
+  /// يقرأ كاش `SharedPreferences` عند الحاجة (يُستعمل في التحضير عند الإقلاع).
+  Future<FinanceConfig> loadCached() async {
+    if (_memory != null) return _memory!;
+    return _readCache();
+  }
 
   /// يعيد الكاش فوراً ثم يحدّثه من الخادم في الخلفية.
   Future<FinanceConfig> refresh({bool force = false}) async {
@@ -239,17 +244,32 @@ class FinanceConfigRepository {
 
       final config = FinanceConfig.fromJson(merged);
       _memory = config;
-      await _prefs.setString(_cacheKey, jsonEncode(merged));
+      await _writeCache(merged);
       return config;
     } on AppFailure {
       // أوفلاين: الكاش المحلي أو الافتراضيات.
-      return _readCache();
+      return await _readCache();
     }
   }
 
-  FinanceConfig _readCache() {
+  Future<void> _writeCache(Map<String, dynamic> merged) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode(merged));
+    } catch (_) {
+      // الكاش تسهيل وليس شرطاً.
+    }
+  }
+
+  Future<FinanceConfig> _readCache() async {
     if (_memory != null) return _memory!;
-    final raw = _prefs.getString(_cacheKey);
+    final SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (_) {
+      return const FinanceConfig();
+    }
+    final raw = prefs.getString(_cacheKey);
     if (raw == null) return const FinanceConfig();
     try {
       final decoded = jsonDecode(raw);

@@ -1,5 +1,5 @@
 import '../../../../core/error/failures.dart';
-import '../../../../core/network/api_client.dart';
+import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../models/invoice_model.dart';
@@ -12,7 +12,7 @@ import '../models/invoice_query.dart';
 class InvoicesRemoteDataSource {
   const InvoicesRemoteDataSource(this._client);
 
-  final DioClient _client;
+  final FinanceApiClient _client;
 
   /// #33 `GET /api/invoices` — قائمة/Fلاتر/بحث ذكي.
   Future<List<InvoiceModel>> list(InvoiceQuery query) async {

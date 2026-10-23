@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
-import '../../../../core/network/api_client.dart';
+import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/error/failures.dart';
-import '../../../../core/responsive/breakpoints.dart';
+import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/widgets/app_numeric_field.dart';
+import '../../../../core/finance/finance_fields.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/finance_enums.dart';
@@ -414,7 +414,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
   Future<void> _searchSubscribers() async {
     setState(() => _loading = true);
     try {
-      final results = await ReferencesRemoteDataSource(sl<DioClient>())
+      final results = await ReferencesRemoteDataSource(sl<FinanceApiClient>())
           .subscribers(search: _search.text, limit: 30);
       if (!mounted) return;
       setState(() {

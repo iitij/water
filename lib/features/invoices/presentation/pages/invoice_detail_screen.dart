@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
-import '../../../../core/responsive/breakpoints.dart';
+import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/services/pdf_print_service.dart';
 import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
@@ -10,9 +10,7 @@ import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/loading_skeleton.dart';
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
@@ -174,7 +172,10 @@ class _HeaderCard extends StatelessWidget {
                   children: <Widget>[
                     InvoiceTypeBadge(type: invoice.invoiceType.wire),
                     const SizedBox(height: 6),
-                    StatusBadge.fromStatus(invoice.status.colorKey),
+                    StatusBadge(
+                      status: invoice.status.colorKey,
+                      label: invoice.status.label,
+                    ),
                   ],
                 ),
               ],

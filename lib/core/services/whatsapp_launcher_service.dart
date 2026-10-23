@@ -1,7 +1,7 @@
 import 'package:url_launcher/url_launcher.dart';
 
 import '../error/failures.dart';
-import '../network/api_client.dart';
+import '../finance/finance_api_client.dart';
 import '../settings/finance_config.dart';
 import '../utils/phone_formatter.dart';
 
@@ -92,12 +92,12 @@ class WhatsAppPayload {
 /// محرّك إرسال الواتساب الثلاثي الوضع (`click_to_chat` / `meta_api` / `local_api`).
 class WhatsAppLauncherService {
   const WhatsAppLauncherService({
-    required DioClient client,
+    required FinanceApiClient client,
     required FinanceConfigRepository configRepository,
   })  : _client = client,
         _config = configRepository;
 
-  final DioClient _client;
+  final FinanceApiClient _client;
   final FinanceConfigRepository _config;
 
   /// يبني رابط `wa.me` محلياً من القالب المخزّن، وإن تعذّر يستخدم رابط الخادم.

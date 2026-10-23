@@ -6,7 +6,7 @@ import 'package:printing/printing.dart';
 import '../error/failures.dart';
 import '../services/pdf_print_service.dart';
 import '../theme/app_colors.dart';
-import 'confirm_dialog.dart';
+import '../finance/finance_feedback.dart';
 
 /// نافذة معاينة ملف PDF الرسمي (الفاتورة/السند) مع أزرار الطباعة والمشاركة.
 ///

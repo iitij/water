@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
-import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
 import '../../domain/repositories/invoices_repository.dart';
@@ -62,7 +62,7 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     if (state.query.search == value) return;
     emit(state.copyWith(query: state.query.copyWith(search: value)));
 
-    final parsed = CompoundSearchQuery.parse(value);
+    final parsed = FinanceSearchQuery.parse(value);
     if (parsed.isEmpty && state.query.squareId == null) {
       await load(refresh: true);
       return;

@@ -1,5 +1,5 @@
 import '../../../../core/error/failures.dart';
-import '../../../../core/network/api_client.dart';
+import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../models/collect_payment_models.dart';
@@ -9,7 +9,7 @@ import '../models/payment_model.dart';
 class PaymentsRemoteDataSource {
   const PaymentsRemoteDataSource(this._client);
 
-  final DioClient _client;
+  final FinanceApiClient _client;
 
   /// #48 `GET /api/payments`
   Future<List<PaymentModel>> list(PaymentQuery query) async {

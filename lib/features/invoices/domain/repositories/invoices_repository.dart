@@ -1,4 +1,4 @@
-import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
 
@@ -7,7 +7,7 @@ import '../../data/models/invoice_query.dart';
 abstract interface class InvoicesRepository {
   Future<List<InvoiceModel>> list(InvoiceQuery query);
   Future<List<InvoiceModel>> collectorList({
-    CompoundSearchQuery search,
+    FinanceSearchQuery search,
     int? squareId,
   });
 

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/widgets/status_badge.dart';
 import '../../data/models/payment_model.dart';
 import '../widgets/payment_actions.dart';
 

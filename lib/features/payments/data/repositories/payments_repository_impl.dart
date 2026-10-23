@@ -1,6 +1,6 @@
-import '../../../../core/config/app_config.dart';
 import '../../../../core/error/failures.dart';
-import '../../../../core/local_storage/sync_queue.dart';
+import '../../../../core/finance/finance_api_client.dart';
+import '../../../../core/finance/finance_sync_queue.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../invoices/data/datasources/invoices_remote_datasource.dart';
@@ -23,19 +23,20 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     required PaymentsRemoteDataSource remote,
     required InvoicesRemoteDataSource invoices,
     required NetworkInfo networkInfo,
-    SyncQueueRepository? syncQueue,
-    AppConfig config = const AppConfig(),
+    FinanceSyncQueueRepository? syncQueue,
+    this.offlineEnabled = true,
   })  : _remote = remote,
         _invoices = invoices,
         _network = networkInfo,
-        _syncQueue = syncQueue,
-        _config = config;
+        _syncQueue = syncQueue;
 
   final PaymentsRemoteDataSource _remote;
   final InvoicesRemoteDataSource _invoices;
   final NetworkInfo _network;
-  final SyncQueueRepository? _syncQueue;
-  final AppConfig _config;
+  final FinanceSyncQueueRepository? _syncQueue;
+
+  /// تعطيل الطابور المحلي عند اعتماد Dev 1 كاملًا على `SyncQueueManager` (drift).
+  final bool offlineEnabled;
 
   @override
   Future<List<PaymentModel>> list(PaymentQuery query) => _remote.list(query);
@@ -49,7 +50,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     if (validationError != null) throw ValidationFailure(validationError, <String, List<String>>{});
 
     final online = await _network.isConnected;
-    if (!online && _config.isOfflineEnabled) {
+    if (!online && offlineEnabled) {
       return _enqueueOffline(request);
     }
 
@@ -63,7 +64,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
       return await _remote.create(request.toCreatePayload());
     } on AppFailure catch (failure) {
       // انقطاع أثناء الطلب → ندرجه في الطابور بدل إخبار المحصل بالفشل.
-      if (_isNetworkLike(failure) && _config.isOfflineEnabled) {
+      if (_isNetworkLike(failure) && offlineEnabled) {
         return _enqueueOffline(request);
       }
       rethrow;
@@ -151,5 +152,5 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
 
   @override
   String printFallbackPath(int paymentId) =>
-      '${_config.pdfBaseUrl ?? ''}${AppConfig.fallbackReceiptPrintPath(paymentId)}';
+      financeAdminPrintUrl('/payments/$paymentId/print');
 }

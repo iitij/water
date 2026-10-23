@@ -86,23 +86,47 @@ class ThermalPrinterService {
   ThermalPrinterService({
     required ThermalPrinterChannel channel,
     required FinanceConfigRepository configRepository,
-    required SharedPreferences prefs,
+    SharedPreferences? prefs,
   })  : _channel = channel,
         _config = configRepository,
-        _prefs = prefs;
+        _prefs = prefs {
+    _primeAddress();
+  }
 
   static const String _addressKey = 'thermal.printer.address';
 
   final ThermalPrinterChannel _channel;
   final FinanceConfigRepository _config;
-  final SharedPreferences _prefs;
+  SharedPreferences? _prefs;
+  String? _address;
 
-  String? get savedAddress => _prefs.getString(_addressKey);
+  /// `SharedPreferences` تُحمَّل كسولاً: Dev 1 لا يسجّلها في الـ DI، ولا نريد أن
+  /// نفرض على المضيف تهيئتها قبل بناء الخدمة.
+  void _primeAddress() {
+    final prefs = _prefs;
+    if (prefs != null) {
+      _address = prefs.getString(_addressKey);
+      return;
+    }
+    SharedPreferences.getInstance().then((loaded) {
+      _prefs = loaded;
+      _address = loaded.getString(_addressKey);
+    });
+  }
 
-  Future<void> saveAddress(String address) =>
-      _prefs.setString(_addressKey, address.trim());
+  String? get savedAddress => _address ?? _prefs?.getString(_addressKey);
 
-  Future<void> clearAddress() => _prefs.remove(_addressKey);
+  Future<void> saveAddress(String address) async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    _address = address.trim();
+    await prefs.setString(_addressKey, _address!);
+  }
+
+  Future<void> clearAddress() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    _address = null;
+    await prefs.remove(_addressKey);
+  }
 
   int get paperWidthMm => _config.cached.thermalPaperWidthMm;
 

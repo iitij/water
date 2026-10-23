@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/di/injection_container.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/services/pdf_print_service.dart';
 import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
 import '../../data/models/invoice_model.dart';

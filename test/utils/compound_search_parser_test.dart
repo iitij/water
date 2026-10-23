@@ -5,9 +5,9 @@ import 'package:water_mobile/core/utils/compound_search_parser.dart';
 /// (`preg_match('/^(\d+)[\/\-\\\\_](\d+)$/', $query, $matches)`) والخطة §1.3 القاعدة 5
 /// و§7.1-1: `4/1` يعني «مربع ٤، مسار ١».
 void main() {
-  group('CompoundSearchQuery.parse', () {
+  group('FinanceSearchQuery.parse', () {
     test('صيغة (مربع/مسار) بالفاصلة المائلة', () {
-      final query = CompoundSearchQuery.parse('4/1');
+      final query = FinanceSearchQuery.parse('4/1');
 
       expect(query.isCompoundPathSearch, true);
       expect(query.squareId, 4);
@@ -17,7 +17,7 @@ void main() {
 
     test('تقبل الشرطة والشرطة المائلة المقلوبة والشرطة السفلية', () {
       for (final raw in <String>['4-1', r'4\1', '4_1']) {
-        final query = CompoundSearchQuery.parse(raw);
+        final query = FinanceSearchQuery.parse(raw);
         expect(query.isCompoundPathSearch, true, reason: raw);
         expect(query.squareId, 4, reason: raw);
         expect(query.pathNumber, 1, reason: raw);
@@ -25,7 +25,7 @@ void main() {
     });
 
     test('الأرقام العربية تُطبَّع قبل التحليل', () {
-      final query = CompoundSearchQuery.parse('٤/١');
+      final query = FinanceSearchQuery.parse('٤/١');
 
       expect(query.isCompoundPathSearch, true);
       expect(query.squareId, 4);
@@ -34,7 +34,7 @@ void main() {
     });
 
     test('النص العادي ليس بحث مسار', () {
-      final query = CompoundSearchQuery.parse('أحمد 4/1');
+      final query = FinanceSearchQuery.parse('أحمد 4/1');
 
       expect(query.isCompoundPathSearch, false);
       expect(query.squareId, isNull);
@@ -43,13 +43,13 @@ void main() {
     });
 
     test('رقم واحد فقط لا يُعتبر مساراً', () {
-      final query = CompoundSearchQuery.parse('4');
+      final query = FinanceSearchQuery.parse('4');
       expect(query.isCompoundPathSearch, false);
       expect(query.hasSplitParams, false);
     });
 
     test('المسار الصفري مقبول (مربع 4 مسار 0) — يُرسل كما هو للخادم', () {
-      final query = CompoundSearchQuery.parse('4/0');
+      final query = FinanceSearchQuery.parse('4/0');
       expect(query.isCompoundPathSearch, true);
       expect(query.pathNumber, 0);
       // `0` قيمة صحيحة وليست «فارغة».
@@ -57,21 +57,21 @@ void main() {
     });
 
     test('الفراغات حول النص تُزال', () {
-      final query = CompoundSearchQuery.parse('  4/12  ');
+      final query = FinanceSearchQuery.parse('  4/12  ');
       expect(query.squareId, 4);
       expect(query.pathNumber, 12);
     });
 
     test('البحث الفارغ', () {
-      expect(CompoundSearchQuery.parse('').isEmpty, true);
-      expect(CompoundSearchQuery.parse('   ').isEmpty, true);
-      expect(CompoundSearchQuery.parse('اسم').isEmpty, false);
+      expect(FinanceSearchQuery.parse('').isEmpty, true);
+      expect(FinanceSearchQuery.parse('   ').isEmpty, true);
+      expect(FinanceSearchQuery.parse('اسم').isEmpty, false);
     });
   });
 
   group('بارامترات الطلب', () {
     test('ترسل البارامترات المنفصلة عند دعم الخادم لها', () {
-      final map = CompoundSearchQuery.parse('4/1').toQueryMap();
+      final map = FinanceSearchQuery.parse('4/1').toQueryMap();
 
       expect(map['query'], '4/1');
       expect(map['square_id'], 4);
@@ -79,7 +79,7 @@ void main() {
     });
 
     test('البحث النصي يرسل `q` فقط', () {
-      final map = CompoundSearchQuery.parse('أحمد').toQueryMap(key: 'q');
+      final map = FinanceSearchQuery.parse('أحمد').toQueryMap(key: 'q');
 
       expect(map['q'], 'أحمد');
       expect(map.containsKey('square_id'), false);
@@ -89,9 +89,9 @@ void main() {
 
   group('normalizeDigits', () {
     test('يطبع الأرقام العربية والفارسية', () {
-      expect(CompoundSearchQuery.normalizeDigits('١٢٣٤٥٦٧٨٩٠'), '1234567890');
-      expect(CompoundSearchQuery.normalizeDigits('۱۲۳'), '123');
-      expect(CompoundSearchQuery.normalizeDigits(' خليط ٤5 '), ' خليط 45 ');
+      expect(FinanceSearchQuery.normalizeDigits('١٢٣٤٥٦٧٨٩٠'), '1234567890');
+      expect(FinanceSearchQuery.normalizeDigits('۱۲۳'), '123');
+      expect(FinanceSearchQuery.normalizeDigits(' خليط ٤5 '), ' خليط 45 ');
     });
   });
 }

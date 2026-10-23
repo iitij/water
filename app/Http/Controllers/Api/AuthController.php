@@ -2,107 +2,108 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use App\Models\User;
+use Laravel\Sanctum\PersonalAccessToken;
 
-class AuthController extends Controller
+class AuthController extends ApiController
 {
     public function login(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+        $credentials = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+            'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $request->email)->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        $user = User::where('email', $credentials['email'])->first();
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['البيانات المدخلة غير صحيحة.'],
+                'email' => ['بيانات تسجيل الدخول غير صحيحة.'],
             ]);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = $user->createToken('water-mobile')->plainTextToken;
 
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'avatar' => $user->getFilamentAvatarUrl(),
-                'roles' => $user->getRoleNames(),
-                'permissions' => $user->getAllPermissions()->pluck('name'),
-            ]
+            'user' => $this->userPayload($user),
         ]);
+    }
+
+    /** The /me route is the canonical mobile endpoint; /user remains compatible. */
+    public function me(Request $request)
+    {
+        return response()->json(['user' => $this->userPayload($request->user())]);
     }
 
     public function user(Request $request)
     {
-        $user = $request->user();
-        return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'avatar' => $user->getFilamentAvatarUrl(),
-                'roles' => $user->getRoleNames(),
-                'permissions' => $user->getAllPermissions()->pluck('name'),
-            ]
-        ]);
+        return $this->me($request);
     }
 
+    /** Supports both PUT /profile and legacy POST /profile multipart requests. */
     public function updateProfile(Request $request)
     {
         $user = $request->user();
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'password' => 'nullable|min:6',
-            'avatar' => 'nullable|image|max:5120',
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:6', 'confirmed'],
+            'password_confirmation' => ['nullable', 'string'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
         ]);
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-
-        if ($request->filled('password')) {
-            $user->password = Hash::make($request->password);
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+        if (! empty($validated['password'])) {
+            $user->password = Hash::make($validated['password']);
         }
 
         if ($request->hasFile('avatar')) {
             if ($user->avatar) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
+                Storage::disk('public')->delete($user->avatar);
             }
-            $path = $request->file('avatar')->store('avatars', 'public');
-            $user->avatar = $path;
+            $user->avatar = $request->file('avatar')->store('avatars', 'public');
         }
 
         $user->save();
 
         return response()->json([
             'message' => 'تم تحديث الملف الشخصي بنجاح.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'avatar' => $user->getFilamentAvatarUrl(),
-                'roles' => $user->getRoleNames(),
-                'permissions' => $user->getAllPermissions()->pluck('name'),
-            ]
+            'user' => $this->userPayload($user->fresh()),
         ]);
     }
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()?->currentAccessToken();
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        }
 
-        return response()->json([
-            'message' => 'تم تسجيل الخروج بنجاح.'
-        ]);
+        return response()->json(['message' => 'تم تسجيل الخروج بنجاح.']);
+    }
+
+    private function userPayload(?User $user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        $avatarUrl = $user->getFilamentAvatarUrl();
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'avatar' => $avatarUrl ? url($avatarUrl) : null,
+            'roles' => $user->getRoleNames()->values(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
+        ];
     }
 }

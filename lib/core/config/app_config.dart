@@ -1,33 +1,22 @@
-/// إعدادات التطبيق العامة (النواة — Dev 1). نسخة Dev 3 العقدية: تُستبدل عند الدمج.
-///
-/// المرجع: `FLUTTER_MOBILE_MASTER_PLAN.md` §3.1 (`core/config/app_config.dart`).
 class AppConfig {
-  const AppConfig({
-    this.baseUrl = 'http://192.168.1.10:8000/api',
-    this.pdfBaseUrl,
-    this.connectTimeout = const Duration(seconds: 20),
-    this.receiveTimeout = const Duration(seconds: 40),
-    this.downloadTimeout = const Duration(seconds: 120),
-    this.isOfflineEnabled = true,
-  });
+  const AppConfig._();
 
-  /// أساس الـ API (Laravel + Sanctum) — يتوافق مع `routes/api.php` بدون بادئة `/api`
-  /// لأن `bootstrap/app.php` يضيف البادئة تلقائياً.
-  final String baseUrl;
+  /// Set this per environment, e.g. --dart-define=API_BASE_URL=https://water.example.com/api
+  /// Android emulator default; physical devices should use the server's LAN URL.
+  static const String _configuredApiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000/api',
+  );
 
-  /// أساس روابط الطباعة إن اختلف (لنسخ الروابط في المتصفح).
-  final String? pdfBaseUrl;
+  static String get apiBaseUrl {
+    final value = _configuredApiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    return '$value/';
+  }
 
-  final Duration connectTimeout;
-  final Duration receiveTimeout;
-  final Duration downloadTimeout;
-  final bool isOfflineEnabled;
-
-  /// مسار واتساب المحلي (Node/unofficial API) — الخطة §1.3 القاعدة 6.
-  static const String localWhatsappSendUrl = 'http://localhost:3000/api/send';
-
-  /// ملحق رابط PDF في لوحة Filament (`/invoices/{id}/print`, `/payments/{id}/print`)
-  /// — يُستخدم فقط عند تعذر مسار الـ API.
-  static String fallbackInvoicePrintPath(int id) => '/invoices/$id/print';
-  static String fallbackReceiptPrintPath(int id) => '/payments/$id/print';
+  static const Duration connectTimeout = Duration(seconds: 15);
+  static const Duration receiveTimeout = Duration(seconds: 30);
+  static const Duration sendTimeout = Duration(seconds: 30);
+  static const String appName = 'مشروع مياه الوشاح';
+  static const String defaultProjectName = 'مشروع مياه الوشاح';
+  static const String locale = 'ar';
 }

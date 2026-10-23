@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/loading_skeleton.dart';
-import '../../../../core/widgets/compound_search_bar.dart';
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../data/models/tariff_model.dart';
 import '../../domain/repositories/tariffs_repository.dart';
 import '../cubit/tariffs_cubit.dart';
 import '../sheets/tariff_form_sheet.dart';
+import '../../../../core/finance/finance_colors.dart';
 
 /// `SCR-21` — إدارة التسعيرات، مطابقةً لـ `TariffResource` في Filament:
 /// قائمة + سعر نشط في الترويسة + `TrashedFilter` (الحية/الكل/المحذوفة) +
@@ -78,7 +77,7 @@ class _TariffsBodyState extends State<_TariffsBody> {
               children: <Widget>[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: CompoundSearchBar(
+                  child: FinanceSearchBar(
                     controller: _search,
                     hint: 'ابحث باسم التسعيرة',
                     onChanged: cubit.search,
@@ -201,7 +200,7 @@ class _ActivePriceHeader extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: AppColors.headerGradient,
+        gradient: FinanceColors.headerGradient,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

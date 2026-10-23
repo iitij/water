@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/app_numeric_field.dart';
+import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../tariffs/domain/repositories/tariffs_repository.dart';
 import '../../data/datasources/invoices_remote_datasource.dart';
@@ -17,6 +17,7 @@ import '../cubit/invoice_generation_cubit.dart';
 import '../cubit/invoice_generation_state.dart';
 import '../pages/invoice_create_edit_screen.dart';
 import '../widgets/invoice_actions.dart';
+import '../../../../core/finance/finance_colors.dart';
 
 /// `SCR-16` — محركات إصدار الفواتير الثلاثة كأدراج سفلية، مطابقةً لـ
 /// `InvoiceResource` Header Actions:
@@ -48,21 +49,21 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
           ),
           _PickerTile(
             icon: Icons.calculate_outlined,
-            color: AppColors.meter,
+            color: FinanceColors.meter,
             title: 'فاتورة عداد',
             subtitle: 'من القراءات غير المفوترة + مفاتيح قسط الاشتراك ورسوم الوايت',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.meter),
           ),
           _PickerTile(
             icon: Icons.assignment_outlined,
-            color: AppColors.subscription,
+            color: FinanceColors.subscription,
             title: 'فاتورة اشتراك',
             subtitle: 'للمشتركين الذين لديهم رسوم اشتراك غير مفوترة',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.subscription),
           ),
           _PickerTile(
             icon: Icons.local_shipping_outlined,
-            color: AppColors.tanker,
+            color: FinanceColors.tanker,
             title: 'فاتورة وايت',
             subtitle: 'لطلبات الوايت المكتملة غير المفوترة',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.tanker),
@@ -254,7 +255,7 @@ class _GenerateSheetBody extends StatelessWidget {
       return const _SheetChrome(
         title: 'إصدار فاتورة اشتراك',
         icon: Icons.assignment_outlined,
-        color: AppColors.subscription,
+        color: FinanceColors.subscription,
         submitLabel: 'إصدار فاتورة الاشتراك',
       );
     }
@@ -262,14 +263,14 @@ class _GenerateSheetBody extends StatelessWidget {
       return const _SheetChrome(
         title: 'إصدار فاتورة وايت',
         icon: Icons.local_shipping_outlined,
-        color: AppColors.tanker,
+        color: FinanceColors.tanker,
         submitLabel: 'إصدار فاتورة الوايت',
       );
     }
     return const _SheetChrome(
       title: 'إصدار فاتورة عداد',
       icon: Icons.calculate_outlined,
-      color: AppColors.meter,
+      color: FinanceColors.meter,
       submitLabel: 'إصدار الفاتورة',
     );
   }

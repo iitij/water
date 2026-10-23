@@ -6,9 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../config/app_config.dart';
 import '../error/failures.dart';
-import '../network/api_client.dart';
+import '../finance/finance_api_client.dart';
 
 /// محرّك الطباعة الأول (`PDF A5 Landscape`) — تحميل الملف الرسمي من الخادم ثم
 /// معاينته/طباعته/مشاركته. لا يُعاد توليد التنسيق في التطبيق: الخادم هو مصدر
@@ -16,12 +15,9 @@ import '../network/api_client.dart';
 ///
 /// المرجع: الخطة §4.4 (زر `generate_pdf`) و§4.5 و§2.3 (المسار 45 و53).
 class PdfPrintService {
-  const PdfPrintService({required DioClient client, AppConfig config = const AppConfig()})
-      : _client = client,
-        _config = config;
+  const PdfPrintService({required FinanceApiClient client}) : _client = client;
 
-  final DioClient _client;
-  final AppConfig _config;
+  final FinanceApiClient _client;
 
   /// تحميل بايتات الـ PDF من مسار الـ API، وعند فشل ذلك (نسخة API قديمة) نجرب
   /// مسار الطباعة في لوحة Filament عبر رابط مطلق.
@@ -87,8 +83,7 @@ class PdfPrintService {
   /// مسار بديل من لوحة Filament (`/invoices/{id}/print`) — يُستخدم عند عدم توفر
   /// `/api/invoices/{id}/pdf` بعد (يرجى دمجه من Dev 1 في Sprint 1).
   String? filamentFallbackUrl(String relativePath) {
-    final base = _config.pdfBaseUrl;
-    if (base == null || base.isEmpty) return null;
-    return '$base$relativePath';
+    final url = financeAdminPrintUrl(relativePath);
+    return url == relativePath ? null : url;
   }
 }

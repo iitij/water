@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../../../core/utils/json_utils.dart';
 import 'invoice_model.dart';
 
@@ -30,7 +30,7 @@ class InvoiceQuery extends Equatable {
   final String? billingPeriod;
   final int? limit;
 
-  CompoundSearchQuery get parsedSearch => CompoundSearchQuery.parse(search);
+  FinanceSearchQuery get parsedSearch => FinanceSearchQuery.parse(search);
 
   bool get hasSearch => parsedSearch.rawQuery.isNotEmpty;
 

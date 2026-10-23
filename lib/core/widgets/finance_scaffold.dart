@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../responsive/breakpoints.dart';
+import '../finance/finance_responsive.dart';
 import '../router/finance_route_names.dart';
 
 /// نسخة تعاقدية من `core/widgets/responsive_scaffold.dart` — المالك الفعلي Dev 1.
@@ -60,7 +60,7 @@ class _FinanceScaffoldState extends State<FinanceScaffold> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final isTablet = width >= Breakpoints.tablet;
+    final isTablet = width >= FinanceBreakpoints.tablet;
 
     if (!isTablet) {
       return Scaffold(
@@ -87,8 +87,8 @@ class _FinanceScaffoldState extends State<FinanceScaffold> {
           NavigationRail(
             selectedIndex: widget.currentIndex,
             onDestinationSelected: _go,
-            extended: width >= Breakpoints.desktop,
-            labelType: width >= Breakpoints.desktop
+            extended: width >= FinanceBreakpoints.desktop,
+            labelType: width >= FinanceBreakpoints.desktop
                 ? NavigationRailLabelType.none
                 : NavigationRailLabelType.all,
             destinations: <NavigationRailDestination>[

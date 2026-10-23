@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../auth/session_store.dart';
-import '../di/injection_container.dart';
+import '../auth/session_service.dart';
+import '../finance/finance_locator.dart';
+import '../finance/finance_locator.dart';
+import '../finance/finance_session.dart';
 
 /// مصفوفة الصلاحيات الخاصة بالوحدة المالية — **ملف إضافي من Dev 3** يُدمج مع
 /// `core/permissions/` الخاص بـ Dev 1 (لم يُنشأ هناك بعد باسمنا، فاستعملنا اسماً
 /// مميزاً لتفادي تعارض الدمج).
 ///
 /// الأسماء تتبع مصفوفة الخطة §3.3 (`role_matrix`): المفاتيح تُقرأ من
-/// `SessionStore.permissions` كما يرجعها `GET /api/auth/me` في حقل `abilities`،
-/// و`super_admin` يملك `*` ضمنياً (يُدار داخل `SessionStore.has`).
+/// `FinanceSession.permissions` كما يرجعها `GET /api/auth/me` في حقل `abilities`،
+/// و`super_admin` يملك `*` ضمنياً (يُدار داخل `FinanceSession.has`).
 class FinanceAbilities {
   FinanceAbilities._();
 
@@ -44,7 +46,10 @@ class FinanceAbilities {
 
 /// امتداد سياق للتحقق السريع قبل تنفيذ إجراء.
 extension FinancePermissionX on BuildContext {
-  SessionStore get session => sl<SessionStore>();
+  FinanceSession get session => FinanceSession(
+        service: getIt<SessionService>(),
+        permissions: getIt<PermissionService>(),
+      );
 
   bool can(String ability) => session.has(ability);
 

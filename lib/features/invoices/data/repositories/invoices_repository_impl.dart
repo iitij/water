@@ -1,6 +1,6 @@
-import '../../../../core/config/app_config.dart';
 import '../../../../core/network/finance_endpoints.dart';
-import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/finance/finance_api_client.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../datasources/invoices_remote_datasource.dart';
 import '../models/invoice_model.dart';
@@ -9,21 +9,17 @@ import '../models/invoice_query.dart';
 /// تنفيذ المستودع. حالياً شبكة فقط؛ يُضاف `InvoicesLocalDataSource` (Drift) كطبقة
 /// Cache-First عندما يدمج Dev 2 قاعدة البيانات المحلية، عبر نفس العقد.
 class InvoicesRepositoryImpl implements InvoicesRepository {
-  const InvoicesRepositoryImpl({
-    required InvoicesRemoteDataSource remote,
-    AppConfig config = const AppConfig(),
-  })  : _remote = remote,
-        _config = config;
+  const InvoicesRepositoryImpl({required InvoicesRemoteDataSource remote})
+      : _remote = remote;
 
   final InvoicesRemoteDataSource _remote;
-  final AppConfig _config;
 
   @override
   Future<List<InvoiceModel>> list(InvoiceQuery query) => _remote.list(query);
 
   @override
   Future<List<InvoiceModel>> collectorList({
-    CompoundSearchQuery search = const CompoundSearchQuery(rawQuery: ''),
+    FinanceSearchQuery search = const FinanceSearchQuery(rawQuery: ''),
     int? squareId,
   }) {
     if (search.isEmpty && squareId == null) return _remote.unpaid();
@@ -83,6 +79,5 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
   String sendWhatsappPath(int id) => FinanceEndpoints.invoiceSendWhatsapp(id);
 
   @override
-  String printFallbackPath(int id) =>
-      '${_config.pdfBaseUrl ?? ''}${AppConfig.fallbackInvoicePrintPath(id)}';
+  String printFallbackPath(int id) => financeAdminPrintUrl('/invoices/$id/print');
 }

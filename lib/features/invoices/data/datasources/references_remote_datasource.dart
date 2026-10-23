@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../../../core/network/api_client.dart';
+import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 
@@ -227,7 +227,7 @@ class SubscriberDueSummary {
 class ReferencesRemoteDataSource {
   const ReferencesRemoteDataSource(this._client);
 
-  final DioClient _client;
+  final FinanceApiClient _client;
 
   Future<List<SquareOption>> squares() async {
     final response = await _client.getRaw(FinanceEndpoints.squares);

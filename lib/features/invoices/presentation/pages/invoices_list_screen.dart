@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
-import '../../../../core/responsive/breakpoints.dart';
+import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/compound_search_bar.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/loading_skeleton.dart';
+import '../../../../core/finance/finance_search.dart';
+import '../../../../core/finance/finance_feedback.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
 import '../../domain/repositories/invoices_repository.dart';
@@ -70,7 +68,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
           final cubit = context.read<InvoicesCubit>();
           return Column(
             children: <Widget>[
-              CompoundSearchBar(
+              FinanceSearchBar(
                 controller: _search,
                 onChanged: (value) => cubit.search(value),
                 onSubmitted: (value) => cubit.search(value),

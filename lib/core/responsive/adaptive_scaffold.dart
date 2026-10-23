@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'breakpoints.dart';
 
-/// وجه وجهة تنقل للهيكل المتكيف.
 class AdaptiveDestination {
   const AdaptiveDestination({
     required this.label,
@@ -15,9 +14,7 @@ class AdaptiveDestination {
   final IconData selectedIcon;
 }
 
-/// الهيكل المتكيف (الهاتف: BottomNavigationBar — التابلت: NavigationRail + Master-Detail).
-///
-/// ⚠️ نسخة تعاقدية Dev 3 من الكود المرجعي في الخطة §8.3 — المالك الفعلي Dev 1.
+/// Shared navigation frame: bottom bar on phones, right-side rail on larger screens.
 class AdaptiveScaffold extends StatelessWidget {
   const AdaptiveScaffold({
     super.key,
@@ -28,96 +25,114 @@ class AdaptiveScaffold extends StatelessWidget {
     this.secondaryBody,
     this.floatingActionButton,
     this.appBar,
+    this.bottomBar,
   });
 
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
   final List<AdaptiveDestination> destinations;
   final Widget body;
-
-  /// يظهر في وضع Master-Detail على الشاشات الكبيرة فقط.
   final Widget? secondaryBody;
   final Widget? floatingActionButton;
   final PreferredSizeWidget? appBar;
+  final Widget? bottomBar;
+
+  static bool isCompact(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
+
+  static bool isMedium(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return width >= AppBreakpoints.compact && width < AppBreakpoints.medium;
+  }
+
+  static bool isExpanded(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= AppBreakpoints.medium;
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-
-    if (width < Breakpoints.compactMax) {
+    if (width < AppBreakpoints.compact) {
       return Scaffold(
         appBar: appBar,
         body: body,
         floatingActionButton: floatingActionButton,
-        bottomNavigationBar: NavigationBar(
+        bottomNavigationBar: bottomBar ?? NavigationBar(
           selectedIndex: currentIndex,
           onDestinationSelected: onDestinationSelected,
           destinations: destinations
-              .map(
-                (d) => NavigationDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
-                  label: d.label,
-                ),
-              )
-              .toList(),
+              .map((destination) => NavigationDestination(
+                    icon: Icon(destination.icon),
+                    selectedIcon: Icon(destination.selectedIcon),
+                    label: destination.label,
+                  ))
+              .toList(growable: false),
         ),
       );
     }
 
-    final isExtendedRail = width >= 1024;
-
+    final extended = width >= AppBreakpoints.wideRail;
     return Scaffold(
       appBar: appBar,
       floatingActionButton: floatingActionButton,
-      body: Row(
-        children: <Widget>[
-          NavigationRail(
-            extended: isExtendedRail,
-            selectedIndex: currentIndex,
-            onDestinationSelected: onDestinationSelected,
-            labelType: isExtendedRail
-                ? NavigationRailLabelType.none
-                : NavigationRailLabelType.all,
-            destinations: destinations
-                .map(
-                  (d) => NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selectedIcon),
-                    label: Text(d.label),
-                  ),
-                )
-                .toList(),
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(flex: 4, child: body),
-          if (secondaryBody != null && width >= Breakpoints.mediumMax) ...<Widget>[
-            const VerticalDivider(thickness: 1, width: 1),
-            Expanded(flex: 6, child: secondaryBody!),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Row(
+          children: <Widget>[
+            NavigationRail(
+              extended: extended,
+              selectedIndex: currentIndex,
+              onDestinationSelected: onDestinationSelected,
+              labelType: extended ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+              minExtendedWidth: 190,
+              destinations: destinations
+                  .map((destination) => NavigationRailDestination(
+                        icon: Icon(destination.icon),
+                        selectedIcon: Icon(destination.selectedIcon),
+                        label: Text(destination.label),
+                      ))
+                  .toList(growable: false),
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(
+              flex: secondaryBody != null && width >= AppBreakpoints.medium ? 4 : 1,
+              child: body,
+            ),
+            if (secondaryBody != null && width >= AppBreakpoints.medium) ...<Widget>[
+              const VerticalDivider(width: 1, thickness: 1),
+              Expanded(flex: 6, child: secondaryBody!),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-/// بناء متجاوب بسيط: قائمة على الهاتف، جدول/شبكة على التابلت (الخطة §3.3-4).
-class ResponsiveBuilder extends StatelessWidget {
-  const ResponsiveBuilder({
+class MasterDetailLayout extends StatelessWidget {
+  const MasterDetailLayout({
     super.key,
-    required this.compact,
-    this.medium,
-    this.expanded,
+    required this.master,
+    required this.detail,
+    this.masterFlex = 4,
+    this.detailFlex = 6,
   });
 
-  final WidgetBuilder compact;
-  final WidgetBuilder? medium;
-  final WidgetBuilder? expanded;
+  final Widget master;
+  final Widget detail;
+  final int masterFlex;
+  final int detailFlex;
 
   @override
   Widget build(BuildContext context) {
-    if (context.isExpanded) return (expanded ?? medium ?? compact)(context);
-    if (context.isMedium) return (medium ?? compact)(context);
-    return compact(context);
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < AppBreakpoints.medium) return master;
+      return Row(
+        children: <Widget>[
+          Expanded(flex: masterFlex, child: master),
+          const VerticalDivider(width: 1),
+          Expanded(flex: detailFlex, child: detail),
+        ],
+      );
+    });
   }
 }

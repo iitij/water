@@ -22,6 +22,7 @@ class Payment extends Model
         'reference_number',
         'notes',
         'reason',
+        'sync_uuid',
     ];
 
     protected $casts = [
@@ -57,29 +58,40 @@ class Payment extends Model
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
 
         static::updated(function (Payment $payment) {
-            // Handle transaction ledger
             $transactionService = new \App\Services\TransactionService();
+            $paymentService = new \App\Services\PaymentService();
+            $oldSubscriberId = (int) $payment->getOriginal('subscriber_id');
+            $oldMeterId = $payment->getOriginal('meter_id') ? (int) $payment->getOriginal('meter_id') : null;
+
             $transaction = \App\Models\Transaction::where('reference_type', Payment::class)
                 ->where('reference_id', $payment->id)
                 ->first();
-
             if ($transaction) {
                 $transaction->update([
                     'subscriber_id' => $payment->subscriber_id,
+                    'meter_id' => $payment->meter_id,
                     'amount' => $payment->amount,
                 ]);
             }
-            
-            // Re-calculate balance for old and new subscriber
-            if ($payment->isDirty('subscriber_id') && $oldSubId = $payment->getOriginal('subscriber_id')) {
-                if ($oldSub = Subscriber::find($oldSubId)) {
-                    $transactionService->updateSubscriberBalance($oldSub);
+
+            if ($oldMeterId) {
+                if ($oldMeter = \App\Models\Meter::find($oldMeterId)) {
+                    $transactionService->updateMeterBalance($oldMeter);
                 }
+            } elseif ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
+                $transactionService->updateSubscriberBalance($oldSubscriber);
+            }
+
+            if ($payment->meter_id && $payment->meter) {
+                $transactionService->updateMeterBalance($payment->meter);
+            } elseif ($payment->subscriber) {
+                $transactionService->updateSubscriberBalance($payment->subscriber);
+            }
+
+            if ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
+                $paymentService->recalculateInvoices($oldSubscriber, $oldMeterId);
             }
             if ($payment->subscriber) {
-                $transactionService->updateSubscriberBalance($payment->subscriber);
-                // Recalculate invoices because amount or invoice target might have changed
-                $paymentService = new \App\Services\PaymentService();
                 $paymentService->recalculateInvoices($payment->subscriber, $payment->meter_id);
             }
         });

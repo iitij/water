@@ -14,9 +14,9 @@ import '../../features/payments/presentation/pages/payment_form_screen.dart';
 import '../../features/payments/presentation/pages/payments_list_screen.dart';
 import '../../features/payments/presentation/pages/quick_collector_screen.dart';
 import '../../features/tariffs/presentation/pages/tariffs_screen.dart';
-import '../di/injection_container.dart';
+import '../finance/finance_locator.dart';
 import '../permissions/finance_permissions.dart';
-import '../widgets/empty_state_widget.dart';
+import '../finance/finance_feedback.dart';
 import 'finance_route_names.dart';
 
 /// مسارات الوحدة المالية (`SCR-13`…`SCR-21`) — قائمة `RouteBase` جاهزة للإضافة إلى

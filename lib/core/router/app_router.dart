@@ -1,108 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../auth/session_store.dart';
-import '../di/injection_container.dart';
-import '../widgets/finance_scaffold.dart';
-import 'finance_routes.dart';
+import '../../features/auth/presentation/pages/edit_profile_screen.dart';
+import '../../features/auth/presentation/pages/login_screen.dart';
+import '../../features/auth/presentation/pages/splash_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
+import '../../features/offline_sync/presentation/offline_sync_monitor_screen.dart';
+import '../auth/session_service.dart';
+import '../responsive/adaptive_scaffold.dart';
+import '../theme/app_theme.dart';
+import 'route_names.dart';
 
-/// ⚠️ نسخة تعاقدية من `core/router/app_router.dart` — المالك الفعلي **Dev 1**.
-///
-/// الهدف: تشغيل شريحة Dev 3 كاملة (تسجيل دخول ← محصل سريع ← فواتير ← سندات ←
-/// تسعيرات) بدون انتظار دمج فرع `feat/mohammed-core-auth-api`. عند الدمج تُحذف
-/// هذه الدالة ويُستعان بـ `buildFinanceRoutes()` المصدَّرة من `finance_routes.dart`
-/// لإضافتها إلى `routes` الخاص بـ Dev 1.
-class FinanceAppRouter {
-  FinanceAppRouter._();
+class AppRouter {
+  AppRouter({required SessionService session}) : router = _createRouter(session);
 
-  static final GlobalKey<NavigatorState> rootNavigatorKey =
-      GlobalKey<NavigatorState>(debugLabel: 'finance-root');
+  final GoRouter router;
 
-  static GoRouter create({
-    List<RouteBase> extraRoutes = const <RouteBase>[],
-    String initialLocation = '/collector',
-    String loginLocation = '/login',
-    bool wrapInShell = false,
-  }) {
-    return GoRouter(
-      navigatorKey: rootNavigatorKey,
-      initialLocation: initialLocation,
-      debugLogDiagnostics: false,
-      redirect: (context, state) {
-        final loggedIn = sl<SessionStore>().isLoggedIn;
-        final atLogin = state.matchedLocation == loginLocation;
-        if (!loggedIn && !atLogin) return loginLocation;
-        if (loggedIn && atLogin) return initialLocation;
-        return null;
-      },
-      errorBuilder: (context, state) => Scaffold(
-        appBar: AppBar(title: const Text('مسار غير معروف')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'لا توجد شاشة لهذا المسار:\n${state.uri}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        ),
-      ),
-      routes: <RouteBase>[
-        ...extraRoutes,
-        // إن لم يوفّر Dev 1 مسار /login بعد، نضع بديلاً يشرح الحالة بدل التيه.
-        if (!extraRoutes.any((route) => route.path == loginLocation))
+  static GoRouter _createRouter(SessionService session) => GoRouter(
+        initialLocation: RouteNames.splash,
+        refreshListenable: session,
+        redirect: (context, state) {
+          final location = state.matchedLocation;
+          final isPublic = location == RouteNames.splash || location == RouteNames.login;
+          if (!session.isReady) {
+            return location == RouteNames.splash ? null : RouteNames.splash;
+          }
+          if (!session.isAuthenticated) {
+            return location == RouteNames.login ? null : RouteNames.login;
+          }
+          if (isPublic) return RouteNames.home;
+          return null;
+        },
+        routes: <RouteBase>[
           GoRoute(
-            path: loginLocation,
-            name: 'finance-login-placeholder',
-            builder: (context, state) => const MissingLoginPlaceholder(),
+            path: RouteNames.splash,
+            builder: (context, state) => const SplashScreen(),
           ),
-        if (wrapInShell)
-          ShellRoute(
-            builder: (context, state, child) =>
-                FinanceShell(state: state, child: child),
-            routes: buildFinanceRoutes(),
-          )
-        else
-          ...buildFinanceRoutes(),
-      ],
-    );
-  }
-}
-
-/// شاشة احتياطية عند غياب شاشة الدخول الحقيقية (Dev 1) — تعرض إرشاداً واضحاً
-/// بدل شاشة فارغة، وتُستبدل تلقائياً بمسار `/login` في `extraRoutes`.
-class MissingLoginPlaceholder extends StatelessWidget {
-  const MissingLoginPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('تسجيل الدخول')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const Icon(Icons.lock_open, size: 40),
-              const SizedBox(height: 12),
-              const Text(
-                'شاشة تسجيل الدخول يوفّرها Dev 1 (`core/auth`).',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w700),
+          GoRoute(
+            path: RouteNames.login,
+            builder: (context, state) => const LoginScreen(),
+          ),
+          StatefulShellRoute.indexedStack(
+            builder: (context, state, navigationShell) => AppHomeShell(shell: navigationShell),
+            branches: <StatefulShellBranch>[
+              StatefulShellBranch(
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: RouteNames.home,
+                    builder: (context, state) => const HomeScreen(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'لتجربة شريحة المالية فوراً: مرّر مسار /login حقيقي في extraRoutes، '
-                'أو سجّل الرمز في SharedPreferences بالمفتاح auth.token.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12),
+              StatefulShellBranch(
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: RouteNames.offlineSync,
+                    builder: (context, state) => const OfflineSyncMonitorScreen(),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: RouteNames.profile,
+                    builder: (context, state) => const EditProfileScreen(),
+                  ),
+                ],
               ),
             ],
           ),
-        ),
+        ],
+      );
+}
+
+class AppHomeShell extends StatelessWidget {
+  const AppHomeShell({super.key, required this.shell});
+
+  final StatefulNavigationShell shell;
+
+  static const _destinations = <AdaptiveDestination>[
+    AdaptiveDestination(label: 'الرئيسية', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded),
+    AdaptiveDestination(label: 'المزامنة', icon: Icons.sync_outlined, selectedIcon: Icons.sync_rounded),
+    AdaptiveDestination(label: 'الملف الشخصي', icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final titles = <String>['الرئيسية', 'مراقب المزامنة', 'الملف الشخصي'];
+    final currentIndex = shell.currentIndex.clamp(0, titles.length - 1).toInt();
+    return AdaptiveScaffold(
+      currentIndex: currentIndex,
+      destinations: _destinations,
+      onDestinationSelected: (index) => shell.goBranch(
+        index,
+        initialLocation: index == shell.currentIndex,
       ),
+      appBar: AppBar(
+        title: Text(titles[currentIndex]),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'تبديل المظهر',
+            onPressed: () => GetIt.I<AppThemeController>().toggle(),
+            icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+      body: shell,
     );
   }
 }

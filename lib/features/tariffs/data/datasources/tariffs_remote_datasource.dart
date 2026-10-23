@@ -1,5 +1,5 @@
 import '../../../../core/error/failures.dart';
-import '../../../../core/network/api_client.dart';
+import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../models/tariff_model.dart';
@@ -9,7 +9,7 @@ import '../models/tariff_model.dart';
 class TariffsRemoteDataSource {
   const TariffsRemoteDataSource(this._client);
 
-  final DioClient _client;
+  final FinanceApiClient _client;
 
   /// يرجع (القائمة، السعر النشط). `active_price` مفتاح اختياري يضيفه Dev 1
   /// على نفس الاستجابة؛ وإن غاب يُشتق محلياً بمنطق `Tariff::getActivePrice()`.

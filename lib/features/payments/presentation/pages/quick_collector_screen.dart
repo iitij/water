@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di/injection_container.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/compound_search_bar.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/loading_skeleton.dart';
+import '../../../../core/finance/finance_search.dart';
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -90,7 +88,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
 
             return Column(
               children: <Widget>[
-                CompoundSearchBar(
+                FinanceSearchBar(
                   controller: _search,
                   autofocus: true,
                   onChanged: (value) => cubit.onSearchChanged(value),

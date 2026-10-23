@@ -1,0 +1,30 @@
+name: water_fouad
+description: "وحدات المهندس فؤاد (Dev 4): المربعات SCR-04، المشتركون وملف 360° SCR-05/06/07، رسوم الاشتراك SCR-19، طلبات الوايت SCR-20، دفتر الأستاذ SCR-22"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+  dio: ^5.7.0
+  intl: ^0.19.0
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  share_plus: ^10.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  bloc_test: ^9.1.7
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true

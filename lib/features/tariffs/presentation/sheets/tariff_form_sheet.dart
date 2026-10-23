@@ -4,8 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/widgets/app_numeric_field.dart';
-import '../../../../core/widgets/confirm_dialog.dart';
+import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/finance/finance_feedback.dart';
 import '../../data/models/tariff_model.dart';
 import '../cubit/tariffs_cubit.dart';
 
