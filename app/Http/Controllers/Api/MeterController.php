@@ -1,0 +1,198 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Models\Meter;
+use App\Models\Subscriber;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+
+class MeterController extends ApiController
+{
+    public function index(Request $request)
+    {
+        $this->authorizeApi(Meter::class, 'viewAny');
+        $query = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name'])
+            ->withCount('readings')->orderBy('id');
+
+        if ($request->filled('subscriber_id')) {
+            $query->where('subscriber_id', $request->integer('subscriber_id'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->query('status'));
+        }
+        if ($request->filled('square_id')) {
+            $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
+        }
+        if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
+            $normalized = $this->normalizeDigits($search);
+            if ($path = $this->parseCompoundSearch($normalized)) {
+                [$squareId, $pathNumber] = $path;
+                $query->where('path_number', $pathNumber)
+                    ->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId));
+            } else {
+                $query->where(function ($builder) use ($search, $normalized) {
+                    $builder->where('unique_code', 'like', "%{$search}%")
+                        ->orWhere('tenant_name', 'like', "%{$search}%")
+                        ->orWhere('tenant_phone', 'like', "%{$search}%")
+                        ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%"));
+                    if (ctype_digit($normalized)) {
+                        $builder->orWhere('path_number', (int) $normalized);
+                    }
+                });
+            }
+        }
+
+        return $query->paginate($this->perPage($request))->appends($request->query());
+    }
+
+    public function search(Request $request)
+    {
+        $this->authorizeApi(Meter::class, 'viewAny');
+        $request->query->set('per_page', $request->query('limit', $request->query('per_page', 50)));
+        if ($request->query->has('query') && ! $request->query->has('q')) {
+            $request->query->set('q', $request->query('query'));
+        }
+        $results = $this->index($request);
+        $search = $this->normalizeDigits(trim((string) $request->query('query', $request->query('q', ''))));
+        $exactPath = $this->parseCompoundSearch($search);
+        $results->getCollection()->transform(function (Meter $meter) use ($search, $exactPath) {
+            $meter->setAttribute('is_path_match', $exactPath !== null
+                ? ((string) $meter->path_number === $exactPath[1] && (string) $meter->subscriber?->square_id === $exactPath[0])
+                : ($search !== '' && (string) $meter->path_number === $search));
+            $meter->setAttribute('last_reading', $meter->readings()->latest('id')->value('current_reading') ?? $meter->initial_reading ?? 0);
+            return $meter;
+        });
+        $results->setCollection($results->getCollection()->sortByDesc('is_path_match')->values());
+        return $results;
+    }
+
+    public function show(int $id)
+    {
+        $this->authorizeApi(Meter::class, 'view');
+        $meter = Meter::with(['subscriber.square', 'readings' => fn ($q) => $q->latest('reading_date')->latest('id')->limit(20)])
+            ->withCount('readings')->findOrFail($id);
+        $meter->setAttribute('last_reading', $meter->readings->first()?->current_reading ?? $meter->initial_reading ?? 0);
+        $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
+        $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
+        return response()->json(['meter' => $meter]);
+    }
+
+    public function store(Request $request)
+    {
+        $this->authorizeApi(Meter::class, 'create');
+        $data = $request->validate([
+            'unique_code' => ['required', 'string', 'max:50', 'unique:meters,unique_code'],
+            'path_number' => ['nullable', 'integer', 'min:0'],
+            'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
+            'status' => ['sometimes', 'in:active,inactive'],
+            'installed_at' => ['nullable', 'date'],
+            'removed_at' => ['nullable', 'date', 'after_or_equal:installed_at'],
+            'initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'tenant_name' => ['nullable', 'string', 'max:255'],
+            'tenant_phone' => ['nullable', 'string', 'max:50'],
+        ]);
+        $subscriber = Subscriber::findOrFail($data['subscriber_id']);
+        if (! $this->pathAvailable($subscriber->square_id, $data['path_number'] ?? null)) {
+            return response()->json(['errors' => ['path_number' => ['رقم المسار مستخدم بالفعل في هذا المربع السكني.']]], 422);
+        }
+        $data['status'] ??= 'active';
+        $meter = Meter::create($data)->load(['subscriber.square']);
+        return response()->json(['message' => 'تم إضافة العداد بنجاح.', 'meter' => $meter], 201);
+    }
+
+    public function update(Request $request, int $id)
+    {
+        $this->authorizeApi(Meter::class, 'update');
+        $meter = Meter::findOrFail($id);
+        $data = $request->validate([
+            'unique_code' => ['sometimes', 'required', 'string', 'max:50', Rule::unique('meters', 'unique_code')->ignore($meter->id)],
+            'path_number' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
+            'status' => ['sometimes', 'required', 'in:active,inactive'],
+            'installed_at' => ['sometimes', 'nullable', 'date'],
+            'removed_at' => ['sometimes', 'nullable', 'date'],
+            'initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'tenant_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'tenant_phone' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ]);
+        $subscriber = isset($data['subscriber_id']) ? Subscriber::findOrFail($data['subscriber_id']) : $meter->subscriber;
+        $pathNumber = array_key_exists('path_number', $data) ? $data['path_number'] : $meter->path_number;
+        if (! $this->pathAvailable($subscriber->square_id, $pathNumber, $meter->id)) {
+            return response()->json(['errors' => ['path_number' => ['رقم المسار مستخدم بالفعل في هذا المربع السكني.']]], 422);
+        }
+        $meter->update($data);
+        return response()->json(['message' => 'تم تحديث العداد بنجاح.', 'meter' => $meter->fresh(['subscriber.square'])]);
+    }
+
+    public function destroy(int $id)
+    {
+        $this->authorizeApi(Meter::class, 'delete');
+        $meter = Meter::findOrFail($id);
+        if ($this->hasHistory($meter)) {
+            return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
+        }
+        $meter->delete();
+        return response()->json(['message' => 'تم حذف العداد بنجاح.']);
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $this->authorizeApi(Meter::class, 'deleteAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:meters,id']]);
+        $deleted = 0;
+        $skipped = [];
+        DB::transaction(function () use ($data, &$deleted, &$skipped) {
+            foreach (Meter::whereIn('id', $data['ids'])->lockForUpdate()->get() as $meter) {
+                if ($this->hasHistory($meter)) {
+                    $skipped[] = $meter->id;
+                    continue;
+                }
+                $meter->delete();
+                $deleted++;
+            }
+        });
+        return response()->json(['deleted_count' => $deleted, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
+    }
+
+    public function validatePath(Request $request)
+    {
+        $this->authorizeApi(Meter::class, 'viewAny');
+        $data = $request->validate([
+            'path_number' => ['required', 'integer', 'min:0'],
+            'subscriber_id' => ['nullable', 'integer', 'exists:subscribers,id'],
+            'square_id' => ['nullable', 'integer', 'exists:squares,id'],
+            'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
+        ]);
+        if (empty($data['subscriber_id']) && empty($data['square_id'])) {
+            return response()->json(['message' => 'أرسل subscriber_id أو square_id للتحقق من المسار.'], 422);
+        }
+        $squareId = $data['square_id'] ?? Subscriber::findOrFail($data['subscriber_id'])->square_id;
+        $available = $this->pathAvailable($squareId, (int) $data['path_number'], $data['meter_id'] ?? null);
+        return response()->json([
+            'valid' => $available,
+            'available' => $available,
+            'square_id' => $squareId,
+            'path_number' => (int) $data['path_number'],
+            'message' => $available ? 'المسار متاح.' : 'رقم المسار مستخدم بالفعل في هذا المربع السكني.',
+        ]);
+    }
+
+    private function pathAvailable(int $squareId, ?int $pathNumber, ?int $ignoreMeterId = null): bool
+    {
+        if ($pathNumber === null) {
+            return true;
+        }
+        return ! Meter::where('path_number', $pathNumber)
+            ->when($ignoreMeterId, fn ($q) => $q->where('id', '!=', $ignoreMeterId))
+            ->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId))
+            ->exists();
+    }
+
+    private function hasHistory(Meter $meter): bool
+    {
+        return $meter->readings()->exists() || $meter->payments()->exists()
+            || $meter->subscriber->invoices()->where('meter_id', $meter->id)->exists();
+    }
+}

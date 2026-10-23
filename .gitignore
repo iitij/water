@@ -30,16 +30,17 @@ whatsapp-server/.wwebjs_auth/
 whatsapp-server/session/
 whatsapp-server/uploads/
 
-# تجاهل ملفات النظام المؤقتة
-/storage/framework/cache/data/
-/storage/framework/sessions/
-/storage/framework/views/
-/storage/logs/
-
-# Flutter / Dart
+# Flutter / Dart generated files
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 build/
 coverage/
+*.iml
+
+# تجاهل ملفات النظام المؤقتة
+/storage/framework/cache/data/
+/storage/framework/sessions/
+/storage/framework/views/
+/storage/logs/

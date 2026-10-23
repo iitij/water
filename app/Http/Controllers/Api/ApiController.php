@@ -1,0 +1,109 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+/** Shared helpers for the mobile API controllers. */
+abstract class ApiController extends Controller
+{
+    /**
+     * Check the project’s Shield-style permission names as well as the older
+     * snake_case names used by sync_permissions.php. Admin roles are explicit
+     * API super-users; all other users must have the permission for the action.
+     */
+    protected function authorizeApi(string $resource, string $ability): void
+    {
+        $user = request()->user();
+        abort_unless($user, 401, 'يلزم تسجيل الدخول.');
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) {
+            return;
+        }
+
+        $resourceName = class_basename($resource);
+        $legacy = ucfirst($ability) . ':' . $resourceName;
+        $permission = Str::snake($ability) . '_' . Str::snake($resourceName);
+
+        if ($user->can($legacy) || $user->can($permission) || $this->hasBuiltInRoleAccess($user, $resourceName, $ability)) {
+            return;
+        }
+
+        abort(403, 'ليست لديك صلاحية لتنفيذ هذا الإجراء.');
+    }
+
+    protected function authorizeSystem(string $permission = 'ViewAny:User'): void
+    {
+        $user = request()->user();
+        abort_unless($user, 401, 'يلزم تسجيل الدخول.');
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) {
+            return;
+        }
+
+        $legacy = Str::snake(str_replace(':', '_', $permission));
+        abort_unless($user->can($permission) || $user->can($legacy), 403, 'ليست لديك صلاحية لإدارة النظام.');
+    }
+
+    protected function authorizeSystemWrite(string $resource): void
+    {
+        $user = request()->user();
+        abort_unless($user, 401, 'يلزم تسجيل الدخول.');
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) return;
+
+        $permission = 'Update:' . $resource;
+        $legacy = Str::snake('update_' . $resource);
+        abort_unless($user->can($permission) || $user->can($legacy), 403, 'ليست لديك صلاحية تعديل إعدادات النظام.');
+    }
+
+    private function hasBuiltInRoleAccess(object $user, string $resource, string $ability): bool
+    {
+        if (! method_exists($user, 'hasAnyRole')) return false;
+        $access = [
+            'reader' => [
+                'Meter' => ['viewAny', 'view'], 'Reading' => ['viewAny', 'view', 'create', 'update'],
+                'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
+            ],
+            'meter_reader' => [
+                'Meter' => ['viewAny', 'view'], 'Reading' => ['viewAny', 'view', 'create', 'update'],
+                'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
+            ],
+            'collector' => [
+                'Invoice' => ['viewAny', 'view'], 'Payment' => ['viewAny', 'view', 'create', 'update'],
+                'Reading' => ['viewAny', 'view'], 'Meter' => ['viewAny', 'view'],
+                'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
+            ],
+        ];
+        foreach (array_keys($access) as $role) {
+            if ($user->hasRole($role) && in_array($ability, $access[$role][$resource] ?? [], true)) return true;
+        }
+        return false;
+    }
+
+    protected function perPage(Request $request, int $default = 25, int $max = 100): int
+    {
+        return max(1, min($max, (int) $request->query('per_page', $default)));
+    }
+
+    protected function normalizeDigits(string $value): string
+    {
+        return strtr($value, [
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        ]);
+    }
+
+    /** @return array{0:string,1:string}|null */
+    protected function parseCompoundSearch(string $value): ?array
+    {
+        $value = $this->normalizeDigits(trim($value));
+        return preg_match('/^(\d+)[\/\-\\\\_](\d+)$/', $value, $matches)
+            ? [$matches[1], $matches[2]]
+            : null;
+    }
+}

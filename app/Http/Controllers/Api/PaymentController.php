@@ -1,0 +1,225 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Jobs\SendWhatsAppPaymentJob;
+use App\Models\Invoice;
+use App\Models\Meter;
+use App\Models\Payment;
+use App\Models\Subscriber;
+use App\Services\PaymentService;
+use App\Services\WhatsAppService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Spatie\LaravelPdf\Enums\Unit;
+use Spatie\LaravelPdf\Facades\Pdf;
+
+class PaymentController extends ApiController
+{
+    public function index(Request $request)
+    {
+        $this->authorizeApi(Payment::class, 'viewAny');
+        $query = Payment::with([
+            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name',
+            'meter:id,unique_code,path_number,tenant_name,tenant_phone',
+            'invoice:id,bill_number,status,total_amount', 'user:id,name',
+        ])->latest('payment_date')->latest('id');
+
+        if ($request->filled('payment_method')) {
+            $query->where('payment_method', $request->query('payment_method'));
+        }
+        if ($request->filled('subscriber_id')) {
+            $query->where('subscriber_id', $request->integer('subscriber_id'));
+        }
+        if ($request->filled('from_date')) {
+            $query->whereDate('payment_date', '>=', $request->query('from_date'));
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('payment_date', '<=', $request->query('to_date'));
+        }
+        if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('receipt_number', 'like', "%{$search}%")
+                    ->orWhere('reference_number', 'like', "%{$search}%")
+                    ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%"))
+                    ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%")
+                        ->orWhere('tenant_name', 'like', "%{$search}%"));
+            });
+        }
+
+        return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
+            $payment->setAttribute('receipt_data', $this->receiptData($payment));
+            return $payment;
+        })->appends($request->query());
+    }
+
+    public function show(int $id)
+    {
+        $this->authorizeApi(Payment::class, 'view');
+        $payment = Payment::with([
+            'subscriber.square', 'meter', 'invoice', 'user',
+        ])->findOrFail($id);
+        return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
+    }
+
+    public function store(Request $request, PaymentService $paymentService)
+    {
+        $this->authorizeApi(Payment::class, 'create');
+        $data = $request->validate([
+            'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
+            'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+            'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'payment_date' => ['nullable', 'date'],
+            'payment_method' => ['required', 'in:cash,bank_transfer,check'],
+            'reference_number' => ['nullable', 'string', 'max:255'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+            'sync_uuid' => ['nullable', 'uuid'],
+        ]);
+        $subscriber = Subscriber::findOrFail($data['subscriber_id']);
+        if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
+            return response()->json(['message' => 'الفاتورة المحددة لا تتبع هذا المشترك.'], 422);
+        }
+        if (! empty($data['meter_id']) && ! Meter::where('id', $data['meter_id'])->where('subscriber_id', $subscriber->id)->exists()) {
+            return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
+        }
+        if (! empty($data['invoice_id']) && ! empty($data['meter_id'])) {
+            $invoice = Invoice::findOrFail($data['invoice_id']);
+            if ((int) $invoice->meter_id !== (int) $data['meter_id']) {
+                return response()->json(['message' => 'العداد المحدد لا يطابق حساب الفاتورة.'], 422);
+            }
+        }
+
+        $payment = $paymentService->collectPayment(
+            $subscriber,
+            (float) $data['amount'],
+            $data['invoice_id'] ?? null,
+            $data['payment_method'],
+            $data['reference_number'] ?? null,
+            $data['notes'] ?? null,
+            $data['reason'] ?? null,
+            $request->user()->id,
+            $data['payment_date'] ?? null,
+            $data['meter_id'] ?? null,
+            $data['sync_uuid'] ?? null,
+        );
+        $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
+        return response()->json(['message' => 'تم تسجيل سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)], 201);
+    }
+
+    public function update(Request $request, int $id)
+    {
+        $this->authorizeApi(Payment::class, 'update');
+        $payment = Payment::with('subscriber')->findOrFail($id);
+        $data = $request->validate([
+            'invoice_id' => ['sometimes', 'nullable', 'integer', 'exists:invoices,id'],
+            'meter_id' => ['sometimes', 'nullable', 'integer', 'exists:meters,id'],
+            'amount' => ['sometimes', 'required', 'numeric', 'gt:0'],
+            'payment_date' => ['sometimes', 'required', 'date'],
+            'payment_method' => ['sometimes', 'required', 'in:cash,bank_transfer,check'],
+            'reference_number' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'notes' => ['sometimes', 'nullable', 'string'],
+        ]);
+        $invoiceId = array_key_exists('invoice_id', $data) ? $data['invoice_id'] : $payment->invoice_id;
+        if ($invoiceId) {
+            $invoice = Invoice::where('subscriber_id', $payment->subscriber_id)->findOrFail($invoiceId);
+            if (array_key_exists('meter_id', $data) && (int) ($data['meter_id'] ?? 0) !== (int) ($invoice->meter_id ?? 0)) {
+                return response()->json(['message' => 'العداد المحدد لا يطابق حساب الفاتورة.'], 422);
+            }
+            $data['meter_id'] = $invoice->meter_id;
+        } elseif (array_key_exists('meter_id', $data) && $data['meter_id'] !== null) {
+            Meter::where('subscriber_id', $payment->subscriber_id)->findOrFail($data['meter_id']);
+        }
+
+        DB::transaction(fn () => $payment->update($data));
+        $payment->refresh()->load(['subscriber.square', 'meter', 'invoice', 'user']);
+        return response()->json(['message' => 'تم تحديث سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
+    }
+
+    public function destroy(int $id)
+    {
+        $this->authorizeApi(Payment::class, 'delete');
+        Payment::findOrFail($id)->delete();
+        return response()->json(['message' => 'تم حذف سند القبض وإعادة توزيع الدفعات.']);
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $this->authorizeApi(Payment::class, 'deleteAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:payments,id']]);
+        $deleted = 0;
+        DB::transaction(function () use ($data, &$deleted) {
+            foreach (Payment::whereIn('id', $data['ids'])->lockForUpdate()->get() as $payment) {
+                $payment->delete();
+                $deleted++;
+            }
+        });
+        return response()->json(['deleted_count' => $deleted]);
+    }
+
+    public function downloadPdf(int $id)
+    {
+        $this->authorizeApi(Payment::class, 'view');
+        $payment = Payment::with(['subscriber.square', 'meter', 'invoice', 'user'])->findOrFail($id);
+        return Pdf::view('pdf.receipt', ['payment' => $payment])
+            ->withBrowsershot(fn ($browsershot) => $browsershot->noSandbox())
+            ->margins(0, 0, 0, 0, Unit::Millimeter)
+            ->format('A5')->landscape()
+            ->name('receipt-' . $payment->receipt_number . '.pdf')->download();
+    }
+
+    public function whatsappLink(int $id, WhatsAppService $whatsAppService)
+    {
+        $this->authorizeApi(Payment::class, 'view');
+        $payment = Payment::with(['subscriber', 'meter', 'invoice'])->findOrFail($id);
+        $url = $whatsAppService->getPaymentMessageUrl($payment);
+        if (! $url) {
+            return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.'], 422);
+        }
+        parse_str(parse_url($url, PHP_URL_QUERY) ?? '', $query);
+        return response()->json(['url' => $url, 'message' => $query['text'] ?? null]);
+    }
+
+    public function sendWhatsApp(int $id)
+    {
+        $this->authorizeApi(Payment::class, 'update');
+        $payment = Payment::with(['subscriber', 'meter', 'invoice'])->findOrFail($id);
+        SendWhatsAppPaymentJob::dispatch($payment);
+        return response()->json(['message' => 'تمت إضافة إرسال سند القبض إلى قائمة المهام.', 'queued' => true], 202);
+    }
+
+    private function receiptData(Payment $payment): array
+    {
+        $payment->loadMissing(['subscriber.meters', 'meter', 'invoice', 'user']);
+        $amount = (float) $payment->amount;
+        $amountInWords = class_exists(\NumberFormatter::class)
+            ? (new \NumberFormatter('ar', \NumberFormatter::SPELLOUT))->format($amount) . ' ريال يمني لا غير'
+            : null;
+        $invoiceRemaining = $payment->invoice ? $payment->invoice->getTrueRemainingAmount() : null;
+        $subscriber = $payment->subscriber;
+        $debit = $subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
+        $credit = max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
+        return [
+            'receipt_number' => $payment->receipt_number,
+            'amount' => number_format($amount, 2, '.', ''),
+            'amount_in_words' => $amountInWords,
+            'date' => optional($payment->payment_date)->format('Y-m-d'),
+            'payment_method' => $payment->payment_method,
+            'reference_number' => $payment->reference_number,
+            'reason' => $payment->reason,
+            'subscriber_name' => $payment->meter?->tenant_name ?: $subscriber->name,
+            'subscriber_phone' => $payment->meter?->tenant_phone ?: $subscriber->phone,
+            'square' => $subscriber->square?->name,
+            'meter' => $payment->meter?->unique_code,
+            'invoice_number' => $payment->invoice?->bill_number,
+            'invoice_remaining' => $invoiceRemaining === null ? null : number_format((float) $invoiceRemaining, 2, '.', ''),
+            'outstanding_balance' => number_format((float) $debit, 2, '.', ''),
+            'credit_balance' => number_format((float) $credit, 2, '.', ''),
+            'collector' => $payment->user?->name,
+            'pdf_url' => url('/api/payments/' . $payment->id . '/pdf'),
+        ];
+    }
+}
