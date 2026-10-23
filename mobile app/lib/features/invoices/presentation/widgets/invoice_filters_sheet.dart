@@ -180,7 +180,8 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   Widget _periodDropdown() {
     return DropdownButtonFormField<String?>(
-      value: _draft.billingPeriod,
+      key: ValueKey<String?>('period-${_draft.billingPeriod}'),
+      initialValue: _draft.billingPeriod,
       decoration: const InputDecoration(labelText: 'فترة الفوترة'),
       isExpanded: true,
       items: <DropdownMenuItem<String?>>[
@@ -202,7 +203,8 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   Widget _squareDropdown() {
     return DropdownButtonFormField<int?>(
-      value: _draft.squareId,
+      key: ValueKey<int?>(_draft.squareId),
+      initialValue: _draft.squareId,
       decoration: const InputDecoration(labelText: 'المربع السكني'),
       isExpanded: true,
       items: <DropdownMenuItem<int?>>[

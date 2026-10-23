@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -172,12 +174,12 @@ class _SquareDetail extends StatelessWidget {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
       try {
-        context.push('/subscribers/${subscriber.id}', extra: subscriber);
+        unawaited(context.push<Object?>('/subscribers/${subscriber.id}', extra: subscriber));
         return;
       } catch (_) {}
     }
     final deps = FouadModule.deps;
-    Navigator.of(context).push(
+    unawaited(Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => MultiBlocProvider(
           providers: [
@@ -198,7 +200,7 @@ class _SquareDetail extends StatelessWidget {
           child: Subscriber360Screen(subscriber: subscriber),
         ),
       ),
-    );
+    ));
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import 'payment_model.dart';
 
@@ -47,6 +48,7 @@ class CollectPaymentRequest extends Equatable {
     required this.amount,
     required this.method,
     this.invoiceId,
+    this.meterId,
     this.referenceNumber,
     this.reason,
     this.notes,
@@ -55,6 +57,7 @@ class CollectPaymentRequest extends Equatable {
 
   final int subscriberId;
   final int? invoiceId;
+  final int? meterId;
   final double amount;
   final PaymentMethod method;
   final String? referenceNumber;
@@ -63,24 +66,30 @@ class CollectPaymentRequest extends Equatable {
   final DateTime? paymentDate;
 
   /// جسم `POST /api/invoices/{id}/pay` (`InvoiceController::pay` سطر 96-104).
-  Map<String, dynamic> toPayPayload() => <String, dynamic>{
+  Map<String, dynamic> toPayPayload({String? syncUuid}) => <String, dynamic>{
         'amount': amount,
         'payment_method': method.wire,
+        if (paymentDate != null) 'payment_date': DateFormat.day(paymentDate),
         if (method.requiresReference) 'reference_number': referenceNumber,
         if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
         if (reason != null && reason!.trim().isNotEmpty) 'reason': reason!.trim(),
+        if (syncUuid != null && syncUuid.trim().isNotEmpty)
+          'sync_uuid': syncUuid.trim(),
       };
 
   /// جسم `POST /api/payments` (§2.3-50).
-  Map<String, dynamic> toCreatePayload() => PaymentModel.createPayload(
+  Map<String, dynamic> toCreatePayload({String? syncUuid}) =>
+      PaymentModel.createPayload(
         subscriberId: subscriberId,
         invoiceId: invoiceId,
+        meterId: meterId,
         amount: amount,
         method: method,
         paymentDate: paymentDate,
         referenceNumber: referenceNumber,
         reason: reason,
         notes: notes,
+        syncUuid: syncUuid,
       );
 
   /// التحقق المحلي قبل الإرسال — يطابق `PaymentResource::form` والقاعدة الشرطية
@@ -103,10 +112,12 @@ class CollectPaymentRequest extends Equatable {
     String? notes,
     DateTime? paymentDate,
     int? invoiceId,
+    int? meterId,
   }) =>
       CollectPaymentRequest(
         subscriberId: subscriberId,
         invoiceId: invoiceId ?? this.invoiceId,
+        meterId: meterId ?? this.meterId,
         amount: amount ?? this.amount,
         method: method ?? this.method,
         referenceNumber: referenceNumber ?? this.referenceNumber,
@@ -119,6 +130,7 @@ class CollectPaymentRequest extends Equatable {
   List<Object?> get props => <Object?>[
         subscriberId,
         invoiceId,
+        meterId,
         amount,
         method,
         referenceNumber,

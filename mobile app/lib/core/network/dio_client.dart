@@ -32,6 +32,13 @@ class DioClient {
   final OfflineCacheInterceptor offlineCache;
   final ErrorInterceptor errorInterceptor;
 
+  void updateBaseUrl(String url) {
+    final normalized = AppConfig.normalizeApiBaseUrl(url);
+    AppConfig.configureServer(normalized);
+    dio.options.baseUrl = normalized;
+    offlineCache.clear();
+  }
+
   Future<Response<List<int>>> download(String path, {Map<String, dynamic>? query}) {
     return dio.get<List<int>>(
       path,

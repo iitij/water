@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../features/meters/data/models/meter.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/readings/domain/readings_repository.dart';
+import '../network/api_endpoints.dart';
 import 'app_database.dart';
 
 class OfflinePackResult {
@@ -108,10 +109,10 @@ class OfflinePackDownloader {
     try {
       Response<dynamic> response;
       try {
-        response = await _dio.get('/settings/reading');
+        response = await _dio.get<dynamic>(ApiEndpoints.readingSettings);
       } on DioException catch (error) {
         if (error.response?.statusCode != 404) rethrow;
-        response = await _dio.get('/settings');
+        response = await _dio.get<dynamic>(ApiEndpoints.settings);
       }
       final body = response.data;
       if (body is Map) {

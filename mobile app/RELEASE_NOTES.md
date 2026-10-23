@@ -21,14 +21,33 @@ Do not use this build for live financial collection until device/backend QA pass
 
 `localhost` on a phone refers to the phone, not your PC. HTTP is enabled for
 local testing and is not encrypted. Use HTTPS before production.
-The server is saved on first launch. Changing servers requires clearing app data
-after synchronizing pending work, preventing credentials/queues crossing servers.
+
+The server is saved on first launch. It can be changed later from the login screen
+(server button) or **الملف الشخصي ← الاتصال بالخادم** without clearing app data:
+the app signs the current session out, clears cached server snapshots and keeps
+local data intact. The change is **blocked while any offline operation is still
+waiting in the sync queue** so receipts/readings can never move between servers.
 
 Extract the whole Windows ZIP and run `water_project.exe`; keep the DLLs and data
 folder alongside it. Windows camera, Bluetooth, printing and platform plugins
 need separate hardware testing. The APK build does not verify those operations.
 
-Automated analyzer errors and Flutter tests gate Android publication, but legacy lint
-warnings are not yet blocking. Full master-plan acceptance, backend integration,
-physical-device testing, secure offline persistence and production signing remain
+Automated analyzer errors and Flutter tests gate publication on both Android and
+Windows, but legacy lint warnings are not yet blocking. Full master-plan acceptance,
+backend integration, physical-device testing and production signing remain
 release-readiness work. No production-readiness claim is made by this prerelease.
+
+## What changed in this build
+
+- **One offline queue**: readings and cash receipts now share a single durable
+  SQLite (Drift) queue. Pending items saved by previous builds in
+  `SharedPreferences` are migrated automatically on first launch, and the sync
+  monitor (`SCR-28`) plus the home badge show one unified pending count.
+- **Account isolation**: every queued operation stores its owner user id, so a
+  shared device can never upload one employee's receipts under another account.
+- **Idempotent receipts**: each payment gets a UUID before the request is sent and
+  reuses it after a network drop, so a lost response cannot create a duplicate
+  receipt (`sync_uuid` on the backend).
+- **Role-aware home screen**: module cards and the app-bar shortcuts are filtered by
+  the user's Shield permissions instead of showing every screen to every role.
+- **Server switching** from inside the app, guarded by the pending-sync check.

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
@@ -16,13 +15,16 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     required Dio dio,
     required AppDatabase database,
     Uuid? uuid,
+    String? Function()? ownerUserIdProvider,
   })  : _database = database,
         _remote = ReadingsRemoteDataSource(dio),
-        _uuid = uuid ?? const Uuid();
+        _uuid = uuid ?? const Uuid(),
+        _ownerUserIdProvider = ownerUserIdProvider;
 
   final AppDatabase _database;
   final ReadingsRemoteDataSource _remote;
   final Uuid _uuid;
+  final String? Function()? _ownerUserIdProvider;
 
   @override
   Future<MeterPeriodResponse> getMeterPeriod(Meter meter) async {
@@ -160,6 +162,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       localId: localId,
       actionId: localId,
       reading: readingPayload,
+      ownerUserId: _ownerUserIdProvider?.call(),
     );
     return ReadingSaveResult(
       reading: Reading(

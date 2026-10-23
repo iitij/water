@@ -108,6 +108,7 @@ class Reading {
 
   Map<String, dynamic> toSyncJson({String? imageBase64}) => {
         'client_action_id': localId,
+        'sync_uuid': localId,
         'meter_id': meterId,
         'reading_date': _dateOnly(readingDate),
         'actual_reading_date': _dateOnly(actualReadingDate ?? readingDate),
@@ -214,6 +215,7 @@ class ReadingSubmission {
 
   Map<String, dynamic> toJson({String? localId}) => {
         if (localId != null) 'client_action_id': localId,
+        if (localId != null) 'sync_uuid': localId,
         'meter_id': meterId,
         'reading_date': _dateOnly(readingDate),
         'actual_reading_date': _dateOnly(readingDate),
@@ -221,6 +223,9 @@ class ReadingSubmission {
         'period_end': _dateOnly(periodEnd),
         'previous_reading': previousReading,
         'current_reading': currentReading,
+        // Kept in the local queue payload so offline rows show the real
+        // consumption before the server recalculates it on sync.
+        'consumption_units': consumption,
         'has_subscription_fee': hasSubscriptionFee,
         'subscription_installment': subscriptionInstallment,
         'has_tanker_fee': hasTankerFee,

@@ -21,7 +21,7 @@ class AppTypography {
       titleSmall: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.35, fontWeight: FontWeight.w600, color: color),
       bodyLarge: TextStyle(fontFamily: fontFamily, fontSize: 16, height: 1.5, color: color),
       bodyMedium: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.5, color: color),
-      bodySmall: TextStyle(fontFamily: fontFamily, fontSize: 12, height: 1.45, color: color.withOpacity(.72)),
+      bodySmall: TextStyle(fontFamily: fontFamily, fontSize: 12, height: 1.45, color: color.withValues(alpha: .72)),
       labelLarge: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.2, fontWeight: FontWeight.w700, color: color),
       labelMedium: TextStyle(fontFamily: fontFamily, fontSize: 12, height: 1.2, fontWeight: FontWeight.w600, color: color),
       labelSmall: TextStyle(fontFamily: fontFamily, fontSize: 11, height: 1.2, fontWeight: FontWeight.w500, color: color),

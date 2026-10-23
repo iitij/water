@@ -1,7 +1,11 @@
 name: Mobile test builds
 on:
   push:
-    branches: [arena/99b63ce7-water]
+    # Build every active development branch (mainline + Arena working branches)
+    # so integration fixes are verified before they reach a release branch.
+    branches: [main, master, develop, 'arena/**']
+    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
+  pull_request:
     paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
   workflow_dispatch:
 permissions:
@@ -40,6 +44,7 @@ jobs:
           cd release
           sha256sum water-android-test.apk > SHA256SUMS.txt
       - name: Publish Android testing prerelease directly (no artifact quota)
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -62,9 +67,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Analyze (errors fail, legacy lint warnings are reported)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - run: python ../scripts/ci_run.py flutter build windows --release --build-name=1.0.0 --build-number=${{ github.run_number }}
       - run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath water-windows-test.zip
       - name: Publish Windows testing prerelease directly
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

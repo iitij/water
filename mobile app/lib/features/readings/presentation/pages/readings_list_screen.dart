@@ -235,7 +235,8 @@ class _ReadingsListView extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final squareDropdown = DropdownButtonFormField<int?>(
-                value: state.squareFilter,
+                key: ValueKey<String>('square-${state.squareFilter}'),
+                initialValue: state.squareFilter,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'المربع السكني',

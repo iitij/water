@@ -83,7 +83,8 @@ class _FieldReaderView extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           DropdownButtonFormField<int?>(
-                            value: state.squareFilter,
+                            key: ValueKey<String>('square-${state.squareFilter}'),
+                            initialValue: state.squareFilter,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'فلترة بالمربع السكني',
@@ -150,7 +151,7 @@ class _FieldReaderView extends StatelessWidget {
 
   Future<void> _openReader(BuildContext context, Meter meter, MetersCubit cubit) async {
     await Navigator.of(context).push<ReadingSaveResult>(
-      MaterialPageRoute(
+      MaterialPageRoute<ReadingSaveResult>(
         builder: (_) => SubmitReadingScreen(
           meter: meter,
           readingsRepository: readingsRepository,
@@ -164,7 +165,7 @@ class _FieldReaderView extends StatelessWidget {
 
   Future<void> _scan(BuildContext context, MetersCubit cubit) async {
     final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const MeterBarcodeScannerScreen()),
+      MaterialPageRoute<String>(builder: (_) => const MeterBarcodeScannerScreen()),
     );
     if (code != null && context.mounted) cubit.setQuery(code);
   }

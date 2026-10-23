@@ -11,11 +11,13 @@ class MeterFormScreen extends StatefulWidget {
   const MeterFormScreen({
     required this.repository,
     this.meter,
+    this.initialSubscriberId,
     super.key,
   });
 
   final MetersRepository repository;
   final Meter? meter;
+  final int? initialSubscriberId;
 
   @override
   State<MeterFormScreen> createState() => _MeterFormScreenState();
@@ -67,10 +69,12 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
     try {
       final subscribers = await widget.repository.getSubscribers();
       if (!mounted) return;
+      final targetSubscriberId =
+          widget.meter?.subscriberId ?? widget.initialSubscriberId;
       setState(() {
         _subscribers = subscribers;
         _selectedSubscriber = _subscribers.cast<SubscriberOption?>().firstWhere(
-              (subscriber) => subscriber?.id == widget.meter?.subscriberId,
+              (subscriber) => subscriber?.id == targetSubscriberId,
               orElse: () => null,
             );
         _isLoading = false;
@@ -334,7 +338,8 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                 ),
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<int>(
-                                  value: _selectedSubscriber?.id,
+                                  key: ValueKey<int?>(_selectedSubscriber?.id),
+                                  initialValue: _selectedSubscriber?.id,
                                   isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: 'المشترك المالك',
@@ -399,7 +404,8 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                 ],
                                 const SizedBox(height: 20),
                                 DropdownButtonFormField<String>(
-                                  value: _status,
+                                  key: ValueKey<String>('status-$_status'),
+                                  initialValue: _status,
                                   decoration: const InputDecoration(
                                     labelText: 'حالة العداد',
                                     prefixIcon: Icon(Icons.toggle_on_outlined),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -155,12 +157,12 @@ class _SubscribersView extends StatelessWidget {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
       try {
-        context.push('/subscribers/${subscriber.id}', extra: subscriber);
+        unawaited(context.push<Object?>('/subscribers/${subscriber.id}', extra: subscriber));
         return;
       } catch (_) {}
     }
     final deps = FouadModule.deps;
-    Navigator.of(context).push(
+    unawaited(Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => RepositoryProvider<SubscribersRepository>.value(
           value: deps.subscribers,
@@ -187,7 +189,7 @@ class _SubscribersView extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Future<void> _handleOpenForm(BuildContext context) async {

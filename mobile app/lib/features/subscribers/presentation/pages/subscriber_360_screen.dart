@@ -247,7 +247,10 @@ class _MetersTab extends StatelessWidget {
     if (GetIt.I.isRegistered<MetersRepository>()) {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => MeterFormScreen(repository: GetIt.I<MetersRepository>()),
+          builder: (_) => MeterFormScreen(
+            repository: GetIt.I<MetersRepository>(),
+            initialSubscriberId: sub.id,
+          ),
         ),
       );
       if (context.mounted) {
@@ -258,7 +261,7 @@ class _MetersTab extends StatelessWidget {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
       try {
-        await context.push('/meters/new?subscriber_id=${sub.id}');
+        await context.push<Object?>('/meters/new?subscriber_id=${sub.id}');
         if (context.mounted) {
           await context.read<Subscriber360Cubit>().load(sub.id);
         }
@@ -596,7 +599,8 @@ class _StatementTab extends StatelessWidget {
             child: Row(children: [
               Expanded(
                 child: DropdownButtonFormField<PartyFilter>(
-                  value: state.party,
+                  key: ValueKey<PartyFilter>(state.party),
+                  initialValue: state.party,
                   decoration: const InputDecoration(labelText: 'فلتر الجهة (الحساب)', border: OutlineInputBorder()),
                   items: [for (final p in parties) DropdownMenuItem(value: p, child: Text(p.label))],
                   onChanged: (p) { if (p != null) context.read<Subscriber360Cubit>().filterParty(p); },

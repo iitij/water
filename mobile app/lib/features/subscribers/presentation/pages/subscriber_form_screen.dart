@@ -81,7 +81,8 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            value: _squareId,
+            key: ValueKey<int?>(_squareId),
+            initialValue: _squareId,
             decoration: const InputDecoration(labelText: 'المربع السكني *', border: OutlineInputBorder()),
             items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
             onChanged: (v) => setState(() => _squareId = v),
@@ -89,7 +90,8 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<SubscriberStatus>(
-            value: _status,
+            key: ValueKey<SubscriberStatus>(_status),
+            initialValue: _status,
             decoration: const InputDecoration(labelText: 'حالة المشترك', border: OutlineInputBorder()),
             items: [for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
             onChanged: (v) => setState(() => _status = v ?? _status),

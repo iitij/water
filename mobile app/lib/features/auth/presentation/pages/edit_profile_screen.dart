@@ -6,7 +6,9 @@ import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/auth/session_service.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -214,9 +216,42 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             : roles.map((role) => Chip(
                                   avatar: Icon(_roleIcon(role), size: 17, color: AppColors.primary),
                                   label: Text(_roleLabel(role)),
-                                  backgroundColor: theme.colorScheme.primary.withOpacity(.06),
-                                  side: BorderSide(color: theme.dividerColor.withOpacity(.65)),
+                                  backgroundColor: theme.colorScheme.primary.withValues(alpha: .06),
+                                  side: BorderSide(color: theme.dividerColor.withValues(alpha: .65)),
                                 )).toList(growable: false),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _ProfileCard(
+                      icon: Icons.dns_outlined,
+                      title: 'الاتصال بالخادم',
+                      subtitle: 'عنوان خادم الـ API المرتبط بهذا الجهاز حالياً.',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Text(
+                              AppConfig.currentApiBaseUrl ?? 'غير مضبوط',
+                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: saving
+                                ? null
+                                : () async {
+                                    final updated = await ServerConfigSheet.show(context);
+                                    if (!mounted || updated == null) return;
+                                    setState(() {});
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
+                                      SnackBar(content: Text('تم تحديث عنوان الخادم إلى: $updated')),
+                                    );
+                                  },
+                            icon: const Icon(Icons.swap_horiz_rounded),
+                            label: const Text('تغيير عنوان الخادم'),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -269,14 +304,14 @@ class _ProfileHero extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(begin: AlignmentDirectional.topStart, end: AlignmentDirectional.bottomEnd, colors: <Color>[Color(0xFF075D73), Color(0xFF0EA5E9)]),
-        boxShadow: <BoxShadow>[BoxShadow(color: AppColors.primary.withOpacity(.16), blurRadius: 22, offset: const Offset(0, 11))],
+        boxShadow: <BoxShadow>[BoxShadow(color: AppColors.primary.withValues(alpha: .16), blurRadius: 22, offset: const Offset(0, 11))],
       ),
       child: Row(
         children: <Widget>[
           Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
-              CircleAvatar(radius: 35, backgroundColor: Colors.white.withOpacity(.22), foregroundImage: _avatarImage(), child: const Icon(Icons.person_rounded, color: Colors.white, size: 38)),
+              CircleAvatar(radius: 35, backgroundColor: Colors.white.withValues(alpha: .22), foregroundImage: _avatarImage(), child: const Icon(Icons.person_rounded, color: Colors.white, size: 38)),
               PositionedDirectional(
                 bottom: -2,
                 end: -2,
@@ -295,9 +330,9 @@ class _ProfileHero extends StatelessWidget {
               children: <Widget>[
                 Text(name, style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 3),
-                Directionality(textDirection: TextDirection.ltr, child: Text(email, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withOpacity(.8)), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Directionality(textDirection: TextDirection.ltr, child: Text(email, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: .8)), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
                 const SizedBox(height: 10),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(.14), borderRadius: BorderRadius.circular(99)), child: const Text('حساب موثّق', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(99)), child: const Text('حساب موثّق', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))),
               ],
             ),
           ),
@@ -326,12 +361,12 @@ class _ProfileCard extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(22), border: Border.all(color: theme.dividerColor.withOpacity(.75))),
+      decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(22), border: Border.all(color: theme.dividerColor.withValues(alpha: .75))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(children: <Widget>[
-            Container(width: 38, height: 38, decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(.08), borderRadius: BorderRadius.circular(13)), child: Icon(icon, color: theme.colorScheme.primary, size: 20)),
+            Container(width: 38, height: 38, decoration: BoxDecoration(color: theme.colorScheme.primary.withValues(alpha: .08), borderRadius: BorderRadius.circular(13)), child: Icon(icon, color: theme.colorScheme.primary, size: 20)),
             const SizedBox(width: 11),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[Text(title, style: theme.textTheme.titleMedium), Text(subtitle, style: theme.textTheme.bodySmall)])),
           ]),

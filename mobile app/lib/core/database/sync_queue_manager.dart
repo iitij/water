@@ -325,6 +325,7 @@ class SyncQueueManager {
   Map<String, dynamic>? _findResult(List<Map<String, dynamic>> results, String id) {
     for (final result in results) {
       final resultId = (result['client_action_id'] ??
+              result['sync_uuid'] ??
               result['local_id'] ??
               result['client_id'] ??
               result['action_id'])

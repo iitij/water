@@ -39,53 +39,90 @@ class HomeScreen extends StatelessWidget {
         final width = MediaQuery.sizeOf(context).width;
         final horizontal = width < 360 ? 14.0 : 22.0;
 
+        final canUseFieldReader = isAdmin ||
+            permissions.hasAnyPermission(
+              const <String>['Create:Reading', 'Update:Reading'],
+            );
+        final canUseQuickCollector = isAdmin ||
+            permissions.hasAnyPermission(
+              const <String>['Create:Payment', 'payments.collect'],
+            );
+        final canOpenDashboard = isAdmin ||
+            permissions.hasAnyPermission(const <String>[
+              'View:StatsOverview',
+              'View:MonthlyRevenueChart',
+              'View:LatestInvoicesWidget',
+              'View:OverdueInvoicesWidget',
+            ]);
+
         final fieldActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.speed_rounded,
-            color: AppColors.primary,
-            title: 'القارئ الميداني السريع',
-            subtitle: 'بحث المسار المركب 4/1 ومسح الباركود وتسجيل القراءات',
-            route: RouteNames.fieldReader,
-          ),
-          _ModuleEntry(
-            icon: Icons.gas_meter_outlined,
-            color: AppColors.info,
-            title: 'إدارة العدادات',
-            subtitle: 'قائمة العدادات، المسارات، المستأجرين، والأرصدة المعزولة',
-            route: RouteNames.meters,
-          ),
-          _ModuleEntry(
-            icon: Icons.fact_check_outlined,
-            color: AppColors.success,
-            title: 'سجل القراءات الشامل',
-            subtitle: 'فلترة القراءات والإصدار الجماعي للفواتير',
-            route: RouteNames.readings,
-          ),
+          if (canUseFieldReader)
+            _ModuleEntry(
+              icon: Icons.speed_rounded,
+              color: AppColors.primary,
+              title: 'القارئ الميداني السريع',
+              subtitle: 'بحث المسار المركب 4/1 ومسح الباركود وتسجيل القراءات',
+              route: RouteNames.fieldReader,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Meter', 'View:Meter'],
+              ))
+            _ModuleEntry(
+              icon: Icons.gas_meter_outlined,
+              color: AppColors.info,
+              title: 'إدارة العدادات',
+              subtitle: 'قائمة العدادات، المسارات، المستأجرين، والأرصدة المعزولة',
+              route: RouteNames.meters,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Reading', 'View:Reading'],
+              ))
+            _ModuleEntry(
+              icon: Icons.fact_check_outlined,
+              color: AppColors.success,
+              title: 'سجل القراءات الشامل',
+              subtitle: 'فلترة القراءات والإصدار الجماعي للفواتير',
+              route: RouteNames.readings,
+            ),
         ];
 
         final financeActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.point_of_sale_rounded,
-            color: AppColors.warning,
-            title: 'المحصل الميداني السريع',
-            subtitle: 'تحصيل فوري للفواتير غير المسددة وطباعة السندات',
-            route: RouteNames.quickCollector,
-          ),
-          _ModuleEntry(
-            icon: Icons.receipt_long_rounded,
-            color: AppColors.primary,
-            title: 'قائمة الفواتير ومحركات الإصدار',
-            subtitle: 'فواتير العدادات والاشتراكات والوايت وإعادة الاحتساب',
-            route: RouteNames.invoices,
-          ),
-          _ModuleEntry(
-            icon: Icons.payments_outlined,
-            color: AppColors.success,
-            title: 'سندات القبض والمدفوعات',
-            subtitle: 'توزيع FIFO التلقائي، الطباعة الحرارية وPDF، والواتساب',
-            route: RouteNames.payments,
-          ),
-          if (isAdmin || permissions.can('tariffs.view'))
+          if (canUseQuickCollector)
+            _ModuleEntry(
+              icon: Icons.point_of_sale_rounded,
+              color: AppColors.warning,
+              title: 'المحصل الميداني السريع',
+              subtitle: 'تحصيل فوري للفواتير غير المسددة وطباعة السندات',
+              route: RouteNames.quickCollector,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Invoice', 'View:Invoice', 'invoices.view'],
+              ))
+            _ModuleEntry(
+              icon: Icons.receipt_long_rounded,
+              color: AppColors.primary,
+              title: 'قائمة الفواتير ومحركات الإصدار',
+              subtitle: 'فواتير العدادات والاشتراكات والوايت وإعادة الاحتساب',
+              route: RouteNames.invoices,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Payment', 'View:Payment', 'payments.view'],
+              ))
+            _ModuleEntry(
+              icon: Icons.payments_outlined,
+              color: AppColors.success,
+              title: 'سندات القبض والمدفوعات',
+              subtitle: 'توزيع FIFO التلقائي، الطباعة الحرارية وPDF، والواتساب',
+              route: RouteNames.payments,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Tariff', 'View:Tariff', 'tariffs.view'],
+              ))
             _ModuleEntry(
               icon: Icons.price_change_outlined,
               color: AppColors.info,
@@ -96,86 +133,122 @@ class HomeScreen extends StatelessWidget {
         ];
 
         final crmActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.people_alt_outlined,
-            color: AppColors.primary,
-            title: 'المشتركون والملف الشامل 360°',
-            subtitle: 'إدارة المشتركين، كشف الحساب، والتبويبات الـ 6',
-            route: RouteNames.subscribers,
-          ),
-          _ModuleEntry(
-            icon: Icons.grid_view_rounded,
-            color: AppColors.info,
-            title: 'المربعات السكنية',
-            subtitle: 'إدارة الحارات والمربعات ومشتركي كل مربع',
-            route: RouteNames.squares,
-          ),
-          _ModuleEntry(
-            icon: Icons.card_membership_outlined,
-            color: AppColors.warning,
-            title: 'رسوم الاشتراك والأقساط',
-            subtitle: 'متابعة رسوم التأسيس وإصدار فواتير الأقساط',
-            route: RouteNames.subscriptionFees,
-          ),
-          _ModuleEntry(
-            icon: Icons.local_shipping_outlined,
-            color: AppColors.success,
-            title: 'طلبات الخدمة والوايت',
-            subtitle: 'تسجيل طلبات الوايت، الإنجاز، والفوترة المباشرة',
-            route: RouteNames.serviceRequests,
-          ),
-          _ModuleEntry(
-            icon: Icons.account_balance_outlined,
-            color: AppColors.primary,
-            title: 'دفتر الأستاذ العام',
-            subtitle: 'سجل الحركات المالية الدائنة والمدينة المفصل',
-            route: RouteNames.transactions,
-          ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Subscriber', 'View:Subscriber'],
+              ))
+            _ModuleEntry(
+              icon: Icons.people_alt_outlined,
+              color: AppColors.primary,
+              title: 'المشتركون والملف الشامل 360°',
+              subtitle: 'إدارة المشتركين، كشف الحساب، والتبويبات الـ 6',
+              route: RouteNames.subscribers,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Square', 'View:Square'],
+              ))
+            _ModuleEntry(
+              icon: Icons.grid_view_rounded,
+              color: AppColors.info,
+              title: 'المربعات السكنية',
+              subtitle: 'إدارة الحارات والمربعات ومشتركي كل مربع',
+              route: RouteNames.squares,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:SubscriptionFee', 'View:SubscriptionFee'],
+              ))
+            _ModuleEntry(
+              icon: Icons.card_membership_outlined,
+              color: AppColors.warning,
+              title: 'رسوم الاشتراك والأقساط',
+              subtitle: 'متابعة رسوم التأسيس وإصدار فواتير الأقساط',
+              route: RouteNames.subscriptionFees,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:ServiceRequest', 'View:ServiceRequest'],
+              ))
+            _ModuleEntry(
+              icon: Icons.local_shipping_outlined,
+              color: AppColors.success,
+              title: 'طلبات الخدمة والوايت',
+              subtitle: 'تسجيل طلبات الوايت، الإنجاز، والفوترة المباشرة',
+              route: RouteNames.serviceRequests,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['ViewAny:Transaction', 'View:Transaction'],
+              ))
+            _ModuleEntry(
+              icon: Icons.account_balance_outlined,
+              color: AppColors.primary,
+              title: 'دفتر الأستاذ العام',
+              subtitle: 'سجل الحركات المالية الدائنة والمدينة المفصل',
+              route: RouteNames.transactions,
+            ),
         ];
 
         final adminActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.dashboard_customize_outlined,
-            color: AppColors.primary,
-            title: 'لوحة القيادة الإحصائية',
-            subtitle: 'مؤشرات الأداء، إيرادات الأشهر، والفواتير المتأخرة',
-            route: RouteNames.dashboard,
-          ),
-          _ModuleEntry(
-            icon: Icons.analytics_outlined,
-            color: AppColors.info,
-            title: 'التقارير المالية والتحليلية',
-            subtitle: 'تقارير التحصيل، المديونية، وتوزيع المربعات',
-            route: RouteNames.reports,
-          ),
-          _ModuleEntry(
-            icon: Icons.table_view_outlined,
-            color: AppColors.success,
-            title: 'مركز تصدير بيانات Excel',
-            subtitle: 'تصدير المشتركين والفواتير والقراءات بصيغة XLSX',
-            route: RouteNames.exports,
-          ),
-          _ModuleEntry(
-            icon: Icons.tune_rounded,
-            color: AppColors.warning,
-            title: 'استوديو الإعدادات وخادم الواتساب',
-            subtitle: 'مصمم الفاتورة والسند، إعدادات القراءة، وربط QR للواتساب',
-            route: RouteNames.settings,
-          ),
-          _ModuleEntry(
-            icon: Icons.manage_accounts_outlined,
-            color: AppColors.primary,
-            title: 'إدارة المستخدمين',
-            subtitle: 'حسابات الموظفين والمحصلين والقراء',
-            route: RouteNames.users,
-          ),
-          _ModuleEntry(
-            icon: Icons.admin_panel_settings_outlined,
-            color: AppColors.info,
-            title: 'الأدوار ومصفوفة صلاحيات Shield',
-            subtitle: 'التحكم الدقيق بـ 167 صلاحية للأدوار',
-            route: RouteNames.roles,
-          ),
+          if (canOpenDashboard)
+            _ModuleEntry(
+              icon: Icons.dashboard_customize_outlined,
+              color: AppColors.primary,
+              title: 'لوحة القيادة الإحصائية',
+              subtitle: 'مؤشرات الأداء، إيرادات الأشهر، والفواتير المتأخرة',
+              route: RouteNames.dashboard,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(
+                const <String>['View:StatsOverview', 'View:ExportDataPage'],
+              ))
+            _ModuleEntry(
+              icon: Icons.analytics_outlined,
+              color: AppColors.info,
+              title: 'التقارير المالية والتحليلية',
+              subtitle: 'تقارير التحصيل، المديونية، وتوزيع المربعات',
+              route: RouteNames.reports,
+            ),
+          if (isAdmin || permissions.can('View:ExportDataPage'))
+            _ModuleEntry(
+              icon: Icons.table_view_outlined,
+              color: AppColors.success,
+              title: 'مركز تصدير بيانات Excel',
+              subtitle: 'تصدير المشتركين والفواتير والقراءات بصيغة XLSX',
+              route: RouteNames.exports,
+            ),
+          if (isAdmin ||
+              permissions.hasAnyPermission(const <String>[
+                'View:InvoiceSettings',
+                'View:ReadingSettings',
+                'View:ReceiptSettings',
+                'View:WhatsAppSettings',
+                'ViewAny:Setting',
+              ]))
+            _ModuleEntry(
+              icon: Icons.tune_rounded,
+              color: AppColors.warning,
+              title: 'استوديو الإعدادات وخادم الواتساب',
+              subtitle: 'مصمم الفاتورة والسند، إعدادات القراءة، وربط QR للواتساب',
+              route: RouteNames.settings,
+            ),
+          if (isAdmin || permissions.can('ViewAny:User'))
+            _ModuleEntry(
+              icon: Icons.manage_accounts_outlined,
+              color: AppColors.primary,
+              title: 'إدارة المستخدمين',
+              subtitle: 'حسابات الموظفين والمحصلين والقراء',
+              route: RouteNames.users,
+            ),
+          if (isAdmin || permissions.can('ViewAny:Role'))
+            _ModuleEntry(
+              icon: Icons.admin_panel_settings_outlined,
+              color: AppColors.info,
+              title: 'الأدوار ومصفوفة صلاحيات Shield',
+              subtitle: 'التحكم الدقيق بـ 167 صلاحية للأدوار',
+              route: RouteNames.roles,
+            ),
         ];
 
         final systemActions = <_ModuleEntry>[
@@ -210,19 +283,23 @@ class HomeScreen extends StatelessWidget {
                     roleTitle: roleTitle,
                     online: queue.isOnline,
                     onPrimaryAction: () {
-                      if (isReader && !isAdmin) {
-                        context.push(RouteNames.fieldReader);
-                      } else if (isCollector && !isAdmin) {
-                        context.push(RouteNames.quickCollector);
+                      if ((isReader && !isAdmin) || (!canOpenDashboard && canUseFieldReader)) {
+                        context.push<Object?>(RouteNames.fieldReader);
+                      } else if ((isCollector && !isAdmin) || (!canOpenDashboard && canUseQuickCollector)) {
+                        context.push<Object?>(RouteNames.quickCollector);
+                      } else if (canOpenDashboard) {
+                        context.push<Object?>(RouteNames.dashboard);
                       } else {
-                        context.push(RouteNames.dashboard);
+                        context.go(RouteNames.offlineSync);
                       }
                     },
-                    primaryActionLabel: isReader && !isAdmin
+                    primaryActionLabel: (isReader && !isAdmin) || (!canOpenDashboard && canUseFieldReader)
                         ? 'فتح القارئ الميداني'
-                        : isCollector && !isAdmin
+                        : (isCollector && !isAdmin) || (!canOpenDashboard && canUseQuickCollector)
                             ? 'فتح المحصل السريع'
-                            : 'فتح لوحة القيادة',
+                            : canOpenDashboard
+                                ? 'فتح لوحة القيادة'
+                                : 'فتح مراقب المزامنة',
                   ),
                   const SizedBox(height: 18),
                   LayoutBuilder(
@@ -279,31 +356,28 @@ class HomeScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 22),
-                  _SectionBlock(
-                    title: 'العمليات الميدانية والعدادات والقراءات',
-                    entries: fieldActions,
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionBlock(
-                    title: 'الفواتير والتحصيل والنظام المالي',
-                    entries: financeActions,
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionBlock(
-                    title: 'المشتركون والمربعات والخدمات المساندة',
-                    entries: crmActions,
-                  ),
-                  if (isAdmin ||
-                      permissions.hasAnyPermission(const <String>[
-                        'View:ExportDataPage',
-                        'View:InvoiceSettings',
-                        'View:ReadingSettings',
-                        'View:ReceiptSettings',
-                        'View:WhatsAppSettings',
-                        'ViewAny:User',
-                        'ViewAny:Role',
-                      ])) ...<Widget>[
+                  if (fieldActions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 22),
+                    _SectionBlock(
+                      title: 'العمليات الميدانية والعدادات والقراءات',
+                      entries: fieldActions,
+                    ),
+                  ],
+                  if (financeActions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 18),
+                    _SectionBlock(
+                      title: 'الفواتير والتحصيل والنظام المالي',
+                      entries: financeActions,
+                    ),
+                  ],
+                  if (crmActions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 18),
+                    _SectionBlock(
+                      title: 'المشتركون والمربعات والخدمات المساندة',
+                      entries: crmActions,
+                    ),
+                  ],
+                  if (adminActions.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 18),
                     _SectionBlock(
                       title: 'لوحة القيادة، التقارير، الإعدادات، والصلاحيات',
@@ -368,7 +442,7 @@ class _SectionBlock extends StatelessWidget {
                           color: entry.color,
                           title: entry.title,
                           description: entry.subtitle,
-                          onTap: () => context.push(entry.route),
+                          onTap: () => context.push<Object?>(entry.route),
                         ),
                       ),
                     )
@@ -390,7 +464,7 @@ class _SectionBlock extends StatelessWidget {
                           color: first.color,
                           title: first.title,
                           description: first.subtitle,
-                          onTap: () => context.push(first.route),
+                          onTap: () => context.push<Object?>(first.route),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -402,7 +476,7 @@ class _SectionBlock extends StatelessWidget {
                                 color: second.color,
                                 title: second.title,
                                 description: second.subtitle,
-                                onTap: () => context.push(second.route),
+                                onTap: () => context.push<Object?>(second.route),
                               ),
                       ),
                     ],

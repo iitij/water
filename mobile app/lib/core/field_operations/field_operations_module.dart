@@ -29,6 +29,8 @@ class FieldOperationsModule {
   static Future<FieldOperationsModule> initialize({
     required Dio dio,
     AppDatabase? database,
+    bool autoStartSync = true,
+    String? Function()? ownerUserIdProvider,
   }) {
     final appDatabase = database ?? AppDatabase.open();
     final metersRepository = MetersRepositoryImpl(
@@ -38,12 +40,16 @@ class FieldOperationsModule {
     final readingsRepository = ReadingsRepositoryImpl(
       dio: dio,
       database: appDatabase,
+      ownerUserIdProvider: ownerUserIdProvider,
     );
     final readingsRemote = ReadingsRemoteDataSource(dio);
     final syncManager = SyncQueueManager(
       database: appDatabase,
       sendBatch: readingsRemote.syncBatch,
-    )..startListening();
+    );
+    if (autoStartSync) {
+      syncManager.startListening();
+    }
 
     return Future<FieldOperationsModule>.value(
       FieldOperationsModule._(

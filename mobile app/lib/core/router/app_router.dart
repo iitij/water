@@ -109,7 +109,7 @@ class AppRouter {
               metersRepository: GetIt.I<MetersRepository>(),
               readingsRepository: GetIt.I<ReadingsRepository>(),
               invoiceActions: GetIt.I<ReadingInvoiceActionsService>(),
-              onOpenFieldReader: () => context.push(RouteNames.fieldReader),
+              onOpenFieldReader: () => context.push<Object?>(RouteNames.fieldReader),
             ),
             routes: <RouteBase>[
               GoRoute(
@@ -118,6 +118,9 @@ class AppRouter {
                 builder: (context, state) => MeterFormScreen(
                   repository: GetIt.I<MetersRepository>(),
                   meter: state.extra is Meter ? state.extra as Meter : null,
+                  initialSubscriberId: int.tryParse(
+                    state.uri.queryParameters['subscriber_id'] ?? '',
+                  ),
                 ),
               ),
             ],
@@ -160,10 +163,10 @@ class AppRouter {
                   isOnline: queue.isOnline ?? true,
                   pendingSyncCount: queue.pendingCount,
                   can: permissions.can,
-                  onAddReading: () => context.push(RouteNames.fieldReader),
-                  onAddSubscriber: () => context.push(RouteNames.subscriberNew),
-                  onOpenReports: () => context.push(RouteNames.reports),
-                  onOpenInvoice: (invoice) => context.push('${RouteNames.invoices}/${invoice.id}'),
+                  onAddReading: () => context.push<Object?>(RouteNames.fieldReader),
+                  onAddSubscriber: () => context.push<Object?>(RouteNames.subscriberNew),
+                  onOpenReports: () => context.push<Object?>(RouteNames.reports),
+                  onOpenInvoice: (invoice) => context.push<Object?>('${RouteNames.invoices}/${invoice.id}'),
                   onCollectPayment: (ctx, dashInvoice) async {
                     await CollectPaymentSheet.show(
                       ctx,
@@ -257,39 +260,57 @@ class AppHomeShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final titles = <String>['منظومة مشاريع المياه', 'مراقب المزامنة', 'الملف الشخصي'];
     final currentIndex = shell.currentIndex.clamp(0, titles.length - 1).toInt();
-    return AdaptiveScaffold(
-      currentIndex: currentIndex,
-      destinations: _destinations,
-      onDestinationSelected: (index) => shell.goBranch(
-        index,
-        initialLocation: index == shell.currentIndex,
-      ),
-      appBar: AppBar(
-        title: Text(titles[currentIndex]),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'القارئ الميداني السريع',
-            onPressed: () => context.push(RouteNames.fieldReader),
-            icon: const Icon(Icons.speed_rounded),
+    final session = GetIt.I<SessionService>();
+    final permissions = GetIt.I<PermissionService>();
+
+    return ListenableBuilder(
+      listenable: session,
+      builder: (context, _) {
+        final canFieldRead = permissions.isAdmin ||
+            permissions.hasAnyPermission(
+              const <String>['Create:Reading', 'Update:Reading'],
+            );
+        final canQuickCollect = permissions.isAdmin ||
+            permissions.hasAnyPermission(
+              const <String>['Create:Payment', 'payments.collect'],
+            );
+        return AdaptiveScaffold(
+          currentIndex: currentIndex,
+          destinations: _destinations,
+          onDestinationSelected: (index) => shell.goBranch(
+            index,
+            initialLocation: index == shell.currentIndex,
           ),
-          IconButton(
-            tooltip: 'المحصل الميداني السريع',
-            onPressed: () => context.push(RouteNames.quickCollector),
-            icon: const Icon(Icons.point_of_sale_rounded),
+          appBar: AppBar(
+            title: Text(titles[currentIndex]),
+            actions: <Widget>[
+              if (canFieldRead)
+                IconButton(
+                  tooltip: 'القارئ الميداني السريع',
+                  onPressed: () => context.push<Object?>(RouteNames.fieldReader),
+                  icon: const Icon(Icons.speed_rounded),
+                ),
+              if (canQuickCollect)
+                IconButton(
+                  tooltip: 'المحصل الميداني السريع',
+                  onPressed: () => context.push<Object?>(RouteNames.quickCollector),
+                  icon: const Icon(Icons.point_of_sale_rounded),
+                ),
+              IconButton(
+                tooltip: 'تبديل المظهر',
+                onPressed: () => GetIt.I<AppThemeController>().toggle(),
+                icon: Icon(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Icons.light_mode_rounded
+                      : Icons.dark_mode_rounded,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
           ),
-          IconButton(
-            tooltip: 'تبديل المظهر',
-            onPressed: () => GetIt.I<AppThemeController>().toggle(),
-            icon: Icon(
-              Theme.of(context).brightness == Brightness.dark
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-            ),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: shell,
+          body: shell,
+        );
+      },
     );
   }
 }
