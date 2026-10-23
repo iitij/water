@@ -161,6 +161,7 @@ class _SubscribersView extends StatelessWidget {
         return;
       } catch (_) {}
     }
+    if (!context.mounted) return;
     final deps = FouadModule.deps;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -204,6 +205,7 @@ class _SubscribersView extends StatelessWidget {
           extra: existing,
         );
       } catch (_) {
+        if (!context.mounted) return;
         saved = await Navigator.of(context).push<bool>(
           MaterialPageRoute<bool>(
             builder: (_) => RepositoryProvider<SubscribersRepository>.value(

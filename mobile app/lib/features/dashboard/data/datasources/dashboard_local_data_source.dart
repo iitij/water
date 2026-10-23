@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../domain/entities/dashboard_entities.dart';
 import '../models/dashboard_models.dart';
 import '../models/report_models.dart';
-import '../../domain/entities/dashboard_entities.dart';
 
 class CachedDashboard {
   const CachedDashboard({required this.data, required this.savedAt});

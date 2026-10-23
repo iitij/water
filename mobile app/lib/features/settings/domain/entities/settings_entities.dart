@@ -116,7 +116,7 @@ class WhatsAppSettings extends Equatable {
     required this.paymentTemplate,
   });
 
-  factory WhatsAppSettings.defaults() => WhatsAppSettings(
+  factory WhatsAppSettings.defaults() => const WhatsAppSettings(
         enabled: false,
         method: 'click_to_chat',
         autoSendInvoice: false,

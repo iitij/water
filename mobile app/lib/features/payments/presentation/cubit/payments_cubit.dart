@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
-import '../../../invoices/domain/accounting/finance_enums.dart';
 
 enum PaymentsLoadStatus { idle, loading, ready, refreshing, failure }
 

@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_fields.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -356,7 +356,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
-              InfoNotice(
+              const InfoNotice(
                 icon: Icons.science_outlined,
                 text: 'تعديل المبلغ يُعيد الخادم على أثره توزيع الدفعات واحتساب حالة '
                     'الفاتورة (PaymentService::recalculateInvoices).',

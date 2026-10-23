@@ -19,7 +19,7 @@ class StatementPdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('كشف حساب مشترك', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.Text('كشف حساب مشترك', style: const pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 6),
               pw.Text('المشترك: $subscriberName'),
               pw.Text('إجمالي دائن: ${summary.totalCredit}  |  إجمالي مدين: ${summary.totalDebit}'),

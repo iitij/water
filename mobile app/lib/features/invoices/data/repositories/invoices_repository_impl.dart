@@ -1,6 +1,6 @@
-import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_search.dart';
+import '../../../../core/network/finance_endpoints.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../datasources/invoices_remote_datasource.dart';
 import '../models/invoice_model.dart';

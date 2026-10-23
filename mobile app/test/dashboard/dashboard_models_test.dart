@@ -21,7 +21,7 @@ void main() {
           'labels': ['سبتمبر 2026', 'أكتوبر 2026'],
           'data': [320000, 480000],
         },
-        'latest_invoices': const [],
+        'latest_invoices': const <dynamic>[],
         'overdue_invoices': [
           {
             'id': 9,

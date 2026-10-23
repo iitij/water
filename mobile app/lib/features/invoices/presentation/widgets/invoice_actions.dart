@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/services/pdf_print_service.dart';
 import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
 import '../../data/models/invoice_model.dart';
@@ -46,7 +46,8 @@ Future<void> printInvoiceThermal(BuildContext context, InvoiceModel invoice) asy
 
   if (result.status == ThermalPrintStatus.notConnected) {
     final address = await _promptPrinterAddress(context, service);
-    if (address == null || address.isEmpty || !context.mounted) {
+    if (!context.mounted) return;
+    if (address == null || address.isEmpty) {
       AppFeedback.error(context, result.message ?? 'لم تُاختر طابعة.');
       return;
     }

@@ -70,7 +70,7 @@ void main() {
     });
 
     test('rejects non-positive amounts', () {
-      final request = CollectPaymentRequest(
+      final request = const CollectPaymentRequest(
         subscriberId: 1,
         amount: 0,
         method: PaymentMethod.cash,

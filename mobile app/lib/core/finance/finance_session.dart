@@ -2,6 +2,7 @@
 /// عند Dev 1، يبقي واجهة Dev 3 (`isLoggedIn`/`has`/`canAny`/`canAll`) بلا تعديل الشاشات.
 ///
 /// لا يخزّن أي توكن هنا: `SecureStorageService` هو مصدر الحقيقة (انظر `configureDependencies`).
+library;
 import '../auth/session_service.dart';
 import '../permissions/permission_service.dart';
 

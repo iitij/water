@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_search.dart';
-import '../../../../core/finance/finance_feedback.dart';
-import '../../../../core/finance/finance_responsive.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
@@ -257,7 +257,7 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           );
           if (!confirmed) return false;
           await cubit.deletePayment(payment.id);
-          if (context.mounted) AppFeedback.success(context, 'تم حذف السند.');
+          if (mounted) AppFeedback.success(context, 'تم حذف السند.');
           return true;
         },
         child: GestureDetector(

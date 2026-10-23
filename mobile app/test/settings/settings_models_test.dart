@@ -13,8 +13,8 @@ void main() {
   });
 
   test('template defaults include all invoice and receipt switches/labels', () {
-    final invoice = TemplateSettingsModel.fromJson(TemplateKind.invoice, const {});
-    final receipt = TemplateSettingsModel.fromJson(TemplateKind.receipt, const {});
+    final invoice = TemplateSettingsModel.fromJson(TemplateKind.invoice, const <String, dynamic>{});
+    final receipt = TemplateSettingsModel.fromJson(TemplateKind.receipt, const <String, dynamic>{});
 
     expect(invoice.boolean('inv_show_bill_number'), isTrue);
     expect(invoice.boolean('inv_show_tanker'), isFalse);
@@ -25,7 +25,7 @@ void main() {
   });
 
   test('default operational templates preserve all Laravel variables', () {
-    final settings = WhatsAppSettingsModel.fromJson(const {});
+    final settings = WhatsAppSettingsModel.fromJson(const <String, dynamic>{});
     expect(settings.invoiceMessage, contains('{meter_code}'));
     expect(settings.invoiceMessage, contains('{unit_price}'));
     expect(settings.paymentMessage, contains('{payment_method}'));

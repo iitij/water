@@ -140,8 +140,8 @@ class ReadingsRemoteDataSource {
           break;
         }
       }
-      if (value is Map && (value as Map)['data'] is List) {
-        value = (value as Map)['data'];
+      if (value is Map && (value)['data'] is List) {
+        value = (value)['data'];
       }
     }
     if (value is! List) return const [];

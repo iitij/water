@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class AppTypography {
   const AppTypography._();
 
-  static const fontFamily = 'Tajawal';
+  static const fontFamily = 'IBMPlexSansArabic';
 
   static TextTheme textTheme(Brightness brightness) {
     final color = brightness == Brightness.dark

@@ -2,6 +2,7 @@
 ///
 /// كل تبعيات Dev 3 تُقرأ من `getIt` الخاص بـ Dev 1 بعد أن يتأكد [FinanceModule.ensure]
 /// من تسجيلها — فلا يحتاج المضيف إلى تعديل أي ملف لتشغيل الوحدة المالية.
+library;
 import 'package:get_it/get_it.dart';
 
 import 'finance_api_client.dart';

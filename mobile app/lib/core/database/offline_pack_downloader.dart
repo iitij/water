@@ -116,7 +116,7 @@ class OfflinePackDownloader {
   }) async {
     try {
       onProgress?.call('جلب حزمة المربع الأوفلاين من الخادم', .15);
-      final response = await _dio.get(ApiEndpoints.squareOfflinePack(squareId));
+      final response = await _dio.get<dynamic>(ApiEndpoints.squareOfflinePack(squareId));
       final body = response.data;
       if (body is! Map) return null;
 

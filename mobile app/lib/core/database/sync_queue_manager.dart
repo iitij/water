@@ -202,8 +202,8 @@ class SyncQueueManager {
         final id = action['id'].toString();
         final attempts = _toInt(action['attempt_count']);
         if (permanentFailure) {
-          await _markFailed(id, attempts, message!, response: _asMap(error.response?.data));
-          await _database.setReadingSyncError(id, message!);
+          await _markFailed(id, attempts, message, response: _asMap(error.response?.data));
+          await _database.setReadingSyncError(id, message);
           failedCount++;
         } else {
           await _database.updateSyncAction(

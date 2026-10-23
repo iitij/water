@@ -1,5 +1,6 @@
 /// أدوات التجاوب الخاصة بالوحدة المالية، مبنية على `core/responsive/` عند Dev 1
 /// (`AppBreakpoints` + `AdaptiveScaffold.isCompact/isMedium/isExpanded`).
+library;
 import 'package:flutter/material.dart';
 
 import '../responsive/adaptive_scaffold.dart';

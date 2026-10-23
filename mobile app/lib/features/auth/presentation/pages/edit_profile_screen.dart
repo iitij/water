@@ -78,7 +78,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       confirmLabel: 'تسجيل الخروج',
       destructive: true,
     );
-    if (confirmed && mounted) context.read<AuthCubit>().logout();
+    if (confirmed && mounted) await context.read<AuthCubit>().logout();
   }
 
   @override

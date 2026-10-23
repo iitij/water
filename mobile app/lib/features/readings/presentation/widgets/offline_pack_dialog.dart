@@ -150,7 +150,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<int?>(
-                      value: widget.squares.any((s) => s.id == _selectedSquareId)
+                      initialValue: widget.squares.any((s) => s.id == _selectedSquareId)
                           ? _selectedSquareId
                           : null,
                       isExpanded: true,

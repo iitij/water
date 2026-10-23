@@ -81,7 +81,7 @@ class MetersRemoteDataSource {
   }
 
   Future<Map<String, dynamic>> bulkDeleteMeters(List<int> meterIds) async {
-    final response = await _dio.post(
+    final response = await _dio.post<dynamic>(
       ApiEndpoints.bulkDeleteMeters,
       data: {'ids': meterIds},
     );
@@ -102,8 +102,8 @@ class MetersRemoteDataSource {
           break;
         }
       }
-      if (value is Map && (value as Map)['data'] is List) {
-        value = (value as Map)['data'];
+      if (value is Map && (value)['data'] is List) {
+        value = (value)['data'];
       }
     }
     if (value is! List) return const [];

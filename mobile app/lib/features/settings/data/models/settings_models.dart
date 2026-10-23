@@ -143,7 +143,7 @@ class WhatsAppSettingsModel extends WhatsAppSettings {
 }
 
 class LocalServerStatusModel extends LocalServerStatus {
-  LocalServerStatusModel({
+  const LocalServerStatusModel({
     required super.state,
     required super.checkedAt,
     super.qrCode,

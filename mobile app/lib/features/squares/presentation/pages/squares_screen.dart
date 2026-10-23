@@ -118,7 +118,7 @@ class _SquaresView extends StatelessWidget {
                       'حذف ${state.selectedIds.length} مربعاً؟ سيتم تخطي المربعات التي تحتوي على مشتركين.',
                     )) {
                       if (context.mounted) {
-                        context.read<SquaresCubit>().bulkDelete();
+                        await context.read<SquaresCubit>().bulkDelete();
                       }
                     }
                   },
@@ -254,7 +254,7 @@ class _MasterList extends StatelessWidget {
                                   'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
                                 )) {
                                   if (context.mounted) {
-                                    context.read<SquaresCubit>().delete(sq.id);
+                                    await context.read<SquaresCubit>().delete(sq.id);
                                   }
                                 }
                               },
@@ -289,6 +289,7 @@ class _SquareDetail extends StatelessWidget {
         return;
       } catch (_) {}
     }
+    if (!context.mounted) return;
     final deps = FouadModule.deps;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(

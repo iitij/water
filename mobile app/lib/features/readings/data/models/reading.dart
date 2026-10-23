@@ -346,7 +346,7 @@ Map<String, dynamic>? _map(Object? value) {
   return null;
 }
 
-String? _string(Object? value) => value == null ? null : value.toString();
+String? _string(Object? value) => value?.toString();
 
 int? _int(Object? value) {
   if (value is int) return value;

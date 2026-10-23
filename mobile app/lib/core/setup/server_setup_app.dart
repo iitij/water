@@ -67,7 +67,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
     locale: const Locale('ar'),
     supportedLocales: const [Locale('ar')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(colorSchemeSeed: const Color(0xFF075D73), fontFamily: 'Tajawal'),
+    theme: ThemeData(colorSchemeSeed: const Color(0xFF075D73), fontFamily: 'IBMPlexSansArabic'),
     home: Scaffold(
       appBar: AppBar(title: const Text('إعداد خادم مشروع المياه')),
       body: Center(

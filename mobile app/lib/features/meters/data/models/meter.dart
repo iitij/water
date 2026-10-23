@@ -219,7 +219,7 @@ Map<String, dynamic>? _asMap(Object? value) {
   return null;
 }
 
-String? _asString(Object? value) => value == null ? null : value.toString();
+String? _asString(Object? value) => value?.toString();
 
 int? _asInt(Object? value) {
   if (value is int) return value;

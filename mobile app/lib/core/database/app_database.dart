@@ -13,7 +13,7 @@ import 'package:path_provider/path_provider.dart';
 /// mobile feature branches are being integrated, and still uses Drift's query
 /// executor, isolate-backed SQLite engine, transactions, and bound variables.
 class AppDatabase extends GeneratedDatabase {
-  AppDatabase(QueryExecutor executor) : super(executor);
+  AppDatabase(super.executor);
 
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
@@ -657,14 +657,14 @@ class AppDatabase extends GeneratedDatabase {
           _date(serverReading?['actual_reading_date']),
           _date(serverReading?['period_start']),
           _date(serverReading?['period_end']),
-          hasServerValue && serverReading!.containsKey('previous_reading')
-              ? _double(serverReading!['previous_reading'])
+          hasServerValue && serverReading.containsKey('previous_reading')
+              ? _double(serverReading['previous_reading'])
               : null,
-          hasServerValue && serverReading!.containsKey('current_reading')
-              ? _double(serverReading!['current_reading'])
+          hasServerValue && serverReading.containsKey('current_reading')
+              ? _double(serverReading['current_reading'])
               : null,
-          hasServerValue && serverReading!.containsKey('consumption_units')
-              ? _double(serverReading!['consumption_units'])
+          hasServerValue && serverReading.containsKey('consumption_units')
+              ? _double(serverReading['consumption_units'])
               : null,
           isInvoiced == null ? null : (isInvoiced ? 1 : 0),
           invoiceId,

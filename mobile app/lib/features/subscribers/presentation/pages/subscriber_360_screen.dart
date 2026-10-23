@@ -139,6 +139,7 @@ class _Subscriber360View extends StatelessWidget {
       try {
         saved = await context.push<bool>('/subscriber-form', extra: activeSubscriber);
       } catch (_) {
+        if (!context.mounted) return;
         saved = await Navigator.of(context).push<bool>(
           MaterialPageRoute<bool>(
             builder: (_) => RepositoryProvider<SubscribersRepository>.value(
@@ -847,7 +848,7 @@ class _FeesTab extends StatelessWidget {
               children: [
                 if (meters.isNotEmpty) ...[
                   DropdownButtonFormField<int?>(
-                    value: meters.any((m) => m.meterId == selectedMeterId) ? selectedMeterId : null,
+                    initialValue: meters.any((m) => m.meterId == selectedMeterId) ? selectedMeterId : null,
                     decoration: const InputDecoration(
                       labelText: 'العداد (اختياري)',
                       border: OutlineInputBorder(),
@@ -872,7 +873,7 @@ class _FeesTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<FeeStatus>(
-                  value: selectedStatus,
+                  initialValue: selectedStatus,
                   decoration: const InputDecoration(
                     labelText: 'الحالة',
                     border: OutlineInputBorder(),
@@ -1076,7 +1077,7 @@ class _RequestsTab extends StatelessWidget {
                   },
                 ),
                 DropdownButtonFormField<TankerStatus>(
-                  value: selectedStatus,
+                  initialValue: selectedStatus,
                   decoration: const InputDecoration(
                     labelText: 'الحالة',
                     border: OutlineInputBorder(),

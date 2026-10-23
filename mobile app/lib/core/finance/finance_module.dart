@@ -15,6 +15,7 @@
 /// ```dart
 /// routes: <RouteBase>[...financeRoutes, ...FinanceModule.routes]
 /// ```
+library;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';

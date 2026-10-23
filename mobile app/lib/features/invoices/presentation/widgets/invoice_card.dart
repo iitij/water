@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/finance/finance_colors.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
-import '../../../../core/widgets/finance_badges.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/invoice_accounting.dart';
-import '../../../../core/finance/finance_colors.dart';
 
 /// بطاقة فاتورة موحّدة — **مكوّن مُسلَّم** لفؤاد (`SCR-05/07/19/20`) ولأسامة
 /// (`SCR-03` ودجة الفواتير المتأخرة)، ولشاشة المحصل السريع `SCR-13`.

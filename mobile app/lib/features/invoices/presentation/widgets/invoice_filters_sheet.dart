@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -16,7 +17,7 @@ Future<void> showInvoiceFiltersSheet(
 }) async {
   List<SquareOption> squares = const <SquareOption>[];
   Future<List<SubscriberOption>> Function(String search)? resolvedLoader = subscribersLoader;
-  if (getIt.isRegistered<ReferencesRemoteDataSource>()) {
+  if (GetIt.I.isRegistered<ReferencesRemoteDataSource>()) {
     final refs = sl<ReferencesRemoteDataSource>();
     try {
       squares = await refs.squares();
@@ -263,7 +264,6 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   Widget _periodDropdown() {
     return DropdownButtonFormField<String?>(
-      key: ValueKey<String?>('period-${_draft.billingPeriod}'),
       initialValue: _draft.billingPeriod,
       decoration: const InputDecoration(labelText: 'فترة الفوترة'),
       isExpanded: true,
@@ -288,7 +288,6 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
     final squareId =
         widget.squares.any((s) => s.id == _draft.squareId) ? _draft.squareId : null;
     return DropdownButtonFormField<int?>(
-      key: ValueKey<int?>(squareId),
       initialValue: squareId,
       decoration: const InputDecoration(labelText: 'المربع السكني'),
       isExpanded: true,

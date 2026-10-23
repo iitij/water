@@ -139,7 +139,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<int?>(
-                      value: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
+                      initialValue: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
                       decoration: const InputDecoration(
                         labelText: 'العداد',
                         border: OutlineInputBorder(),
@@ -164,7 +164,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<FeeStatus>(
-                    value: selectedStatus,
+                    initialValue: selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'الحالة',
                       border: OutlineInputBorder(),
@@ -384,7 +384,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                                 onPressed: () async {
                                   if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
                                     if (context.mounted) {
-                                      context.read<SubscriptionFeesCubit>().delete(f.id);
+                                      await context.read<SubscriptionFeesCubit>().delete(f.id);
                                     }
                                   }
                                 },

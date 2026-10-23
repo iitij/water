@@ -157,13 +157,13 @@ void main() {
     });
 
     test('هاتف المستأجر له الأولوية على هاتف المشترك', () {
-      final invoice = InvoiceModel(
+      final invoice = const InvoiceModel(
         id: 10,
         subscriberId: 3,
         invoiceType: InvoiceType.meter,
         billNumber: 'INV-10',
-        subscriber: const InvoiceSubscriberRef(id: 3, name: 'صالح', phone: '0700000000'),
-        meter: const InvoiceMeterRef(
+        subscriber: InvoiceSubscriberRef(id: 3, name: 'صالح', phone: '0700000000'),
+        meter: InvoiceMeterRef(
           id: 5,
           uniqueCode: 'M-5',
           tenantName: 'مستأجر',
@@ -181,14 +181,14 @@ void main() {
         tankerInvoiceTemplate: 'وايت: {tanker_fee}',
       );
 
-      final subscription = InvoiceModel(
+      final subscription = const InvoiceModel(
         id: 11,
         subscriberId: 3,
         invoiceType: InvoiceType.subscription,
         billNumber: 'SUB-1',
         subscriptionInstallment: 2000,
       );
-      final tanker = InvoiceModel(
+      final tanker = const InvoiceModel(
         id: 12,
         subscriberId: 3,
         invoiceType: InvoiceType.tanker,
