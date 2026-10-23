@@ -22,6 +22,8 @@ class Reading extends Model
         'created_by',
         'period_start',
         'period_end',
+        'sync_uuid',
+        'image_path',
     ];
 
     protected $casts = [

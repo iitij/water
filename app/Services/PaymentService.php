@@ -164,18 +164,36 @@ class PaymentService
         ?string $notes = null,
         ?string $reason = null,
         ?int $userId = null,
+        ?string $paymentDate = null,
+        ?int $requestedMeterId = null,
+        ?string $syncUuid = null,
     ): Payment {
-        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId) {
-            
-            // استنتاج العداد من الفاتورة إذا وجدت
-            $meterId = null;
-            $meter = null;
-            if ($invoiceId) {
-                $invoice = Invoice::find($invoiceId);
-                if ($invoice && $invoice->meter_id) {
-                    $meterId = $invoice->meter_id;
-                    $meter = $invoice->meter;
+        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid) {
+            if ($syncUuid) {
+                $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->first();
+                if ($existing) {
+                    if ($existing->trashed()) {
+                        abort(409, 'عملية الدفع المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
+                    }
+                    if ((int) $existing->user_id !== (int) ($userId ?? 0)
+                        || (int) $existing->subscriber_id !== (int) $subscriber->id
+                        || (int) ($existing->invoice_id ?? 0) !== (int) ($invoiceId ?? 0)
+                        || round((float) $existing->amount, 2) !== round($amount, 2)
+                        || (! $invoiceId && (int) ($existing->meter_id ?? 0) !== (int) ($requestedMeterId ?? 0))
+                        || $existing->payment_method !== $paymentMethod) {
+                        abort(409, 'معرّف المزامنة مستخدم مسبقاً لعملية دفع مختلفة.');
+                    }
+                    return $existing;
                 }
+            }
+
+            // استنتاج العداد من الفاتورة، أو من الاختيار الصريح للحساب المعزول.
+            $meterId = $requestedMeterId;
+            $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
+            if ($invoiceId) {
+                $invoice = Invoice::where('subscriber_id', $subscriber->id)->findOrFail($invoiceId);
+                $meterId = $invoice->meter_id;
+                $meter = $invoice->meter;
             }
 
             // 1. إنشاء سجل الدفع
@@ -186,11 +204,12 @@ class PaymentService
                 'user_id' => $userId,
                 'receipt_number' => Payment::generateReceiptNumber(),
                 'amount' => $amount,
-                'payment_date' => now(),
+                'payment_date' => $paymentDate ?? now()->toDateString(),
                 'payment_method' => $paymentMethod,
                 'reference_number' => $referenceNumber,
                 'notes' => $notes,
                 'reason' => $reason,
+                'sync_uuid' => $syncUuid,
             ]);
 
             // 2. توزيع الدفعة على الفواتير المستحقة
