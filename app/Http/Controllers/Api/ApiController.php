@@ -27,22 +27,32 @@ abstract class ApiController extends Controller
 
     protected function authorizeApi(string $resource, string $ability): void
     {
+        abort_unless(request()->user(), 401, 'يلزم تسجيل الدخول.');
+        abort_unless($this->allowsApi($resource, $ability), 403, 'ليست لديك صلاحية لتنفيذ هذا الإجراء.');
+    }
+
+    /**
+     * نسخة غير مُجهضة من `authorizeApi` للشاشات المجمّعة (مثل البحث الشامل)
+     * التي تبني نتائجها حسب ما يُسمح به للمستخدم دون إفشال الطلب كله.
+     */
+    protected function allowsApi(string $resource, string $ability): bool
+    {
         $user = request()->user();
-        abort_unless($user, 401, 'يلزم تسجيل الدخول.');
+        if (! $user) {
+            return false;
+        }
 
         if ($this->isAdminUser($user)) {
-            return;
+            return true;
         }
 
         $resourceName = class_basename($resource);
         $legacy = ucfirst($ability) . ':' . $resourceName;
         $permission = Str::snake($ability) . '_' . Str::snake($resourceName);
 
-        if ($user->can($legacy) || $user->can($permission) || $this->hasBuiltInRoleAccess($user, $resourceName, $ability)) {
-            return;
-        }
-
-        abort(403, 'ليست لديك صلاحية لتنفيذ هذا الإجراء.');
+        return $user->can($legacy)
+            || $user->can($permission)
+            || $this->hasBuiltInRoleAccess($user, $resourceName, $ability);
     }
 
     protected function authorizeSystem(string $permission = 'ViewAny:User'): void

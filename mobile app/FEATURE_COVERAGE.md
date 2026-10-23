@@ -8,7 +8,21 @@ modules. The workspace changes make those modules discoverable without putting
 an administration manual on the home screen. No web views or simulated business
 data replace the native workflows.
 
-### Delivered in this change
+### Delivered — global search
+
+- A single **البحث الشامل** screen (`/search`) reachable from the app bar on every
+  tab and from the desktop rail. It calls `GET /api/search` with a 320 ms
+  debounce, drops stale responses, and groups subscribers, invoices, meters,
+  receipts and squares.
+- The server returns only the groups the signed-in user may list
+  (`Subscriber`/`Invoice`/`Meter`/`Payment`/`Square` `viewAny`), using the same
+  Shield + legacy snake_case + built-in-role rules as the rest of the API.
+  Arabic-Indic digits are normalised before matching.
+- Tapping a result opens the existing screen (subscriber 360, invoice detail,
+  payment editor, the subscriber's meters, or the squares list); no read-only
+  duplicate screens were added.
+
+### Delivered in the workspace change
 
 - Task-first Arabic/RTL home, four permission-filtered daily shortcuts, a short
   quick-access list, and a real shared-queue connection/pending/failure summary.
@@ -53,6 +67,7 @@ Action-by-action acceptance against a running Laravel instance remains required.
 | Subscription fees | رسوم الاشتراك |
 | Service/tanker requests | طلبات الخدمة والوايت; edit from request menu |
 | Transactions (read only) | الحركات المالية |
+| Filament global search | البحث الشامل |
 | Dashboard widgets | لوحة المؤشرات |
 | Reports | التقارير |
 | ExportDataPage | تصدير Excel |
@@ -71,9 +86,10 @@ Do not call the app “all Laravel functions verified” until these are complet
 
 - Compare **each** Filament form field, filter, relation action, export, single
   action and bulk action with the Flutter UI and API, using seeded test data.
-  Module availability is not proof of action-level equivalence. In particular,
-  the meter and service-request bulk-delete API actions still need mobile UI
-  parity work; the current request editor does not add bulk selection.
+  Module availability is not proof of action-level equivalence. The current
+  source-level matrix lives in `docs/MOBILE_PARITY_AUDIT_AR.md`; the remaining
+  action-level gaps it lists are tariff bulk restore/force-delete, meter-owner
+  transfer, and the Filament "save and add meter/subscription fee" chains.
 - Resolve meter-owner transfer: the mobile meter form currently disables owner
   changes even though the current API accepts `subscriber_id` updates. Review
   balance/history isolation before enabling financial ownership changes.

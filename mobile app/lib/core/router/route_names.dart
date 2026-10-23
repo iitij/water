@@ -6,6 +6,7 @@ class RouteNames {
   static const login = '/login';
   static const home = '/home';
   static const services = '/services';
+  static const globalSearch = '/search';
   static const profile = '/profile';
   static const offlineSync = '/sync';
 

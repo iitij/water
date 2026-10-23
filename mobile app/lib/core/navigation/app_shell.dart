@@ -166,6 +166,12 @@ class _TopBar extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'البحث الشامل',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => context.push(RouteNames.globalSearch),
+                  icon: const Icon(Icons.search_rounded, size: 21),
+                ),
                 AnimatedBuilder(
                   animation: queue,
                   builder: (context, _) => _SyncButton(
@@ -398,7 +404,26 @@ class _SideRail extends StatelessWidget {
                 subtitle: 'منصة إدارة المشروع',
                 onDark: false,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+              Material(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: InkWell(
+                  onTap: () => context.push(RouteNames.globalSearch),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(Icons.search_rounded, size: 18, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Text('بحث شامل', style: theme.textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
               Padding(
                 padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
                 child: Text(

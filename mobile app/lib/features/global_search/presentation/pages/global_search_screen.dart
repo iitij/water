@@ -1,0 +1,220 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/widgets/search_text_field.dart';
+import '../../data/models/global_search_models.dart';
+import '../cubit/global_search_cubit.dart';
+
+/// بحث واحد في كل موارد النظام (مشتركون، فواتير، عدادات، سندات قبض ومربعات).
+///
+/// الخادم لا يعيد إلا المجموعات التي يملك المستخدم صلاحية عرضها، لذلك لا تحتاج
+/// الشاشة إلى فلترة إضافية. الضغط على نتيجة يفتح شاشة السجل نفسها المستخدمة في
+/// التطبيق (المشترك 360، الفاتورة، السند، …) بدل أي شاشة عرض جديدة.
+class GlobalSearchScreen extends StatelessWidget {
+  const GlobalSearchScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<GlobalSearchCubit, GlobalSearchState>(
+      builder: (context, state) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('البحث الشامل')),
+          body: SafeArea(
+            top: false,
+            child: Column(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.xs,
+                  ),
+                  child: SearchTextField(
+                    query: state.query,
+                    hintText: 'اسم، هاتف، رقم فاتورة، سند أو عداد…',
+                    onChanged: context.read<GlobalSearchCubit>().search,
+                  ),
+                ),
+                if (state.loading) const LinearProgressIndicator(minHeight: 2),
+                Expanded(child: _body(context, state)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _body(BuildContext context, GlobalSearchState state) {
+    if (state.error != null) {
+      return EmptyStateWidget(
+        title: 'تعذّر تنفيذ البحث',
+        message: state.error!,
+        icon: Icons.cloud_off_rounded,
+        action: TextButton.icon(
+          onPressed: context.read<GlobalSearchCubit>().retry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('إعادة المحاولة'),
+        ),
+      );
+    }
+
+    if (state.needsMoreCharacters) {
+      return const EmptyStateWidget(
+        title: 'أكمل حرفين على الأقل',
+        message: 'البحث يبدأ من حرفين حتى لا يعيد كل السجلات.',
+        icon: Icons.keyboard_rounded,
+      );
+    }
+
+    if (!state.searched) {
+      return EmptyStateWidget(
+        title: 'ابحث في كل النظام',
+        message: 'اسم مشترك، رقم هاتف، رقم فاتورة، سند قبض، أو رقم عداد — في مكان واحد.',
+        icon: Icons.manage_search_rounded,
+        action: TextButton.icon(
+          onPressed: () => context.push('/services'),
+          icon: const Icon(Icons.apps_rounded),
+          label: const Text('تصفّح كل الخدمات'),
+        ),
+      );
+    }
+
+    if (state.loading && !state.hasResults) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2.4));
+    }
+
+    if (!state.hasResults) {
+      return const EmptyStateWidget(
+        title: 'لا توجد نتائج',
+        message: 'جرّب اسم المشترك كاملاً، أو رقم الهاتف، أو رقم الفاتورة كما يظهر في السند.',
+        icon: Icons.search_off_rounded,
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.xs,
+        AppSpacing.md,
+        AppSpacing.xxl,
+      ),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: <Widget>[
+        for (final group in state.groups)
+          ...<Widget>[
+            _GroupHeader(group: group),
+            for (final item in group.items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: _ResultTile(type: group.type, item: item),
+              ),
+          ],
+      ],
+    );
+  }
+}
+
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.group});
+
+  final GlobalSearchGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.xs, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),
+      child: Row(
+        children: <Widget>[
+          Text(
+            group.label,
+            style: theme.textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            '${group.items.length}',
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultTile extends StatelessWidget {
+  const _ResultTile({required this.type, required this.item});
+
+  final String type;
+  final GlobalSearchItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final visual = _visualFor(type, scheme);
+    final caption = item.caption;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: () => _open(context),
+      child: ListTile(
+        contentPadding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.sm, 2, AppSpacing.sm, 2),
+        leading: AppGlyph(icon: visual.icon, tone: visual.tone, size: 38),
+        title: Text(
+          item.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleSmall,
+        ),
+        subtitle: caption == null
+            ? null
+            : Text(
+                caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+        trailing: item.amount == null
+            ? const Icon(Icons.chevron_left_rounded, size: 18)
+            : Text(
+                CurrencyFormatter.withLabel(item.amount),
+                style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context) {
+    final route = switch (type) {
+      'subscriber' => '/subscribers/${item.id}',
+      'invoice' => '/invoices/${item.id}',
+      'payment' => '/payments/${item.id}/edit',
+      'meter' => item.subscriberId != null
+          ? '/subscribers/${item.subscriberId}'
+          : '/meters',
+      'square' => '/squares',
+      _ => '/home',
+    };
+    context.push(route);
+  }
+
+  static ({IconData icon, Color tone}) _visualFor(String type, ColorScheme scheme) {
+    return switch (type) {
+      'subscriber' => (icon: Icons.person_rounded, tone: scheme.primary),
+      'invoice' => (icon: Icons.receipt_long_rounded, tone: AppColors.warning),
+      'meter' => (icon: Icons.water_damage_outlined, tone: AppColors.info),
+      'payment' => (icon: Icons.payments_rounded, tone: AppColors.success),
+      'square' => (icon: Icons.grid_view_rounded, tone: AppColors.violet),
+      _ => (icon: Icons.search_rounded, tone: scheme.primary),
+    };
+  }
+}
