@@ -135,7 +135,7 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                   Expanded(
                     child: Text(
                       widget.tariff == null ? 'تسعيرة جديدة' : 'تعديل التسعيرة',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
@@ -323,7 +323,7 @@ class TariffCard extends StatelessWidget {
                   children: <Widget>[
                     Text(
                       tariff.name,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -339,7 +339,7 @@ class TariffCard extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     CurrencyFormatter.withLabel(tariff.unitPrice),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   if (busy)

@@ -99,69 +99,27 @@ class _PressableScaleState extends State<PressableScale> {
   }
 }
 
-/// A soft animated background wash used behind hero sections.
+/// Flat ink backdrop used behind the splash and login screens.
+///
+/// Replaces the old animated aqua gradient: one deep surface, no ornaments,
+/// so the entry screens match the rest of the product.
 class AquaBackdrop extends StatelessWidget {
   const AquaBackdrop({
     super.key,
-    this.colors = const <Color>[
-      Color(0xFF04161F),
-      Color(0xFF073B49),
-      Color(0xFF0E7C86),
-    ],
+    this.colors = const <Color>[AppColors.panel],
     this.child,
   });
 
+  /// Deprecated: accepted for compatibility and ignored.
   final List<Color> colors;
   final Widget? child;
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-          colors: colors,
-          stops: const <double>[0, .55, 1],
-        ),
-      ),
-      child: Stack(
-        children: <Widget>[
-          PositionedDirectional(
-            top: -140,
-            end: -80,
-            child: _Orb(size: 340, color: Colors.white.withValues(alpha: .1)),
-          ),
-          PositionedDirectional(
-            bottom: -170,
-            start: -80,
-            child: _Orb(size: 380, color: AppColors.secondary.withValues(alpha: .16)),
-          ),
-          PositionedDirectional(
-            top: 160,
-            start: 30,
-            child: _Orb(size: 120, color: Colors.white.withValues(alpha: .05)),
-          ),
-          if (child != null) Positioned.fill(child: child!),
-        ],
-      ),
+      decoration: BoxDecoration(color: dark ? AppColors.darkPaper : AppColors.panel),
+      child: child,
     );
   }
-}
-
-class _Orb extends StatelessWidget {
-  const _Orb({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: <Color>[color, color.withValues(alpha: 0)]),
-        ),
-      );
 }

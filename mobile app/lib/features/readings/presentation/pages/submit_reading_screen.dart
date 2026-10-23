@@ -536,7 +536,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                 textDirection: TextDirection.ltr,
                 child: Text(
                   _formatNumber(value),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -786,13 +786,13 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                 textDirection: TextDirection.ltr,
                 child: Text(
                   value,
-                  style: TextStyle(fontWeight: emphasis ? FontWeight.w800 : FontWeight.w500),
+                  style: TextStyle(fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500),
                 ),
               )
             else
               Text(
                 value,
-                style: TextStyle(fontWeight: emphasis ? FontWeight.w800 : FontWeight.w500),
+                style: TextStyle(fontWeight: emphasis ? FontWeight.w600 : FontWeight.w500),
               ),
           ],
         ),

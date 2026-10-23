@@ -132,7 +132,7 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
                     const SizedBox(height: 14),
                     Text(
                       'لا توجد عمليات معلّقة',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 5),
                     Text(

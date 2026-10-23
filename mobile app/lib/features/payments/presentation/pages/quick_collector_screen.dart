@@ -233,7 +233,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
               padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Text(
                 'تصفية بالمربع',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
             ListTile(
@@ -363,7 +363,7 @@ class _CollectorCard extends StatelessWidget {
             children: <Widget>[
               Text(
                 invoice.beneficiaryName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
               Text(
@@ -420,7 +420,7 @@ class _DetailRow extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: bold ? 14 : 12,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+              fontWeight: bold ? FontWeight.w600 : FontWeight.w700,
               color: tone,
             ),
           ),

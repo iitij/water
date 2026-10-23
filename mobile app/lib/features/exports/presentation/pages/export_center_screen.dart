@@ -245,7 +245,7 @@ class _ExportCard extends StatelessWidget {
                     _title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.white,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
                 ),

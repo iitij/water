@@ -217,7 +217,7 @@ class _LoginFormCard extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         'مرحباً بعودتك',
-                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text('سجّل الدخول لمتابعة يومك', style: theme.textTheme.bodySmall),
@@ -362,7 +362,7 @@ class _BrandPanel extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleLarge?.copyWith(
                       color: Colors.white,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
@@ -379,7 +379,7 @@ class _BrandPanel extends StatelessWidget {
           'إدارة واضحة،\nمن الميدان إلى المكتب.',
           style: theme.textTheme.displaySmall?.copyWith(
             color: Colors.white,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             height: 1.28,
           ),
         ),
@@ -460,18 +460,18 @@ class _PreviewCard extends StatelessWidget {
             children: <Widget>[
               Text(
                 'ملخص اليوم',
-                style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: .22),
+                  color: Colors.white.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: const Text(
                   'مباشر',
-                  style: TextStyle(color: Color(0xFF6EE7B7), fontSize: 10.5, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: AppColors.accentOnPanel, fontSize: 10.5, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -483,7 +483,7 @@ class _PreviewCard extends StatelessWidget {
                 child: _PreviewMetric(
                   label: 'محصّل اليوم',
                   value: '12,480',
-                  color: Color(0xFF6EE7B7),
+                  color: AppColors.accentOnPanel,
                 ),
               ),
               const SizedBox(width: 10),
@@ -491,7 +491,7 @@ class _PreviewCard extends StatelessWidget {
                 child: _PreviewMetric(
                   label: 'قراءات',
                   value: '86',
-                  color: Color(0xFF7DD3FC),
+                  color: AppColors.onPanel,
                 ),
               ),
             ],
@@ -501,7 +501,7 @@ class _PreviewCard extends StatelessWidget {
             height: 44,
             child: AppMiniBars(
               values: <double>[18, 26, 21, 34, 30, 42, 38],
-              color: Color(0xFF5EEAD4),
+              color: AppColors.accentOnPanel,
               height: 44,
             ),
           ),
@@ -538,7 +538,7 @@ class _PreviewMetric extends StatelessWidget {
             textDirection: TextDirection.ltr,
             child: Text(
               value,
-              style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w800, height: 1.1),
+              style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w600, height: 1.1),
             ),
           ),
         ],
@@ -560,7 +560,7 @@ class _CompactBrand extends StatelessWidget {
         Text(
           AppConfig.appName,
           textAlign: TextAlign.center,
-          style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+          style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
         Text(

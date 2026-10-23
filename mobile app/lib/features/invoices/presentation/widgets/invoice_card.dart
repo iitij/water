@@ -86,7 +86,7 @@ class InvoiceCard extends StatelessWidget {
                         LtrNumberText(
                           invoice.billNumber.isEmpty ? '—' : invoice.billNumber,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             fontSize: 15,
                           ),
                         ),
@@ -207,7 +207,7 @@ class InvoiceCard extends StatelessWidget {
                                 '-',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: remainingColor,
                                 ),
                               )
@@ -215,7 +215,7 @@ class InvoiceCard extends StatelessWidget {
                                 remainingLabel,
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: remainingColor,
                                 ),
                               ),
@@ -394,7 +394,7 @@ class InvoicesSummaryBar extends StatelessWidget {
                   CurrencyFormatter.withLabel(totalDue),
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
                 ),
@@ -420,7 +420,7 @@ class InvoicesSummaryBar extends StatelessWidget {
             value,
             style: TextStyle(
               color: color ?? Colors.white,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               fontSize: 15,
             ),
           ),

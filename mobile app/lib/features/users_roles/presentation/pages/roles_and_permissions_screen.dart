@@ -116,7 +116,7 @@ class _RolesView extends StatelessWidget {
                 color: role.isSuperAdmin ? AdminPalette.danger : AdminPalette.primary,
               ),
             ),
-            title: LtrText(role.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+            title: LtrText(role.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Wrap(
               spacing: 8,
               runSpacing: 6,

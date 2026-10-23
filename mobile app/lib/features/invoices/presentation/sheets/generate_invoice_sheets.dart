@@ -45,7 +45,7 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
             padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
               'إصدار فاتورة',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
           _PickerTile(
@@ -313,7 +313,7 @@ class _GenerateSheetBody extends StatelessWidget {
                   Expanded(
                     child: Text(
                       chrome.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
@@ -509,14 +509,14 @@ class LiveSummaryCard extends StatelessWidget {
                   const Expanded(
                     child: Text(
                       'صافي الفاتورة',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
                   Text(
                     CurrencyFormatter.withLabel(state.netTotal),
                     style: const TextStyle(
                       fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.danger,
                     ),
                   ),
@@ -564,7 +564,7 @@ Future<void> _afterGenerated(BuildContext context, InvoiceModel invoice) async {
             Text(
               'تم إصدار الفاتورة ${invoice.billNumber}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 4),
             Text(

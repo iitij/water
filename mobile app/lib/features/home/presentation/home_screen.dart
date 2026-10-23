@@ -5,17 +5,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_service.dart';
 import '../../../core/navigation/module_catalog.dart';
-import '../../../core/navigation/sub_page.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_brand.dart';
-import '../../../core/ui/app_controls.dart';
 import '../../../core/ui/app_motion.dart';
 import '../../../core/ui/app_surfaces.dart';
 import '../../../core/ui/app_tiles.dart';
 import '../../../core/ui/app_tokens.dart';
-import '../../../core/utils/arabic_date.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../../core/widgets/shimmer_skeleton.dart';
 import '../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../dashboard/domain/repositories/dashboard_repository.dart';
@@ -79,7 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final queue = GetIt.I<SyncQueueManager>();
     final user = session.user ?? const <String, dynamic>{};
     final name = user['name']?.toString() ?? 'موظف المشروع';
-    final firstName = ArabicDate.firstName(name);
 
     final fieldModules = ModuleCatalog.visible(_permissions, group: AppModuleGroup.field);
     final billingModules = ModuleCatalog.visible(_permissions, group: AppModuleGroup.billing);
@@ -95,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Field collectors work action-first, so they get the compact workspace
     // (search + shortcuts + sync status) instead of the analytics overview.
-    if (_permissions.isCollector && !_permissions.isAdmin) {
+    if (_permissions.isCollector && !_isAdmin) {
       return AnimatedBuilder(
         animation: Listenable.merge(<Listenable>[session, queue]),
         builder: (context, _) => HomeWorkspace(
@@ -120,15 +117,16 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final cubit = _dashboard;
     Widget content = AnimatedBuilder(
       animation: queue,
       builder: (context, _) {
         return AppPageBody(
-          onRefresh: _dashboard == null ? null : () => _dashboard!.refresh(),
+          onRefresh: cubit == null ? null : () => cubit.refresh(),
           children: <Widget>[
             AppReveal(
-              child: _GreetingHero(
-                firstName: firstName,
+              child: _SummarySlot(
+                cubit: cubit,
                 roleLabel: _roleLabel(_permissions),
                 isOnline: queue.isOnline,
                 pendingSync: queue.pendingCount,
@@ -139,15 +137,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 onDashboard: () => context.push(RouteNames.dashboard),
               ),
             ),
-            const Gap(AppSpacing.md),
+            const Gap(AppSpacing.sm),
             AppReveal(
-              delay: const Duration(milliseconds: 60),
+              delay: const Duration(milliseconds: 50),
               child: _QuickActionsCard(
                 onReading: () => context.push(RouteNames.fieldReader),
                 onCollect: () => context.push(RouteNames.quickCollector),
                 onInvoice: canInvoices ? () => context.push(RouteNames.invoices) : null,
-                onSubscriber:
-                    canSubscribers ? () => context.push(RouteNames.subscriberNew) : null,
+                onSubscriber: canSubscribers ? () => context.push(RouteNames.subscriberNew) : null,
               ),
             ),
             const Gap(AppSpacing.xl),
@@ -155,9 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
               delay: const Duration(milliseconds: 90),
               child: SectionHeading(
                 title: 'نظرة سريعة',
-                subtitle: _dashboard == null
-                    ? 'حالة جهازك ومساحة عملك الآن'
-                    : 'أرقام محدثة من الخادم',
+                subtitle: cubit == null ? 'حالة جهازك ومساحة عملك الآن' : 'أرقام محدثة من الخادم',
                 trailing: _canViewDashboard
                     ? TextButton(
                         onPressed: () => context.push(RouteNames.dashboard),
@@ -167,14 +162,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const Gap(AppSpacing.sm),
-            if (_dashboard == null)
+            if (cubit == null)
               _WorkspaceMetrics(queue: queue)
             else
-              _LiveMetrics(cubit: _dashboard!, canViewRevenue: _canViewRevenue),
-            if (_dashboard != null) ...<Widget>[
-              const Gap(AppSpacing.lg),
+              _LiveMetrics(cubit: cubit, canViewRevenue: _canViewRevenue),
+            if (cubit != null) ...<Widget>[
+              const Gap(AppSpacing.md),
               _DashboardExtras(
-                cubit: _dashboard!,
+                cubit: cubit,
                 canViewRevenue: _canViewRevenue,
                 canViewStats: canViewStatsWidget,
                 onOpenReports: () => context.push(RouteNames.reports),
@@ -186,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 delay: const Duration(milliseconds: 130),
                 child: ModuleRailSection(
                   title: 'العمليات الميدانية',
-                  subtitle: 'القراءات والعدادات في جيبك',
+                  subtitle: 'القراءات والعدادات',
                   modules: fieldModules,
                   onViewAll: () => context.go(RouteNames.fieldHub),
                 ),
@@ -198,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 delay: const Duration(milliseconds: 160),
                 child: ModuleRailSection(
                   title: 'التحصيل والفواتير',
-                  subtitle: 'حصّل وأصدر السندات بسرعة',
+                  subtitle: 'حصّل وأصدر السندات',
                   modules: billingModules,
                   onViewAll: () => context.go(RouteNames.billingHub),
                 ),
@@ -210,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 delay: const Duration(milliseconds: 190),
                 child: ModuleRailSection(
                   title: 'المشتركون والخدمات',
-                  subtitle: 'ملفات المشتركين والمربعات',
+                  subtitle: 'الملفات والمربعات',
                   modules: crmModules,
                   onViewAll: () => context.go(RouteNames.crmHub),
                 ),
@@ -236,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SectionHeading(
                     title: 'المزامنة والاتصال',
                     subtitle: 'كل عملية محفوظة حتى تعود الشبكة',
-                    icon: Icons.sync_rounded,
                   ),
                   const Gap(AppSpacing.sm),
                   SyncSummaryCard(onManage: () => context.push(RouteNames.offlineSync)),
@@ -246,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Gap(AppSpacing.xl),
             Center(
               child: Text(
-                'مشروع مياه الوشاح • منصة إدارة موحدة',
+                'مشروع مياه الوشاح',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ),
@@ -255,7 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
 
-    final cubit = _dashboard;
     if (cubit != null) {
       content = BlocProvider<DashboardCubit>.value(value: cubit, child: content);
     }
@@ -263,37 +256,39 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _roleLabel(PermissionService permissions) {
-    if (permissions.isAdmin) return 'مدير النظام • صلاحيات كاملة';
-    if (permissions.isCollector) return 'محصل ميداني • تحصيل وسندات';
-    if (permissions.isReader) return 'قارئ عدادات • عمليات ميدانية';
+    if (permissions.isAdmin) return 'مدير النظام';
+    if (permissions.isCollector) return 'محصل ميداني';
+    if (permissions.isReader) return 'قارئ عدادات';
     return 'موظف المشروع';
   }
 
   String _primaryLabel() {
     if (_permissions.isReader && !_permissions.isAdmin) return 'فتح القارئ الميداني';
     if (_permissions.isCollector && !_permissions.isAdmin) return 'بدء التحصيل السريع';
-    if (_canViewDashboard) return 'لوحة القيادة';
+    if (_canViewDashboard) return 'تحصيل سريع';
     return 'فتح الفواتير';
   }
 
   IconData _primaryIcon() {
     if (_permissions.isReader && !_permissions.isAdmin) return Icons.speed_rounded;
     if (_permissions.isCollector && !_permissions.isAdmin) return Icons.point_of_sale_rounded;
-    if (_canViewDashboard) return Icons.space_dashboard_rounded;
+    if (_canViewDashboard) return Icons.point_of_sale_rounded;
     return Icons.receipt_long_rounded;
   }
 
   String _primaryRoute() {
     if (_permissions.isReader && !_permissions.isAdmin) return RouteNames.fieldReader;
     if (_permissions.isCollector && !_permissions.isAdmin) return RouteNames.quickCollector;
-    if (_canViewDashboard) return RouteNames.dashboard;
+    if (_canViewDashboard) return RouteNames.quickCollector;
     return RouteNames.invoices;
   }
 }
 
-class _GreetingHero extends StatelessWidget {
-  const _GreetingHero({
-    required this.firstName,
+/// Rebuilds the summary panel when the dashboard snapshot changes, without
+/// rebuilding the rest of the page.
+class _SummarySlot extends StatelessWidget {
+  const _SummarySlot({
+    required this.cubit,
     required this.roleLabel,
     required this.isOnline,
     required this.pendingSync,
@@ -304,7 +299,7 @@ class _GreetingHero extends StatelessWidget {
     required this.onDashboard,
   });
 
-  final String firstName;
+  final DashboardCubit? cubit;
   final String roleLabel;
   final bool? isOnline;
   final int pendingSync;
@@ -316,54 +311,338 @@ class _GreetingHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
+    final active = cubit;
+    if (active == null) {
+      return _BalancePanel(
+        roleLabel: roleLabel,
+        isOnline: isOnline,
+        pendingSync: pendingSync,
+        primaryLabel: primaryLabel,
+        primaryIcon: primaryIcon,
+        onPrimary: onPrimary,
+        canViewDashboard: canViewDashboard,
+        onDashboard: onDashboard,
+      );
+    }
+    return BlocBuilder<DashboardCubit, DashboardState>(
+      buildWhen: (previous, current) => previous.snapshot != current.snapshot,
+      builder: (context, state) {
+        final stats = state.snapshot?.data.stats;
+        return _BalancePanel(
+          roleLabel: roleLabel,
+          isOnline: isOnline,
+          pendingSync: pendingSync,
+          primaryLabel: primaryLabel,
+          primaryIcon: primaryIcon,
+          onPrimary: onPrimary,
+          canViewDashboard: canViewDashboard,
+          onDashboard: onDashboard,
+          outstanding: stats?.outstandingAmount,
+          collected: stats?.monthlyCollection,
+          unpaidInvoices: stats?.unpaidInvoicesCount,
+          overdueInvoices: stats?.overdueInvoicesCount,
+        );
+      },
+    );
+  }
+}
+
+/// The page's single dark surface: outstanding balance, collection progress and
+/// the two actions that matter today.
+class _BalancePanel extends StatelessWidget {
+  const _BalancePanel({
+    required this.roleLabel,
+    required this.isOnline,
+    required this.pendingSync,
+    required this.primaryLabel,
+    required this.primaryIcon,
+    required this.onPrimary,
+    required this.canViewDashboard,
+    required this.onDashboard,
+    this.outstanding,
+    this.collected,
+    this.unpaidInvoices,
+    this.overdueInvoices,
+  });
+
+  final String roleLabel;
+  final bool? isOnline;
+  final int pendingSync;
+  final String primaryLabel;
+  final IconData primaryIcon;
+  final VoidCallback onPrimary;
+  final bool canViewDashboard;
+  final VoidCallback onDashboard;
+  final double? outstanding;
+  final double? collected;
+  final int? unpaidInvoices;
+  final int? overdueInvoices;
+
+  static const Color _panelAccent = AppColors.accentOnPanel;
+  static const Color _onPanel = AppColors.onPanel;
+  static const Color _onPanelSoft = AppColors.onPanelSoft;
+  static const Color _onPanelMuted = AppColors.onPanelMuted;
+
+  double get _ratio {
+    final due = outstanding ?? 0;
+    final paid = collected ?? 0;
+    final total = due + paid;
+    if (total <= 0) return 0;
+    return (paid / total).clamp(0, 1).toDouble();
+  }
+
+  bool get _hasNumbers => outstanding != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = _ratio;
+    final percent = (ratio * 100).round();
+    final connection = isOnline == true
+        ? 'متصل'
+        : isOnline == false
+            ? 'أوفلاين'
+            : 'جارٍ الفحص';
+
     return AppHeroPanel(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          HeroCopy(
-            eyebrow: '${ArabicDate.greeting(today)} • ${ArabicDate.full(today)}',
-            title: 'أهلاً، $firstName 👋',
-            subtitle: roleLabel,
-          ),
-          const Gap(AppSpacing.md),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: <Widget>[
-              HeroMetaChip(
-                icon: isOnline == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                label: isOnline == true
-                    ? 'متصل بالخادم'
-                    : isOnline == false
-                        ? 'وضع أوفلاين'
-                        : 'جارٍ فحص الشبكة',
-              ),
-              if (pendingSync > 0)
-                HeroMetaChip(
-                  icon: Icons.cloud_upload_outlined,
-                  label: '$pendingSync بانتظار المزامنة',
+              Expanded(
+                child: Text(
+                  _hasNumbers ? 'إجمالي الديون المستحقة' : 'مساحة العمل اليوم',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _onPanelSoft,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
                 ),
-              const HeroMetaChip(icon: Icons.shield_outlined, label: 'جلسة آمنة'),
+              ),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: isOnline == false ? AppColors.warning : _panelAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                connection,
+                style: const TextStyle(
+                  color: _onPanelMuted,
+                  fontSize: 10.5,
+                  height: 1.3,
+                ),
+              ),
             ],
           ),
-          const Gap(AppSpacing.lg),
-          HeroActions(
-            primary: HeroButton(
-              label: primaryLabel,
-              icon: primaryIcon,
-              onPressed: onPrimary,
+          const SizedBox(height: 8),
+          if (_hasNumbers)
+            _AmountLine(value: CurrencyFormatter.amount(outstanding))
+          else
+            Text(
+              pendingSync > 0 ? '$pendingSync عملية بانتظار المزامنة' : 'لا مهام معلقة اليوم',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _onPanel,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
             ),
-            secondary: canViewDashboard
-                ? HeroGhostButton(
-                    label: 'لوحة القيادة',
-                    icon: Icons.insights_rounded,
-                    onPressed: onDashboard,
-                  )
-                : null,
+          if (_hasNumbers) ...<Widget>[
+            const SizedBox(height: 3),
+            Text(
+              '${unpaidInvoices ?? 0} فاتورة غير مسددة · ${overdueInvoices ?? 0} متأخرة',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: _onPanelMuted, fontSize: 10.5, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: ratio),
+                duration: AppMotion.slow,
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) => LinearProgressIndicator(
+                  value: value,
+                  minHeight: 4,
+                  backgroundColor: Colors.white.withValues(alpha: .12),
+                  valueColor: const AlwaysStoppedAnimation<Color>(_panelAccent),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    'تم تحصيل $percent% من المستحقات',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _onPanelMuted, fontSize: 10, height: 1.4),
+                  ),
+                ),
+                Text(
+                  '${CurrencyFormatter.amount(collected ?? 0)} ر.ي',
+                  style: const TextStyle(color: _onPanelSoft, fontSize: 10.5, height: 1.4),
+                ),
+              ],
+            ),
+          ] else ...<Widget>[
+            const SizedBox(height: 2),
+            Text(
+              roleLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: _onPanelMuted, fontSize: 10.5, height: 1.4),
+            ),
+          ],
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final primary = _PanelButton(
+                label: primaryLabel,
+                icon: primaryIcon,
+                primary: true,
+                onPressed: onPrimary,
+              );
+              if (!canViewDashboard || constraints.maxWidth < 300) {
+                return primary;
+              }
+              return Row(
+                children: <Widget>[
+                  Expanded(flex: 3, child: primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _PanelButton(
+                      label: 'لوحة القيادة',
+                      icon: Icons.insights_rounded,
+                      primary: false,
+                      onPressed: onDashboard,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AmountLine extends StatelessWidget {
+  const _AmountLine({required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      textDirection: TextDirection.rtl,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerEnd,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: AppColors.onPanel,
+                  fontSize: 31,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                  letterSpacing: -.6,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 4),
+          child: Text(
+            'ر.ي',
+            style: TextStyle(
+              color: AppColors.onPanelMuted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PanelButton extends StatelessWidget {
+  const _PanelButton({
+    required this.label,
+    required this.icon,
+    required this.primary,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool primary;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = BorderRadius.all(Radius.circular(AppRadius.md));
+    final foreground = primary ? const Color(0xFF06211D) : AppColors.onPanelSoft;
+    return SizedBox(
+      height: 44,
+      child: Material(
+        color: primary ? AppColors.accentOnPanel : Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: radius,
+          splashColor: primary ? const Color(0x22000000) : Colors.white12,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: primary ? null : Border.all(color: Colors.white.withValues(alpha: .18)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(icon, size: 16, color: foreground),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 12.5,
+                      fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -384,61 +663,36 @@ class _QuickActionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm + 2, AppSpacing.md, AppSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: <Widget>[
-                Text(
-                  'إجراءات سريعة',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const Spacer(),
-                const AppPill(
-                  label: 'الأكثر استخداماً',
-                  icon: Icons.bolt_rounded,
-                  color: AppColors.brandAmber,
-                  dense: true,
-                ),
-              ],
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: AppQuickActionBar(
+        actions: <Widget>[
+          AppQuickAction(
+            label: 'قراءة',
+            icon: Icons.speed_rounded,
+            color: AppColors.primary,
+            onTap: onReading,
+          ),
+          AppQuickAction(
+            label: 'تحصيل',
+            icon: Icons.point_of_sale_rounded,
+            color: AppColors.primary,
+            onTap: onCollect,
+          ),
+          if (onInvoice != null)
+            AppQuickAction(
+              label: 'فاتورة',
+              icon: Icons.receipt_long_rounded,
+              color: AppColors.primary,
+              onTap: onInvoice!,
             ),
-          ),
-          const SizedBox(height: 14),
-          AppQuickActionBar(
-            actions: <Widget>[
-              AppQuickAction(
-                label: 'قراءة',
-                icon: Icons.speed_rounded,
-                color: AppColors.primary,
-                onTap: onReading,
-              ),
-              AppQuickAction(
-                label: 'تحصيل',
-                icon: Icons.point_of_sale_rounded,
-                color: AppColors.warning,
-                onTap: onCollect,
-              ),
-              if (onInvoice != null)
-                AppQuickAction(
-                  label: 'فاتورة',
-                  icon: Icons.receipt_long_rounded,
-                  color: AppColors.info,
-                  onTap: onInvoice!,
-                ),
-              if (onSubscriber != null)
-                AppQuickAction(
-                  label: 'مشترك',
-                  icon: Icons.person_add_alt_1_rounded,
-                  color: AppColors.success,
-                  onTap: onSubscriber!,
-                ),
-            ],
-          ),
+          if (onSubscriber != null)
+            AppQuickAction(
+              label: 'مشترك',
+              icon: Icons.person_add_alt_1_rounded,
+              color: AppColors.primary,
+              onTap: onSubscriber!,
+            ),
         ],
       ),
     );
@@ -458,7 +712,7 @@ class _WorkspaceMetrics extends StatelessWidget {
         title: 'بانتظار المزامنة',
         value: '${queue.pendingCount}',
         icon: Icons.cloud_upload_outlined,
-        color: queue.pendingCount > 0 ? AppColors.warning : AppColors.success,
+        color: AppColors.primary,
         caption: queue.failedCount > 0 ? '${queue.failedCount} فاشلة' : 'جاهز للمزامنة',
       ),
       AppMetricCard(
@@ -469,7 +723,7 @@ class _WorkspaceMetrics extends StatelessWidget {
                 ? 'أوفلاين'
                 : 'فحص',
         icon: queue.isOnline == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-        color: queue.isOnline == true ? AppColors.success : AppColors.warning,
+        color: AppColors.primary,
         caption: 'الخادم الرئيسي',
       ),
       AppMetricCard(
@@ -489,7 +743,7 @@ class _WorkspaceMetrics extends StatelessWidget {
                     ? 'قارئ'
                     : 'موظف',
         icon: Icons.badge_outlined,
-        color: AppColors.violet,
+        color: AppColors.primary,
         caption: 'مساحة العمل',
       ),
     ];
@@ -524,7 +778,7 @@ class _LiveMetrics extends StatelessWidget {
               ),
             );
           }
-          return _MetricsSkeleton();
+          return const _MetricsSkeleton();
         }
 
         final stats = snapshot.data.stats;
@@ -540,14 +794,16 @@ class _LiveMetrics extends StatelessWidget {
             ),
             AppMetricCard(
               title: 'الديون المستحقة',
-              value: AdminFormat.compactMoney(stats.outstandingAmount),
+              value: CurrencyFormatter.amount(stats.outstandingAmount),
+              unit: 'ر.ي',
               icon: Icons.account_balance_wallet_outlined,
               color: AppColors.danger,
               caption: '${AdminFormat.number(stats.unpaidInvoicesCount)} فاتورة غير مسددة',
             ),
             AppMetricCard(
               title: 'إيرادات هذا الشهر',
-              value: AdminFormat.compactMoney(stats.monthlyCollection),
+              value: CurrencyFormatter.amount(stats.monthlyCollection),
+              unit: 'ر.ي',
               icon: Icons.payments_rounded,
               color: AppColors.success,
               sparkline: stats.collectionSparkline,
@@ -557,7 +813,7 @@ class _LiveMetrics extends StatelessWidget {
               title: 'الفواتير المتأخرة',
               value: AdminFormat.number(stats.overdueInvoicesCount),
               icon: Icons.schedule_rounded,
-              color: stats.overdueInvoicesCount > 0 ? AppColors.warning : AppColors.success,
+              color: AppColors.warning,
               caption: stats.overdueInvoicesCount > 0 ? 'تحتاج متابعة' : 'لا توجد متأخرات',
             ),
           ],
@@ -568,14 +824,16 @@ class _LiveMetrics extends StatelessWidget {
 }
 
 class _MetricsSkeleton extends StatelessWidget {
+  const _MetricsSkeleton();
+
   @override
   Widget build(BuildContext context) {
     return const AppMetricGrid(
       children: <Widget>[
-        ShimmerSkeleton(height: 150, radius: 26),
-        ShimmerSkeleton(height: 150, radius: 26),
-        ShimmerSkeleton(height: 150, radius: 26),
-        ShimmerSkeleton(height: 150, radius: 26),
+        ShimmerSkeleton(height: 118, radius: 18),
+        ShimmerSkeleton(height: 118, radius: 18),
+        ShimmerSkeleton(height: 118, radius: 18),
+        ShimmerSkeleton(height: 118, radius: 18),
       ],
     );
   }
@@ -643,7 +901,7 @@ class _DashboardExtras extends StatelessWidget {
             else if (collection != null)
               collection,
             if (data.overdueInvoices.isNotEmpty) ...<Widget>[
-              const Gap(AppSpacing.md),
+              const Gap(AppSpacing.sm),
               InsightCard(
                 title: '${data.overdueInvoices.length} فاتورة تحتاج متابعة',
                 message: 'ابدأ بالتحصيل أو أرسل تذكيراً عبر واتساب بضغطة واحدة.',
@@ -691,55 +949,63 @@ class HomeWorkspace extends StatelessWidget {
       if (index > 0) shortcuts.insert(0, shortcuts.removeAt(index));
     }
     final frequent = visible.where((entry) => const [
-      RouteNames.subscribers, RouteNames.invoices, RouteNames.meters,
-      RouteNames.readings, RouteNames.payments, RouteNames.dashboard,
-    ].contains(entry.route)).take(4).toList();
+          RouteNames.subscribers,
+          RouteNames.invoices,
+          RouteNames.meters,
+          RouteNames.readings,
+          RouteNames.payments,
+          RouteNames.dashboard,
+        ].contains(entry.route)).take(4).toList();
 
     return SafeArea(
       top: false,
       child: SingleChildScrollView(
         key: const PageStorageKey('home-workspace'),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1080),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: const LinearGradient(
-                      begin: AlignmentDirectional.topStart,
-                      end: AlignmentDirectional.bottomEnd,
-                      colors: [AppColors.primaryDark, AppColors.primary],
-                    ),
-                  ),
+              children: <Widget>[
+                AppHeroPanel(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const AppBrandMark(size: 44, glow: false),
+                    children: <Widget>[
+                      const AppBrandMark(size: 36, glow: false),
                       const SizedBox(height: 16),
-                      Text('أهلاً، $name', style: theme.textTheme.headlineSmall?.copyWith(
-                        color: Colors.white, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 6),
-                      Text('كل ما تحتاجه لإدارة المياه، في مكان واحد.',
-                        style: theme.textTheme.bodyLarge?.copyWith(color: Colors.white)),
+                      Text(
+                        'أهلاً، $name',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: AppColors.onPanel,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'كل ما تحتاجه لإدارة المياه، في مكان واحد.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.onPanelSoft,
+                          height: 1.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                WorkspaceSearchButton(onTap: () => onNavigate('${RouteNames.services}?search=1')),
                 const SizedBox(height: 12),
+                WorkspaceSearchButton(onTap: () => onNavigate('${RouteNames.services}?search=1')),
+                const SizedBox(height: 10),
                 _SyncSummary(
-                  online: online, pendingCount: pendingCount, failedCount: failedCount,
+                  online: online,
+                  pendingCount: pendingCount,
+                  failedCount: failedCount,
                   onTap: () => onNavigate(RouteNames.offlineSync),
                 ),
-                if (shortcuts.isNotEmpty) ...[
+                if (shortcuts.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 24),
-                  Text('ماذا تريد أن تفعل؟', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 12),
+                  Text('ماذا تريد أن تفعل؟', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: 10),
                   WorkspaceShortcutGrid(entries: shortcuts, onNavigate: onNavigate),
                 ],
                 const SizedBox(height: 24),
@@ -748,29 +1014,31 @@ class HomeWorkspace extends StatelessWidget {
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 16,
-                  children: [
-                    Text('الوصول السريع', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  children: <Widget>[
+                    Text('الوصول السريع', style: theme.textTheme.titleLarge),
                     TextButton.icon(
                       onPressed: () => onNavigate(RouteNames.services),
-                      icon: const Icon(Icons.apps_rounded),
+                      icon: const Icon(Icons.grid_view_rounded, size: 16),
                       label: const Text('كل الخدمات'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                for (final entry in frequent) Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: WorkspaceTile(entry: entry, onTap: () => onNavigate(entry.route)),
-                ),
-                if (frequent.isEmpty) ...[
-                  Text('يمكنك الوصول إلى حسابك والمزامنة من كل الخدمات. لطلب صلاحيات إضافية، تواصل مع مدير النظام.',
-                    style: theme.textTheme.bodyLarge),
-                ],
+                const SizedBox(height: 6),
+                for (final entry in frequent)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: WorkspaceTile(entry: entry, onTap: () => onNavigate(entry.route)),
+                  ),
+                if (frequent.isEmpty)
+                  Text(
+                    'يمكنك الوصول إلى حسابك والمزامنة من كل الخدمات. لطلب صلاحيات إضافية، تواصل مع مدير النظام.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(14)),
                   onPressed: () => onNavigate(RouteNames.services),
-                  icon: const Icon(Icons.grid_view_rounded),
+                  icon: const Icon(Icons.grid_view_rounded, size: 16),
                   label: const Text('استعراض كل الخدمات'),
                 ),
               ],
@@ -783,8 +1051,13 @@ class HomeWorkspace extends StatelessWidget {
 }
 
 class _SyncSummary extends StatelessWidget {
-  const _SyncSummary({required this.online, required this.pendingCount,
-    required this.failedCount, required this.onTap});
+  const _SyncSummary({
+    required this.online,
+    required this.pendingCount,
+    required this.failedCount,
+    required this.onTap,
+  });
+
   final bool? online;
   final int pendingCount;
   final int failedCount;
@@ -793,22 +1066,54 @@ class _SyncSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = failedCount > 0 ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
-    final connection = online == true ? 'متصل بالشبكة' : online == false
-        ? 'غير متصل بالشبكة' : 'جارٍ التحقق من الاتصال';
-    final status = failedCount > 0 ? '$failedCount عملية تحتاج مراجعة' : pendingCount > 0
-        ? '$pendingCount عملية بانتظار المزامنة' : 'لا توجد عمليات معلقة';
-    return Material(
-      color: color.withValues(alpha: .06),
-      borderRadius: BorderRadius.circular(16),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        leading: Icon(failedCount > 0 ? Icons.sync_problem_rounded :
-          online == true ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: color),
-        title: Text(connection, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-        subtitle: Text(status, style: TextStyle(color: color)),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-        onTap: onTap,
+    final scheme = theme.colorScheme;
+    final failed = failedCount > 0;
+    final connection = online == true
+        ? 'متصل بالشبكة'
+        : online == false
+            ? 'غير متصل بالشبكة'
+            : 'جارٍ التحقق من الاتصال';
+    final status = failed
+        ? '$failedCount عملية تحتاج مراجعة'
+        : pendingCount > 0
+            ? '$pendingCount عملية بانتظار المزامنة'
+            : 'لا توجد عمليات معلقة';
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 14, 12),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              failed
+                  ? Icons.sync_problem_rounded
+                  : online == true
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+              size: 18,
+              color: failed ? scheme.error : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(connection, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 1),
+                  Text(status, style: theme.textTheme.labelSmall),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: scheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
+          ],
+        ),
       ),
     );
   }

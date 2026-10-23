@@ -178,7 +178,7 @@ Widget _previewSection(String title, List<Widget> children) {
     children: [
       Text(
         title,
-        style: const TextStyle(color: AdminPalette.primary, fontWeight: FontWeight.w800),
+        style: const TextStyle(color: AdminPalette.primary, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 8),
       ...children,

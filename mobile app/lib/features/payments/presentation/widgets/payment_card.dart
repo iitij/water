@@ -49,7 +49,7 @@ class PaymentCard extends StatelessWidget {
                       payment.receiptNumber.isEmpty ? 'سند غير مرقّم' : payment.receiptNumber,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -57,7 +57,7 @@ class PaymentCard extends StatelessWidget {
                     amount,
                     style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.success,
                     ),
                   ),

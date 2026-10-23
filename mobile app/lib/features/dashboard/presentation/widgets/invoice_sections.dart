@@ -168,7 +168,7 @@ class _InvoiceTile extends StatelessWidget {
                             invoice.billNumber,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
@@ -195,7 +195,7 @@ class _InvoiceTile extends StatelessWidget {
                   child: Text(
                     AdminFormat.money(invoice.totalAmount),
                     maxLines: 1,
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 Text('الإجمالي', style: theme.textTheme.labelSmall),
@@ -242,16 +242,9 @@ class _OverdueTile extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: AlignmentDirectional.topStart,
-              end: AlignmentDirectional.bottomEnd,
-              colors: <Color>[
-                AppColors.danger.withValues(alpha: dark ? .16 : .06),
-                AppColors.danger.withValues(alpha: dark ? .05 : .015),
-              ],
-            ),
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.danger.withValues(alpha: dark ? .26 : .16)),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,7 +269,7 @@ class _OverdueTile extends StatelessWidget {
                             textDirection: TextDirection.ltr,
                             child: Text(
                               invoice.billNumber,
-                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -326,7 +319,7 @@ class _OverdueTile extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 40),
                         padding: const EdgeInsets.symmetric(horizontal: 14),
-                        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+                        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                       ),
                       icon: busy
                           ? const SizedBox(

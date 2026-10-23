@@ -261,7 +261,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 Text(
                                   'الاتصال بالخادم',
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -305,7 +305,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       : 'تسجيل الخروج',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     color: AppColors.danger,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -415,7 +415,7 @@ class _ProfileHero extends StatelessWidget {
                   name,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

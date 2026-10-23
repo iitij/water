@@ -9,14 +9,17 @@ abstract final class AdminFormat {
 
   static String number(num value) => _number.format(value);
   static String money(num value) => '${_money.format(value)} ريال';
+
+  /// Dense money label for small cards and chart legends: keeps the digits
+  /// left-to-right and the Arabic magnitude word separate, e.g. `1.07 مليون`.
   static String compactMoney(num value) {
     if (value.abs() >= 1000000) {
-      return '${_number.format(value / 1000000)} م ريال';
+      return '${_number.format(value / 1000000)} مليون';
     }
     if (value.abs() >= 1000) {
-      return '${_number.format(value / 1000)} ألف ريال';
+      return '${_number.format(value / 1000)} ألف';
     }
-    return money(value);
+    return _money.format(value);
   }
 
   static String date(DateTime? value) =>
@@ -93,7 +96,7 @@ class AdminSectionHeader extends StatelessWidget {
     final titleText = Text(
       title,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
     );
     return Row(

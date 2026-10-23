@@ -107,7 +107,7 @@ class DueHeaderCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   state.subscriberName ?? '—',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
               if (invoice != null)
@@ -137,7 +137,7 @@ class DueHeaderCard extends StatelessWidget {
                 CurrencyFormatter.debt(state.dueAmount),
                 style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.danger,
                 ),
               ),

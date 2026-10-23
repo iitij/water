@@ -241,7 +241,7 @@ class _ActivePriceHeader extends StatelessWidget {
                 : CurrencyFormatter.withLabel(state.activePrice),
             style: const TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: Colors.white,
             ),
           ),

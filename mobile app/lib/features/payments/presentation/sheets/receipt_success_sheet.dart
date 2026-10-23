@@ -108,7 +108,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
             Text(
               widget.queuedOffline ? 'الدفعة في طابور المزامنة' : 'تم التحصيل بنجاح',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 2),
             Text(
@@ -128,7 +128,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                 children: <Widget>[
                   Text(
                     CurrencyFormatter.withLabel(payment.amount),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../ui/app_tokens.dart';
 export 'finance_badges.dart';
 
 class StatusBadge extends StatelessWidget {
@@ -20,19 +21,20 @@ class StatusBadge extends StatelessWidget {
       _ => (label ?? _label(normalized), AppColors.neutral),
     };
 
+    final tint = AppSemantic.resolve(context, color);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
+        color: tint.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: .22)),
+        border: Border.all(color: tint.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: tint, shape: BoxShape.circle)),
           const SizedBox(width: 6),
-          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: tint)),
         ],
       ),
     );

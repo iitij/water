@@ -846,7 +846,7 @@ class _ReadingCard extends StatelessWidget {
                             textDirection: TextDirection.ltr,
                             child: Text(
                               reading.meterCode ?? 'عداد ${reading.meterId}',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],

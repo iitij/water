@@ -36,11 +36,6 @@ class BillingHubScreen extends StatelessWidget {
       children: <Widget>[
         AppReveal(
           child: AppHeroPanel(
-            gradient: const LinearGradient(
-              begin: AlignmentDirectional.topStart,
-              end: AlignmentDirectional.bottomEnd,
-              colors: <Color>[Color(0xFF062733), Color(0xFF0A4B5A), Color(0xFF0E7C86)],
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[

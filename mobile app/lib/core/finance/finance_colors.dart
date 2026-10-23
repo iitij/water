@@ -24,7 +24,7 @@ class FinanceColors {
   static LinearGradient get headerGradient => const LinearGradient(
         begin: AlignmentDirectional.centerStart,
         end: AlignmentDirectional.centerEnd,
-        colors: <Color>[AppColors.primary, AppColors.primaryDark],
+        colors: <Color>[AppColors.panel, AppColors.panel],
       );
 
   /// لون المحرك حسب نوع الفاتورة (`meter|subscription|tanker`).

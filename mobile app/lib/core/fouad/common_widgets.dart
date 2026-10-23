@@ -33,7 +33,7 @@ class StatusBadge extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
             ),
           ),
         ],
@@ -79,23 +79,9 @@ class SumBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: AlignmentDirectional.centerStart,
-          end: AlignmentDirectional.centerEnd,
-          colors: <Color>[
-            AppColors.primary.withValues(alpha: 0.07),
-            AppColors.primary.withValues(alpha: 0.015),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Wrap(
         spacing: 24,
@@ -114,7 +100,7 @@ class SumBar extends StatelessWidget {
                     style: TextStyle(
                       color: it.color,
                       fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -179,7 +165,7 @@ Future<bool> confirmAction(BuildContext context, String title, String body) asyn
     context: context,
     builder: (ctx) => AlertDialog(
       icon: const Icon(Icons.help_outline_rounded, size: 30, color: AppColors.primary),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       content: Text(body),
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),

@@ -156,7 +156,7 @@ class _HeaderCard extends StatelessWidget {
                         invoice.billNumber,
                         style: const TextStyle(
                           fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -277,7 +277,7 @@ class _AmountsCard extends StatelessWidget {
                   CurrencyFormatter.debt(trueRemaining),
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     color: trueRemaining > 0 ? AppColors.danger : AppColors.success,
                   ),
                 ),
@@ -313,7 +313,7 @@ class _ItemsCard extends StatelessWidget {
           children: <Widget>[
             const Text(
               'بنود الفاتورة',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 10),
             ...invoice.items.map(
@@ -357,7 +357,7 @@ class _ReadingsCard extends StatelessWidget {
           children: <Widget>[
             const Text(
               'القراءات',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 10),
             ...invoice.readings.map(
@@ -409,7 +409,7 @@ class _PaymentsCard extends StatelessWidget {
           children: <Widget>[
             const Text(
               'المدفوعات المرتبطة',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 10),
             ...invoice.payments.map(
@@ -466,7 +466,7 @@ class _NotesCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text('ملاحظات', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             Text(notes),
           ],

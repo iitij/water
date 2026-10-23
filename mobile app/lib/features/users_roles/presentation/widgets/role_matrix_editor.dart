@@ -246,7 +246,7 @@ class _PermissionGroupsList extends StatelessWidget {
                       : (_) => onChanged(names, checkboxValue != true),
                 ),
                 Expanded(
-                  child: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  child: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 Text('$count/${names.length}', style: const TextStyle(color: AdminPalette.primary)),
               ],

@@ -91,7 +91,7 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('كل الخدمات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      Text('كل الخدمات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Text('اختر خدمة أو ابحث عنها بالاسم.', style: theme.textTheme.bodyLarge),
                       const SizedBox(height: 20),

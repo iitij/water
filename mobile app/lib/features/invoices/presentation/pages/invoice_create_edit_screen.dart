@@ -310,7 +310,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
                           _parse(_credit),
                     ),
                     style: const TextStyle(
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.danger,
                     ),
                   ),
@@ -339,7 +339,7 @@ class _SectionTitle extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       );
 }

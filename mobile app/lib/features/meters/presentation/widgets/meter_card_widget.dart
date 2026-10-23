@@ -88,7 +88,7 @@ class MeterCardWidget extends StatelessWidget {
                     child: Text(
                       meter.uniqueCode,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: .2,
                           ),
                     ),

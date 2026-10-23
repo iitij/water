@@ -5,6 +5,13 @@ Testing builds of the integrated Arabic Water app. Android APKs are attached to
 
 ## What's new in this prerelease
 
+- **Design system v2 (radical redesign)** — one teal accent, no decorative
+  gradients, hairline cards instead of shadows, a single ink summary panel per
+  page, and heavier weight replaced by a calmer 600/400 scale. Home, shell, hubs,
+  login, splash and the dashboard widgets now share it.
+- Numbers are shown as full amounts with a muted `ر.ي` unit (no more
+  `م ريال` / `ألف ريال` abbreviations on cards), in tabular figures with Latin
+  digits inside the RTL layout.
 - A full interface redesign: new design system, light/dark themes and a calmer,
   higher-contrast Arabic layout.
 - Five-tab navigation (Overview, Field, Billing, Subscribers, More) replacing the

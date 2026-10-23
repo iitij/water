@@ -104,7 +104,7 @@ class _ShortcutCard extends StatelessWidget {
                 child: Icon(entry.icon, color: color, size: 28),
               ),
               const SizedBox(height: 16),
-              Text(entry.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(entry.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text(entry.description, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],

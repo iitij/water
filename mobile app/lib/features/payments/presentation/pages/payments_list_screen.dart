@@ -340,7 +340,7 @@ class _Cell extends StatelessWidget {
           value,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             color: tone,
           ),
         ),
