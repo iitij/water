@@ -1,15 +1,18 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/services/pdf_print_service.dart';
+import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../models/reading.dart';
 
-/// Narrow integration seam for the invoice module's print and WhatsApp actions.
-/// Dev 3 can replace this adapter with the shared PdfPrintService and
-/// WhatsAppLauncherService without changing the reading screens.
+/// Integration bridge between Dev 2's reading auto-invoice flow and Dev 3's
+/// shared PDF print + WhatsApp engines (`PdfPrintService` & `WhatsAppLauncherService`).
 class ReadingInvoiceActionsService {
   const ReadingInvoiceActionsService(this._dio);
 
@@ -18,6 +21,23 @@ class ReadingInvoiceActionsService {
   Future<void> printInvoice(InvoiceSummary invoice) async {
     final invoiceId = invoice.id;
     if (invoiceId == null) throw StateError('رقم الفاتورة غير متاح للطباعة.');
+
+    try {
+      final pdfService = sl<PdfPrintService>();
+      final bytes = await pdfService.fetchPdf(
+        ApiEndpoints.invoicePdf(invoiceId),
+        fallbackUrl: invoice.pdfUrl,
+      );
+      if (_isPdf(bytes)) {
+        await pdfService.printBytes(
+          bytes,
+          name: 'invoice-${invoice.billNumber ?? invoiceId}.pdf',
+        );
+        return;
+      }
+    } catch (_) {
+      // Fallback to direct Dio fetch if FinanceModule is not initialized in isolated tests.
+    }
 
     try {
       final response = await _dio.get<List<int>>(
@@ -29,6 +49,7 @@ class ReadingInvoiceActionsService {
         await Printing.layoutPdf(
           onLayout: (_) async => Uint8List.fromList(bytes),
           name: 'invoice-${invoice.billNumber ?? invoiceId}.pdf',
+          format: PdfPageFormat.a5.landscape,
         );
         return;
       }
@@ -36,9 +57,6 @@ class ReadingInvoiceActionsService {
       if (error.response?.statusCode != 404) rethrow;
     }
 
-    // The existing Laravel reading response supplies `/invoices/{id}/print` but
-    // the API PDF endpoint is not yet in routes/api.php. Open that print view as
-    // a compatible fallback until Dev 3 wires the shared PDF service.
     final rawPrintUrl = invoice.pdfUrl;
     var printUri = rawPrintUrl == null ? null : Uri.tryParse(rawPrintUrl);
     if (printUri != null && !printUri.hasScheme) {
@@ -51,8 +69,8 @@ class ReadingInvoiceActionsService {
   }
 
   Future<void> shareOnWhatsApp(InvoiceSummary invoice) async {
+    final invoiceId = invoice.id;
     final phone = _normalizeYemeniPhone(invoice.subscriberPhone);
-    if (phone == null) throw StateError('رقم هاتف المشترك غير متاح لإرسال الفاتورة.');
     final message = <String>[
       'فاتورة استهلاك مياه',
       if (invoice.billNumber != null) 'رقم الفاتورة: ${invoice.billNumber}',
@@ -63,6 +81,23 @@ class ReadingInvoiceActionsService {
       'الإجمالي المستحق: ${invoice.totalAmount} ريال',
       if (invoice.pdfUrl != null) 'رابط الفاتورة: ${invoice.pdfUrl}',
     ].join('\n');
+
+    if (invoiceId != null && phone != null) {
+      try {
+        final whatsapp = sl<WhatsAppLauncherService>();
+        final result = await whatsapp.dispatch(
+          recipientPhone: phone,
+          message: message,
+          serverEndpoint: 'invoices/$invoiceId/send-whatsapp',
+          payload: <String, dynamic>{'invoice_id': invoiceId},
+        );
+        if (result.ok) return;
+      } catch (_) {
+        // Fallback to direct wa.me link below.
+      }
+    }
+
+    if (phone == null) throw StateError('رقم هاتف المشترك غير متاح لإرسال الفاتورة.');
     final uri = Uri.https('wa.me', '/$phone', {'text': message});
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw StateError('تعذر فتح تطبيق واتساب على هذا الجهاز.');

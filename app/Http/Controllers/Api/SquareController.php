@@ -83,7 +83,7 @@ class SquareController extends ApiController
         $this->authorizeApi(Square::class, 'delete');
         $square = Square::findOrFail($id);
         if ($square->subscribers()->exists()) {
-            return response()->json(['message' => 'لا يمكن حذف مربع يحتوي على مشتركين. انقل المشتركين أولاً.'], 409);
+            return response()->json(['message' => 'لا يمكن حذف مربع يحتوي على مشتركين. انقل المشتركين أولاً.'], 422);
         }
         $square->delete();
 

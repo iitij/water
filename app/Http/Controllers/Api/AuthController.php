@@ -96,13 +96,17 @@ class AuthController extends ApiController
         }
 
         $avatarUrl = $user->getFilamentAvatarUrl();
+        $roles = $user->getRoleNames()->values();
+        if ($roles->isEmpty() && ! empty($user->role)) {
+            $roles = collect([$user->role])->values();
+        }
 
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'avatar' => $avatarUrl ? url($avatarUrl) : null,
-            'roles' => $user->getRoleNames()->values(),
+            'roles' => $roles,
             'permissions' => $user->getAllPermissions()->pluck('name')->values(),
         ];
     }

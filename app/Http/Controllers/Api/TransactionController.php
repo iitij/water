@@ -14,8 +14,18 @@ class TransactionController extends ApiController
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name',
             'meter:id,unique_code,path_number,tenant_name', 'reference',
         ])->latest('created_at')->latest('id');
-        foreach (['subscriber_id', 'type'] as $filter) {
-            if ($request->filled($filter)) $query->where($filter, $request->query($filter));
+        if ($request->filled('subscriber_id')) {
+            $query->where('subscriber_id', $request->query('subscriber_id'));
+        }
+        if ($request->filled('type')) {
+            $type = $request->query('type');
+            if ($type === 'credit') {
+                $query->where(fn ($q) => $q->where('type', 'credit')->orWhere('amount', '>', 0));
+            } elseif ($type === 'debit') {
+                $query->where(fn ($q) => $q->where('type', 'debit')->orWhere('amount', '<', 0));
+            } else {
+                $query->where('type', $type);
+            }
         }
         if ($request->filled('meter_id')) {
             $meterId = (string) $request->query('meter_id');
@@ -28,6 +38,8 @@ class TransactionController extends ApiController
         }
         if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
+        if ($request->filled('from')) $query->whereDate('created_at', '>=', $request->query('from'));
+        if ($request->filled('to')) $query->whereDate('created_at', '<=', $request->query('to'));
         if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
             $query->where(function ($builder) use ($search) {
                 $builder->where('description', 'like', "%{$search}%")
@@ -35,7 +47,10 @@ class TransactionController extends ApiController
                     ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%"));
             });
         }
-        return $query->paginate($this->perPage($request))->appends($request->query());
+        if ($request->filled('per_page')) {
+            return $query->paginate($this->perPage($request))->appends($request->query());
+        }
+        return $query->get();
     }
 
     public function show(int $id)

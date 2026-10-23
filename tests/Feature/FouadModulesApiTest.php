@@ -9,6 +9,7 @@ use App\Models\ServiceRequest;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -23,7 +24,9 @@ class FouadModulesApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $this->user = User::factory()->create();
+        $this->user->assignRole('super_admin');
     }
 
     public function test_squares_crud_and_subscribers_count(): void

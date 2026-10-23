@@ -1,17 +1,28 @@
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
+import '../../features/admin_shared/data/admin_api_client.dart';
+import '../../features/auth/presentation/cubit/auth_cubit.dart';
+import '../../features/dashboard/dashboard.dart';
+import '../../features/exports/exports.dart';
+import '../../features/meters/domain/meters_repository.dart';
+import '../../features/offline_sync/data/shared_preferences_sync_queue_repository.dart';
+import '../../features/offline_sync/domain/sync_queue_repository.dart';
+import '../../features/offline_sync/services/sync_queue_manager.dart';
+import '../../features/readings/data/services/reading_invoice_actions_service.dart';
+import '../../features/readings/domain/readings_repository.dart';
+import '../../features/settings/settings.dart';
+import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../field_operations/field_operations_module.dart';
+import '../finance/finance_module.dart';
+import '../fouad/fouad_module.dart';
 import '../network/dio_client.dart';
 import '../network/network_info.dart';
 import '../network/secure_storage_service.dart';
 import '../permissions/permission_service.dart';
-import '../theme/app_theme.dart';
-import '../../features/auth/presentation/cubit/auth_cubit.dart';
-import '../../features/offline_sync/data/shared_preferences_sync_queue_repository.dart';
-import '../../features/offline_sync/domain/sync_queue_repository.dart';
-import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../router/app_router.dart';
+import '../theme/app_theme.dart';
 
 final GetIt getIt = GetIt.instance;
 
@@ -46,6 +57,44 @@ Future<void> configureDependencies() async {
   );
   getIt.registerSingleton<SyncQueueManager>(syncManager);
   getIt.registerFactory<AuthCubit>(() => AuthCubit(session));
+
+  // Dev 2: Field Operations (Meters, Readings, Drift SQLite & Offline Pack)
+  final fieldModule = await FieldOperationsModule.initialize(dio: dioClient.dio);
+  getIt.registerSingleton<FieldOperationsModule>(fieldModule);
+  getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
+  getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
+  getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
+
+  // Dev 3: Finance Module (Invoices, Payments, Tariffs, PDF/Thermal Print & WhatsApp)
+  FinanceModule.ensure();
+
+  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger
+  FouadModule.ensure(dio: dioClient.dio);
+
+  // Dev 5: Dashboard, Reports, Settings Studio, WhatsApp Local Server, RBAC & Exports
+  final adminApi = DioAdminApiClient(dioClient.dio);
+  final settingsCache = SharedPreferencesSettingsCache();
+  await settingsCache.rehydrate();
+  final settingsRepository = SettingsRepositoryImpl(
+    SettingsRemoteDataSource(adminApi),
+    settingsCache,
+  );
+  final dashboardRepository = DashboardRepositoryImpl(
+    DashboardRemoteDataSource(adminApi),
+    DashboardLocalDataSource(),
+  );
+  final rbacRepository = RbacRepositoryImpl(RbacRemoteDataSource(adminApi));
+  final exportRepository = ExportRepositoryImpl(ExportRemoteDataSource(adminApi));
+  final excelService = ExcelExportService.platform(exportRepository);
+
+  getIt.registerSingleton<AdminApiClient>(adminApi);
+  getIt.registerSingleton<SettingsCache>(settingsCache);
+  getIt.registerSingleton<SettingsRepository>(settingsRepository);
+  getIt.registerSingleton<DashboardRepository>(dashboardRepository);
+  getIt.registerSingleton<RbacRepository>(rbacRepository);
+  getIt.registerSingleton<ExportRepository>(exportRepository);
+  getIt.registerSingleton<ExcelExportService>(excelService);
+
   getIt.registerSingleton<AppRouter>(AppRouter(session: session));
 
   await syncManager.initialize();

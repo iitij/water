@@ -102,12 +102,16 @@ class UserController extends ApiController
     private function userPayload(User $user): array
     {
         $user->loadMissing('roles');
+        $roles = $user->getRoleNames()->values();
+        if ($roles->isEmpty() && ! empty($user->role)) {
+            $roles = collect([$user->role])->values();
+        }
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'avatar' => $user->getFilamentAvatarUrl(),
-            'roles' => $user->getRoleNames()->values(),
+            'roles' => $roles,
             'permissions' => $user->getAllPermissions()->pluck('name')->values(),
             'created_at' => $user->created_at?->toISOString(),
         ];

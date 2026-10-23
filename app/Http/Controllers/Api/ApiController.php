@@ -14,12 +14,23 @@ abstract class ApiController extends Controller
      * snake_case names used by sync_permissions.php. Admin roles are explicit
      * API super-users; all other users must have the permission for the action.
      */
+    protected function isAdminUser(object $user): bool
+    {
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) {
+            return true;
+        }
+        if (method_exists($user, 'roles') && $user->roles()->doesntExist()) {
+            return in_array($user->role ?? null, ['super_admin', 'admin'], true);
+        }
+        return false;
+    }
+
     protected function authorizeApi(string $resource, string $ability): void
     {
         $user = request()->user();
         abort_unless($user, 401, 'يلزم تسجيل الدخول.');
 
-        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) {
+        if ($this->isAdminUser($user)) {
             return;
         }
 
@@ -39,7 +50,7 @@ abstract class ApiController extends Controller
         $user = request()->user();
         abort_unless($user, 401, 'يلزم تسجيل الدخول.');
 
-        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) {
+        if ($this->isAdminUser($user)) {
             return;
         }
 
@@ -52,7 +63,7 @@ abstract class ApiController extends Controller
         $user = request()->user();
         abort_unless($user, 401, 'يلزم تسجيل الدخول.');
 
-        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['super_admin', 'admin'])) return;
+        if ($this->isAdminUser($user)) return;
 
         $permission = 'Update:' . $resource;
         $legacy = Str::snake('update_' . $resource);
@@ -77,8 +88,10 @@ abstract class ApiController extends Controller
                 'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
             ],
         ];
+        $hasSpatieRoles = method_exists($user, 'roles') && $user->roles()->exists();
         foreach (array_keys($access) as $role) {
-            if ($user->hasRole($role) && in_array($ability, $access[$role][$resource] ?? [], true)) return true;
+            $matches = $hasSpatieRoles ? $user->hasRole($role) : (($user->role ?? null) === $role);
+            if ($matches && in_array($ability, $access[$role][$resource] ?? [], true)) return true;
         }
         return false;
     }
