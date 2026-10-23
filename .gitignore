@@ -35,3 +35,29 @@ whatsapp-server/uploads/
 /storage/framework/sessions/
 /storage/framework/views/
 /storage/logs/
+
+# ─── Flutter (تطبيق الموبايل — Dev 3: lib/, pubspec.yaml, test/) ────────────
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+.idea/
+*.iml
+*.swp
+.DS_Store
+# ملفات توليد الكود (لا نولّد في فروع الفريق المتوازية)
+*.g.dart
+*.freezed.dart
+# الاختبارات والتغطية
+coverage/
+**/ios/Flutter/Flutter.podspec
+**/ios/Pods/
+**/ios/.symlinks/
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/*.jks

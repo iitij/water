@@ -1,0 +1,336 @@
+import 'dart:convert';
+
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/finance_endpoints.dart';
+import '../../../../core/utils/json_utils.dart';
+
+/// مراجع خفيفة تحتاجها نوافذ الإصدار الثلاثية وشاشات التحصيل:
+/// المربعات، المشتركون (مع عداداتهم ورسومهم المعلّقة)، وملخص استحقاق المشترك.
+///
+/// ملاحظة ملكية: هذه المسارات يملكها Dev 1/Dev 2/Dev 4، لكنها للقراءة فقط داخل
+/// وحدة Dev 3، وتُستخدم بأشكال مرنة (tolerant parsing) حتى لا ننكسر مع اختلاف
+/// صيغة الاستجابة بين `SubscriberController@index` الحالي والنسخة الموسّعة.
+class SquareOption {
+  const SquareOption({required this.id, required this.name, this.subscribersCount});
+
+  final int id;
+  final String name;
+  final int? subscribersCount;
+
+  factory SquareOption.fromJson(Map<String, dynamic> json) => SquareOption(
+        id: JsonUtils.asInt(json['id']),
+        name: JsonUtils.asString(json['name'], fallback: '-'),
+        subscribersCount: JsonUtils.asIntOrNull(
+          json['subscribers_count'] ?? json['count'],
+        ),
+      );
+
+  @override
+  String toString() => name;
+}
+
+class MeterOption {
+  const MeterOption({
+    required this.id,
+    required this.uniqueCode,
+    this.pathNumber,
+    this.tenantName,
+    this.tenantPhone,
+    this.balance = 0,
+    this.status,
+    this.uninvoicedUnits = 0,
+  });
+
+  final int id;
+  final String uniqueCode;
+  final int? pathNumber;
+  final String? tenantName;
+  final String? tenantPhone;
+  final double balance;
+  final String? status;
+
+  /// وحدات غير مفوترة (من `GET /api/meters/{id}/pending` عند توفره — Dev 2).
+  final double uninvoicedUnits;
+
+  bool get hasTenant => (tenantName?.trim().isNotEmpty ?? false);
+
+  /// رصيد دائن متاح على دفتر العداد (يُخصم من الفاتورة القادمة كما في
+  /// `InvoiceService::generateInvoice` سطر 96-104).
+  double get credit => balance > 0 ? balance : 0;
+  double get debit => balance < 0 ? -balance : 0;
+
+  String get label {
+    final buffer = StringBuffer(uniqueCode.isEmpty ? '#$id' : uniqueCode);
+    if (pathNumber != null) buffer.write(' / مسار $pathNumber');
+    if (hasTenant) buffer.write(' — المستأجر: ${tenantName!.trim()}');
+    return buffer.toString();
+  }
+
+  factory MeterOption.fromJson(Map<String, dynamic> json) => MeterOption(
+        id: JsonUtils.asInt(json['id']),
+        uniqueCode: JsonUtils.asString(json['unique_code']),
+        pathNumber: JsonUtils.asIntOrNull(json['path_number']),
+        tenantName: JsonUtils.asStringOrNull(json['tenant_name']),
+        tenantPhone: JsonUtils.asStringOrNull(json['tenant_phone']),
+        balance: JsonUtils.asDouble(json['balance']),
+        status: JsonUtils.asStringOrNull(json['status']),
+        uninvoicedUnits: JsonUtils.asDouble(json['uninvoiced_units']),
+      );
+
+  @override
+  bool operator ==(Object other) => other is MeterOption && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+class SubscriberOption {
+  const SubscriberOption({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.squareId,
+    this.squareName,
+    this.status,
+    this.balance = 0,
+    this.meters = const <MeterOption>[],
+    this.uninvoicedSubscriptionFee = 0,
+    this.pendingTankerAmount = 0,
+  });
+
+  final int id;
+  final String name;
+  final String? phone;
+  final int? squareId;
+  final String? squareName;
+  final String? status;
+
+  /// الرصيد العام للمشترك (موجب = دائن).
+  final double balance;
+  final List<MeterOption> meters;
+
+  /// مجاميع تُستخدم لملء مفاتيح `has_subscription_fee` / `has_tanker_fee`.
+  final double uninvoicedSubscriptionFee;
+  final double pendingTankerAmount;
+
+  bool get isActive => status == null || status == 'active';
+
+  /// رصيد دائن متاح للخصم عند الإصدار (أدنى بين العام والعداد حسب نوع الفاتورة).
+  double get availableGeneralCredit => balance > 0 ? balance : 0;
+
+  String get label {
+    final buffer = StringBuffer(name);
+    if (squareName != null) buffer.write(' — ${squareName!}');
+    if (meters.isNotEmpty) {
+      buffer.write(' (${meters.map((m) => m.uniqueCode).join('، ')})');
+    }
+    return buffer.toString();
+  }
+
+  factory SubscriberOption.fromJson(Map<String, dynamic> json) {
+    final square = JsonUtils.asMap(json['square']);
+    return SubscriberOption(
+      id: JsonUtils.asInt(json['id']),
+      name: JsonUtils.asString(json['name'], fallback: '-'),
+      phone: JsonUtils.asStringOrNull(json['phone']),
+      squareId: JsonUtils.asIntOrNull(json['square_id']),
+      squareName: square == null
+          ? JsonUtils.asStringOrNull(json['square_name'])
+          : JsonUtils.asStringOrNull(square['name']),
+      status: JsonUtils.asStringOrNull(json['status']),
+      balance: JsonUtils.asDouble(json['balance']),
+      meters: JsonUtils.asMapList(json['meters']).map(MeterOption.fromJson).toList(),
+      uninvoicedSubscriptionFee: JsonUtils.asDouble(
+        json['uninvoiced_subscription_fee'] ?? json['subscription_fee_uninvoiced'],
+      ),
+      pendingTankerAmount: JsonUtils.asDouble(
+        json['pending_tanker_amount'] ?? json['tanker_amount'],
+      ),
+    );
+  }
+
+  SubscriberOption copyWith({List<MeterOption>? meters}) => SubscriberOption(
+        id: id,
+        name: name,
+        phone: phone,
+        squareId: squareId,
+        squareName: squareName,
+        status: status,
+        balance: balance,
+        meters: meters ?? this.meters,
+        uninvoicedSubscriptionFee: uninvoicedSubscriptionFee,
+        pendingTankerAmount: pendingTankerAmount,
+      );
+
+  @override
+  bool operator ==(Object other) => other is SubscriberOption && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => name;
+}
+
+/// ملخص استحقاق المشترك لنافذة التحصيل (`GET /api/subscribers/{id}/unpaid-invoices-summary`).
+/// عند غياب المسار يُشتق محلياً من قائمة فواتير المشترك.
+class SubscriberDueSummary {
+  const SubscriberDueSummary({
+    required this.subscriberId,
+    this.latestUnpaidInvoiceId,
+    this.latestUnpaidBillNumber,
+    this.dueAmount = 0,
+    this.outstandingBalance = 0,
+    this.creditBalance = 0,
+    this.uninvoicedSubscriptionFee = 0,
+    this.pendingTankerAmount = 0,
+    this.openInvoicesCount = 0,
+  });
+
+  final int subscriberId;
+  final int? latestUnpaidInvoiceId;
+  final String? latestUnpaidBillNumber;
+
+  /// `total_amount + previous_balance - amount_paid` لأحدث فاتورة غير مسددة
+  /// (يطابق `PaymentResource::form` سطر 42-46).
+  final double dueAmount;
+
+  /// إجمالي الدين على المشترك وكل عداداته (`getOutstandingBalance` + مجاميع العدادات).
+  final double outstandingBalance;
+  final double creditBalance;
+  final double uninvoicedSubscriptionFee;
+  final double pendingTankerAmount;
+  final int openInvoicesCount;
+
+  bool get hasInvoiceToCollect => latestUnpaidInvoiceId != null;
+
+  factory SubscriberDueSummary.fromJson(Map<String, dynamic> json) => SubscriberDueSummary(
+        subscriberId: JsonUtils.asInt(json['subscriber_id']),
+        latestUnpaidInvoiceId: JsonUtils.asIntOrNull(json['invoice_id']),
+        latestUnpaidBillNumber: JsonUtils.asStringOrNull(json['bill_number']),
+        dueAmount: JsonUtils.asDouble(json['due_amount'] ?? json['amount_due']),
+        outstandingBalance: JsonUtils.asDouble(json['outstanding_balance']),
+        creditBalance: JsonUtils.asDouble(json['credit_balance']),
+        uninvoicedSubscriptionFee: JsonUtils.asDouble(json['uninvoiced_subscription_fee']),
+        pendingTankerAmount: JsonUtils.asDouble(json['pending_tanker_amount']),
+        openInvoicesCount: JsonUtils.asInt(json['open_invoices_count']),
+      );
+
+  @override
+  String toString() => jsonEncode(<String, dynamic>{
+        'subscriber_id': subscriberId,
+        'invoice_id': latestUnpaidInvoiceId,
+        'due_amount': dueAmount,
+      });
+}
+
+class ReferencesRemoteDataSource {
+  const ReferencesRemoteDataSource(this._client);
+
+  final DioClient _client;
+
+  Future<List<SquareOption>> squares() async {
+    final response = await _client.getRaw(FinanceEndpoints.squares);
+    return JsonUtils.unwrapList(response).map(SquareOption.fromJson).toList();
+  }
+
+  /// `/api/subscribers?q=&square_id=` — بحث نصي مع فلتر المربع.
+  Future<List<SubscriberOption>> subscribers({
+    String? search,
+    int? squareId,
+    String? status,
+    int? limit,
+  }) async {
+    final response = await _client.getRaw(
+      FinanceEndpoints.subscribers,
+      query: <String, dynamic>{
+        if (search != null && search.trim().isNotEmpty) 'q': search.trim(),
+        if (squareId != null) 'square_id': squareId,
+        if (status != null) 'status': status,
+        if (limit != null) 'per_page': limit,
+      },
+    );
+    return JsonUtils.unwrapList(response).map(SubscriberOption.fromJson).toList();
+  }
+
+  /// عدّادات مشترك محدد — `GET /api/subscribers/{id}` يرجع `meters` مضمّنة.
+  Future<List<MeterOption>> metersOf(int subscriberId) async {
+    final response = await _client.getRaw(
+      FinanceEndpoints.subscribers,
+      query: <String, dynamic>{'subscriber_id': subscriberId, 'with': 'meters'},
+    );
+    final list = JsonUtils.unwrapList(response);
+    for (final item in list) {
+      if (JsonUtils.asInt(item['id']) == subscriberId) {
+        return SubscriberOption.fromJson(item).meters;
+      }
+    }
+    return const <MeterOption>[];
+  }
+
+  Future<SubscriberDueSummary?> dueSummary(int subscriberId) async {
+    try {
+      final response = await _client.getRaw(
+        FinanceEndpoints.subscriberDueSummary(subscriberId),
+      );
+      final map = JsonUtils.asMap(response);
+      if (map == null) return null;
+      final data = JsonUtils.asMap(map['data']) ?? map;
+      return SubscriberDueSummary.fromJson(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// مجموع رسوم الاشتراك غير المفوترة (لمفتاح `has_subscription_fee`).
+  Future<double> uninvoicedSubscriptionFees(int subscriberId) async {
+    try {
+      final response = await _client.getRaw(
+        FinanceEndpoints.subscriptionFees,
+        query: <String, dynamic>{
+          'subscriber_id': subscriberId,
+          'status': 'uninvoiced',
+          'per_page': 1,
+        },
+      );
+      final map = JsonUtils.asMap(response);
+      if (map != null) {
+        final total = JsonUtils.asDoubleOrNull(map['total_sum']);
+        if (total != null) return total;
+      }
+      final items = JsonUtils.unwrapList(response);
+      return items.fold<double>(
+        0,
+        (sum, item) => sum + JsonUtils.asDouble(item['amount']),
+      );
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// مجموع طلبات الوايت المكتملة (لمفتاح `has_tanker_fee`).
+  Future<double> pendingTankerAmount(int subscriberId) async {
+    try {
+      final response = await _client.getRaw(
+        FinanceEndpoints.serviceRequests,
+        query: <String, dynamic>{
+          'subscriber_id': subscriberId,
+          'status': 'completed',
+          'per_page': 1,
+        },
+      );
+      final map = JsonUtils.asMap(response);
+      if (map != null) {
+        final total = JsonUtils.asDoubleOrNull(map['total_sum']);
+        if (total != null) return total;
+      }
+      final items = JsonUtils.unwrapList(response);
+      return items.fold<double>(
+        0,
+        (sum, item) => sum + JsonUtils.asDouble(item['amount']),
+      );
+    } catch (_) {
+      return 0;
+    }
+  }
+}
