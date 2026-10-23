@@ -1,3 +1,5 @@
+import 'dart:io';
+
 class AppConfig {
   const AppConfig._();
 
@@ -7,6 +9,18 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: '',
   );
+
+  /// Default API URL based on platform:
+  /// - Windows / Desktop: http://localhost:8000/api
+  /// - Mobile / Physical Device: http://192.168.1.20:8000/api
+  static String get defaultApiBaseUrl {
+    if (_configuredApiBaseUrl.trim().isNotEmpty) {
+      return _configuredApiBaseUrl;
+    }
+    return Platform.isWindows
+        ? 'http://localhost:8000/api'
+        : 'http://192.168.1.20:8000/api';
+  }
 
   static String? _runtimeApiBaseUrl;
 
@@ -34,16 +48,15 @@ class AppConfig {
     if (_runtimeApiBaseUrl != null && _runtimeApiBaseUrl!.isNotEmpty) {
       return _runtimeApiBaseUrl;
     }
-    if (_configuredApiBaseUrl.trim().isEmpty) return null;
     try {
-      return normalizeApiBaseUrl(_configuredApiBaseUrl);
+      return normalizeApiBaseUrl(defaultApiBaseUrl);
     } on FormatException {
       return null;
     }
   }
 
   static String get apiBaseUrl => _runtimeApiBaseUrl ??
-      normalizeApiBaseUrl(_configuredApiBaseUrl);
+      normalizeApiBaseUrl(defaultApiBaseUrl);
 
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);

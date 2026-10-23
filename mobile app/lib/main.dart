@@ -9,11 +9,9 @@ import 'core/setup/server_setup_app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
-  final server = preferences.getString(ServerSetupApp.preferenceKey);
-  if (server == null) {
-    runApp(const ServerSetupApp());
-    return;
-  }
+  final server = preferences.getString(ServerSetupApp.preferenceKey) ??
+      AppConfig.defaultApiBaseUrl;
+
   AppConfig.configureServer(server);
   await bootstrap();
   runApp(const WaterApp());
