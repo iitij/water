@@ -16,7 +16,7 @@ Future<void> showInvoiceFiltersSheet(
 }) async {
   List<SquareOption> squares = const <SquareOption>[];
   Future<List<SubscriberOption>> Function(String search)? resolvedLoader = subscribersLoader;
-  if (sl.isRegistered<ReferencesRemoteDataSource>()) {
+  if (getIt.isRegistered<ReferencesRemoteDataSource>()) {
     final refs = sl<ReferencesRemoteDataSource>();
     try {
       squares = await refs.squares();

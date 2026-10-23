@@ -614,7 +614,7 @@ class _InvoicesTab extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StatusBadge(
-                  label: model.status.labelAr,
+                  label: model.status.label,
                   color: isPaid ? AppColors.success : AppColors.warning,
                 ),
                 if (!isPaid)
@@ -755,7 +755,7 @@ class _PaymentsTab extends StatelessWidget {
                 : null,
             leading: const Icon(Icons.receipt, color: AppColors.success),
             title: Text('${model.receiptNumber} • ${p['payment_date'] ?? ''}'),
-            subtitle: Text(model.method.labelAr),
+            subtitle: Text(model.method.label),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
