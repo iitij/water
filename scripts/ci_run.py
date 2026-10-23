@@ -9,6 +9,11 @@ import shutil
 import subprocess
 import sys
 
+# Windows runners otherwise use a legacy console encoding, which cannot print
+# Flutter's Unicode progress marks or Arabic compiler/test diagnostics.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 command = sys.argv[1:]
 command[0] = shutil.which(command[0]) or command[0]
 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

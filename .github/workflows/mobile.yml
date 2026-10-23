@@ -5,7 +5,7 @@ on:
     paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: mobile-${{ github.ref }}
   cancel-in-progress: true
@@ -39,11 +39,15 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk release/water-android-test.apk
           cd release
           sha256sum water-android-test.apk > SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-test
-          path: mobile app/release/*
-          if-no-files-found: error
+      - name: Publish Android testing prerelease directly (no artifact quota)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "mobile-test-${{ github.run_number }}" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Water Android testing build ${{ github.run_number }}" \
+            --notes-file RELEASE_NOTES.md \
+            release/water-android-test.apk release/SHA256SUMS.txt
   windows:
     runs-on: windows-latest
     timeout-minutes: 45
@@ -60,29 +64,12 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: python ../scripts/ci_run.py flutter build windows --release --build-name=1.0.0 --build-number=${{ github.run_number }}
       - run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath water-windows-test.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-test
-          path: mobile app/water-windows-test.zip
-          if-no-files-found: error
-  prerelease:
-    needs: [android, windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: '*-test'
-          merge-multiple: true
-          path: release
-      - name: Publish testing prerelease
+      - name: Publish Windows testing prerelease directly
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "mobile-test-${{ github.run_number }}" \
+          gh release create "windows-test-${{ github.run_number }}" \
             --target "$GITHUB_SHA" --prerelease \
-            --title "Water mobile testing build ${{ github.run_number }}" \
-            --notes-file 'mobile app/RELEASE_NOTES.md' \
-            release/water-android-test.apk release/SHA256SUMS.txt release/water-windows-test.zip
+            --title "Water Windows testing build ${{ github.run_number }}" \
+            --notes-file RELEASE_NOTES.md water-windows-test.zip

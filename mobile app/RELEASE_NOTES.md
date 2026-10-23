@@ -1,6 +1,7 @@
 # Water — testing prerelease
 
-Android APK and Windows desktop build of the integrated Arabic Water app.
+Testing builds of the integrated Arabic Water app. Android APKs are attached to
+`mobile-test-*` releases; Windows ZIPs are attached to `windows-test-*` releases.
 
 **Testing only — not a production release.** Android uses the generated debug
 signing key, so a later build may require uninstalling the previous APK. Sync
@@ -27,7 +28,7 @@ Extract the whole Windows ZIP and run `water_project.exe`; keep the DLLs and dat
 folder alongside it. Windows camera, Bluetooth, printing and platform plugins
 need separate hardware testing. The APK build does not verify those operations.
 
-Automated analyzer errors and Flutter tests gate publication, but legacy lint
+Automated analyzer errors and Flutter tests gate Android publication, but legacy lint
 warnings are not yet blocking. Full master-plan acceptance, backend integration,
 physical-device testing, secure offline persistence and production signing remain
 release-readiness work. No production-readiness claim is made by this prerelease.

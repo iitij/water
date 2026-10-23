@@ -26,7 +26,9 @@ The committed Gradle configuration targets AGP 9 and Flutter 3.44.
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md) for local-network setup and limitations.
 The GitHub Actions workflow builds Android and Windows and publishes a testing
-prerelease only after both builds and Android's analyzer/test gates succeed.
+prereleases per platform, directly to Releases (without Actions artifact storage).
+Android publication requires its build and analyzer/test gates to succeed.
+Windows publication requires its own build to succeed.
 It runs on the Arena working branch or manually, not on arbitrary pull requests.
 Production signing is deliberately not implied: configure a persistent private
 keystore through GitHub Actions secrets before shipping a production build.
