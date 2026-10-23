@@ -2,9 +2,9 @@ import 'package:intl/intl.dart';
 
 import '../../../admin_shared/data/admin_api_client.dart';
 import '../../../admin_shared/data/admin_api_endpoints.dart';
+import '../../domain/entities/dashboard_entities.dart';
 import '../models/dashboard_models.dart';
 import '../models/report_models.dart';
-import '../../domain/entities/dashboard_entities.dart';
 
 class DashboardRemoteDataSource {
   const DashboardRemoteDataSource(this._api);

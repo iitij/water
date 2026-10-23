@@ -2,7 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Meter;
+use App\Models\Reading;
+use App\Models\ServiceRequest;
+use App\Models\Setting;
 use App\Models\Square;
+use App\Models\SubscriptionFee;
+use App\Services\ReadingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -109,5 +115,63 @@ class SquareController extends ApiController
         });
 
         return response()->json(['deleted_count' => $deleted, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
+    }
+
+    public function offlinePack(int $id, ReadingService $readingService)
+    {
+        $this->authorizeApi(Square::class, 'view');
+        $square = Square::withCount('subscribers')->findOrFail($id);
+        $subscribers = $square->subscribers()
+            ->select('id', 'square_id', 'name', 'phone', 'address', 'status', 'balance', 'subscription_start_date')
+            ->orderBy('name')
+            ->get();
+
+        $meters = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name'])
+            ->withCount('readings')
+            ->whereHas('subscriber', fn ($q) => $q->where('square_id', $square->id))
+            ->orderBy('path_number')
+            ->orderBy('id')
+            ->get()
+            ->map(function (Meter $meter) use ($readingService) {
+                $lastReading = $meter->readings()->latest('id')->first();
+                $period = $readingService->calculateReadingPeriod($meter->id);
+                $subFee = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
+                    ->where('status', 'uninvoiced')->sum('amount');
+                $tankerFee = (float) ServiceRequest::where('subscriber_id', $meter->subscriber_id)
+                    ->where('status', 'completed')->sum('amount');
+
+                $meter->setAttribute('last_reading', $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading);
+                $meter->setAttribute('period', [
+                    'period_start' => $period['period_start'],
+                    'period_end' => $period['period_end'],
+                    'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
+                    'has_subscription_fee' => $subFee > 0,
+                    'subscription_installment' => $subFee,
+                    'has_tanker_fee' => $tankerFee > 0,
+                    'tanker_installment' => $tankerFee,
+                ]);
+                return $meter;
+            });
+
+        $readings = Reading::with(['meter:id,unique_code,path_number,subscriber_id', 'invoice:id,bill_number,status'])
+            ->whereHas('meter.subscriber', fn ($q) => $q->where('square_id', $square->id))
+            ->latest('reading_date')
+            ->limit(250)
+            ->get();
+
+        return response()->json([
+            'square' => $square,
+            'subscribers' => $subscribers,
+            'meters' => $meters,
+            'readings' => $readings,
+            'reading_settings' => [
+                'reading_period' => Setting::get('reading_period', 'monthly'),
+                'reading_day' => Setting::get('reading_day', 'last_day'),
+                'auto_issue_invoice_on_reading' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
+                'grace_period' => (int) Setting::get('grace_period', '14'),
+                'strict_overdue_on_new_invoice' => filter_var(Setting::get('strict_overdue_on_new_invoice', '0'), FILTER_VALIDATE_BOOLEAN),
+            ],
+            'generated_at' => now()->toISOString(),
+        ]);
     }
 }

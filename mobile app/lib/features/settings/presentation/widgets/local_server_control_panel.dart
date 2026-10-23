@@ -40,13 +40,22 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<WhatsAppSettingsCubit, WhatsAppSettingsState>(
+    return BlocConsumer<WhatsAppSettingsCubit, WhatsAppSettingsState>(
+      listenWhen: (previous, current) =>
+          previous.serverSuccessMessage != current.serverSuccessMessage &&
+          current.serverSuccessMessage != null,
+      listener: (context, state) {
+        if (state.serverSuccessMessage != null) {
+          showAdminSnackBar(context, state.serverSuccessMessage!);
+        }
+      },
       buildWhen: (previous, current) =>
           previous.serverStatus != current.serverStatus ||
           previous.isServerBusy != current.isServerBusy ||
           previous.serverError != current.serverError,
       builder: (context, state) {
         final status = state.serverStatus;
+        final isOffline = status == null || status.state == LocalServerState.offline;
         return AdminCard(
           borderColor: AdminPalette.success.withAlpha(45),
           child: Column(
@@ -79,7 +88,7 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  if (status == null || status.state == LocalServerState.offline)
+                  if (isOffline)
                     FilledButton.icon(
                       key: const ValueKey('start-local-server'),
                       onPressed: state.isServerBusy
@@ -88,7 +97,26 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                       icon: const Icon(Icons.play_arrow_rounded),
                       label: const Text('تشغيل الخادم من هنا'),
                     )
-                  else
+                  else ...[
+                    FilledButton.tonalIcon(
+                      key: const ValueKey('send-whatsapp-test'),
+                      onPressed: state.isServerBusy
+                          ? null
+                          : () => _openSendTestDialog(context),
+                      icon: const Icon(Icons.send_rounded),
+                      label: const Text('إرسال رسالة تجريبية'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('logout-local-server'),
+                      onPressed: state.isServerBusy
+                          ? null
+                          : () => _confirmLogout(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AdminPalette.warning,
+                      ),
+                      icon: const Icon(Icons.link_off_rounded),
+                      label: const Text('تسجيل خروج / فصل الرقم'),
+                    ),
                     FilledButton.tonalIcon(
                       key: const ValueKey('stop-local-server'),
                       onPressed: state.isServerBusy ? null : () => _confirmStop(context),
@@ -96,6 +124,7 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                       icon: const Icon(Icons.stop_rounded),
                       label: const Text('إيقاف الخادم نهائياً'),
                     ),
+                  ],
                   OutlinedButton.icon(
                     onPressed: state.isServerBusy
                         ? null
@@ -158,6 +187,120 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
       ),
     );
     if (confirmed ?? false) await cubit.stopLocalServer();
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final cubit = context.read<WhatsAppSettingsCubit>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('فصل رقم الواتساب المرتبط'),
+        content: const Text(
+          'سيتم تسجيل الخروج من جلسة الواتساب الحالية وإصدار كود QR جديد لربط رقم آخر. هل تريد المتابعة؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('تسجيل الخروج'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) await cubit.logoutLocalServer();
+  }
+
+  Future<void> _openSendTestDialog(BuildContext context) async {
+    final cubit = context.read<WhatsAppSettingsCubit>();
+    final formKey = GlobalKey<FormState>();
+    final phoneCtrl = TextEditingController();
+    final msgCtrl = TextEditingController(
+      text: 'رسالة تجريبية من نظام إدارة المياه للتأكد من جاهزية الربط عبر الواتساب ✅',
+    );
+    var sending = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> send() async {
+            if (!(formKey.currentState?.validate() ?? false)) return;
+            setDialogState(() => sending = true);
+            final ok = await cubit.sendTestMessage(
+              phone: phoneCtrl.text.trim(),
+              message: msgCtrl.text.trim(),
+            );
+            if (!dialogContext.mounted) return;
+            setDialogState(() => sending = false);
+            if (ok) Navigator.pop(dialogContext);
+          }
+
+          return AlertDialog(
+            title: const Text('إرسال رسالة واتساب تجريبية'),
+            content: SizedBox(
+              width: 480,
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: TextFormField(
+                        controller: phoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الجوال (مع مفتاح الدولة، مثل 96777xxxxxxx)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.phone_outlined),
+                        ),
+                        validator: (val) => val == null || val.trim().length < 7
+                            ? 'أدخل رقم هاتف صالح'
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: msgCtrl,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'نص الرسالة التجريبية',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (val) => val == null || val.trim().isEmpty
+                          ? 'أدخل نص الرسالة'
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: sending ? null : () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton.icon(
+                onPressed: sending ? null : send,
+                icon: sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+                label: Text(sending ? 'جارٍ الإرسال...' : 'إرسال الآن'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    phoneCtrl.dispose();
+    msgCtrl.dispose();
   }
 }
 

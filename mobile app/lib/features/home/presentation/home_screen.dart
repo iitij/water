@@ -1,579 +1,814 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_service.dart';
+import '../../../core/navigation/module_catalog.dart';
+import '../../../core/navigation/sub_page.dart';
 import '../../../core/permissions/permission_service.dart';
-import '../../../core/responsive/breakpoints.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/stat_card.dart';
-import '../../../core/widgets/status_badge.dart';
+import '../../../core/ui/app_brand.dart';
+import '../../../core/ui/app_controls.dart';
+import '../../../core/ui/app_motion.dart';
+import '../../../core/ui/app_surfaces.dart';
+import '../../../core/ui/app_tiles.dart';
+import '../../../core/ui/app_tokens.dart';
+import '../../../core/utils/arabic_date.dart';
+import '../../../core/widgets/shimmer_skeleton.dart';
+import '../../admin_shared/presentation/widgets/admin_widgets.dart';
+import '../../dashboard/domain/repositories/dashboard_repository.dart';
+import '../../dashboard/presentation/cubit/dashboard_cubit.dart';
+import '../../dashboard/presentation/widgets/collection_progress_card.dart';
+import '../../dashboard/presentation/widgets/monthly_revenue_chart_card.dart';
+import '../../navigation/presentation/widgets/module_section.dart';
 import '../../offline_sync/services/sync_queue_manager.dart';
+import '../domain/workspace_catalog.dart';
+import 'widgets/workspace_widgets.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _permissions = GetIt.I<PermissionService>();
+  DashboardCubit? _dashboard;
+
+  bool get _isAdmin => _permissions.isAdmin;
+
+  bool get _canViewStats =>
+      _isAdmin ||
+      _permissions.hasAnyPermission(const <String>[
+        'View:StatsOverview',
+        'View:MonthlyRevenueChart',
+        'View:OverdueInvoicesWidget',
+        'View:LatestInvoicesWidget',
+      ]);
+
+  bool get _canViewDashboard =>
+      _isAdmin ||
+      _permissions.hasAnyPermission(const <String>[
+        'View:CustomAccountWidget',
+        'View:StatsOverview',
+        'View:MonthlyRevenueChart',
+      ]);
+
+  bool get _canViewRevenue => _isAdmin || _permissions.can('View:MonthlyRevenueChart');
+
+  @override
+  void initState() {
+    super.initState();
+    if (_canViewStats) {
+      _dashboard = DashboardCubit(GetIt.I<DashboardRepository>())..load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dashboard?.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = GetIt.I<SessionService>();
-    final permissions = GetIt.I<PermissionService>();
     final queue = GetIt.I<SyncQueueManager>();
-    final name = session.user?['name']?.toString() ?? 'موظف المشروع';
-    final roles = permissions.currentRoles;
-    final isAdmin = permissions.isAdmin;
-    final isCollector = permissions.isCollector;
-    final isReader = permissions.isReader;
+    final user = session.user ?? const <String, dynamic>{};
+    final name = user['name']?.toString() ?? 'موظف المشروع';
+    final firstName = ArabicDate.firstName(name);
 
-    final roleTitle = isAdmin
-        ? 'إدارة النظام الشاملة'
-        : isCollector
-            ? 'التحصيل الميداني والمحاسبة'
-            : isReader
-                ? 'القراءات والعمليات الميدانية'
-                : 'مساحة العمل الموحدة';
+    final fieldModules = ModuleCatalog.visible(_permissions, group: AppModuleGroup.field);
+    final billingModules = ModuleCatalog.visible(_permissions, group: AppModuleGroup.billing);
+    final crmModules = ModuleCatalog.visible(_permissions, group: AppModuleGroup.crm);
+    final canInvoices = _isAdmin || _permissions.can('invoices.view');
+    final canSubscribers = _isAdmin ||
+        _permissions.hasAnyPermission(const <String>['ViewAny:Subscriber', 'View:Subscriber']);
+    final canViewStatsWidget = _isAdmin || _permissions.can('View:StatsOverview');
+    final insightModules = <AppModule>[
+      ...ModuleCatalog.visible(_permissions, group: AppModuleGroup.insights),
+      ...ModuleCatalog.visible(_permissions, group: AppModuleGroup.admin),
+    ];
 
-    return AnimatedBuilder(
+    // Field collectors work action-first, so they get the compact workspace
+    // (search + shortcuts + sync status) instead of the analytics overview.
+    if (_permissions.isCollector && !_permissions.isAdmin) {
+      return AnimatedBuilder(
+        animation: Listenable.merge(<Listenable>[session, queue]),
+        builder: (context, _) => HomeWorkspace(
+          name: name,
+          can: _permissions.can,
+          online: queue.isOnline,
+          pendingCount: queue.pendingCount,
+          failedCount: queue.failedCount,
+          collectorFirst: true,
+          onNavigate: (route) {
+            if (const <String>[
+              RouteNames.services,
+              RouteNames.offlineSync,
+              RouteNames.profile,
+            ].contains(Uri.parse(route).path)) {
+              context.go(route);
+            } else {
+              context.push(route);
+            }
+          },
+        ),
+      );
+    }
+
+    Widget content = AnimatedBuilder(
       animation: queue,
       builder: (context, _) {
-        final width = MediaQuery.sizeOf(context).width;
-        final horizontal = width < 360 ? 14.0 : 22.0;
-
-        final fieldActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.speed_rounded,
-            color: AppColors.primary,
-            title: 'القارئ الميداني السريع',
-            subtitle: 'بحث المسار المركب 4/1 ومسح الباركود وتسجيل القراءات',
-            route: RouteNames.fieldReader,
-          ),
-          _ModuleEntry(
-            icon: Icons.gas_meter_outlined,
-            color: AppColors.info,
-            title: 'إدارة العدادات',
-            subtitle: 'قائمة العدادات، المسارات، المستأجرين، والأرصدة المعزولة',
-            route: RouteNames.meters,
-          ),
-          _ModuleEntry(
-            icon: Icons.fact_check_outlined,
-            color: AppColors.success,
-            title: 'سجل القراءات الشامل',
-            subtitle: 'فلترة القراءات والإصدار الجماعي للفواتير',
-            route: RouteNames.readings,
-          ),
-        ];
-
-        final financeActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.point_of_sale_rounded,
-            color: AppColors.warning,
-            title: 'المحصل الميداني السريع',
-            subtitle: 'تحصيل فوري للفواتير غير المسددة وطباعة السندات',
-            route: RouteNames.quickCollector,
-          ),
-          _ModuleEntry(
-            icon: Icons.receipt_long_rounded,
-            color: AppColors.primary,
-            title: 'قائمة الفواتير ومحركات الإصدار',
-            subtitle: 'فواتير العدادات والاشتراكات والوايت وإعادة الاحتساب',
-            route: RouteNames.invoices,
-          ),
-          _ModuleEntry(
-            icon: Icons.payments_outlined,
-            color: AppColors.success,
-            title: 'سندات القبض والمدفوعات',
-            subtitle: 'توزيع FIFO التلقائي، الطباعة الحرارية وPDF، والواتساب',
-            route: RouteNames.payments,
-          ),
-          if (isAdmin || permissions.can('tariffs.view'))
-            _ModuleEntry(
-              icon: Icons.price_change_outlined,
-              color: AppColors.info,
-              title: 'شرائح التعرفة والتسعير',
-              subtitle: 'إدارة سعر الوحدة والتسعيرات النشطة والمحذوفة',
-              route: RouteNames.tariffs,
+        return AppPageBody(
+          onRefresh: _dashboard == null ? null : () => _dashboard!.refresh(),
+          children: <Widget>[
+            AppReveal(
+              child: _GreetingHero(
+                firstName: firstName,
+                roleLabel: _roleLabel(_permissions),
+                isOnline: queue.isOnline,
+                pendingSync: queue.pendingCount,
+                primaryLabel: _primaryLabel(),
+                primaryIcon: _primaryIcon(),
+                onPrimary: () => context.push(_primaryRoute()),
+                canViewDashboard: _canViewDashboard,
+                onDashboard: () => context.push(RouteNames.dashboard),
+              ),
             ),
-        ];
-
-        final crmActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.people_alt_outlined,
-            color: AppColors.primary,
-            title: 'المشتركون والملف الشامل 360°',
-            subtitle: 'إدارة المشتركين، كشف الحساب، والتبويبات الـ 6',
-            route: RouteNames.subscribers,
-          ),
-          _ModuleEntry(
-            icon: Icons.grid_view_rounded,
-            color: AppColors.info,
-            title: 'المربعات السكنية',
-            subtitle: 'إدارة الحارات والمربعات ومشتركي كل مربع',
-            route: RouteNames.squares,
-          ),
-          _ModuleEntry(
-            icon: Icons.card_membership_outlined,
-            color: AppColors.warning,
-            title: 'رسوم الاشتراك والأقساط',
-            subtitle: 'متابعة رسوم التأسيس وإصدار فواتير الأقساط',
-            route: RouteNames.subscriptionFees,
-          ),
-          _ModuleEntry(
-            icon: Icons.local_shipping_outlined,
-            color: AppColors.success,
-            title: 'طلبات الخدمة والوايت',
-            subtitle: 'تسجيل طلبات الوايت، الإنجاز، والفوترة المباشرة',
-            route: RouteNames.serviceRequests,
-          ),
-          _ModuleEntry(
-            icon: Icons.account_balance_outlined,
-            color: AppColors.primary,
-            title: 'دفتر الأستاذ العام',
-            subtitle: 'سجل الحركات المالية الدائنة والمدينة المفصل',
-            route: RouteNames.transactions,
-          ),
-        ];
-
-        final adminActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.dashboard_customize_outlined,
-            color: AppColors.primary,
-            title: 'لوحة القيادة الإحصائية',
-            subtitle: 'مؤشرات الأداء، إيرادات الأشهر، والفواتير المتأخرة',
-            route: RouteNames.dashboard,
-          ),
-          _ModuleEntry(
-            icon: Icons.analytics_outlined,
-            color: AppColors.info,
-            title: 'التقارير المالية والتحليلية',
-            subtitle: 'تقارير التحصيل، المديونية، وتوزيع المربعات',
-            route: RouteNames.reports,
-          ),
-          _ModuleEntry(
-            icon: Icons.table_view_outlined,
-            color: AppColors.success,
-            title: 'مركز تصدير بيانات Excel',
-            subtitle: 'تصدير المشتركين والفواتير والقراءات بصيغة XLSX',
-            route: RouteNames.exports,
-          ),
-          _ModuleEntry(
-            icon: Icons.tune_rounded,
-            color: AppColors.warning,
-            title: 'استوديو الإعدادات وخادم الواتساب',
-            subtitle: 'مصمم الفاتورة والسند، إعدادات القراءة، وربط QR للواتساب',
-            route: RouteNames.settings,
-          ),
-          _ModuleEntry(
-            icon: Icons.manage_accounts_outlined,
-            color: AppColors.primary,
-            title: 'إدارة المستخدمين',
-            subtitle: 'حسابات الموظفين والمحصلين والقراء',
-            route: RouteNames.users,
-          ),
-          _ModuleEntry(
-            icon: Icons.admin_panel_settings_outlined,
-            color: AppColors.info,
-            title: 'الأدوار ومصفوفة صلاحيات Shield',
-            subtitle: 'التحكم الدقيق بـ 167 صلاحية للأدوار',
-            route: RouteNames.roles,
-          ),
-        ];
-
-        final systemActions = <_ModuleEntry>[
-          _ModuleEntry(
-            icon: Icons.sync_rounded,
-            color: AppColors.info,
-            title: 'مراقب المزامنة الأوفلاين',
-            subtitle: queue.pendingCount == 0
-                ? 'جميع العمليات متزامنة مع الخادم'
-                : 'يوجد ${queue.pendingCount} عملية بانتظار المزامنة',
-            route: RouteNames.offlineSync,
-          ),
-          _ModuleEntry(
-            icon: Icons.person_outline_rounded,
-            color: AppColors.primary,
-            title: 'الملف الشخصي',
-            subtitle: 'تحديث الاسم، البريد، كلمة المرور، والصورة الشخصية',
-            route: RouteNames.profile,
-          ),
-        ];
-
-        return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(horizontal, 18, horizontal, 32),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: AppBreakpoints.contentMax),
+            const Gap(AppSpacing.md),
+            AppReveal(
+              delay: const Duration(milliseconds: 60),
+              child: _QuickActionsCard(
+                onReading: () => context.push(RouteNames.fieldReader),
+                onCollect: () => context.push(RouteNames.quickCollector),
+                onInvoice: canInvoices ? () => context.push(RouteNames.invoices) : null,
+                onSubscriber:
+                    canSubscribers ? () => context.push(RouteNames.subscriberNew) : null,
+              ),
+            ),
+            const Gap(AppSpacing.xl),
+            AppReveal(
+              delay: const Duration(milliseconds: 90),
+              child: SectionHeading(
+                title: 'نظرة سريعة',
+                subtitle: _dashboard == null
+                    ? 'حالة جهازك ومساحة عملك الآن'
+                    : 'أرقام محدثة من الخادم',
+                trailing: _canViewDashboard
+                    ? TextButton(
+                        onPressed: () => context.push(RouteNames.dashboard),
+                        child: const Text('لوحة القيادة'),
+                      )
+                    : null,
+              ),
+            ),
+            const Gap(AppSpacing.sm),
+            if (_dashboard == null)
+              _WorkspaceMetrics(queue: queue)
+            else
+              _LiveMetrics(cubit: _dashboard!, canViewRevenue: _canViewRevenue),
+            if (_dashboard != null) ...<Widget>[
+              const Gap(AppSpacing.lg),
+              _DashboardExtras(
+                cubit: _dashboard!,
+                canViewRevenue: _canViewRevenue,
+                canViewStats: canViewStatsWidget,
+                onOpenReports: () => context.push(RouteNames.reports),
+              ),
+            ],
+            if (fieldModules.isNotEmpty) ...<Widget>[
+              const Gap(AppSpacing.xl),
+              AppReveal(
+                delay: const Duration(milliseconds: 130),
+                child: ModuleRailSection(
+                  title: 'العمليات الميدانية',
+                  subtitle: 'القراءات والعدادات في جيبك',
+                  modules: fieldModules,
+                  onViewAll: () => context.go(RouteNames.fieldHub),
+                ),
+              ),
+            ],
+            if (billingModules.isNotEmpty) ...<Widget>[
+              const Gap(AppSpacing.xl),
+              AppReveal(
+                delay: const Duration(milliseconds: 160),
+                child: ModuleRailSection(
+                  title: 'التحصيل والفواتير',
+                  subtitle: 'حصّل وأصدر السندات بسرعة',
+                  modules: billingModules,
+                  onViewAll: () => context.go(RouteNames.billingHub),
+                ),
+              ),
+            ],
+            if (crmModules.isNotEmpty) ...<Widget>[
+              const Gap(AppSpacing.xl),
+              AppReveal(
+                delay: const Duration(milliseconds: 190),
+                child: ModuleRailSection(
+                  title: 'المشتركون والخدمات',
+                  subtitle: 'ملفات المشتركين والمربعات',
+                  modules: crmModules,
+                  onViewAll: () => context.go(RouteNames.crmHub),
+                ),
+              ),
+            ],
+            if (insightModules.isNotEmpty) ...<Widget>[
+              const Gap(AppSpacing.xl),
+              AppReveal(
+                delay: const Duration(milliseconds: 220),
+                child: ModuleGridSection(
+                  modules: insightModules,
+                  title: 'التحليلات والإدارة',
+                  subtitle: 'التقارير والإعدادات والصلاحيات',
+                ),
+              ),
+            ],
+            const Gap(AppSpacing.xl),
+            AppReveal(
+              delay: const Duration(milliseconds: 250),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  _WelcomeCard(
-                    name: name,
-                    roleTitle: roleTitle,
-                    online: queue.isOnline,
-                    onPrimaryAction: () {
-                      if (isReader && !isAdmin) {
-                        context.push(RouteNames.fieldReader);
-                      } else if (isCollector && !isAdmin) {
-                        context.push(RouteNames.quickCollector);
-                      } else {
-                        context.push(RouteNames.dashboard);
-                      }
-                    },
-                    primaryActionLabel: isReader && !isAdmin
-                        ? 'فتح القارئ الميداني'
-                        : isCollector && !isAdmin
-                            ? 'فتح المحصل السريع'
-                            : 'فتح لوحة القيادة',
+                  const SectionHeading(
+                    title: 'المزامنة والاتصال',
+                    subtitle: 'كل عملية محفوظة حتى تعود الشبكة',
+                    icon: Icons.sync_rounded,
                   ),
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = constraints.maxWidth >= 520 ? 3 : 1;
-                      final cards = <Widget>[
-                        StatCard(
-                          title: 'عمليات تنتظر المزامنة',
-                          value: queue.pendingCount.toString(),
-                          icon: Icons.cloud_upload_outlined,
-                          color: AppColors.warning,
-                          caption: queue.failedCount > 0 ? '${queue.failedCount} فاشلة' : 'جاهز للمزامنة',
-                        ),
-                        StatCard(
-                          title: 'صلاحيات حسابك',
-                          value: isAdmin ? 'كاملة' : permissions.currentPermissions.length.toString(),
-                          icon: Icons.verified_user_outlined,
-                          color: AppColors.success,
-                          caption: roles.isEmpty ? 'مفعّلة' : roles.join(' • '),
-                        ),
-                        StatCard(
-                          title: 'اتصال الخادم',
-                          value: queue.isOnline == true
-                              ? 'متصل'
-                              : (queue.isOnline == false ? 'أوفلاين' : 'جارٍ الفحص'),
-                          icon: queue.isOnline == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                          color: queue.isOnline == true ? AppColors.info : AppColors.warning,
-                          caption: 'حالة الشبكة',
-                        ),
-                      ];
-                      if (columns == 1) {
-                        return Column(
-                          children: cards
-                              .map((card) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: SizedBox(width: double.infinity, child: card),
-                                  ))
-                              .toList(),
-                        );
-                      }
-                      return Row(
-                        children: cards
-                            .asMap()
-                            .entries
-                            .map((entry) => Expanded(
-                                  child: Padding(
-                                    padding: EdgeInsetsDirectional.only(
-                                      end: entry.key == cards.length - 1 ? 0 : 10,
-                                    ),
-                                    child: entry.value,
-                                  ),
-                                ))
-                            .toList(),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 22),
-                  _SectionBlock(
-                    title: 'العمليات الميدانية والعدادات والقراءات',
-                    entries: fieldActions,
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionBlock(
-                    title: 'الفواتير والتحصيل والنظام المالي',
-                    entries: financeActions,
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionBlock(
-                    title: 'المشتركون والمربعات والخدمات المساندة',
-                    entries: crmActions,
-                  ),
-                  if (isAdmin ||
-                      permissions.hasAnyPermission(const <String>[
-                        'View:ExportDataPage',
-                        'View:InvoiceSettings',
-                        'View:ReadingSettings',
-                        'View:ReceiptSettings',
-                        'View:WhatsAppSettings',
-                        'ViewAny:User',
-                        'ViewAny:Role',
-                      ])) ...<Widget>[
-                    const SizedBox(height: 18),
-                    _SectionBlock(
-                      title: 'لوحة القيادة، التقارير، الإعدادات، والصلاحيات',
-                      entries: adminActions,
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  _SectionBlock(
-                    title: 'المزامنة والحساب الشخصي',
-                    entries: systemActions,
-                  ),
+                  const Gap(AppSpacing.sm),
+                  SyncSummaryCard(onManage: () => context.push(RouteNames.offlineSync)),
                 ],
               ),
             ),
+            const Gap(AppSpacing.xl),
+            Center(
+              child: Text(
+                'مشروع مياه الوشاح • منصة إدارة موحدة',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    final cubit = _dashboard;
+    if (cubit != null) {
+      content = BlocProvider<DashboardCubit>.value(value: cubit, child: content);
+    }
+    return content;
+  }
+
+  String _roleLabel(PermissionService permissions) {
+    if (permissions.isAdmin) return 'مدير النظام • صلاحيات كاملة';
+    if (permissions.isCollector) return 'محصل ميداني • تحصيل وسندات';
+    if (permissions.isReader) return 'قارئ عدادات • عمليات ميدانية';
+    return 'موظف المشروع';
+  }
+
+  String _primaryLabel() {
+    if (_permissions.isReader && !_permissions.isAdmin) return 'فتح القارئ الميداني';
+    if (_permissions.isCollector && !_permissions.isAdmin) return 'بدء التحصيل السريع';
+    if (_canViewDashboard) return 'لوحة القيادة';
+    return 'فتح الفواتير';
+  }
+
+  IconData _primaryIcon() {
+    if (_permissions.isReader && !_permissions.isAdmin) return Icons.speed_rounded;
+    if (_permissions.isCollector && !_permissions.isAdmin) return Icons.point_of_sale_rounded;
+    if (_canViewDashboard) return Icons.space_dashboard_rounded;
+    return Icons.receipt_long_rounded;
+  }
+
+  String _primaryRoute() {
+    if (_permissions.isReader && !_permissions.isAdmin) return RouteNames.fieldReader;
+    if (_permissions.isCollector && !_permissions.isAdmin) return RouteNames.quickCollector;
+    if (_canViewDashboard) return RouteNames.dashboard;
+    return RouteNames.invoices;
+  }
+}
+
+class _GreetingHero extends StatelessWidget {
+  const _GreetingHero({
+    required this.firstName,
+    required this.roleLabel,
+    required this.isOnline,
+    required this.pendingSync,
+    required this.primaryLabel,
+    required this.primaryIcon,
+    required this.onPrimary,
+    required this.canViewDashboard,
+    required this.onDashboard,
+  });
+
+  final String firstName;
+  final String roleLabel;
+  final bool? isOnline;
+  final int pendingSync;
+  final String primaryLabel;
+  final IconData primaryIcon;
+  final VoidCallback onPrimary;
+  final bool canViewDashboard;
+  final VoidCallback onDashboard;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    return AppHeroPanel(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          HeroCopy(
+            eyebrow: '${ArabicDate.greeting(today)} • ${ArabicDate.full(today)}',
+            title: 'أهلاً، $firstName 👋',
+            subtitle: roleLabel,
           ),
+          const Gap(AppSpacing.md),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              HeroMetaChip(
+                icon: isOnline == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                label: isOnline == true
+                    ? 'متصل بالخادم'
+                    : isOnline == false
+                        ? 'وضع أوفلاين'
+                        : 'جارٍ فحص الشبكة',
+              ),
+              if (pendingSync > 0)
+                HeroMetaChip(
+                  icon: Icons.cloud_upload_outlined,
+                  label: '$pendingSync بانتظار المزامنة',
+                ),
+              const HeroMetaChip(icon: Icons.shield_outlined, label: 'جلسة آمنة'),
+            ],
+          ),
+          const Gap(AppSpacing.lg),
+          HeroActions(
+            primary: HeroButton(
+              label: primaryLabel,
+              icon: primaryIcon,
+              onPressed: onPrimary,
+            ),
+            secondary: canViewDashboard
+                ? HeroGhostButton(
+                    label: 'لوحة القيادة',
+                    icon: Icons.insights_rounded,
+                    onPressed: onDashboard,
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionsCard extends StatelessWidget {
+  const _QuickActionsCard({
+    required this.onReading,
+    required this.onCollect,
+    required this.onInvoice,
+    required this.onSubscriber,
+  });
+
+  final VoidCallback onReading;
+  final VoidCallback onCollect;
+  final VoidCallback? onInvoice;
+  final VoidCallback? onSubscriber;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm + 2, AppSpacing.md, AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: <Widget>[
+                Text(
+                  'إجراءات سريعة',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const Spacer(),
+                const AppPill(
+                  label: 'الأكثر استخداماً',
+                  icon: Icons.bolt_rounded,
+                  color: AppColors.brandAmber,
+                  dense: true,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          AppQuickActionBar(
+            actions: <Widget>[
+              AppQuickAction(
+                label: 'قراءة',
+                icon: Icons.speed_rounded,
+                color: AppColors.primary,
+                onTap: onReading,
+              ),
+              AppQuickAction(
+                label: 'تحصيل',
+                icon: Icons.point_of_sale_rounded,
+                color: AppColors.warning,
+                onTap: onCollect,
+              ),
+              if (onInvoice != null)
+                AppQuickAction(
+                  label: 'فاتورة',
+                  icon: Icons.receipt_long_rounded,
+                  color: AppColors.info,
+                  onTap: onInvoice!,
+                ),
+              if (onSubscriber != null)
+                AppQuickAction(
+                  label: 'مشترك',
+                  icon: Icons.person_add_alt_1_rounded,
+                  color: AppColors.success,
+                  onTap: onSubscriber!,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkspaceMetrics extends StatelessWidget {
+  const _WorkspaceMetrics({required this.queue});
+
+  final SyncQueueManager queue;
+
+  @override
+  Widget build(BuildContext context) {
+    final permissions = GetIt.I<PermissionService>();
+    final cards = <Widget>[
+      AppMetricCard(
+        title: 'بانتظار المزامنة',
+        value: '${queue.pendingCount}',
+        icon: Icons.cloud_upload_outlined,
+        color: queue.pendingCount > 0 ? AppColors.warning : AppColors.success,
+        caption: queue.failedCount > 0 ? '${queue.failedCount} فاشلة' : 'جاهز للمزامنة',
+      ),
+      AppMetricCard(
+        title: 'حالة الاتصال',
+        value: queue.isOnline == true
+            ? 'متصل'
+            : queue.isOnline == false
+                ? 'أوفلاين'
+                : 'فحص',
+        icon: queue.isOnline == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+        color: queue.isOnline == true ? AppColors.success : AppColors.warning,
+        caption: 'الخادم الرئيسي',
+      ),
+      AppMetricCard(
+        title: 'صلاحيات حسابك',
+        value: permissions.isAdmin ? 'كاملة' : '${permissions.currentPermissions.length}',
+        icon: Icons.verified_user_outlined,
+        color: AppColors.primary,
+        caption: permissions.isAdmin ? 'مدير النظام' : 'صلاحية مفعّلة',
+      ),
+      AppMetricCard(
+        title: 'الدور الوظيفي',
+        value: permissions.isAdmin
+            ? 'مدير'
+            : permissions.isCollector
+                ? 'محصل'
+                : permissions.isReader
+                    ? 'قارئ'
+                    : 'موظف',
+        icon: Icons.badge_outlined,
+        color: AppColors.violet,
+        caption: 'مساحة العمل',
+      ),
+    ];
+    return AppMetricGrid(children: cards);
+  }
+}
+
+class _LiveMetrics extends StatelessWidget {
+  const _LiveMetrics({required this.cubit, required this.canViewRevenue});
+
+  final DashboardCubit cubit;
+  final bool canViewRevenue;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<DashboardCubit, DashboardState>(
+      buildWhen: (previous, current) =>
+          previous.snapshot != current.snapshot || previous.status != current.status,
+      builder: (context, state) {
+        final snapshot = state.snapshot;
+        if (snapshot == null) {
+          if (state.status == DashboardRequestStatus.failure) {
+            return AppNotice(
+              title: 'تعذر تحميل الأرقام',
+              message: 'قد تكون غير متصل بالشبكة. بقية مساحة العمل تعمل بشكل طبيعي.',
+              icon: Icons.cloud_off_rounded,
+              color: AppColors.warning,
+              action: TextButton(
+                onPressed: () => cubit.load(forceRefresh: true),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+                child: const Text('إعادة المحاولة'),
+              ),
+            );
+          }
+          return _MetricsSkeleton();
+        }
+
+        final stats = snapshot.data.stats;
+        return AppMetricGrid(
+          children: <Widget>[
+            AppMetricCard(
+              title: 'المشتركون النشطون',
+              value: AdminFormat.number(stats.activeSubscribersCount),
+              icon: Icons.groups_rounded,
+              color: AppColors.primary,
+              sparkline: stats.subscribersSparkline,
+              caption: 'من أصل ${AdminFormat.number(stats.totalSubscribersCount)} مشترك',
+            ),
+            AppMetricCard(
+              title: 'الديون المستحقة',
+              value: AdminFormat.compactMoney(stats.outstandingAmount),
+              icon: Icons.account_balance_wallet_outlined,
+              color: AppColors.danger,
+              caption: '${AdminFormat.number(stats.unpaidInvoicesCount)} فاتورة غير مسددة',
+            ),
+            AppMetricCard(
+              title: 'إيرادات هذا الشهر',
+              value: AdminFormat.compactMoney(stats.monthlyCollection),
+              icon: Icons.payments_rounded,
+              color: AppColors.success,
+              sparkline: stats.collectionSparkline,
+              caption: '${AdminFormat.number(stats.readingsThisMonth)} قراءة هذا الشهر',
+            ),
+            AppMetricCard(
+              title: 'الفواتير المتأخرة',
+              value: AdminFormat.number(stats.overdueInvoicesCount),
+              icon: Icons.schedule_rounded,
+              color: stats.overdueInvoicesCount > 0 ? AppColors.warning : AppColors.success,
+              caption: stats.overdueInvoicesCount > 0 ? 'تحتاج متابعة' : 'لا توجد متأخرات',
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _ModuleEntry {
-  const _ModuleEntry({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    required this.route,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final String route;
-}
-
-class _SectionBlock extends StatelessWidget {
-  const _SectionBlock({required this.title, required this.entries});
-
-  final String title;
-  final List<_ModuleEntry> entries;
-
+class _MetricsSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return const AppMetricGrid(
       children: <Widget>[
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 680;
-            if (!isWide) {
-              return Column(
-                children: entries
-                    .map(
-                      (entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _ActionCard(
-                          icon: entry.icon,
-                          color: entry.color,
-                          title: entry.title,
-                          description: entry.subtitle,
-                          onTap: () => context.push(entry.route),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              );
-            }
-            final rows = <Widget>[];
-            for (var i = 0; i < entries.length; i += 2) {
-              final first = entries[i];
-              final second = i + 1 < entries.length ? entries[i + 1] : null;
-              rows.add(
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _ActionCard(
-                          icon: first.icon,
-                          color: first.color,
-                          title: first.title,
-                          description: first.subtitle,
-                          onTap: () => context.push(first.route),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: second == null
-                            ? const SizedBox.shrink()
-                            : _ActionCard(
-                                icon: second.icon,
-                                color: second.color,
-                                title: second.title,
-                                description: second.subtitle,
-                                onTap: () => context.push(second.route),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return Column(children: rows);
-          },
-        ),
+        ShimmerSkeleton(height: 150, radius: 26),
+        ShimmerSkeleton(height: 150, radius: 26),
+        ShimmerSkeleton(height: 150, radius: 26),
+        ShimmerSkeleton(height: 150, radius: 26),
       ],
     );
   }
 }
 
-class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard({
+class _DashboardExtras extends StatelessWidget {
+  const _DashboardExtras({
+    required this.cubit,
+    required this.canViewRevenue,
+    required this.canViewStats,
+    required this.onOpenReports,
+  });
+
+  final DashboardCubit cubit;
+  final bool canViewRevenue;
+  final bool canViewStats;
+  final VoidCallback onOpenReports;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<DashboardCubit, DashboardState>(
+      buildWhen: (previous, current) => previous.snapshot != current.snapshot,
+      builder: (context, state) {
+        final snapshot = state.snapshot;
+        if (snapshot == null) return const SizedBox.shrink();
+        final data = snapshot.data;
+        final chart = canViewRevenue && data.monthlyRevenue.length > 0
+            ? MonthlyRevenueChartCard(revenue: data.monthlyRevenue)
+            : null;
+        final collection = canViewStats
+            ? CollectionProgressCard(stats: data.stats, onOpenReports: onOpenReports)
+            : null;
+        if (chart == null && collection == null) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (chart != null)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 980) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        chart,
+                        if (collection != null) ...<Widget>[
+                          const Gap(AppSpacing.md),
+                          collection,
+                        ],
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(flex: 3, child: chart),
+                      const SizedBox(width: AppSpacing.md),
+                      if (collection != null) Expanded(flex: 2, child: collection),
+                    ],
+                  );
+                },
+              )
+            else if (collection != null)
+              collection,
+            if (data.overdueInvoices.isNotEmpty) ...<Widget>[
+              const Gap(AppSpacing.md),
+              InsightCard(
+                title: '${data.overdueInvoices.length} فاتورة تحتاج متابعة',
+                message: 'ابدأ بالتحصيل أو أرسل تذكيراً عبر واتساب بضغطة واحدة.',
+                icon: Icons.notifications_active_rounded,
+                color: AppColors.warning,
+                actionLabel: 'التحصيل',
+                onAction: () => context.push(RouteNames.quickCollector),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Dependency-free view, also used to test narrow, RTL and large-text layouts.
+class HomeWorkspace extends StatelessWidget {
+  const HomeWorkspace({
+    super.key,
     required this.name,
-    required this.roleTitle,
+    required this.can,
     required this.online,
-    required this.onPrimaryAction,
-    required this.primaryActionLabel,
+    required this.pendingCount,
+    required this.failedCount,
+    required this.onNavigate,
+    this.collectorFirst = false,
   });
 
   final String name;
-  final String roleTitle;
+  final bool Function(String) can;
   final bool? online;
-  final VoidCallback onPrimaryAction;
-  final String primaryActionLabel;
+  final int pendingCount;
+  final int failedCount;
+  final bool collectorFirst;
+  final ValueChanged<String> onNavigate;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
-          begin: AlignmentDirectional.topStart,
-          end: AlignmentDirectional.bottomEnd,
-          colors: <Color>[Color(0xFF0B2B40), Color(0xFF02687E), Color(0xFF0EA5E9)],
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: .18),
-            blurRadius: 26,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
+    final visible = WorkspaceCatalog.visible(can);
+    final shortcuts = visible.where((entry) => entry.shortcut).toList();
+    if (collectorFirst) {
+      final index = shortcuts.indexWhere((entry) => entry.route == RouteNames.quickCollector);
+      if (index > 0) shortcuts.insert(0, shortcuts.removeAt(index));
+    }
+    final frequent = visible.where((entry) => const [
+      RouteNames.subscribers, RouteNames.invoices, RouteNames.meters,
+      RouteNames.readings, RouteNames.payments, RouteNames.dashboard,
+    ].contains(entry.route)).take(4).toList();
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        key: const PageStorageKey('home-workspace'),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1080),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'أهلاً بك، $name',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  roleTitle,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: .78),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: <Widget>[
-                    StatusBadge(
-                      status: online == true
-                          ? 'connected'
-                          : (online == false ? 'offline' : 'waiting'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: const LinearGradient(
+                      begin: AlignmentDirectional.topStart,
+                      end: AlignmentDirectional.bottomEnd,
+                      colors: [AppColors.primaryDark, AppColors.primary],
                     ),
-                    FilledButton.tonalIcon(
-                      onPressed: onPrimaryAction,
-                      icon: const Icon(Icons.bolt_rounded, size: 18),
-                      label: Text(primaryActionLabel),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppBrandMark(size: 44, glow: false),
+                      const SizedBox(height: 16),
+                      Text('أهلاً، $name', style: theme.textTheme.headlineSmall?.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text('كل ما تحتاجه لإدارة المياه، في مكان واحد.',
+                        style: theme.textTheme.bodyLarge?.copyWith(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                WorkspaceSearchButton(onTap: () => onNavigate('${RouteNames.services}?search=1')),
+                const SizedBox(height: 12),
+                _SyncSummary(
+                  online: online, pendingCount: pendingCount, failedCount: failedCount,
+                  onTap: () => onNavigate(RouteNames.offlineSync),
+                ),
+                if (shortcuts.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Text('ماذا تريد أن تفعل؟', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  WorkspaceShortcutGrid(entries: shortcuts, onNavigate: onNavigate),
+                ],
+                const SizedBox(height: 24),
+                // Wrap lets the link move below the heading with large text.
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  children: [
+                    Text('الوصول السريع', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    TextButton.icon(
+                      onPressed: () => onNavigate(RouteNames.services),
+                      icon: const Icon(Icons.apps_rounded),
+                      label: const Text('كل الخدمات'),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                for (final entry in frequent) Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: WorkspaceTile(entry: entry, onTap: () => onNavigate(entry.route)),
+                ),
+                if (frequent.isEmpty) ...[
+                  Text('يمكنك الوصول إلى حسابك والمزامنة من كل الخدمات. لطلب صلاحيات إضافية، تواصل مع مدير النظام.',
+                    style: theme.textTheme.bodyLarge),
+                ],
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
+                  onPressed: () => onNavigate(RouteNames.services),
+                  icon: const Icon(Icons.grid_view_rounded),
+                  label: const Text('استعراض كل الخدمات'),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .14),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: .2)),
-            ),
-            child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 34),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.description,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String description;
+class _SyncSummary extends StatelessWidget {
+  const _SyncSummary({required this.online, required this.pendingCount,
+    required this.failedCount, required this.onTap});
+  final bool? online;
+  final int pendingCount;
+  final int failedCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final color = failedCount > 0 ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
+    final connection = online == true ? 'متصل بالشبكة' : online == false
+        ? 'غير متصل بالشبكة' : 'جارٍ التحقق من الاتصال';
+    final status = failedCount > 0 ? '$failedCount عملية تحتاج مراجعة' : pendingCount > 0
+        ? '$pendingCount عملية بانتظار المزامنة' : 'لا توجد عمليات معلقة';
     return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+      color: color.withValues(alpha: .06),
+      borderRadius: BorderRadius.circular(16),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        leading: Icon(failedCount > 0 ? Icons.sync_problem_rounded :
+          online == true ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: color),
+        title: Text(connection, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+        subtitle: Text(status, style: TextStyle(color: color)),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(17),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: .7)),
-          ),
-          child: Row(
-            children: <Widget>[
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: .1),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(icon, color: color),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(title, style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 3),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_left_rounded),
-            ],
-          ),
-        ),
       ),
     );
   }

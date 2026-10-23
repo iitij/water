@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Water Project app icon (full bleed)">
+  <title>Water Project app icon (full bleed)</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#042F51"/>
+      <stop offset="0.52" stop-color="#025B7A"/>
+      <stop offset="1" stop-color="#0285A2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <path d="M511.59 218.03 A6271.9 6271.9 0 0 1 677.78 465.03 A197.21 197.21 0 1 1 345.41 465.03 A6271.9 6271.9 0 0 0 511.59 218.03 Z" fill="#FDFDFD"/>
+  <path d="M511.59 312.75 A4609.8 4609.8 0 0 1 634.00 495.98 A144.94 144.94 0 1 1 389.18 495.98 A4609.8 4609.8 0 0 0 511.59 312.75 Z" fill="#019EEB"/>
+  <line x1="540.71" y1="418.62" x2="617.14" y2="540.29" stroke="#FDA107" stroke-width="33.97" stroke-linecap="round"/>
+</svg>

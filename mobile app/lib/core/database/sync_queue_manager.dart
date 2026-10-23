@@ -202,8 +202,8 @@ class SyncQueueManager {
         final id = action['id'].toString();
         final attempts = _toInt(action['attempt_count']);
         if (permanentFailure) {
-          await _markFailed(id, attempts, message!, response: _asMap(error.response?.data));
-          await _database.setReadingSyncError(id, message!);
+          await _markFailed(id, attempts, message, response: _asMap(error.response?.data));
+          await _database.setReadingSyncError(id, message);
           failedCount++;
         } else {
           await _database.updateSyncAction(
@@ -325,6 +325,7 @@ class SyncQueueManager {
   Map<String, dynamic>? _findResult(List<Map<String, dynamic>> results, String id) {
     for (final result in results) {
       final resultId = (result['client_action_id'] ??
+              result['sync_uuid'] ??
               result['local_id'] ??
               result['client_id'] ??
               result['action_id'])

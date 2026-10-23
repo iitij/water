@@ -18,11 +18,11 @@ class AquaGlassCard extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: (dark ? const Color(0xFF142338) : Colors.white).withOpacity(.93),
+            color: (dark ? const Color(0xFF142338) : Colors.white).withValues(alpha: .93),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withOpacity(dark ? .12 : .72)),
+            border: Border.all(color: Colors.white.withValues(alpha: dark ? .12 : .72)),
             boxShadow: <BoxShadow>[
-              BoxShadow(color: const Color(0xFF0B2B40).withOpacity(.12), blurRadius: 38, offset: const Offset(0, 18)),
+              BoxShadow(color: const Color(0xFF0B2B40).withValues(alpha: .12), blurRadius: 38, offset: const Offset(0, 18)),
             ],
           ),
           child: child,

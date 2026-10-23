@@ -100,6 +100,39 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
     }
   }
 
+  Future<bool> restore() async {
+    final invoice = state.invoice;
+    if (invoice == null) return false;
+    emit(state.copyWith(actionRunning: true, clearError: true));
+    try {
+      await _repository.restore(invoice.id);
+      final refreshed = await _repository.byId(invoice.id);
+      emit(state.copyWith(
+        invoice: refreshed,
+        actionRunning: false,
+        lastActionLabel: 'تمت استعادة الفاتورة بنجاح',
+      ));
+      return true;
+    } on AppFailure catch (failure) {
+      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      return false;
+    }
+  }
+
+  Future<bool> forceDelete() async {
+    final invoice = state.invoice;
+    if (invoice == null) return false;
+    emit(state.copyWith(actionRunning: true, clearError: true));
+    try {
+      await _repository.forceDelete(invoice.id);
+      emit(state.copyWith(actionRunning: false, lastActionLabel: 'تم حذف الفاتورة نهائياً'));
+      return true;
+    } on AppFailure catch (failure) {
+      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      return false;
+    }
+  }
+
   // ─── الطباعة المزدوجة ────────────────────────────────────────────────────
   Future<Uint8List?> loadPdfBytes() async {
     final invoice = state.invoice;

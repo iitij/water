@@ -58,6 +58,9 @@ class SubscribersRepositoryImpl implements SubscribersRepository {
   Future<void> deleteSubscriber(int id) => _remote.delete(id);
 
   @override
+  Future<int> bulkDelete(List<int> ids) => _remote.bulkDelete(ids);
+
+  @override
   Future<List<LedgerEntry>> getStatement(int subscriberId, {PartyFilter party = const PartyAll()}) =>
       _remote.getTransactions(subscriberId, meterId: party.apiValue);
 

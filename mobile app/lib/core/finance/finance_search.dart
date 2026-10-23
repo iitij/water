@@ -3,9 +3,10 @@
 /// نسخة Dev 3 الأكثر اتساعاً من `core/utils/compound_search_parser.dart` عند Dev 1
 /// (تضيف `isEmpty`/`hasSplitParams` وتوحيد الأرقام العربية) مع شريط البحث الذي تستخدمه
 /// شاشات SCR-13/14/17/21.
-import '../theme/app_colors.dart';
-import '../utils/compound_search_parser.dart';
+library;
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
 
 class FinanceSearchQuery {
   const FinanceSearchQuery({

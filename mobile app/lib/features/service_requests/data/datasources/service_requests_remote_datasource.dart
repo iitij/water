@@ -25,6 +25,11 @@ class ServiceRequestsRemoteDatasource {
 
   Future<void> delete(int id) => _api.delete('/service-requests/$id');
 
+  Future<int> bulkDelete(List<int> ids) async {
+    final j = await _api.post('/service-requests/bulk-delete', data: {'ids': ids}) as Map<String, dynamic>;
+    return (j['deleted_count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<ServiceRequestModel> complete(int id) async {
     final j = await _api.patch('/service-requests/$id/complete') as Map<String, dynamic>;
     return ServiceRequestModel.fromJson(j['service_request'] as Map<String, dynamic>);

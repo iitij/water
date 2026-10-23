@@ -23,6 +23,11 @@ class SubscriptionFeesRemoteDatasource {
 
   Future<void> delete(int id) => _api.delete('/subscription-fees/$id');
 
+  Future<int> bulkDelete(List<int> ids) async {
+    final j = await _api.post('/subscription-fees/bulk-delete', data: {'ids': ids}) as Map<String, dynamic>;
+    return (j['deleted_count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<Map<String, dynamic>> invoice(int id) async =>
       await _api.post('/subscription-fees/$id/invoice') as Map<String, dynamic>;
 

@@ -12,11 +12,11 @@ class ReadingsRemoteDataSource {
 
   Future<Map<String, dynamic>> fetchMeterPeriod(int meterId) async {
     try {
-      final response = await _dio.get(ApiEndpoints.meterPeriod(meterId));
+      final response = await _dio.get<dynamic>(ApiEndpoints.meterPeriod(meterId));
       return _asMap(response.data);
     } on DioException catch (error) {
       if (error.response?.statusCode != 404) rethrow;
-      final response = await _dio.get(
+      final response = await _dio.get<dynamic>(
         ApiEndpoints.readingCalculateDates,
         queryParameters: {'meter_id': meterId},
       );
@@ -32,7 +32,7 @@ class ReadingsRemoteDataSource {
     DateTime? toDate,
     String? query,
   }) async {
-    final response = await _dio.get(
+    final response = await _dio.get<dynamic>(
       ApiEndpoints.readings,
       queryParameters: {
         if (isInvoiced != null) 'is_invoiced': isInvoiced ? 1 : 0,
@@ -65,7 +65,7 @@ class ReadingsRemoteDataSource {
     } else {
       body = payload;
     }
-    final response = await _dio.post(
+    final response = await _dio.post<dynamic>(
       ApiEndpoints.readings,
       data: body,
       options: Options(headers: {'Idempotency-Key': clientActionId}),
@@ -77,24 +77,24 @@ class ReadingsRemoteDataSource {
     int readingId,
     Map<String, dynamic> payload,
   ) async {
-    final response = await _dio.put(ApiEndpoints.reading(readingId), data: payload);
+    final response = await _dio.put<dynamic>(ApiEndpoints.reading(readingId), data: payload);
     return _asMap(response.data);
   }
 
   Future<void> deleteReading(int readingId) async {
-    await _dio.delete(ApiEndpoints.reading(readingId));
+    await _dio.delete<dynamic>(ApiEndpoints.reading(readingId));
   }
 
   Future<Map<String, dynamic>> bulkIssueInvoices(List<int> readingIds) async {
     try {
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         ApiEndpoints.readingBulkInvoice,
         data: {'ids': readingIds},
       );
       return _asMap(response.data);
     } on DioException catch (error) {
       if (error.response?.statusCode != 404) rethrow;
-      final response = await _dio.post(
+      final response = await _dio.post<dynamic>(
         ApiEndpoints.readingBulkIssueInvoices,
         data: {'ids': readingIds},
       );
@@ -103,7 +103,7 @@ class ReadingsRemoteDataSource {
   }
 
   Future<Map<String, dynamic>> bulkDelete(List<int> readingIds) async {
-    final response = await _dio.post(
+    final response = await _dio.post<dynamic>(
       ApiEndpoints.readingBulkDelete,
       data: {'ids': readingIds},
     );
@@ -114,7 +114,7 @@ class ReadingsRemoteDataSource {
     List<Map<String, dynamic>> readings, {
     required String batchId,
   }) async {
-    final response = await _dio.post(
+    final response = await _dio.post<dynamic>(
       ApiEndpoints.readingSyncBatch,
       data: {'readings': readings},
       options: Options(
@@ -140,8 +140,8 @@ class ReadingsRemoteDataSource {
           break;
         }
       }
-      if (value is Map && (value as Map)['data'] is List) {
-        value = (value as Map)['data'];
+      if (value is Map && (value)['data'] is List) {
+        value = (value)['data'];
       }
     }
     if (value is! List) return const [];

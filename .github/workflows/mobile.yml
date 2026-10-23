@@ -1,8 +1,12 @@
 name: Mobile test builds
 on:
   push:
-    branches: [arena/99b63ce7-water]
-    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
+    # Build every active development branch (mainline + Arena working branches)
+    # so integration fixes are verified before they reach a release branch.
+    branches: [main, master, develop, 'arena/**']
+    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/**']
+  pull_request:
+    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/**']
   workflow_dispatch:
 permissions:
   contents: write
@@ -29,7 +33,16 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Analyze (legacy lint warnings are reported, errors fail)
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: python ../scripts/ci_analyze.py flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Upload analyzer report (best effort, artifact quota may block it)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-analyze-log
+          path: mobile app/analyze.log
+          if-no-files-found: ignore
+          retention-days: 3
       - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - name: Build testing APK (debug signing, runtime server setup)
         run: python ../scripts/ci_run.py flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }}
@@ -40,6 +53,7 @@ jobs:
           cd release
           sha256sum water-android-test.apk > SHA256SUMS.txt
       - name: Publish Android testing prerelease directly (no artifact quota)
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -62,9 +76,16 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Analyze (errors fail, legacy lint warnings are reported)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - run: python ../scripts/ci_run.py flutter build windows --release --build-name=1.0.0 --build-number=${{ github.run_number }}
       - run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath water-windows-test.zip
+      - name: Checksums
+        shell: bash
+        run: sha256sum water-windows-test.zip > SHA256SUMS.txt
       - name: Publish Windows testing prerelease directly
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,4 +93,5 @@ jobs:
           gh release create "windows-test-${{ github.run_number }}" \
             --target "$GITHUB_SHA" --prerelease \
             --title "Water Windows testing build ${{ github.run_number }}" \
-            --notes-file RELEASE_NOTES.md water-windows-test.zip
+            --notes-file RELEASE_NOTES.md \
+            water-windows-test.zip SHA256SUMS.txt

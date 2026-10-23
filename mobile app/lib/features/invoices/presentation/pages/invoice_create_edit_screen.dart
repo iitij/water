@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/finance/finance_locator.dart';
-import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/finance/finance_api_client.dart';
+import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/widgets/finance_badges.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/finance_enums.dart';
 import '../../domain/repositories/invoices_repository.dart';
-import '../../../../core/widgets/status_badge.dart';
-import '../../../../core/widgets/finance_badges.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
 
 /// إنشاء/تعديل يدوي لفاتورة — يطابق مخطط `InvoiceResource::form` حقلاً حقلاً:
 /// بيانات الفاتورة (مشترك/رقم مولَّد/تاريخ/حالة)، تفاصيل المبالغ السبعة مع حساب
@@ -464,7 +462,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
             onPressed: _searchSubscribers,
           ),
         ),
-        if (_loading) const ShimmerSkeleton(height: 4),
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
         if (_results.isNotEmpty)
           Container(
             constraints: const BoxConstraints(maxHeight: 220),

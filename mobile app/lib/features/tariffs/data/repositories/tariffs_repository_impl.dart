@@ -1,6 +1,6 @@
+import '../../domain/repositories/tariffs_repository.dart';
 import '../datasources/tariffs_remote_datasource.dart';
 import '../models/tariff_model.dart';
-import '../../domain/repositories/tariffs_repository.dart';
 
 class TariffsRepositoryImpl implements TariffsRepository {
   const TariffsRepositoryImpl(this._remote);

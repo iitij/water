@@ -272,11 +272,11 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
             ),
           ],
         ),
-        _MetaTemplateGuide(
+        const _MetaTemplateGuide(
           title: 'النص المقترح لقالب الفاتورة',
           text: 'أهلاً بك {{1}}،\nتم إصدار فاتورتك الجديدة رقم {{2}}.\nالمبلغ الإجمالي المطلوب: {{3}} ريال.\nيرجى الاطلاع على الفاتورة المرفقة (PDF).',
         ),
-        _MetaTemplateGuide(
+        const _MetaTemplateGuide(
           title: 'النص المقترح لقالب السند',
           text: 'أهلاً بك {{1}}،\nاستلمنا دفعتك بموجب سند رقم {{2}}.\nالمبلغ المدفوع: {{3}} ريال.\nيرجى الاطلاع على السند المرفق (PDF).',
         ),

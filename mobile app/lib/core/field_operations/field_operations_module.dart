@@ -1,15 +1,15 @@
 import 'package:dio/dio.dart';
 
-import '../database/app_database.dart';
-import '../database/offline_pack_downloader.dart';
-import '../database/sync_queue_manager.dart';
-import '../database/sync_queue_repository.dart';
 import '../../features/meters/data/repositories/meters_repository_impl.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/readings/data/datasources/readings_remote_data_source.dart';
 import '../../features/readings/data/repositories/readings_repository_impl.dart';
 import '../../features/readings/data/services/reading_invoice_actions_service.dart';
 import '../../features/readings/domain/readings_repository.dart';
+import '../database/app_database.dart';
+import '../database/offline_pack_downloader.dart';
+import '../database/sync_queue_manager.dart';
+import '../database/sync_queue_repository.dart';
 
 /// Composition root for the meter-reader feature set.
 ///
@@ -29,6 +29,8 @@ class FieldOperationsModule {
   static Future<FieldOperationsModule> initialize({
     required Dio dio,
     AppDatabase? database,
+    bool autoStartSync = true,
+    String? Function()? ownerUserIdProvider,
   }) {
     final appDatabase = database ?? AppDatabase.open();
     final metersRepository = MetersRepositoryImpl(
@@ -38,12 +40,16 @@ class FieldOperationsModule {
     final readingsRepository = ReadingsRepositoryImpl(
       dio: dio,
       database: appDatabase,
+      ownerUserIdProvider: ownerUserIdProvider,
     );
     final readingsRemote = ReadingsRemoteDataSource(dio);
     final syncManager = SyncQueueManager(
       database: appDatabase,
       sendBatch: readingsRemote.syncBatch,
-    )..startListening();
+    );
+    if (autoStartSync) {
+      syncManager.startListening();
+    }
 
     return Future<FieldOperationsModule>.value(
       FieldOperationsModule._(

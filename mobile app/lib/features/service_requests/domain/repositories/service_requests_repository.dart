@@ -11,6 +11,7 @@ abstract class ServiceRequestsRepository {
   Future<ServiceRequest> createRequest({required int subscriberId, required double amount, required String serviceDate, TankerStatus status = TankerStatus.completed, String? notes});
   Future<ServiceRequest> updateRequest(ServiceRequest request);
   Future<void> deleteRequest(int id);
+  Future<int> bulkDelete(List<int> ids);
   Future<ServiceRequest> markCompleted(int id);
   Future<Map<String, dynamic>> invoiceRequest(int id);
   Future<double?> lastAmountFor(int subscriberId);

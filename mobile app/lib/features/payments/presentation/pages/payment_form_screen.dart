@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_fields.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
@@ -300,7 +300,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
         widget.payment.id,
         <String, dynamic>{
           'amount': parsed,
-          'payment_date': DateFormat.day(_date),
+          'payment_date': DateFormat.dateTime(_date),
           'payment_method': _method.wire,
           if (_method.requiresReference) 'reference_number': _reference.text.trim(),
           if (_reason.text.trim().isNotEmpty) 'reason': _reason.text.trim(),
@@ -357,7 +357,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
-              InfoNotice(
+              const InfoNotice(
                 icon: Icons.science_outlined,
                 text: 'تعديل المبلغ يُعيد الخادم على أثره توزيع الدفعات واحتساب حالة '
                     'الفاتورة (PaymentService::recalculateInvoices).',
@@ -413,17 +413,37 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
               const SizedBox(height: 12),
               InkWell(
                 onTap: () async {
-                  final picked = await showDatePicker(
+                  final pickedDate = await showDatePicker(
                     context: context,
                     initialDate: _date,
                     firstDate: DateTime(_date.year - 2),
                     lastDate: DateTime.now().add(const Duration(days: 1)),
                   );
-                  if (picked != null) setState(() => _date = picked);
+                  if (pickedDate == null || !context.mounted) return;
+                  final pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(_date),
+                  );
+                  if (!mounted) return;
+                  setState(() {
+                    _date = DateTime(
+                      pickedDate.year,
+                      pickedDate.month,
+                      pickedDate.day,
+                      pickedTime?.hour ?? _date.hour,
+                      pickedTime?.minute ?? _date.minute,
+                    );
+                  });
                 },
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'تاريخ الدفعة'),
-                  child: Text(DateFormat.day(_date)),
+                  decoration: const InputDecoration(
+                    labelText: 'تاريخ ووقت الدفعة',
+                    prefixIcon: Icon(Icons.schedule_outlined),
+                  ),
+                  child: Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(DateFormat.dateTime(_date)),
+                  ),
                 ),
               ),
               const SizedBox(height: 18),

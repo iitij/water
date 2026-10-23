@@ -177,7 +177,7 @@ class FinanceConfig {
     return FinanceConfig(
       whatsappEnabled: _bool(json['whatsapp_enabled']),
       whatsappMethod: (json['whatsapp_method'] as String?) ?? 'click_to_chat',
-      gracePeriodDays: grace == null ? 14 : grace,
+      gracePeriodDays: grace ?? 14,
       strictOverdueOnNewInvoice: _bool(json['strict_overdue_on_new_invoice']),
       projectName: (json['invoice_project_name_ar'] as String?) ??
           'مشروع مياه الوشاح',
@@ -231,7 +231,7 @@ class FinanceConfigRepository {
     if (_memory != null && !force) return _memory!;
     try {
       final base = await _client.getRaw(FinanceEndpoints.settings);
-      Map<String, dynamic> merged = <String, dynamic>{};
+      final Map<String, dynamic> merged = <String, dynamic>{};
       if (base is Map) merged.addAll(base.cast<String, dynamic>());
 
       // `GET /api/settings/whatsapp` يضيفه Dev 1 — عند غيابه نكمل بالافتراضيات.

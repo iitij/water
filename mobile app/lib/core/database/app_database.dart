@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,14 +13,26 @@ import 'package:path_provider/path_provider.dart';
 /// mobile feature branches are being integrated, and still uses Drift's query
 /// executor, isolate-backed SQLite engine, transactions, and bound variables.
 class AppDatabase extends GeneratedDatabase {
-  AppDatabase(QueryExecutor executor) : super(executor);
+  AppDatabase(super.executor);
 
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   factory AppDatabase.inMemory() => AppDatabase(NativeDatabase.memory());
 
+  final StreamController<void> _syncQueueChanges = StreamController<void>.broadcast();
+
+  /// Emits whenever `pending_sync_actions` is mutated so `SyncQueueManager`
+  /// and UI badges (`HomeScreen`, `SCR-28`) stay in sync immediately.
+  Stream<void> get onSyncQueueChanged => _syncQueueChanges.stream;
+
+  void _notifySyncQueueChanged() {
+    if (!_syncQueueChanges.isClosed) {
+      _syncQueueChanges.add(null);
+    }
+  }
+
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -37,6 +50,15 @@ class AppDatabase extends GeneratedDatabase {
           if (from < 1 && to >= 1) {
             for (final statement in _schemaStatements) {
               await customStatement(statement);
+            }
+          }
+          if (from < 2 && to >= 2) {
+            final columns = await _select('PRAGMA table_info(pending_sync_actions)');
+            final hasOwner = columns.any((col) => col['name'] == 'owner_user_id');
+            if (!hasOwner) {
+              await customStatement(
+                'ALTER TABLE pending_sync_actions ADD COLUMN owner_user_id TEXT',
+              );
             }
           }
         },
@@ -136,7 +158,8 @@ class AppDatabase extends GeneratedDatabase {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       last_error TEXT,
-      server_response_json TEXT
+      server_response_json TEXT,
+      owner_user_id TEXT
     )''',
     '''CREATE INDEX IF NOT EXISTS pending_sync_state_created_idx
       ON pending_sync_actions(state, created_at)''',
@@ -482,7 +505,15 @@ class AppDatabase extends GeneratedDatabase {
     required String localId,
     required Map<String, dynamic> reading,
     required String actionId,
+    String? ownerUserId,
   }) async {
+    final enrichedReading = <String, dynamic>{
+      ...reading,
+      'local_id': reading['local_id'] ?? localId,
+      'client_action_id': reading['client_action_id'] ?? actionId,
+      'sync_uuid': reading['sync_uuid'] ?? actionId,
+    };
+    final effectiveOwner = ownerUserId ?? reading['owner_user_id']?.toString();
     await transaction(() async {
       await _execute(
         '''INSERT INTO cached_readings(
@@ -492,29 +523,30 @@ class AppDatabase extends GeneratedDatabase {
         ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, NULL, ?)''',
         [
           localId,
-          _int(reading['meter_id']) ?? 0,
-          _date(reading['reading_date']) ?? _now(),
-          _date(reading['actual_reading_date']),
-          _date(reading['period_start']) ?? _now(),
-          _date(reading['period_end']) ?? _now(),
-          _double(reading['previous_reading']),
-          _double(reading['current_reading']),
-          _double(reading['consumption_units']),
-          reading['image_path'],
+          _int(enrichedReading['meter_id']) ?? 0,
+          _date(enrichedReading['reading_date']) ?? _now(),
+          _date(enrichedReading['actual_reading_date']),
+          _date(enrichedReading['period_start']) ?? _now(),
+          _date(enrichedReading['period_end']) ?? _now(),
+          _double(enrichedReading['previous_reading']),
+          _double(enrichedReading['current_reading']),
+          _double(enrichedReading['consumption_units']),
+          enrichedReading['image_path'],
           _now(),
         ],
       );
       await _execute(
         '''INSERT INTO pending_sync_actions(
-          id, action_type, payload_json, state, attempt_count, created_at, updated_at
-        ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?)''',
-        [actionId, _jsonEncode(reading), _now(), _now()],
+          id, action_type, payload_json, state, attempt_count, created_at, updated_at, owner_user_id
+        ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?, ?)''',
+        [actionId, _jsonEncode(enrichedReading), _now(), _now(), effectiveOwner],
       );
       await _execute(
         'UPDATE cached_meters SET last_reading = ? WHERE server_id = ?',
-        [_double(reading['current_reading']), _int(reading['meter_id']) ?? 0],
+        [_double(enrichedReading['current_reading']), _int(enrichedReading['meter_id']) ?? 0],
       );
     });
+    _notifySyncQueueChanged();
   }
 
   Future<void> updateCachedReading({
@@ -557,6 +589,7 @@ class AppDatabase extends GeneratedDatabase {
       );
       if (meterId != null) await _recalculateMeterLastReading(meterId);
     });
+    _notifySyncQueueChanged();
   }
 
   Future<void> deleteCachedReadingsByServerIds(List<int> ids) async {
@@ -624,14 +657,14 @@ class AppDatabase extends GeneratedDatabase {
           _date(serverReading?['actual_reading_date']),
           _date(serverReading?['period_start']),
           _date(serverReading?['period_end']),
-          hasServerValue && serverReading!.containsKey('previous_reading')
-              ? _double(serverReading!['previous_reading'])
+          hasServerValue && serverReading.containsKey('previous_reading')
+              ? _double(serverReading['previous_reading'])
               : null,
-          hasServerValue && serverReading!.containsKey('current_reading')
-              ? _double(serverReading!['current_reading'])
+          hasServerValue && serverReading.containsKey('current_reading')
+              ? _double(serverReading['current_reading'])
               : null,
-          hasServerValue && serverReading!.containsKey('consumption_units')
-              ? _double(serverReading!['consumption_units'])
+          hasServerValue && serverReading.containsKey('consumption_units')
+              ? _double(serverReading['consumption_units'])
               : null,
           isInvoiced == null ? null : (isInvoiced ? 1 : 0),
           invoiceId,
@@ -653,6 +686,7 @@ class AppDatabase extends GeneratedDatabase {
         );
       }
     });
+    _notifySyncQueueChanged();
   }
 
   Future<void> setReadingSyncError(String localId, String error) => _execute(
@@ -664,11 +698,26 @@ class AppDatabase extends GeneratedDatabase {
     required String id,
     required String type,
     required String payloadJson,
-  }) => _execute(
-        '''INSERT OR REPLACE INTO pending_sync_actions(
-          id, action_type, payload_json, state, attempt_count, created_at, updated_at
-        ) VALUES (?, ?, ?, 'pending', 0, ?, ?)''',
-        [id, type, payloadJson, _now(), _now()],
+    String state = 'pending',
+    int attemptCount = 0,
+    String? createdAt,
+    String? lastError,
+    String? ownerUserId,
+  }) async {
+    final timestamp = createdAt ?? _now();
+    await _execute(
+      '''INSERT OR REPLACE INTO pending_sync_actions(
+        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      [id, type, payloadJson, state, attemptCount, timestamp, _now(), lastError, ownerUserId],
+    );
+    _notifySyncQueueChanged();
+  }
+
+  Future<List<Map<String, Object?>>> getActiveSyncActions({int limit = 500}) => _select(
+        '''SELECT * FROM pending_sync_actions
+           WHERE state IN ('pending', 'retrying', 'syncing', 'failed')
+           ORDER BY created_at ASC, id ASC LIMIT ${limit.clamp(1, 1000)}''',
       );
 
   Future<List<Map<String, Object?>>> getPendingActions({
@@ -711,29 +760,59 @@ class AppDatabase extends GeneratedDatabase {
     int? attemptCount,
     String? lastError,
     String? serverResponseJson,
-  }) => _execute(
-        '''UPDATE pending_sync_actions SET state = ?,
-          attempt_count = COALESCE(?, attempt_count), last_error = ?,
-          server_response_json = COALESCE(?, server_response_json), updated_at = ?
-          WHERE id = ?''',
-        [state, attemptCount, lastError, serverResponseJson, _now(), id],
-      );
+    String? ownerUserId,
+  }) async {
+    await _execute(
+      '''UPDATE pending_sync_actions SET state = ?,
+        attempt_count = COALESCE(?, attempt_count), last_error = ?,
+        server_response_json = COALESCE(?, server_response_json),
+        owner_user_id = COALESCE(?, owner_user_id),
+        updated_at = ?
+        WHERE id = ?''',
+      [state, attemptCount, lastError, serverResponseJson, ownerUserId, _now(), id],
+    );
+    _notifySyncQueueChanged();
+  }
 
   Future<void> updateSyncActionPayload({
     required String id,
     required String payloadJson,
-  }) => _execute(
-        '''UPDATE pending_sync_actions SET payload_json = ?, updated_at = ?
-           WHERE id = ?''',
-        [payloadJson, _now(), id],
-      );
+  }) async {
+    await _execute(
+      '''UPDATE pending_sync_actions SET payload_json = ?, updated_at = ?
+         WHERE id = ?''',
+      [payloadJson, _now(), id],
+    );
+    _notifySyncQueueChanged();
+  }
 
-  Future<void> removeSyncAction(String id) => _execute(
-        'DELETE FROM pending_sync_actions WHERE id = ?',
-        [id],
-      );
+  Future<void> removeSyncAction(String id) async {
+    await _execute(
+      'DELETE FROM pending_sync_actions WHERE id = ?',
+      [id],
+    );
+    _notifySyncQueueChanged();
+  }
 
-  Future<void> closeDatabase() => close();
+  /// Clears server-cached snapshots when switching to a different backend server.
+  /// Must only be called after confirming `getPendingActionCount() == 0`.
+  Future<void> clearCachedServerData() async {
+    await transaction(() async {
+      await _execute('DELETE FROM cached_squares');
+      await _execute('DELETE FROM cached_subscribers');
+      await _execute('DELETE FROM cached_meters');
+      await _execute('DELETE FROM cached_meter_periods');
+      await _execute('DELETE FROM cached_settings');
+      await _execute('DELETE FROM cached_readings WHERE server_id IS NOT NULL');
+      await _execute("DELETE FROM pending_sync_actions WHERE state = 'synced'");
+    });
+    _notifySyncQueueChanged();
+  }
+
+  Future<void> closeDatabase() async {
+    await _syncQueueChanges.close();
+    await close();
+  }
 
   String _jsonEncode(Map<String, dynamic> value) {
     // Keep dart:convert out of callers so queue writes and reading rows share

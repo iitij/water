@@ -22,8 +22,11 @@ abstract interface class InvoicesRepository {
   Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request);
 
   Future<void> delete(int id);
+  Future<void> forceDelete(int id);
   Future<BulkActionResult> bulkDelete(List<int> ids);
   Future<void> restore(int id);
+  Future<BulkActionResult> bulkRestore(List<int> ids);
+  Future<BulkActionResult> bulkForceDelete(List<int> ids);
 
   Future<InvoiceModel> recalculate(int id);
   Future<BulkActionResult> bulkRecalculate(List<int> ids);

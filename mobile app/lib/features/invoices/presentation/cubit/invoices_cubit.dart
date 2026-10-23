@@ -63,7 +63,12 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(query: state.query.copyWith(search: value)));
 
     final parsed = FinanceSearchQuery.parse(value);
-    if (parsed.isEmpty && state.query.squareId == null) {
+    final hasExtraFilters = state.query.trashed != 'without' ||
+        state.query.invoiceType != null ||
+        state.query.status != null ||
+        state.query.subscriberId != null ||
+        state.query.billingPeriod != null;
+    if ((parsed.isEmpty && state.query.squareId == null) || hasExtraFilters) {
       await load(refresh: true);
       return;
     }
@@ -141,6 +146,22 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     }
   }
 
+  Future<bool> forceDeleteInvoice(int id) async {
+    emit(state.copyWith(busyInvoiceId: id, clearError: true));
+    try {
+      await _repository.forceDelete(id);
+      emit(state.copyWith(
+        invoices: state.invoices.where((i) => i.id != id).toList(),
+        selectedIds: state.selectedIds.where((s) => s != id).toSet(),
+        busyInvoiceId: null,
+      ));
+      return true;
+    } on AppFailure catch (failure) {
+      emit(state.copyWith(busyInvoiceId: null, errorMessage: failure.message));
+      return false;
+    }
+  }
+
   // ─── الإجراءات الجماعية (`Bulk Actions`) ────────────────────────────────
   Future<BulkActionResult?> bulkRecalculate() async {
     if (state.selectedIds.isEmpty) return null;
@@ -161,6 +182,34 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(bulkRunning: true, clearError: true));
     try {
       final result = await _repository.bulkDelete(state.selectedIds.toList());
+      await load(refresh: true);
+      emit(state.copyWith(bulkRunning: false, selectedIds: const <int>{}));
+      return result;
+    } on AppFailure catch (failure) {
+      emit(state.copyWith(bulkRunning: false, errorMessage: failure.message));
+      return null;
+    }
+  }
+
+  Future<BulkActionResult?> bulkRestore() async {
+    if (state.selectedIds.isEmpty) return null;
+    emit(state.copyWith(bulkRunning: true, clearError: true));
+    try {
+      final result = await _repository.bulkRestore(state.selectedIds.toList());
+      await load(refresh: true);
+      emit(state.copyWith(bulkRunning: false, selectedIds: const <int>{}));
+      return result;
+    } on AppFailure catch (failure) {
+      emit(state.copyWith(bulkRunning: false, errorMessage: failure.message));
+      return null;
+    }
+  }
+
+  Future<BulkActionResult?> bulkForceDelete() async {
+    if (state.selectedIds.isEmpty) return null;
+    emit(state.copyWith(bulkRunning: true, clearError: true));
+    try {
+      final result = await _repository.bulkForceDelete(state.selectedIds.toList());
       await load(refresh: true);
       emit(state.copyWith(bulkRunning: false, selectedIds: const <int>{}));
       return result;

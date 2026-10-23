@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
-import '../../../invoices/domain/accounting/finance_enums.dart';
 
 enum PaymentsLoadStatus { idle, loading, ready, refreshing, failure }
 
@@ -125,6 +125,14 @@ class PaymentsCubit extends Cubit<PaymentsState> {
     final selected = state.selectedIds.toSet();
     if (!selected.remove(id)) selected.add(id);
     emit(state.copyWith(selectedIds: selected));
+  }
+
+  void selectAll() {
+    emit(state.copyWith(selectedIds: state.payments.map((p) => p.id).toSet()));
+  }
+
+  void clearSelection() {
+    emit(state.copyWith(selectedIds: const <int>{}));
   }
 
   /// يعيد تحميل سند واحد بعد التعديل/الدفع ودمجه في القائمة.

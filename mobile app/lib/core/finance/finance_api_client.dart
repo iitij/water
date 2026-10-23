@@ -7,6 +7,7 @@
 /// حتى لا تتغير أي شاشة، مع تمرير كل الطلبات عبر `Dio` الخاص بـ Dev 1.
 /// للتوحيد المستقبلي: انقل هذه الطريقة إلى `core/network/` عند Dev 1 أو اجعل
 /// `DioClient` يطبّق `FinanceApiTransport`. راجع `docs/handoff/DEV3_FINANCE_MODULE.md` §9.
+library;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';

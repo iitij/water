@@ -6,9 +6,15 @@ import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/auth/session_service.dart';
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/app_button.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../cubit/auth_cubit.dart';
@@ -77,6 +83,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       destructive: true,
     );
     if (confirmed && mounted) context.read<AuthCubit>().logout();
+  }
+
+  Future<void> _openServerConfig() async {
+    final updated = await ServerConfigSheet.show(context);
+    if (!mounted || updated == null) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم تحديث عنوان الخادم إلى: $updated')),
+    );
   }
 
   @override
@@ -196,7 +211,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               },
                             ),
                             const SizedBox(height: 18),
-                            AppButton(label: 'حفظ التعديلات', icon: Icons.check_rounded, loading: saving, onPressed: saving ? null : _save),
+                            AppPrimaryButton(label: 'حفظ التعديلات', icon: Icons.check_rounded, loading: saving, onPressed: saving ? null : _save),
                           ],
                         ),
                       ),
@@ -210,21 +225,104 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: roles.isEmpty
-                            ? <Widget>[const Chip(avatar: Icon(Icons.person_outline, size: 17), label: Text('موظف'))]
-                            : roles.map((role) => Chip(
-                                  avatar: Icon(_roleIcon(role), size: 17, color: AppColors.primary),
-                                  label: Text(_roleLabel(role)),
-                                  backgroundColor: theme.colorScheme.primary.withOpacity(.06),
-                                  side: BorderSide(color: theme.dividerColor.withOpacity(.65)),
-                                )).toList(growable: false),
+                            ? <Widget>[
+                                AppPill(
+                                  label: 'موظف',
+                                  icon: Icons.person_outline_rounded,
+                                  color: AppColors.primary,
+                                ),
+                              ]
+                            : roles
+                                .map(
+                                  (role) => AppPill(
+                                    label: _roleLabel(role),
+                                    icon: _roleIcon(role),
+                                    color: AppColors.primary,
+                                  ),
+                                )
+                                .toList(growable: false),
                       ),
                     ),
                     const SizedBox(height: 18),
-                    OutlinedButton.icon(
-                      onPressed: state.operation == AuthOperation.logout && state.status == AuthStatus.loading ? null : _logout,
-                      icon: const Icon(Icons.logout_rounded),
-                      label: Text(state.operation == AuthOperation.logout && state.status == AuthStatus.loading ? 'جارٍ تسجيل الخروج…' : 'تسجيل الخروج'),
-                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, minimumSize: const Size.fromHeight(50), side: const BorderSide(color: Color(0xFFFECACA)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    AppCard(
+                      onTap: saving ? null : _openServerConfig,
+                      child: Row(
+                        children: <Widget>[
+                          const AppIconBubble(
+                            icon: Icons.dns_outlined,
+                            color: AppColors.primary,
+                            size: 42,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'الاتصال بالخادم',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  Uri.tryParse(AppConfig.apiBaseUrl)?.authority ??
+                                      AppConfig.apiBaseUrl,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textDirection: TextDirection.ltr,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_left_rounded, size: 20),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    AppCard(
+                      onTap: state.operation == AuthOperation.logout &&
+                              state.status == AuthStatus.loading
+                          ? null
+                          : _logout,
+                      child: Row(
+                        children: <Widget>[
+                          AppIconBubble(
+                            icon: Icons.logout_rounded,
+                            color: AppColors.danger,
+                            size: 42,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  state.operation == AuthOperation.logout &&
+                                          state.status == AuthStatus.loading
+                                      ? 'جارٍ تسجيل الخروج…'
+                                      : 'تسجيل الخروج',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'إنهاء الجلسة على هذا الجهاز',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 13,
+                            color: AppColors.danger,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -253,7 +351,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 }
 
 class _ProfileHero extends StatelessWidget {
-  const _ProfileHero({required this.name, required this.email, required this.avatarUrl, required this.avatarFile, required this.onEditAvatar});
+  const _ProfileHero({
+    required this.name,
+    required this.email,
+    required this.avatarUrl,
+    required this.avatarFile,
+    required this.onEditAvatar,
+  });
 
   final String name;
   final String email;
@@ -264,26 +368,40 @@ class _ProfileHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(begin: AlignmentDirectional.topStart, end: AlignmentDirectional.bottomEnd, colors: <Color>[Color(0xFF075D73), Color(0xFF0EA5E9)]),
-        boxShadow: <BoxShadow>[BoxShadow(color: AppColors.primary.withOpacity(.16), blurRadius: 22, offset: const Offset(0, 11))],
-      ),
+    return AppHeroPanel(
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: <Widget>[
           Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
-              CircleAvatar(radius: 35, backgroundColor: Colors.white.withOpacity(.22), foregroundImage: _avatarImage(), child: const Icon(Icons.person_rounded, color: Colors.white, size: 38)),
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: .35), width: 1.4),
+                ),
+                child: CircleAvatar(
+                  radius: 34,
+                  backgroundColor: Colors.white.withValues(alpha: .2),
+                  foregroundImage: _avatarImage(),
+                  child: const Icon(Icons.person_rounded, color: Colors.white, size: 38),
+                ),
+              ),
               PositionedDirectional(
                 bottom: -2,
                 end: -2,
                 child: Material(
                   color: Colors.white,
                   shape: const CircleBorder(),
-                  child: InkWell(onTap: onEditAvatar, customBorder: const CircleBorder(), child: const Padding(padding: EdgeInsets.all(7), child: Icon(Icons.edit_rounded, size: 15, color: AppColors.primary))),
+                  child: InkWell(
+                    onTap: onEditAvatar,
+                    customBorder: const CircleBorder(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(7),
+                      child: Icon(Icons.edit_rounded, size: 15, color: AppColors.primary),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -293,11 +411,28 @@ class _ProfileHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(name, style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  name,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 3),
-                Directionality(textDirection: TextDirection.ltr, child: Text(email, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withOpacity(.8)), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(
+                    email,
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: .82)),
+                    textAlign: TextAlign.start,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 const SizedBox(height: 10),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(.14), borderRadius: BorderRadius.circular(99)), child: const Text('حساب موثّق', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))),
+                const HeroMetaChip(icon: Icons.verified_rounded, label: 'حساب موثّق'),
               ],
             ),
           ),
@@ -323,19 +458,12 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(22), border: Border.all(color: theme.dividerColor.withOpacity(.75))),
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Row(children: <Widget>[
-            Container(width: 38, height: 38, decoration: BoxDecoration(color: theme.colorScheme.primary.withOpacity(.08), borderRadius: BorderRadius.circular(13)), child: Icon(icon, color: theme.colorScheme.primary, size: 20)),
-            const SizedBox(width: 11),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[Text(title, style: theme.textTheme.titleMedium), Text(subtitle, style: theme.textTheme.bodySmall)])),
-          ]),
-          const SizedBox(height: 18),
+          SectionHeading(title: title, subtitle: subtitle, icon: icon),
+          const Gap(AppSpacing.md),
           child,
         ],
       ),

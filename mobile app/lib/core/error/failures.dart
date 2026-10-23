@@ -16,18 +16,18 @@ sealed class AppFailure extends Equatable {
 
 class NetworkFailure extends AppFailure {
   const NetworkFailure([
-    String message = 'تعذر الاتصال بالخادم — تحقق من الشبكة أو جرّب الوضع أوفلاين.',
-  ]) : super(message, statusCode: 0);
+    super.message = 'تعذر الاتصال بالخادم — تحقق من الشبكة أو جرّب الوضع أوفلاين.',
+  ]) : super(statusCode: 0);
 }
 
 class TimeoutFailure extends AppFailure {
-  const TimeoutFailure([String message = 'انتهت مهلة الاتصال بالخادم.'])
-      : super(message, statusCode: 408);
+  const TimeoutFailure([super.message = 'انتهت مهلة الاتصال بالخادم.'])
+      : super(statusCode: 408);
 }
 
 class UnauthorizedFailure extends AppFailure {
-  const UnauthorizedFailure([String message = 'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.'])
-      : super(message, statusCode: 401);
+  const UnauthorizedFailure([super.message = 'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.'])
+      : super(statusCode: 401);
 }
 
 class ForbiddenFailure extends AppFailure {
@@ -50,14 +50,14 @@ class ForbiddenFailure extends AppFailure {
 }
 
 class NotFoundFailure extends AppFailure {
-  const NotFoundFailure([String message = 'السجل غير موجود أو تم حذفه.'])
-      : super(message, statusCode: 404);
+  const NotFoundFailure([super.message = 'السجل غير موجود أو تم حذفه.'])
+      : super(statusCode: 404);
 }
 
 /// خطأ تحقق من الخادم (422) مع خرائط الحقول المعربة.
 class ValidationFailure extends AppFailure {
-  const ValidationFailure(String message, this.fieldErrors)
-      : super(message, statusCode: 422);
+  const ValidationFailure(super.message, this.fieldErrors)
+      : super(statusCode: 422);
 
   final Map<String, List<String>> fieldErrors;
 
@@ -76,8 +76,7 @@ class ServerFailure extends AppFailure {
 }
 
 class UnexpectedFailure extends AppFailure {
-  const UnexpectedFailure([String message = 'حدث خطأ غير متوقع.'])
-      : super(message);
+  const UnexpectedFailure([super.message = 'حدث خطأ غير متوقع.']);
 }
 
 /// يحوّل `DioException` إلى `AppFailure` بالعربية.

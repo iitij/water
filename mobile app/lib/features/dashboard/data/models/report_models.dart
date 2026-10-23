@@ -94,7 +94,7 @@ class FinancialReportModel extends FinancialReport {
           ? value['data'] as List
           : value['values'] is List
               ? value['values'] as List
-              : const [];
+              : const <dynamic>[];
       return List.generate(
         labels.length < values.length ? labels.length : values.length,
         (index) => ReportPointModel(

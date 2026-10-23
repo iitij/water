@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../entities/rbac_entities.dart';
 
 abstract class RbacRepository {
@@ -5,8 +7,19 @@ abstract class RbacRepository {
   Future<List<Role>> getRoles();
   Future<ShieldPermissionCatalog> getPermissionCatalog();
 
-  Future<SystemUser> createUser(SystemUser user, String password);
-  Future<SystemUser> updateUser(SystemUser user, {String? password});
+  Future<SystemUser> createUser(
+    SystemUser user,
+    String password, {
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+  });
+  Future<SystemUser> updateUser(
+    SystemUser user, {
+    String? password,
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+    bool removeAvatar = false,
+  });
   Future<void> deleteUser(int id);
   Future<void> bulkDeleteUsers(List<int> ids);
 
