@@ -30,6 +30,14 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Analyze (legacy lint warnings are reported, errors fail)
         run: python ../scripts/ci_analyze.py flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Upload analyzer report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-analyze-log
+          path: mobile app/analyze.log
+          if-no-files-found: ignore
+          retention-days: 7
       - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - name: Build testing APK (debug signing, runtime server setup)
         run: python ../scripts/ci_run.py flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }}
@@ -64,6 +72,9 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: python ../scripts/ci_run.py flutter build windows --release --build-name=1.0.0 --build-number=${{ github.run_number }}
       - run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath water-windows-test.zip
+      - name: Checksums
+        shell: bash
+        run: sha256sum water-windows-test.zip > SHA256SUMS.txt
       - name: Publish Windows testing prerelease directly
         shell: bash
         env:
@@ -72,4 +83,5 @@ jobs:
           gh release create "windows-test-${{ github.run_number }}" \
             --target "$GITHUB_SHA" --prerelease \
             --title "Water Windows testing build ${{ github.run_number }}" \
-            --notes-file RELEASE_NOTES.md water-windows-test.zip
+            --notes-file RELEASE_NOTES.md \
+            water-windows-test.zip SHA256SUMS.txt

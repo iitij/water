@@ -12,6 +12,9 @@ Testing builds of the integrated Arabic Water app. Android APKs are attached to
   screens.
 - Richer dashboard widgets: KPI cards with sparklines, collection health ring,
   revenue chart summary and actionable overdue-invoice cards.
+- A real app identity: new water-drop launcher icon on Android, adaptive icon and
+  matching splash background on Android 12+, Windows window icon, and the same
+  mark on the splash and login screens.
 
 **Testing only — not a production release.** Android uses the generated debug
 signing key, so a later build may require uninstalling the previous APK. Sync

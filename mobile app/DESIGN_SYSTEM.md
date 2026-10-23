@@ -63,10 +63,34 @@ Arabic diacritics and descenders.
 | `app_viz.dart` | `AppSparkline`, `AppProgressRing`, `AppMiniBars`, `AppTrendChip` |
 | `app_motion.dart` | `AppReveal`, `PressableScale`, `AquaBackdrop` |
 | `app_tokens.dart` | `AppSpacing`, `AppRadius`, `AppMotion`, `AppShadows`, `AppTint` |
+| `app_brand.dart` | `AppBrandMark`, `AppBrandLockup` |
 
 Navigation-level widgets live in `lib/core/navigation`: `AppHomeShell` (custom
 bottom bar + side rail), `SubPageScaffold` (pushed pages), `HeroCopy`,
 `HeroActions`, `HeroButton`, `HeroGhostButton`, `HeroMetaChip`.
+
+## Brand assets
+
+The product mark is one master artwork, `assets/branding/app_icon_full.png`
+(full-bleed aqua gradient with the white water-drop). Everything else is
+generated from it so the home-screen icon, the splash screen and the in-app
+header can never drift apart:
+
+```
+python3 scripts/generate_brand_assets.py     # from the repository root
+```
+
+| Output | Path |
+| --- | --- |
+| In-app mark (`AppBrandMark`) | `assets/branding/app_mark.png` (declared in `pubspec.yaml`) |
+| Android legacy + round icons | `android/app/src/main/res/mipmap-*/ic_launcher*.png` |
+| Android adaptive icon | `mipmap-*/ic_launcher_{background,foreground}.png` + `mipmap-anydpi-v26/ic_launcher*.xml` |
+| Android launch screen | `drawable*/launch_background.xml`, `values*/colors.xml` (`#F2F7FA` / `#05131B`) |
+| Windows window icon | `windows/runner/resources/app_icon.ico` (16–256 px) |
+
+Rules: never paste a raw `Icons.water_drop_rounded` as the logo — use
+`AppBrandMark(size:)`; inside a white surface pass `glow: false`; the adaptive
+foreground keeps the mark inside the 62 % safe zone so no launcher masks it.
 
 ## Navigation map
 

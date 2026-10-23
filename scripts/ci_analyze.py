@@ -4,8 +4,13 @@ GitHub truncates a single annotation to roughly 4 KB, so publishing the whole
 log tail hides the actual errors when a project has many legacy lint notes.
 Each `error •` line is emitted as its own annotation instead, which keeps the
 failing diagnostics readable from the Checks API.
+
+The full analyzer output is also written to ``analyze.log`` so the workflow can
+upload it as an artifact: run logs are not always retrievable, but artifacts
+are, which makes the complete warning list available after the fact.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,15 +32,22 @@ process = subprocess.Popen(
 
 errors = []
 tail = []
+complete = []
 for line in process.stdout:
     print(line, end="", flush=True)
     if " error • " in line:
         errors.append(line.rstrip())
+    if re.match(r"error |warning |info ", line) or " • " in line:
+        complete.append(line.rstrip())
     tail.append(line)
     if len(tail) > 60:
         tail.pop(0)
 
 code = process.wait()
+
+with open("analyze.log", "w", encoding="utf-8") as handle:
+    handle.write("\n".join(complete))
+    handle.write(f"\n\n{len(errors)} error line(s), exit code {code}\n")
 
 if code and os.environ.get("GITHUB_ACTIONS"):
     if errors:

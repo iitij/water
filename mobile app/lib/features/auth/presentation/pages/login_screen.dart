@@ -11,6 +11,7 @@ import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_brand.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/app_viz.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -322,16 +323,7 @@ class _BrandPanel extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .14),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: .28)),
-              ),
-              child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 30),
-            ),
+            const AppBrandMark(size: 56, glow: false),
             const SizedBox(width: 13),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,17 +524,7 @@ class _CompactBrand extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       children: <Widget>[
-        Container(
-          width: 68,
-          height: 68,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .14),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: .26)),
-            boxShadow: AppShadows.brand(AppColors.secondary, opacity: .18),
-          ),
-          child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 34),
-        ),
+        const AppBrandMark(size: 68),
         const SizedBox(height: 12),
         Text(
           'مياه الوشاح',

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/auth/session_service.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_brand.dart';
 import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_tokens.dart';
 
@@ -64,17 +64,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                               ],
                             );
                           },
-                          child: Container(
-                            width: 96,
-                            height: 96,
-                            decoration: BoxDecoration(
-                              gradient: AppColors.aquaGradient,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(color: Colors.white.withValues(alpha: .3)),
-                              boxShadow: AppShadows.brand(AppColors.primaryBright, opacity: .38),
-                            ),
-                            child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 46),
-                          ),
+                          child: const AppBrandMark(size: 96),
                         ),
                       ),
                       const SizedBox(height: 22),
