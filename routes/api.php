@@ -1,75 +1,167 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\ReadingController;
+use App\Http\Controllers\Api\ExportController as ApiExportController;
 use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\MeterController;
+use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ReadingController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\ServiceRequestController;
+use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\SquareController;
+use App\Http\Controllers\Api\SubscriberController;
+use App\Http\Controllers\Api\SubscriptionFeeController;
+use App\Http\Controllers\Api\TariffController;
+use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WhatsAppServerController;
+use Illuminate\Support\Facades\Route;
 
-Route::post('/login', [AuthController::class, 'login']);
+// The only unauthenticated application API route.
+Route::post('/login', [AuthController::class, 'login'])->name('api.login');
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', [AuthController::class, 'user']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('/profile', [AuthController::class, 'updateProfile']);
-    
-    // Readings (Meter Reader)
-    Route::get('/readings', [ReadingController::class, 'index']);
-    Route::get('/meters/search', [ReadingController::class, 'searchMeter']);
+    // Authentication, current user and profile (legacy aliases remain available).
+    Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
+    Route::get('/me', [AuthController::class, 'me'])->name('api.me');
+    Route::get('/user', [AuthController::class, 'user'])->name('api.user');
+    Route::put('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update');
+    Route::post('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update.legacy');
+
+    // Dashboard and reports.
+    Route::get('/admin/dashboard', [AdminController::class, 'dashboard']);
+    Route::get('/admin/stats', [AdminController::class, 'stats']);
+    Route::get('/admin/widgets/monthly-revenue', [AdminController::class, 'monthlyRevenue']);
+    Route::get('/admin/widgets/latest-invoices', [AdminController::class, 'latestInvoices']);
+    Route::get('/admin/widgets/overdue-invoices', [AdminController::class, 'overdueInvoices']);
+    Route::get('/admin/reports', [AdminController::class, 'reports']);
+
+    // Squares.
+    Route::post('/squares/bulk-delete', [SquareController::class, 'bulkDelete']);
+    Route::apiResource('squares', SquareController::class)->parameters(['squares' => 'id']);
+
+    // Subscribers: custom actions must precede the resource's /{id} route.
+    Route::get('/subscribers/{id}/summary', [SubscriberController::class, 'summary']);
+    Route::get('/subscribers/{id}/statement', [SubscriberController::class, 'statement']);
+    Route::get('/subscribers/{id}/transactions', [SubscriberController::class, 'transactions']);
+    Route::get('/subscribers/{id}/unpaid-invoices-summary', [SubscriberController::class, 'unpaidInvoicesSummary']);
+    Route::post('/subscribers/{id}/collect-payment', [SubscriberController::class, 'collectPayment']);
+    Route::post('/subscribers/bulk-delete', [SubscriberController::class, 'bulkDelete']);
+    Route::apiResource('subscribers', SubscriberController::class)->parameters(['subscribers' => 'id']);
+
+    // Meters and field reading support.
+    Route::get('/meters/search', [MeterController::class, 'search']);
+    Route::post('/meters/validate-path', [MeterController::class, 'validatePath']);
     Route::get('/meters/{id}/period', [ReadingController::class, 'getMeterPeriod']);
+    Route::post('/meters/bulk-delete', [MeterController::class, 'bulkDelete']);
+    Route::apiResource('meters', MeterController::class)->parameters(['meters' => 'id']);
+
+    Route::get('/readings/meters', [MeterController::class, 'search']);
+    Route::get('/readings/calculate-dates', [ReadingController::class, 'calculateDates']);
+    Route::get('/readings/history/{meter_id}', [ReadingController::class, 'meterHistory']);
+    Route::post('/readings/sync-batch', [ReadingController::class, 'syncBatch']);
+    Route::post('/readings/bulk-invoice', [ReadingController::class, 'bulkInvoice']);
+    Route::post('/readings/bulk-issue-invoices', [ReadingController::class, 'bulkInvoice']);
+    Route::post('/readings/bulk-delete', [ReadingController::class, 'bulkDelete']);
+    Route::get('/readings', [ReadingController::class, 'index']);
     Route::post('/readings', [ReadingController::class, 'store']);
+    Route::put('/readings/{id}', [ReadingController::class, 'update']);
+    Route::patch('/readings/{id}', [ReadingController::class, 'update']);
+    Route::delete('/readings/{id}', [ReadingController::class, 'destroy']);
 
-    // Invoices & Payments (Collector)
-    Route::get('/invoices/unpaid', [InvoiceController::class, 'unpaidInvoices']);
+    // Invoices. Keep static routes ahead of /invoices/{id}.
+    Route::get('/invoices/unpaid', [InvoiceController::class, 'unpaid']);
     Route::get('/invoices/search', [InvoiceController::class, 'search']);
-    Route::get('/invoices/{id}', [InvoiceController::class, 'show']);
-    Route::post('/invoices/{id}/pay', [App\Http\Controllers\Api\InvoiceController::class, 'pay']);
-    
-    // Squares (SCR-04) — Dev 4 (Fouad)
-    Route::get('/squares', [App\Http\Controllers\Api\SquareController::class, 'index']);
-    Route::post('/squares', [App\Http\Controllers\Api\SquareController::class, 'store']);
-    Route::post('/squares/bulk-delete', [App\Http\Controllers\Api\SquareController::class, 'bulkDelete']);
-    Route::get('/squares/{id}', [App\Http\Controllers\Api\SquareController::class, 'show']);
-    Route::put('/squares/{id}', [App\Http\Controllers\Api\SquareController::class, 'update']);
-    Route::delete('/squares/{id}', [App\Http\Controllers\Api\SquareController::class, 'destroy']);
+    Route::get('/invoices/billing-periods', [InvoiceController::class, 'billingPeriods']);
+    Route::post('/invoices/pay', [InvoiceController::class, 'payFromPayload']);
+    Route::post('/invoices/generate-meter', [InvoiceController::class, 'generateMeterInvoice']);
+    Route::post('/invoices/generate-subscription', [InvoiceController::class, 'generateSubscriptionInvoice']);
+    Route::post('/invoices/generate-tanker', [InvoiceController::class, 'generateTankerInvoice']);
+    Route::post('/invoices/bulk-recalculate', [InvoiceController::class, 'bulkRecalculate']);
+    Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
+    Route::post('/invoices/{id}/restore', [InvoiceController::class, 'restore']);
+    Route::post('/invoices/{id}/recalculate', [InvoiceController::class, 'recalculate']);
+    Route::post('/invoices/{id}/pay', [InvoiceController::class, 'pay']);
+    Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'downloadPdf'])->name('api.invoices.pdf');
+    Route::get('/invoices/{id}/whatsapp-link', [InvoiceController::class, 'whatsappLink']);
+    Route::post('/invoices/{id}/send-whatsapp', [InvoiceController::class, 'sendWhatsApp']);
+    Route::post('/invoices/{id}/whatsapp', [InvoiceController::class, 'sendWhatsApp']);
+    Route::apiResource('invoices', InvoiceController::class)->parameters(['invoices' => 'id']);
 
-    // Subscribers & 360° Profile (SCR-05, SCR-06, SCR-07) — Dev 4 (Fouad)
-    Route::get('/subscribers', [App\Http\Controllers\Api\SubscriberController::class, 'index']);
-    Route::post('/subscribers', [App\Http\Controllers\Api\SubscriberController::class, 'store']);
-    Route::post('/subscribers/bulk-delete', [App\Http\Controllers\Api\SubscriberController::class, 'bulkDelete']);
-    Route::get('/subscribers/{id}', [App\Http\Controllers\Api\SubscriberController::class, 'show']);
-    Route::put('/subscribers/{id}', [App\Http\Controllers\Api\SubscriberController::class, 'update']);
-    Route::delete('/subscribers/{id}', [App\Http\Controllers\Api\SubscriberController::class, 'destroy']);
-    Route::get('/subscribers/{id}/statement', [App\Http\Controllers\Api\SubscriberController::class, 'statement']);
-    Route::get('/subscribers/{id}/transactions', [App\Http\Controllers\Api\SubscriberController::class, 'transactions']);
-    Route::post('/subscribers/{id}/collect-payment', [App\Http\Controllers\Api\SubscriberController::class, 'collectPayment']);
+    // Payments / receipts.
+    Route::post('/payments/bulk-delete', [PaymentController::class, 'bulkDelete']);
+    Route::get('/payments/{id}/pdf', [PaymentController::class, 'downloadPdf'])->name('api.payments.pdf');
+    Route::get('/payments/{id}/whatsapp-link', [PaymentController::class, 'whatsappLink']);
+    Route::post('/payments/{id}/send-whatsapp', [PaymentController::class, 'sendWhatsApp']);
+    Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
+    Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
-    // Subscription Fees (SCR-19) — Dev 4 (Fouad)
-    Route::get('/subscription-fees', [App\Http\Controllers\Api\SubscriptionFeeController::class, 'index']);
-    Route::put('/subscription-fees/{id}', [App\Http\Controllers\Api\SubscriptionFeeController::class, 'update']);
-    Route::delete('/subscription-fees/{id}', [App\Http\Controllers\Api\SubscriptionFeeController::class, 'destroy']);
-    Route::post('/subscription-fees/bulk-delete', [App\Http\Controllers\Api\SubscriptionFeeController::class, 'bulkDelete']);
-    Route::post('/subscription-fees/{id}/invoice', [App\Http\Controllers\Api\SubscriptionFeeController::class, 'invoice']);
+    // Subscription fees and tanker/service requests.
+    Route::post('/subscription-fees/bulk-delete', [SubscriptionFeeController::class, 'bulkDelete']);
+    Route::post('/subscription-fees/{id}/invoice', [SubscriptionFeeController::class, 'invoice']);
+    Route::apiResource('subscription-fees', SubscriptionFeeController::class)->parameters(['subscription-fees' => 'id']);
 
-    // Service Requests / Water Tanker (SCR-20) — Dev 4 (Fouad)
-    Route::get('/service-requests', [App\Http\Controllers\Api\ServiceRequestController::class, 'index']);
-    Route::put('/service-requests/{id}', [App\Http\Controllers\Api\ServiceRequestController::class, 'update']);
-    Route::delete('/service-requests/{id}', [App\Http\Controllers\Api\ServiceRequestController::class, 'destroy']);
-    Route::post('/service-requests/bulk-delete', [App\Http\Controllers\Api\ServiceRequestController::class, 'bulkDelete']);
-    Route::patch('/service-requests/{id}/complete', [App\Http\Controllers\Api\ServiceRequestController::class, 'complete']);
-    Route::post('/service-requests/{id}/invoice', [App\Http\Controllers\Api\ServiceRequestController::class, 'invoice']);
+    Route::post('/service-requests/bulk-delete', [ServiceRequestController::class, 'bulkDelete']);
+    Route::patch('/service-requests/{id}/complete', [ServiceRequestController::class, 'complete']);
+    Route::post('/service-requests/{id}/invoice', [ServiceRequestController::class, 'invoice']);
+    Route::apiResource('service-requests', ServiceRequestController::class)->parameters(['service-requests' => 'id']);
 
-    // General Ledger (SCR-22, read-only) — Dev 4 (Fouad)
-    Route::get('/transactions', [App\Http\Controllers\Api\TransactionController::class, 'index']);
-    Route::post('/meters', [App\Http\Controllers\Api\SubscriberController::class, 'storeMeter']);
-    Route::put('/meters/{id}', [App\Http\Controllers\Api\SubscriberController::class, 'updateMeter']);
-    Route::post('/subscription-fees', [App\Http\Controllers\Api\SubscriberController::class, 'storeSubscriptionFee']);
-    Route::post('/service-requests', [App\Http\Controllers\Api\SubscriberController::class, 'storeServiceRequest']);
-    
-    // Admin Dashboard Stats
-    Route::get('/admin/stats', [\App\Http\Controllers\Api\AdminController::class, 'stats']);
+    // Tariffs, including soft-delete recovery.
+    Route::post('/tariffs/bulk-delete', [TariffController::class, 'bulkDelete']);
+    Route::post('/tariffs/{id}/restore', [TariffController::class, 'restore']);
+    Route::delete('/tariffs/{id}/force', [TariffController::class, 'forceDestroy']);
+    Route::apiResource('tariffs', TariffController::class)->parameters(['tariffs' => 'id']);
 
-    // Admin Settings
-    Route::get('/settings', [\App\Http\Controllers\Api\SettingController::class, 'index']);
-    Route::post('/settings', [\App\Http\Controllers\Api\SettingController::class, 'update']);
+    // Read-only general ledger.
+    Route::get('/transactions', [TransactionController::class, 'index']);
+    Route::get('/transactions/{id}', [TransactionController::class, 'show']);
+
+    // Settings studio.
+    Route::get('/settings/reading', [SettingController::class, 'reading']);
+    Route::post('/settings/reading', [SettingController::class, 'updateReading']);
+    Route::get('/settings/invoice', [SettingController::class, 'invoiceSettings']);
+    Route::post('/settings/invoice', [SettingController::class, 'updateInvoiceSettings']);
+    Route::get('/settings/receipt', [SettingController::class, 'receiptSettings']);
+    Route::post('/settings/receipt', [SettingController::class, 'updateReceiptSettings']);
+    Route::get('/settings/whatsapp', [SettingController::class, 'whatsappSettings']);
+    Route::post('/settings/whatsapp', [SettingController::class, 'updateWhatsAppSettings']);
+    Route::post('/settings/upload-logo', [SettingController::class, 'uploadLogo']);
+    Route::get('/settings/items', [SettingController::class, 'items']);
+    Route::post('/settings/items', [SettingController::class, 'storeItem']);
+    Route::put('/settings/items/{id}', [SettingController::class, 'updateItem']);
+    Route::patch('/settings/items/{id}', [SettingController::class, 'updateItem']);
+    Route::delete('/settings/items/{id}', [SettingController::class, 'destroyItem']);
+    Route::get('/settings', [SettingController::class, 'index']);
+    Route::post('/settings', [SettingController::class, 'update']);
+
+    // Local WhatsApp bridge controls (server-to-server only; never call localhost from Flutter).
+    Route::get('/whatsapp-server/status', [WhatsAppServerController::class, 'status']);
+    Route::get('/whatsapp-server/qr', [WhatsAppServerController::class, 'qr']);
+    Route::post('/whatsapp-server/start', [WhatsAppServerController::class, 'start']);
+    Route::post('/whatsapp-server/stop', [WhatsAppServerController::class, 'stop']);
+    Route::post('/whatsapp-server/logout', [WhatsAppServerController::class, 'logout']);
+    Route::post('/whatsapp-server/test', [WhatsAppServerController::class, 'sendTest']);
+    // Names used in the earlier API gap report.
+    Route::get('/whatsapp/local-status', [WhatsAppServerController::class, 'status']);
+    Route::post('/whatsapp/local-start', [WhatsAppServerController::class, 'start']);
+    Route::post('/whatsapp/local-stop', [WhatsAppServerController::class, 'stop']);
+
+    // Users and role/permission matrix.
+    Route::get('/roles/permissions-matrix', [RoleController::class, 'permissionsMatrix']);
+    Route::get('/permissions', [RoleController::class, 'permissionsMatrix']);
+    Route::post('/users/bulk-delete', [UserController::class, 'bulkDelete']);
+    Route::apiResource('users', UserController::class)->parameters(['users' => 'id']);
+    Route::post('/roles/bulk-delete', [RoleController::class, 'bulkDelete']);
+    Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);
+
+    // Authenticated XLSX exports.
+    Route::get('/exports/summary', [ApiExportController::class, 'summary']);
+    Route::get('/export/subscribers', [ApiExportController::class, 'subscribers']);
+    Route::get('/export/invoices', [ApiExportController::class, 'invoices']);
+    Route::get('/export/readings', [ApiExportController::class, 'readings']);
+    Route::get('/exports/subscribers', [ApiExportController::class, 'subscribers']);
+    Route::get('/exports/invoices', [ApiExportController::class, 'invoices']);
+    Route::get('/exports/readings', [ApiExportController::class, 'readings']);
 });

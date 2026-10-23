@@ -30,7 +30,7 @@ whatsapp-server/.wwebjs_auth/
 whatsapp-server/session/
 whatsapp-server/uploads/
 
-# Flutter / Dart
+# Flutter / Dart generated files
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -40,6 +40,7 @@ build/
 coverage/
 *.freezed.dart
 *.g.dart
+*.iml
 
 # تجاهل ملفات النظام المؤقتة
 /storage/framework/cache/data/

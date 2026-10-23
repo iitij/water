@@ -5,7 +5,7 @@
 ## 1. المتطلبات والتثبيت
 
 - Flutter **3.33 أو أحدث** وDart **3.8 أو أحدث**؛ هذا يطابق `DropdownButtonFormField.initialValue` وبقية واجهات Material المستخدمة.
-- دمج dependencies الموجودة في `pubspec.yaml` مع ملف المشروع الرئيسي ثم:
+- dependencies الخاصة بالأساس وDev 5 مدمجة الآن في `pubspec.yaml` الجذري؛ بعد تثبيت Flutter شغّل:
 
 ```bash
 flutter pub get

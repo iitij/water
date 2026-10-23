@@ -2,496 +2,352 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Subscriber;
 use App\Models\Invoice;
-use App\Models\Payment;
-use App\Models\Square;
 use App\Models\Meter;
-use App\Models\SubscriptionFee;
+use App\Models\Payment;
 use App\Models\ServiceRequest;
+use App\Models\Square;
+use App\Models\Subscriber;
+use App\Models\SubscriptionFee;
+use App\Models\Transaction;
+use App\Services\PaymentService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
-class SubscriberController extends Controller
+class SubscriberController extends ApiController
 {
-    public function squares()
+    public function index(Request $request)
     {
-        $squares = Square::orderBy('id', 'asc')->get(['id', 'name']);
-        return response()->json($squares);
-    }
+        $this->authorizeApi(Subscriber::class, 'viewAny');
+        $query = Subscriber::query()
+            ->with(['square:id,name', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone'])
+            ->withCount('meters')
+            ->orderBy('name');
 
-    public function storeSquare(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-        ]);
+        if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
+            $normalized = $this->normalizeDigits($search);
+            if ($path = $this->parseCompoundSearch($normalized)) {
+                [$squareId, $pathNumber] = $path;
+                $query->where('square_id', $squareId)->whereHas('meters', fn ($q) => $q->where('path_number', $pathNumber));
+            } else {
+                $query->where(function ($builder) use ($search, $normalized) {
+                    $builder->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereHas('meters', function ($meterQuery) use ($search, $normalized) {
+                            $meterQuery->where('unique_code', 'like', "%{$search}%")
+                                ->orWhere('tenant_name', 'like', "%{$search}%")
+                                ->orWhere('tenant_phone', 'like', "%{$search}%");
+                            if (ctype_digit($normalized)) {
+                                $meterQuery->orWhere('path_number', (int) $normalized);
+                            }
+                        });
+                });
+            }
+        }
+        if ($request->filled('square_id')) {
+            $query->where('square_id', $request->integer('square_id'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->query('status'));
+        }
 
-        $square = Square::create($validated);
-
-        return response()->json([
-            'message' => 'تم إضافة المربع بنجاح',
-            'square' => $square,
-        ], 201);
+        $subscribers = $query->paginate($this->perPage($request))->through(fn (Subscriber $subscriber) => $this->subscriberListItem($subscriber));
+        return $subscribers->appends($request->query());
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'nullable|string|max:50',
-            'square_id' => 'required|exists:squares,id',
-            'status' => 'required|in:active,inactive,suspended',
-            'subscription_start_date' => 'nullable|date',
-            'address' => 'nullable|string',
+        $this->authorizeApi(Subscriber::class, 'create');
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'square_id' => ['required', 'integer', 'exists:squares,id'],
+            'status' => ['sometimes', 'in:active,inactive,suspended'],
+            'subscription_start_date' => ['nullable', 'date'],
+            'address' => ['nullable', 'string'],
+            'initial_subscription_fee' => ['sometimes', 'numeric', 'min:0'],
         ]);
+        $data['status'] ??= 'active';
+        $subscriber = Subscriber::create($data)->load('square');
 
-        $subscriber = Subscriber::create($validated);
-
-        return response()->json([
-            'message' => 'تم إضافة المشترك بنجاح',
-            'subscriber' => $subscriber,
-        ], 201);
+        return response()->json(['message' => 'تم إضافة المشترك بنجاح.', 'subscriber' => $subscriber], 201);
     }
 
-    public function storeMeter(Request $request)
-    {
-        $validated = $request->validate([
-            'unique_code' => 'required|string|max:50|unique:meters,unique_code',
-            'subscriber_id' => 'required|exists:subscribers,id',
-            'tenant_name' => 'nullable|string|max:255',
-            'tenant_phone' => 'nullable|string|max:50',
-            'status' => 'required|in:active,inactive',
-            'path_number' => [
-                'nullable',
-                'integer',
-                function ($attribute, $value, $fail) use ($request) {
-                    if ($value !== null) {
-                        $subscriber = \App\Models\Subscriber::find($request->input('subscriber_id'));
-                        if ($subscriber) {
-                            $exists = \App\Models\Meter::where('path_number', $value)
-                                ->whereHas('subscriber', function($q) use ($subscriber) {
-                                    $q->where('square_id', $subscriber->square_id);
-                                })
-                                ->exists();
-                            if ($exists) {
-                                $fail('رقم المسار مستخدم بالفعل لعداد آخر في نفس المربع السكني.');
-                            }
-                        }
-                    }
-                }
-            ],
-        ]);
-
-        $meter = Meter::create($validated);
-
-        return response()->json([
-            'message' => 'تم إضافة العداد بنجاح',
-            'meter' => $meter,
-        ], 201);
-    }
-
-    public function storeSubscriptionFee(Request $request)
-    {
-        $validated = $request->validate([
-            'subscriber_id' => 'required|exists:subscribers,id',
-            'meter_id' => 'nullable|exists:meters,id',
-            'amount' => 'required|numeric|min:0',
-            'status' => 'required|in:uninvoiced,invoiced,partially_paid,paid',
-            'notes' => 'nullable|string',
-        ]);
-
-        $subscriptionFee = SubscriptionFee::create($validated);
-
-        return response()->json([
-            'message' => 'تم إضافة رسوم الاشتراك بنجاح',
-            'subscription_fee' => $subscriptionFee,
-        ], 201);
-    }
-
-    public function storeServiceRequest(Request $request)
-    {
-        $validated = $request->validate([
-            'subscriber_id' => 'required|exists:subscribers,id',
-            'amount' => 'required|numeric|min:0',
-            'service_date' => 'required|date',
-            'status' => 'required|in:pending,completed,invoiced,paid',
-            'notes' => 'nullable|string',
-        ]);
-
-        $validated['service_type'] = 'water_tanker';
-
-        $serviceRequest = ServiceRequest::create($validated);
-
-        return response()->json([
-            'message' => 'تم إضافة طلب الوايت بنجاح',
-            'service_request' => $serviceRequest,
-        ], 201);
-    }
-
-    public function index(Request $request)
-    {
-        $query = Subscriber::with(['meters', 'square:id,name'])->withCount('meters');
-        if ($request->has('q') && !empty($request->q)) {
-            $q = $request->q;
-            $query->where(function($subQuery) use ($q) {
-                $subQuery->where('name', 'like', "%{$q}%")
-                         ->orWhere('phone', 'like', "%{$q}%")
-                         ->orWhereHas('meters', function($mq) use ($q) {
-                             $mq->where('unique_code', 'like', "%{$q}%")
-                                ->orWhere('tenant_name', 'like', "%{$q}%");
-                         });
-            });
-        }
-        $query->when($request->filled('square_id'), fn ($q) => $q->where('square_id', $request->square_id))
-              ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
-              ->orderBy('name', 'asc');
-
-        $map = function ($sub) {
-            $totalDebit = $sub->getOutstandingBalance() + $sub->meters->sum(fn($m) => $m->getOutstandingBalance());
-            $totalCredit = ($sub->balance > 0 ? (float) $sub->balance : 0) + $sub->meters->sum(fn($m) => $m->balance > 0 ? (float) $m->balance : 0);
-
-            return [
-                'id' => $sub->id,
-                'name' => $sub->name,
-                'phone' => $sub->phone,
-                'address' => $sub->address,
-                'status' => $sub->status,
-                'square_id' => $sub->square_id,
-                'square' => $sub->square ? ['id' => $sub->square->id, 'name' => $sub->square->name] : null,
-                'meters_count' => $sub->meters_count ?? $sub->meters->count(),
-                'subscription_start_date' => $sub->subscription_start_date?->format('Y-m-d'),
-                'balance' => $totalDebit,
-                'debit_balance' => $totalDebit,
-                'credit_balance' => $totalCredit,
-                'account_balance' => $totalCredit > 0 ? $totalCredit : ($totalDebit > 0 ? -$totalDebit : 0),
-                'meter_number' => $sub->meters->first()?->unique_code ?? 'بدون عداد',
-            ];
-        };
-
-        if ($request->filled('per_page')) {
-            $page = $query->paginate((int) $request->per_page);
-            $page->getCollection()->transform($map);
-            return response()->json($page);
-        }
-
-        return response()->json($query->get()->map($map));
-    }
-
-    /** الملف المالي الشامل 360° — SCR-07 (Endpoint 14): ملخص مالي معزول + العلاقات الخمس. */
     public function show(int $id)
     {
+        $this->authorizeApi(Subscriber::class, 'view');
         $subscriber = Subscriber::with([
-            'square:id,name',
-            'meters' => fn ($q) => $q->withCount('readings'),
-            'invoices' => fn ($q) => $q->latest('bill_date'),
-            'payments' => fn ($q) => $q->latest('payment_date'),
-            'subscriptionFees.meter:id,unique_code',
-            'subscriptionFees.invoice:id,bill_number',
-            'serviceRequests.invoice:id,bill_number',
-        ])->find($id);
+            'square:id,name,description',
+            'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
+            'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number,tenant_name'])->latest('bill_date')->latest('id'),
+            'payments' => fn ($q) => $q->with(['meter:id,unique_code,tenant_name', 'user:id,name'])->latest('payment_date')->latest('id'),
+            'subscriptionFees' => fn ($q) => $q->latest(),
+            'serviceRequests' => fn ($q) => $q->latest('service_date'),
+            'transactions' => fn ($q) => $q->latest(),
+        ])->findOrFail($id);
 
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-
-        $meters = $subscriber->meters->map(fn ($m) => [
-            'id' => $m->id,
-            'unique_code' => $m->unique_code,
-            'path_number' => $m->path_number,
-            'status' => $m->status,
-            'tenant_name' => $m->tenant_name,
-            'tenant_phone' => $m->tenant_phone,
-            'balance' => (float) $m->balance,
-            'meter_credit' => $m->balance > 0 ? (float) $m->balance : 0.0,
-            'meter_debit' => $m->getOutstandingBalance(),
-            'readings_count' => $m->readings_count ?? 0,
-        ]);
-
-        $totalCredit = ($subscriber->balance > 0 ? (float) $subscriber->balance : 0)
-            + $meters->sum('meter_credit');
-        $totalDebit = $subscriber->getOutstandingBalance() + $meters->sum('meter_debit');
-
-        $payload = $subscriber->toArray();
-        $payload['meters'] = $meters;
-        $payload['financial_summary'] = [
-            'general_balance' => (float) $subscriber->balance,
-            'total_credit_balance' => $totalCredit,
-            'total_debit_balance' => $totalDebit,
-            'remaining_subscription_fee' => $subscriber->getRemainingSubscriptionFee(),
-            'subscription_fee_status' => $subscriber->getSubscriptionFeeStatus(),
-        ];
-
-        return response()->json($payload);
-    }
-
-    public function destroy(int $id)
-    {
-        $subscriber = Subscriber::find($id);
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-        $subscriber->delete();
-
-        return response()->json(['message' => 'تم حذف المشترك بنجاح']);
-    }
-
-    public function bulkDelete(Request $request)
-    {
-        $validated = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
-        $deleted = Subscriber::whereIn('id', $validated['ids'])->delete();
-
-        return response()->json(['message' => 'تم حذف المشتركين بنجاح', 'deleted_count' => $deleted]);
-    }
-
-    /**
-     * سجل الحركات المالية للمشترك — تبويب كشف الحساب في SCR-07 (Endpoint 18).
-     * مطابق لـ SubscriberTransactionsTable: ?meter_id=general (meter_id IS NULL) أو ?meter_id={id}،
-     * مع الرصيد التراكمي (running balance) محسوباً تصاعدياً ثم يُعرض تنازلياً.
-     */
-    public function transactions(Request $request, int $id)
-    {
-        $subscriber = Subscriber::find($id);
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-
-        $query = \App\Models\Transaction::with('meter:id,unique_code,tenant_name')
-            ->where('subscriber_id', $id)
-            ->when($request->filled('meter_id'), function ($q) use ($request) {
-                $request->meter_id === 'general'
-                    ? $q->whereNull('meter_id')
-                    : $q->where('meter_id', $request->meter_id);
-            })
-            ->orderBy('created_at')->orderBy('id');
-
-        $running = 0.0;
-        $rows = $query->get()->map(function ($t) use (&$running) {
-            $running += (float) $t->amount;
-            return [
-                'id' => $t->id,
-                'created_at' => $t->created_at?->format('Y-m-d H:i'),
-                'type' => $t->type,
-                'meter_id' => $t->meter_id,
-                'party' => $t->meter_id
-                    ? 'عداد رقم: ' . $t->meter_id . ($t->meter?->tenant_name ? ' - ' . $t->meter->tenant_name : '')
-                    : 'الحساب العام للمشترك',
-                'amount' => (float) $t->amount,
-                'running_balance' => round($running, 2),
-                'description' => $t->description,
-            ];
+        $subscriber->setAttribute('financial_summary', $this->financialSummary($subscriber));
+        $subscriber->meters->each(function (Meter $meter) {
+            $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
+            $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
+            $meter->setAttribute('last_reading', $meter->readings()->latest('id')->value('current_reading'));
         });
+        $subscriber->invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
-        return response()->json($rows->sortByDesc('id')->values());
-    }
-
-    /** تحصيل دفعة مباشرة للمشترك — SCR-05/SCR-07 (Endpoint 19، PaymentService FIFO). */
-    public function collectPayment(Request $request, int $id)
-    {
-        $subscriber = Subscriber::find($id);
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-
-        $validated = $request->validate([
-            'amount' => 'required|numeric|min:0.01',
-            'invoice_id' => 'nullable|exists:invoices,id',
-            'payment_method' => 'nullable|in:cash,bank_transfer,check',
-            'reference_number' => 'nullable|string|max:100',
-            'reason' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
-        ]);
-
-        $payment = app(\App\Services\PaymentService::class)->collectPayment(
-            subscriber: $subscriber,
-            amount: (float) $validated['amount'],
-            invoiceId: $validated['invoice_id'] ?? null,
-            paymentMethod: $validated['payment_method'] ?? 'cash',
-            referenceNumber: $validated['reference_number'] ?? null,
-            notes: $validated['notes'] ?? null,
-            reason: $validated['reason'] ?? null,
-            userId: $request->user()?->id,
-        );
-
-        return response()->json(['message' => 'تم تحصيل الدفعة بنجاح', 'payment' => $payment], 201);
+        // Keep the detail object flat; mobile's 360° mapper reads financial_summary/meters directly.
+        return response()->json($subscriber);
     }
 
     public function update(Request $request, int $id)
     {
-        $subscriber = Subscriber::find($id);
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'nullable|string|max:50',
-            'square_id' => 'required|exists:squares,id',
-            'status' => 'required|in:active,inactive,suspended',
-            'address' => 'nullable|string',
+        $this->authorizeApi(Subscriber::class, 'update');
+        $subscriber = Subscriber::findOrFail($id);
+        $data = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'square_id' => ['sometimes', 'required', 'integer', 'exists:squares,id'],
+            'status' => ['sometimes', 'required', 'in:active,inactive,suspended'],
+            'subscription_start_date' => ['sometimes', 'nullable', 'date'],
+            'address' => ['sometimes', 'nullable', 'string'],
+            'initial_subscription_fee' => ['sometimes', 'numeric', 'min:0'],
         ]);
+        $subscriber->update($data);
 
-        $subscriber->update($validated);
+        return response()->json(['message' => 'تم تحديث المشترك بنجاح.', 'subscriber' => $subscriber->fresh('square')]);
+    }
 
+    public function destroy(int $id)
+    {
+        $this->authorizeApi(Subscriber::class, 'delete');
+        Subscriber::findOrFail($id)->delete();
+        return response()->json(['message' => 'تم حذف المشترك بنجاح.']);
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $this->authorizeApi(Subscriber::class, 'deleteAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:subscribers,id']]);
+        $deleted = Subscriber::whereIn('id', $data['ids'])->delete();
+        return response()->json(['deleted_count' => $deleted]);
+    }
+
+    public function summary(int $id)
+    {
+        $this->authorizeApi(Subscriber::class, 'view');
+        $subscriber = Subscriber::with(['square:id,name', 'meters:id,subscriber_id,unique_code,path_number,status,balance'])
+            ->findOrFail($id);
         return response()->json([
-            'message' => 'تم تحديث المشترك بنجاح',
-            'subscriber' => $subscriber,
+            'subscriber' => $subscriber->only(['id', 'name', 'phone', 'address', 'status', 'square_id', 'subscription_start_date']),
+            'financial_summary' => $this->financialSummary($subscriber),
         ]);
     }
 
-    public function updateMeter(Request $request, int $id)
+    public function statement(Request $request, int $id)
     {
-        $meter = Meter::find($id);
-        if (!$meter) {
-            return response()->json(['message' => 'العداد غير موجود'], 404);
-        }
-
-        $validated = $request->validate([
-            'unique_code' => 'required|string|max:50|unique:meters,unique_code,' . $id,
-            'path_number' => [
-                'nullable',
-                'integer',
-                function ($attribute, $value, $fail) use ($meter) {
-                    if ($value !== null) {
-                        $exists = \App\Models\Meter::where('path_number', $value)
-                            ->where('id', '!=', $meter->id)
-                            ->whereHas('subscriber', function($q) use ($meter) {
-                                $q->where('square_id', $meter->subscriber->square_id);
-                            })
-                            ->exists();
-                        if ($exists) {
-                            $fail('رقم المسار مستخدم بالفعل لعداد آخر في نفس المربع السكني.');
-                        }
-                    }
-                }
-            ],
-            'tenant_name' => 'nullable|string|max:255',
-            'tenant_phone' => 'nullable|string|max:50',
-            'status' => 'required|in:active,inactive',
-        ]);
-
-        $meter->update($validated);
-
-        return response()->json([
-            'message' => 'تم تحديث العداد بنجاح',
-            'meter' => $meter,
-        ]);
-    }
-
-    public function statement(int $id)
-    {
-        $subscriber = Subscriber::find($id);
-        if (!$subscriber) {
-            return response()->json(['message' => 'المشترك غير موجود'], 404);
-        }
-
-        $invoices = Invoice::where('subscriber_id', $id)
-            ->orderBy('bill_date', 'desc')
-            ->get()
-            ->map(function ($inv) {
-                return [
-                    'type' => 'invoice',
-                    'date' => $inv->bill_date->format('Y-m-d'),
-                    'description' => 'فاتورة استهلاك (' . $inv->bill_number . ')',
-                    'amount' => $inv->total_amount,
-                    'is_debit' => true,
-                ];
-            });
-
-        $payments = Payment::where('subscriber_id', $id)
-            ->orderBy('payment_date', 'desc')
-            ->get()
-            ->map(function ($pay) {
-                return [
-                    'type' => 'payment',
-                    'date' => $pay->payment_date->format('Y-m-d'),
-                    'description' => 'سند قبض (' . $pay->receipt_number . ')',
-                    'amount' => $pay->amount,
-                    'is_debit' => false,
-                ];
-            });
-
+        $this->authorizeApi(Subscriber::class, 'view');
+        $subscriber = Subscriber::findOrFail($id);
+        $invoices = $subscriber->invoices()->with('meter:id,unique_code,path_number,tenant_name')->get()->map(function (Invoice $invoice) {
+            return [
+                'id' => $invoice->id,
+                'type' => 'invoice',
+                'date' => optional($invoice->bill_date)->format('Y-m-d'),
+                'reference' => $invoice->bill_number,
+                'description' => 'فاتورة ' . $this->invoiceTypeLabel($invoice->invoice_type),
+                'amount' => (float) $invoice->total_amount,
+                'previous_balance' => (float) $invoice->previous_balance,
+                'amount_paid' => (float) $invoice->amount_paid,
+                'remaining_amount' => $invoice->getRemainingAmount(),
+                'true_remaining_amount' => $invoice->getTrueRemainingAmount(),
+                'status' => $invoice->status,
+                'meter' => $invoice->meter,
+            ];
+        });
+        $payments = $subscriber->payments()->with('meter:id,unique_code,path_number,tenant_name')->get()->map(function (Payment $payment) {
+            return [
+                'id' => $payment->id,
+                'type' => 'payment',
+                'date' => optional($payment->payment_date)->format('Y-m-d'),
+                'reference' => $payment->receipt_number,
+                'description' => 'سند قبض' . ($payment->reason ? ' - ' . $payment->reason : ''),
+                'amount' => (float) $payment->amount,
+                'payment_method' => $payment->payment_method,
+                'meter' => $payment->meter,
+            ];
+        });
         $transactions = $invoices->concat($payments)->sortByDesc('date')->values();
 
         return response()->json([
-            'subscriber' => [
-                'name' => $subscriber->name,
-                'balance' => $subscriber->getOutstandingBalance(),
-            ],
+            'subscriber' => ['id' => $subscriber->id, 'name' => $subscriber->name, 'general_balance' => (float) $subscriber->balance],
             'transactions' => $transactions,
+            'financial_summary' => $this->financialSummary($subscriber),
         ]);
     }
 
-    public function invoiceSubscriptionFee(int $id)
+    public function transactions(Request $request, int $id)
     {
-        $fee = SubscriptionFee::with(['subscriber', 'meter'])->find($id);
-        if (!$fee) {
-            return response()->json(['message' => 'رسوم الاشتراك غير موجودة'], 404);
+        $this->authorizeApi(Subscriber::class, 'view');
+        $subscriber = Subscriber::findOrFail($id);
+        $query = Transaction::with(['meter:id,unique_code,path_number', 'reference'])
+            ->where('subscriber_id', $subscriber->id);
+
+        if ($request->has('meter_id')) {
+            if ($request->query('meter_id') === 'general') {
+                $query->whereNull('meter_id');
+            } elseif (filter_var($request->query('meter_id'), FILTER_VALIDATE_INT) !== false) {
+                $query->where('meter_id', (int) $request->query('meter_id'));
+            }
+        }
+        if ($request->filled('type')) {
+            $query->where('type', $request->query('type'));
         }
 
-        if ($fee->status !== 'uninvoiced') {
-            return response()->json(['message' => 'هذه الرسوم مفوترة مسبقاً'], 400);
-        }
+        $runningBalance = 0.0;
+        $rows = $query->orderBy('created_at')->orderBy('id')->get()->map(function (Transaction $transaction) use (&$runningBalance) {
+            $runningBalance += (float) $transaction->amount;
 
-        $subscriber = $fee->subscriber;
-        $sumAmount = \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)
-            ->where('status', 'uninvoiced')
-            ->sum('amount');
+            return [
+                'id' => $transaction->id,
+                'type' => $transaction->type,
+                'amount' => (float) $transaction->amount,
+                'meter_id' => $transaction->meter_id,
+                'party' => $transaction->meter_id
+                    ? 'عداد رقم: ' . $transaction->meter_id . ($transaction->meter?->unique_code ? ' (' . $transaction->meter->unique_code . ')' : '')
+                    : 'الحساب العام للمشترك',
+                'description' => $transaction->description,
+                'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
+                'running_balance' => round($runningBalance, 2),
+            ];
+        });
 
-        $invoiceService = app(\App\Services\InvoiceService::class);
-        $invoice = $invoiceService->generateInvoice(
-            subscriber: $subscriber,
-            meter: null,
-            subscriptionInstallment: (float) $sumAmount,
-            notes: null,
-            tankerInstallment: null,
-            includeReadings: false,
-            invoiceType: 'subscription'
-        );
-        
-        $invoiceArray = $invoice->toArray();
-        $invoiceArray['user'] = ['name' => request()->user() ? request()->user()->name : 'إدارة المشروع'];
-        $invoiceArray['pdf_url'] = url('/invoices/' . $invoice->id . '/print');
-
-        return response()->json([
-            'message' => 'تم إصدار الفاتورة بنجاح',
-            'invoice' => $invoiceArray,
-        ], 201);
+        return response()->json($rows->reverse()->values());
     }
 
-    public function invoiceServiceRequest(int $id)
+    public function collectPayment(Request $request, int $id, PaymentService $paymentService)
     {
-        $request = ServiceRequest::with('subscriber')->find($id);
-        if (!$request) {
-            return response()->json(['message' => 'طلب الوايت غير موجود'], 404);
+        $this->authorizeApi(Payment::class, 'create');
+        $subscriber = Subscriber::findOrFail($id);
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+            'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
+            'payment_date' => ['nullable', 'date'],
+            'payment_method' => ['required', 'in:cash,bank_transfer,check'],
+            'reference_number' => ['nullable', 'string', 'max:255'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+            'sync_uuid' => ['nullable', 'uuid'],
+        ]);
+        if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
+            return response()->json(['message' => 'الفاتورة المحددة لا تتبع هذا المشترك.'], 422);
+        }
+        if (! empty($data['meter_id']) && ! Meter::where('id', $data['meter_id'])->where('subscriber_id', $subscriber->id)->exists()) {
+            return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
         }
 
-        if (in_array($request->status, ['invoiced', 'paid'])) {
-            return response()->json(['message' => 'تم إصدار فاتورة مسبقاً لهذا الطلب'], 400);
-        }
-
-        $subscriber = $request->subscriber;
-        $sumAmount = \App\Models\ServiceRequest::where('subscriber_id', $subscriber->id)
-            ->where('status', 'completed')
-            ->sum('amount');
-
-        $invoiceService = app(\App\Services\InvoiceService::class);
-        $invoice = $invoiceService->generateInvoice(
-            subscriber: $subscriber,
-            meter: null,
-            subscriptionInstallment: null,
-            notes: null,
-            tankerInstallment: (float) $sumAmount,
-            includeReadings: false,
-            invoiceType: 'tanker'
+        $payment = $paymentService->collectPayment(
+            $subscriber,
+            (float) $data['amount'],
+            $data['invoice_id'] ?? null,
+            $data['payment_method'],
+            $data['reference_number'] ?? null,
+            $data['notes'] ?? null,
+            $data['reason'] ?? null,
+            $request->user()->id,
+            $data['payment_date'] ?? null,
+            $data['meter_id'] ?? null,
+            $data['sync_uuid'] ?? null,
         );
-        
-        $invoiceArray = $invoice->toArray();
-        $invoiceArray['user'] = ['name' => request()->user() ? request()->user()->name : 'إدارة المشروع'];
-        $invoiceArray['pdf_url'] = url('/invoices/' . $invoice->id . '/print');
+
+        return response()->json(['message' => 'تم تسجيل الدفعة بنجاح.', 'payment' => $payment->load(['subscriber', 'invoice', 'meter', 'user'])], 201);
+    }
+
+    public function unpaidInvoicesSummary(int $id)
+    {
+        $this->authorizeApi(Subscriber::class, 'view');
+        $subscriber = Subscriber::findOrFail($id);
+        $invoices = $subscriber->invoices()
+            ->with('meter:id,unique_code,path_number,tenant_name')
+            ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            ->orderBy('bill_date')->orderBy('id')->get();
+        $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
         return response()->json([
-            'message' => 'تم إصدار الفاتورة بنجاح',
-            'invoice' => $invoiceArray,
-        ], 201);
+            'subscriber_id' => $subscriber->id,
+            'general_balance' => (float) $subscriber->balance,
+            'invoices' => $invoices,
+            'total_remaining' => round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2),
+        ]);
+    }
+
+    /** Backwards-compatible helpers kept for older mobile builds. */
+    public function squares()
+    {
+        $this->authorizeApi(Square::class, 'viewAny');
+        return Square::withCount('subscribers')->orderBy('name')->get();
+    }
+
+    public function storeSquare(Request $request)
+    {
+        $this->authorizeApi(Square::class, 'create');
+        $data = $request->validate(['name' => ['required', 'string', 'max:100'], 'description' => ['nullable', 'string']]);
+        return response()->json(['square' => Square::create($data)], 201);
+    }
+
+    private function subscriberListItem(Subscriber $subscriber): array
+    {
+        $summary = $this->financialSummary($subscriber);
+        return [
+            'id' => $subscriber->id,
+            'name' => $subscriber->name,
+            'phone' => $subscriber->phone,
+            'address' => $subscriber->address,
+            'status' => $subscriber->status,
+            'square_id' => $subscriber->square_id,
+            'square' => $subscriber->square,
+            'meters_count' => $subscriber->meters_count,
+            'subscription_start_date' => optional($subscriber->subscription_start_date)->format('Y-m-d'),
+            'meter_number' => $subscriber->meters->first()?->unique_code,
+            'credit_balance' => $summary['total_credit_balance'],
+            'debit_balance' => $summary['total_debit_balance'],
+            'account_balance' => $summary['account_balance'],
+            'general_balance' => $summary['general_balance'],
+        ];
+    }
+
+    private function financialSummary(Subscriber $subscriber): array
+    {
+        $generalBalance = (float) $subscriber->balance;
+        $meterCredit = (float) $subscriber->meters->sum(fn (Meter $meter) => max(0, (float) $meter->balance));
+        $meterDebit = (float) $subscriber->meters->sum(fn (Meter $meter) => $meter->getOutstandingBalance());
+        $totalCredit = max(0, $generalBalance) + $meterCredit;
+        $totalDebit = max(0, -$generalBalance) + $meterDebit;
+
+        return [
+            'total_credit_balance' => round($totalCredit, 2),
+            'total_debit_balance' => round($totalDebit, 2),
+            'account_balance' => round($totalCredit - $totalDebit, 2),
+            'general_balance' => round($generalBalance, 2),
+            'general_credit_balance' => round(max(0, $generalBalance), 2),
+            'general_debit_balance' => round(max(0, -$generalBalance), 2),
+            'meters_credit_balance' => round($meterCredit, 2),
+            'meters_debit_balance' => round($meterDebit, 2),
+            'remaining_subscription_fee' => round($subscriber->getRemainingSubscriptionFee(), 2),
+            'subscription_fee_status' => $subscriber->getSubscriptionFeeStatus(),
+        ];
+    }
+
+    private function decorateInvoice(Invoice $invoice): void
+    {
+        $invoice->setAttribute('true_remaining_amount', $invoice->getTrueRemainingAmount());
+        $invoice->setAttribute('is_latest_invoice', $invoice->isLatestInvoice());
+    }
+
+    private function invoiceTypeLabel(?string $type): string
+    {
+        return match ($type) {
+            'subscription' => 'رسوم اشتراك',
+            'tanker' => 'رسوم وايت',
+            default => 'استهلاك مياه',
+        };
     }
 }
