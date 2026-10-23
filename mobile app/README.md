@@ -34,6 +34,12 @@ Production signing is deliberately not implied: configure a persistent private
 keystore through GitHub Actions secrets before shipping a production build.
 Never commit signing keys or backend credentials.
 
+## Workspace and feature coverage
+
+The Arabic home is task-first; **الخدمات** opens the searchable, permission-aware
+service directory. See [FEATURE_COVERAGE.md](FEATURE_COVERAGE.md) for the Laravel
+module inventory, delivered UX/workflow changes, and remaining parity checks.
+
 ## Remaining acceptance work
 
 - Run the master plan's full device/backend acceptance checklist.

@@ -5,6 +5,7 @@ class RouteNames {
   static const splash = '/splash';
   static const login = '/login';
   static const home = '/home';
+  static const services = '/services';
   static const profile = '/profile';
   static const offlineSync = '/sync';
 
@@ -17,6 +18,7 @@ class RouteNames {
   // Dev 3: Finance, Invoices, Payments & Tariffs
   static const quickCollector = '/collector';
   static const invoices = '/invoices';
+  static const invoiceIssue = '/issue-invoice';
   static const invoiceCreate = '/invoices/create';
   static const payments = '/payments';
   static const paymentCreate = '/payments/create';

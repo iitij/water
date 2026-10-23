@@ -6,6 +6,7 @@ import '../../features/invoices/data/models/invoice_query.dart';
 import '../../features/invoices/domain/repositories/invoices_repository.dart';
 import '../../features/invoices/presentation/pages/invoice_create_edit_screen.dart';
 import '../../features/invoices/presentation/pages/invoice_detail_screen.dart';
+import '../../features/invoices/presentation/pages/invoice_issue_screen.dart';
 import '../../features/invoices/presentation/pages/invoices_list_screen.dart';
 import '../../features/invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../features/payments/data/models/payment_model.dart';
@@ -29,6 +30,14 @@ import 'finance_route_names.dart';
 /// كل مسار مغلّف بـ [PermissionRouteShell] بمفتاح صلاحية من `FinanceAbilities`،
 /// لأن دور `collector` في Laravel يملك `invoices.view` + `payments.collect` فقط.
 List<RouteBase> buildFinanceRoutes() => <RouteBase>[
+      GoRoute(
+        path: FinanceRouteNames.invoiceIssue,
+        name: 'invoice-issue',
+        builder: (context, state) => const PermissionRouteShell(
+          ability: FinanceAbilities.createInvoice,
+          child: InvoiceIssueScreen(),
+        ),
+      ),
       GoRoute(
         path: FinanceRouteNames.quickCollector,
         name: 'quick-collector',

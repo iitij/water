@@ -57,6 +57,12 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
     await load();
   }
 
+  Future<void> updateRequest(ServiceRequest request) async {
+    if (!request.canEdit) throw StateError('لا يمكن تعديل طلب مرتبط بفاتورة.');
+    await _repo.updateRequest(request);
+    await load();
+  }
+
   Future<void> markCompleted(int id) async { await _repo.markCompleted(id); await load(); }
 
   Future<String> invoice(int id) async {

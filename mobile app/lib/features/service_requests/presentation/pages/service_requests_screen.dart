@@ -7,12 +7,15 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/fouad/api_client.dart' show friendlyError;
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/service_request.dart';
 import '../cubit/service_requests_cubit.dart';
+import '../widgets/service_request_edit_sheet.dart';
 
 bool _hasServiceRequestsCubit(BuildContext context) {
   try {
@@ -163,24 +166,26 @@ class _ServiceRequestsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    bool can(String permission) => GetIt.I.isRegistered<PermissionService>() &&
+        GetIt.I<PermissionService>().can(permission);
     return BlocBuilder<ServiceRequestsCubit, ServiceRequestsState>(
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('SCR-20 • طلبات الوايت'),
+            title: const Text('طلبات الخدمة والوايت'),
             actions: [
-              IconButton(
+              if (can('invoices.create')) IconButton(
                 icon: const Icon(Icons.receipt_long_outlined),
-                tooltip: 'إصدار فاتورة وايت (SCR-16)',
+                tooltip: 'إصدار فاتورة وايت',
                 onPressed: () => _openGenerateTankerInvoice(context),
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
+          floatingActionButton: can('Create:ServiceRequest') ? FloatingActionButton.extended(
             onPressed: () => _defaultAddRequest(context),
             icon: const Icon(Icons.add),
             label: const Text('طلب وايت جديد'),
-          ),
+          ) : null,
           body: Column(children: [
             Padding(
               padding: const EdgeInsets.all(12),
@@ -221,46 +226,61 @@ class _ServiceRequestsView extends StatelessWidget {
                           child: ListTile(
                             leading: const Icon(Icons.local_shipping, color: AppColors.info),
                             title: Text('${r.subscriberName ?? 'مشترك #${r.subscriberId}'}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}'),
-                            subtitle: Text('${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}${r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}${r.hasNote ? '\n${r.notes}' : ''}'),
-                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                              StatusBadge(
-                                label: r.status.label,
-                                color: switch (r.status) {
-                                  TankerStatus.pending => AppColors.warning,
-                                  TankerStatus.completed => AppColors.info,
-                                  TankerStatus.invoiced => AppColors.primary,
-                                  TankerStatus.paid => AppColors.success,
-                                },
-                              ),
-                              if (r.canComplete)
-                                IconButton(
-                                  icon: const Icon(Icons.check_circle, color: AppColors.success),
-                                  tooltip: 'إنجاز (mark_completed)',
-                                  onPressed: () async {
-                                    if (await confirmAction(context, 'إنجاز الطلب', 'تأكيد إنجاز طلب الوايت بقيمة ${r.amount}؟')) {
-                                      if (context.mounted) {
-                                        context.read<ServiceRequestsCubit>().markCompleted(r.id);
-                                      }
-                                    }
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}'),
+                                if (r.invoiceNumber != null) Text('فاتورة: ${r.invoiceNumber}'),
+                                if (r.hasNote) Text(r.notes!),
+                                const SizedBox(height: 6),
+                                StatusBadge(
+                                  label: r.status.label,
+                                  color: switch (r.status) {
+                                    TankerStatus.pending => AppColors.warning,
+                                    TankerStatus.completed => AppColors.info,
+                                    TankerStatus.invoiced => AppColors.primary,
+                                    TankerStatus.paid => AppColors.success,
                                   },
                                 ),
-                              if (r.canInvoice)
-                                IconButton(
-                                  icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-                                  tooltip: 'إصدار فاتورة وايت',
-                                  onPressed: () => _openGenerateTankerInvoice(context, request: r),
-                                ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                onPressed: () async {
-                                  if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟')) {
-                                    if (context.mounted) {
-                                      context.read<ServiceRequestsCubit>().delete(r.id);
-                                    }
+                              ],
+                            ),
+                            trailing: r.canEdit && (can('Update:ServiceRequest') || can('Delete:ServiceRequest'))
+                                ? PopupMenuButton<String>(
+                              tooltip: 'إجراءات الطلب',
+                              onSelected: (action) async {
+                                final cubit = context.read<ServiceRequestsCubit>();
+                                try {
+                                  switch (action) {
+                                    case 'edit':
+                                      await ServiceRequestEditSheet.show(context, request: r, onSave: cubit.updateRequest);
+                                      break;
+                                    case 'complete':
+                                      if (await confirmAction(context, 'إنجاز الطلب', 'تأكيد إنجاز طلب الوايت؟') && context.mounted) {
+                                        await cubit.markCompleted(r.id);
+                                      }
+                                      break;
+                                    case 'invoice':
+                                      await _openGenerateTankerInvoice(context, request: r);
+                                      break;
+                                    case 'delete':
+                                      if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟') && context.mounted) {
+                                        await cubit.delete(r.id);
+                                      }
+                                      break;
                                   }
-                                },
-                              ),
-                            ]),
+                                } catch (error) {
+                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(friendlyError(error))),
+                                  );
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (r.canEdit && can('Update:ServiceRequest')) const PopupMenuItem(value: 'edit', child: Text('تعديل الطلب')),
+                                if (r.canComplete && can('Update:ServiceRequest')) const PopupMenuItem(value: 'complete', child: Text('إنجاز الطلب')),
+                                if (r.canInvoice && can('Update:ServiceRequest')) const PopupMenuItem(value: 'invoice', child: Text('إصدار فاتورة')),
+                                if (r.canEdit && can('Delete:ServiceRequest')) const PopupMenuItem(value: 'delete', child: Text('حذف الطلب')),
+                              ],
+                            ) : null,
                           ),
                         );
                       },
