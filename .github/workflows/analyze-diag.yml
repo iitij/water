@@ -1,0 +1,45 @@
+name: Analyze diagnostics
+
+on:
+  push:
+    paths: ['.github/workflows/analyze-diag.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+
+      - name: Analyze and surface errors as annotations
+        shell: bash
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.log 2>&1 || true
+          echo "===== raw analyzer errors ====="
+          grep -E "error •" analyze.log | head -30 || true
+          n=0
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            clean=$(printf '%s' "$line" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^[[:space:]]*//' -e 's/%/%25/g')
+            echo "::error title=Analyzer::$clean"
+            n=$((n + 1))
+            if [ "$n" -ge 10 ]; then break; fi
+          done < <(grep -E "error •" analyze.log)
+          if grep -qE "error •" analyze.log; then
+            echo "Analyzer reported errors (see annotations)."
+            exit 1
+          fi
+          echo "No analyzer errors."
