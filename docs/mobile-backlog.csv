@@ -1,0 +1,76 @@
+﻿ID,Sprint,Module,Task,Owner,Support,Depends,Estimate_PD,Priority,Acceptance
+S0-01,S0,Repo,تنظيف الجذر من ملفات test/debug/temp ونقل ملفات SQL إلى docs/db,TL,,-,1,P0,جذر نظيف، .gitignore محدّث، لا ملفات تجريبية
+S0-02,S0,API,كتابة openapi.yaml لكل نقاط P0,TL,BE1,-,4,P0,Prism يعمل، spectral بلا أخطاء
+S0-03,S0,API,Demo seeders (200 مشترك/300 عداد/1200 قراءة/600 فاتورة),BE2,,-,2,P0,migrate:fresh --seed يعطي بيانات متسقة
+S0-04,S0,API,إصلاح G-01..G-07 و G-05/G-06,BE1,,-,4,P0,اختبارات خضراء + PDF محمي
+S0-05,S0,Mobile,هيكل Flutter + theme + router + DI,FD,,-,3,P0,التطبيق يفتح شاشتين
+S0-06,S0,DevOps,CI (API + Mobile) + flavors + Sentry,FD,DevOps,S0-05,2,P0,PR يبني ويختبر
+S0-07,S0,Design,Figma Tokens + 15 مكوّناً + 5 شاشات,UX,,-,4,P0,مراجعة TL معتمدة
+S0-08,S0,QA,خطة الاختبار + Test Matrix,QA,,-,2,P0,معتمدة من TL
+S0-09,S0,Docs,دليل قواعد العمل + جلسة تدريب,TL,,-,1,P0,الكل حضر
+S0-10,S0,DevOps,staging + Chromium/Browsershot + FCM,DevOps,,-,2,P0,PDF يعمل + إشعار تجريبي
+S1-01,S1,API,Auth v1: login/logout/me/profile/password/devices + rate limit,BE1,,S0-02,5,P0,اختبارات نجاح/فشل/429/401
+S1-02,S1,API,Bootstrap + app config + settings read,BE2,,S0-02,3,P0,استجابة تطابق العقد
+S1-03,S1,API,Dashboard summary/charts/attention,BE2,,S1-02,4,P0,أرقام مطابقة AdminController
+S1-04,S1,Mobile,Design System v1 (15 مكوّناً + goldens),FD,,S0-07,8,P0,كل مكوّن له golden + توثيق
+S1-05,S1,Mobile,ApiClient + interceptors + errors + secure storage,FD,,S0-05,5,P0,اختبارات unit للـ mapper
+S1-06,S1,Mobile,شاشات Splash/Onboarding/Login/Biometric + guards,FD,F1,S1-05,5,P0,E2E login يمر
+S1-07,S1,Mobile,Home لكل دور + skeletons + empty/error,F1,F2,S1-03,7,P0,3 أدوار تعمل
+S1-08,S1,Mobile,إشعارات محلية + هيكل مركز التنبيهات,F2,,S1-05,3,P1,إشعار يفتح شاشة
+S1-09,S1,QA,E2E: login + home,QA,,S1-06,3,P0,سيناريو ناجح على جهاز حقيقي
+S1-10,S1,Design,Design QA لشاشات السبرنت,UX,,S1-07,2,P1,قائمة ملاحظات مغلقة
+S2-01,S2,API,Subscribers API: list/detail/patch/statement/balance + فهارس,BE1,,S1-01,6,P0,كشف حساب مطابق + p95<350ms
+S2-02,S2,API,Meters API + QR lookup + period,BE1,,S2-01,4,P0,تحقق المسار الفريد
+S2-03,S2,API,Squares + Tariffs API,BE2,,S1-02,3,P1,CRUD كامل + اختبارات
+S2-04,S2,Mobile,Drift schema + DAOs + cache + FTS search,FD,,S1-05,7,P0,بحث محلي <200ms
+S2-05,S2,Mobile,ملف المشترك 360 (E2) + قائمة (E1) + إضافة (E3),F1,,S2-01,9,P0,8 تبويبات lazy
+S2-06,S2,Mobile,العدادات D1–D5 + QR + بطاقة,F1,,S2-02,6,P0,مسح QR يعمل
+S2-07,S2,Mobile,المربعات والتعرفة I1–I5,F2,,S2-03,5,P1,CRUD + تحقق
+S2-08,S2,Mobile,SearchBar/FilterSheet/EmptyState/PermissionGate,FD,,S1-04,4,P0,مكوّنات موثقة
+S2-09,S2,QA,Widget tests للشاشات الجديدة,QA,F1,S2-05,4,P0,تغطية الحالات الأربع
+S2-10,S2,API,تحديث OpenAPI + أمثلة,BE2,,S2-03,2,P0,spectral نظيف
+S3-01,S3,API,Readings API + صور + idempotency + bulk,BE1,,S2-02,8,P0,صورة محفوظة + تكرار لا يضاعف
+S3-02,S3,API,Sync pull/push + cursors + tombstones + conflicts,BE2,FD,S3-01,9,P0,اختبار تعارض
+S3-03,S3,Mobile,شاشة القراءة C4 + مسح QR C2/C3,F1,,S2-06,9,P0,إدخال <20s ورفض الأقل من السابق
+S3-04,S3,Mobile,نجاح القراءة + الفاتورة التلقائية C5/C6,F1,,S3-03,5,P0,تظهر بيانات الفاتورة
+S3-05,S3,Mobile,طابور Offline + SyncEngine + شاشة المزامنة,FD,,S2-04,8,P0,قراءة بلا شبكة تُزامن بلا تكرار
+S3-06,S3,Mobile,قائمة القراءات + إصدار جماعي C1/C7,F1,,S3-04,6,P1,100 قراءة <30s
+S3-07,S3,QA,E2E: قراءة أونلاين/أوفلاين/مكررة,QA,,S3-05,5,P0,السيناريوهات الثلاثة
+S3-08,S3,QA,Unit tests للتحقق من القراءة,QA,F1,S3-03,3,P0,تغطية 80%
+S3-09,S3,API,تحسين الأداء: إزالة N+1 + فهارس,BE1,BE2,S2-01,4,P1,p95 مطابق للوثيقة
+S3-10,S3,Design,Design QA + Microcopy,UX,,S3-04,2,P1,مراجعة مغلقة
+S4-01,S4,API,Invoices API: CRUD + 3 أنواع + bulk-issue,BE1,,S3-01,8,P0,كل نوع مُختبر
+S4-02,S4,API,PDF محمي + cache + share-link,BE1,DevOps,S4-01,5,P0,PDF <300ms مع cache
+S4-03,S4,Mobile,قائمة الفواتير + تفاصيل F1/F2,F1,,S4-01,8,P0,1000 فاتورة سلسة
+S4-04,S4,Mobile,Wizard إصدار الفواتير F3–F6,F1,,S4-03,9,P0,معاينة = نتيجة API
+S4-05,S4,Mobile,PDF/مشاركة/واتساب F7/F8,F2,,S4-02,5,P0,يفتح ويشارك PDF
+S4-06,S4,Mobile,خدمة الواتساب (رابط + قوالب),F2,,S1-05,4,P1,رابط يعمل + معاينة
+S4-07,S4,QA,E2E إصدار فاتورة + PDF,QA,,S4-04,4,P0,سيناريو كامل
+S4-08,S4,API,تحديث العقد + contract tests,BE2,,S4-01,3,P0,100% نقاط P0
+S4-09,S4,Mobile,تحسين أداء القوائم الطويلة,FD,F1,S4-03,3,P1,jank<1%
+S4-10,S4,PM,عرض للمالك + جمع ملاحظات,TL,,S4-04,2,P1,ملاحظات مسجلة
+S5-01,S5,API,Payments API + توزيع + PDF + واتساب,BE1,,S4-01,8,P0,دفع جزئي/زائد صحيح
+S5-02,S5,API,Fees + Service Requests API + bulk,BE1,,S4-01,5,P0,منع الفوترة المزدوجة
+S5-03,S5,Mobile,شاشة التحصيل G1–G4,F2,,S5-01,9,P0,تحصيل <25s
+S5-04,S5,Mobile,السندات + رسوم/وايت G5/G6 + H1–H6,F2,,S5-03,8,P0,PDF + حالات
+S5-05,S5,Mobile,تحصيل أوفلاين + idempotency,FD,F2,S3-05,7,P0,لا سند مكرر
+S5-06,S5,QA,E2E دفع كامل/جزئي/أوفلاين,QA,,S5-05,5,P0,الثلاثة تمر
+S5-07,S5,API,قفل + تدقيق + صلاحيات نهائية,BE1,,S5-01,4,P0,audit لكل عملية مالية
+S5-08,S5,Security,مراجعة أمنية شاملة (IDOR/PDF/rate),TL,BE1,S5-07,3,P0,لا ثغرة P0
+S5-09,S5,Design,Design QA للتحصيل,UX,,S5-03,2,P1,مغلق
+S6-01,S6,API,Users/Roles API + settings كامل + branding,BE2,,S2-03,8,P1,CRUD + رفع صور
+S6-02,S6,API,Reports + exports (job + download),BE2,,S6-01,7,P1,6 تقارير + xlsx
+S6-03,S6,API,Notifications + devices + FCM,BE2,,S1-02,4,P1,إشعار يصل مع deep link
+S6-04,S6,Mobile,المستخدمون/الأدوار/دفتر الأستاذ J1–J5,F2,,S6-01,6,P1,صلاحيات تظهر صحيحة
+S6-05,S6,Mobile,الإعدادات K1–K8,F2,,S6-01,9,P1,حفظ ذري + معاينة
+S6-06,S6,Mobile,التقارير L1–L7,F2,,S6-02,6,P1,تصدير ومشاركة
+S6-07,S6,Mobile,مركز المزامنة/الملف الشخصي/الأجهزة/المساعدة,F1,FD,S3-05,6,P1,كل شاشات M
+S6-08,S6,QA,Accessibility audit + إصلاحات,QA,FD,S6-07,4,P0,0 مخالفة AA في P0
+S6-09,S6,Mobile,Performance pass + Sentry + إصلاحات,FD,,S6-07,4,P0,ميزانيات 4.6.1
+S6-10,S6,DevOps,Release checklist + متاجر + privacy,DevOps,TL,S6-09,3,P0,حسابات جاهزة
+S7-01,S7,All,إصلاح عيوب P0/P1,All,,-,30,P0,0 عيب P0/P1
+S7-02,S7,QA,اختبار انحدار كامل,QA,,S7-01,8,P0,تقرير موقّع
+S7-03,S7,QA,اختبار 8 أجهزة + شبكات ضعيفة,QA,,S7-02,5,P0,مصفوفة مكتملة
+S7-04,S7,Docs,تدريب المستخدمين + دليل,TL,UX,S7-02,4,P1,دليل PDF + تسجيل
+S7-05,S7,DevOps,إصدار 10% → 50% → 100%,DevOps,,S7-03,3,P0,نشر ناجح
+S7-06,S7,All,مراقبة 48 ساعة + hotfix,All,,S7-05,8,P0,Crash-free ≥99.5%
