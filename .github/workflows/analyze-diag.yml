@@ -11,7 +11,7 @@ permissions:
 jobs:
   diag:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: mobile app
@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.log 2>&1 || true
-          echo "===== raw analyzer errors ====="
+          echo "===== analyzer errors ====="
           grep -E "error •" analyze.log | head -30 || true
           n=0
           while IFS= read -r line; do
@@ -36,10 +36,26 @@ jobs:
             clean=$(printf '%s' "$line" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^[[:space:]]*//' -e 's/%/%25/g')
             echo "::error title=Analyzer::$clean"
             n=$((n + 1))
-            if [ "$n" -ge 10 ]; then break; fi
+            if [ "$n" -ge 8 ]; then break; fi
           done < <(grep -E "error •" analyze.log)
           if grep -qE "error •" analyze.log; then
             echo "Analyzer reported errors (see annotations)."
             exit 1
           fi
           echo "No analyzer errors."
+
+      - name: Tests and surface failures as one annotation
+        if: always()
+        shell: bash
+        run: |
+          flutter test --reporter expanded > test.log 2>&1 || true
+          echo "===== failing tests ====="
+          grep -E "\[E\]" test.log | sed -e 's/\x1b\[[0-9;]*m//g' | sort -u | head -40 || true
+          summary=$(grep -E "\[E\]" test.log | sed -e 's/\x1b\[[0-9;]*m//g' \
+            | sed -E 's/^[0-9:]+ \+[0-9]+ -[0-9]+: //' | sort -u | paste -sd'|' -)
+          if [ -n "$summary" ]; then
+            safe=$(printf '%s' "$summary" | cut -c1-3500 | tr '\n' ' ')
+            echo "::error title=Failing tests::$safe"
+            exit 1
+          fi
+          echo "All tests passed."
