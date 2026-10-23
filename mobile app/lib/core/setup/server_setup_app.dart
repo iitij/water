@@ -94,7 +94,6 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
                     decoration: const InputDecoration(
                       labelText: 'API URL',
                       hintText: 'http://192.168.1.20:8000/api',
-                      border: OutlineInputBorder(),
                     ),
                     validator: (value) {
                       try {

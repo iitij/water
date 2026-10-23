@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../../subscribers/presentation/cubit/subscriber360_cubit.dart';
@@ -22,7 +26,7 @@ bool _hasSquaresCubit(BuildContext context) {
   }
 }
 
-/// SCR-04 — المربعات السكنية: قائمة + عدد المشتركين + CRUD + Master-Detail (تابلت).
+/// المربعات السكنية: قائمة + عدد المشتركين + CRUD + Master-Detail (تابلت).
 class SquaresScreen extends StatelessWidget {
   const SquaresScreen({super.key});
 
@@ -44,18 +48,23 @@ class SquaresScreen extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(square == null ? 'إضافة مربع سكني' : 'تعديل المربع'),
+        icon: const Icon(Icons.apartment_outlined, size: 32, color: AppColors.primary),
+        title: Text(square == null ? 'إضافة مربع سكني' : 'تعديل المربع', style: const TextStyle(fontWeight: FontWeight.w800)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'اسم المربع * (100 حرف كحد أقصى)', border: OutlineInputBorder()), maxLength: 100),
-          const SizedBox(height: 8),
-          TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'الوصف (3 أسطر)', border: OutlineInputBorder()), maxLines: 3),
+          AppTextField(controller: nameCtrl, label: 'اسم المربع *', maxLength: 100),
+          const SizedBox(height: 12),
+          AppTextField(controller: descCtrl, label: 'الوصف', maxLines: 3),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           FilledButton(
             onPressed: () {
               if (nameCtrl.text.trim().isEmpty) return;
-              cubit.save(id: square?.id, name: nameCtrl.text.trim(), description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim());
+              cubit.save(
+                id: square?.id,
+                name: nameCtrl.text.trim(),
+                description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+              );
               Navigator.pop(ctx);
             },
             child: const Text('حفظ'),
@@ -75,11 +84,11 @@ class _SquaresView extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('SCR-04 • المربعات السكنية'),
+            title: const Text('المربعات السكنية'),
             actions: [
               if (state.selectedIds.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.delete_sweep),
+                  icon: const Icon(Icons.delete_sweep_rounded),
                   tooltip: 'حذف جماعي',
                   onPressed: () async {
                     if (await confirmAction(context, 'حذف جماعي', 'حذف ${state.selectedIds.length} مربعاً؟')) {
@@ -93,7 +102,7 @@ class _SquaresView extends StatelessWidget {
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => SquaresScreen._showForm(context),
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_rounded),
             label: const Text('إضافة مربع'),
           ),
           body: MasterDetailLayout(
@@ -109,41 +118,75 @@ class _SquaresView extends StatelessWidget {
   }
 }
 
-class _MasterList extends StatelessWidget {
-  const _MasterList({required this.state});
+class _MasterList extends StatefulWidget {
+  const _MasterList({required this.state, super.key});
   final SquaresState state;
 
   @override
+  State<_MasterList> createState() => _MasterListState();
+}
+
+class _MasterListState extends State<_MasterList> {
+  late final TextEditingController _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     return Column(children: [
       Padding(
         padding: const EdgeInsets.all(12),
-        child: TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'بحث باسم المربع...', border: OutlineInputBorder()),
-          onChanged: (v) => context.read<SquaresCubit>().load(search: v),
+        child: SearchTextField(
+          query: _search.text,
+          hintText: 'بحث باسم المربع...',
+          onChanged: (v) {
+            _search.text = v;
+            context.read<SquaresCubit>().load(search: v);
+          },
         ),
       ),
       Expanded(
         child: state.loading
-            ? const Center(child: CircularProgressIndicator())
+            ? ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                children: List.generate(5, (_) => ShimmerSkeleton(height: 96)),
+              )
             : state.squares.isEmpty
                 ? const EmptyState(message: 'لا توجد مربعات سكنية')
                 : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     itemCount: state.squares.length,
                     itemBuilder: (_, i) {
                       final sq = state.squares[i];
                       final selected = state.selected?.id == sq.id;
-                      return Card(
-                        color: selected ? AppColors.primary.withValues(alpha: 0.08) : null,
-                        child: ListTile(
-                          leading: CircleAvatar(child: Text('#${sq.id}')),
-                          title: Text(sq.name),
-                          subtitle: Text(sq.description ?? ''),
-                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      return AdminCard(
+                        color: selected ? AppColors.primary.withValues(alpha: 0.06) : null,
+                        borderColor: selected ? AppColors.primary.withValues(alpha: .5) : null,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            CircleAvatar(child: Text('#${sq.id}')),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(sq.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 3),
+                                  Text(sq.description ?? '', style: const TextStyle(fontSize: 12, color: AppColors.neutral), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ),
                             StatusBadge(label: '${sq.subscribersCount} مشترك', color: AppColors.info),
-                            IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => SquaresScreen._showForm(context, square: sq)),
+                            const SizedBox(width: 4),
+                            IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => SquaresScreen._showForm(context, square: sq)),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
                               onPressed: () async {
                                 if (await confirmAction(context, 'حذف المربع', 'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.')) {
                                   if (context.mounted) {
@@ -152,9 +195,7 @@ class _MasterList extends StatelessWidget {
                                 }
                               },
                             ),
-                          ]),
-                          onTap: () => context.read<SquaresCubit>().select(sq),
-                          onLongPress: () => context.read<SquaresCubit>().toggleSelect(sq.id),
+                          ],
                         ),
                       );
                     },
@@ -206,24 +247,47 @@ class _SquareDetail extends StatelessWidget {
     final sq = state.selected!;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Container(
-        color: AppColors.primary,
-        padding: const EdgeInsets.all(16),
-        child: Text('مشتركو: ${sq.name} (${state.selectedSubscribers.length})',
-            style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.primaryDark, AppColors.primary],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+          ),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text('مشتركو «${sq.name}»', style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(999)),
+              child: Text('${state.selectedSubscribers.length}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
       ),
+      const SizedBox(height: 12),
       Expanded(
         child: state.selectedSubscribers.isEmpty
-            ? const EmptyState(message: 'لا يوجد مشتركون في هذا المربع بعد')
+            ? const EmptyState(message: 'لا يوجد مشتركون في هذا المربع بعد', icon: Icons.groups_outlined)
             : ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 itemCount: state.selectedSubscribers.length,
                 itemBuilder: (_, i) {
                   final s = state.selectedSubscribers[i];
-                  return ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(s.name),
-                    subtitle: Text(s.phone ?? ''),
-                    trailing: BalanceText(s.generalBalance),
-                    onTap: () => _openSubscriber(context, s),
+                  return AdminCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline_rounded, color: AppColors.primary),
+                      title: Text(s.name),
+                      subtitle: Text(s.phone ?? ''),
+                      trailing: BalanceText(s.generalBalance),
+                      onTap: () => _openSubscriber(context, s),
+                    ),
                   );
                 },
               ),

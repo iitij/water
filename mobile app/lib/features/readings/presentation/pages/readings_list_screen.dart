@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/widgets/filled_dropdown.dart';
 import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../data/models/reading.dart';
@@ -138,9 +140,12 @@ class _ReadingsListView extends StatelessWidget {
                 slivers: [
                   SliverToBoxAdapter(child: _filters(context, state, cubit)),
                   if (state.status == ReadingsLoadStatus.loading && state.readings.isEmpty)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: List.generate(6, (_) => ShimmerSkeleton(height: 96)),
+                      ),
                     )
                   else if (state.status == ReadingsLoadStatus.failure && state.readings.isEmpty)
                     SliverFillRemaining(
@@ -234,14 +239,9 @@ class _ReadingsListView extends StatelessWidget {
           const SizedBox(height: 10),
           LayoutBuilder(
             builder: (context, constraints) {
-              final squareDropdown = DropdownButtonFormField<int?>(
+              final squareDropdown = FilledDropdown<int?>(
                 value: state.squareFilter,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'المربع السكني',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+                label: 'المربع السكني',
                 items: [
                   const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
                   ...state.squares.map((square) => DropdownMenuItem<int?>(
@@ -293,12 +293,12 @@ class _ReadingsListView extends StatelessWidget {
           if (state.status == ReadingsLoadStatus.loading && state.readings.isNotEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
+              child: ShimmerSkeleton(height: 4),
             ),
           if (state.isMutating)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
+              child: ShimmerSkeleton(height: 4),
             ),
         ],
       ),

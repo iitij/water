@@ -48,7 +48,6 @@ class WhatsAppTemplateEditor extends StatelessWidget {
           decoration: const InputDecoration(
             labelText: 'نص القالب',
             alignLabelWithHint: true,
-            border: OutlineInputBorder(),
           ),
           validator: (value) =>
               value == null || value.trim().isEmpty ? 'نص القالب مطلوب' : null,

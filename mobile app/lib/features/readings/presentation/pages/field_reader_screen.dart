@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../../core/widgets/filled_dropdown.dart';
 import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../../meters/presentation/cubit/meters_cubit.dart';
@@ -82,15 +84,10 @@ class _FieldReaderView extends StatelessWidget {
                             onChanged: cubit.setQuery,
                           ),
                           const SizedBox(height: 10),
-                          DropdownButtonFormField<int?>(
+                          FilledDropdown<int?>(
                             value: state.squareFilter,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'فلترة بالمربع السكني',
-                              prefixIcon: Icon(Icons.location_city_outlined),
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
+                            label: 'فلترة بالمربع السكني',
+                            prefixIcon: const Icon(Icons.location_city_outlined),
                             items: [
                               const DropdownMenuItem<int?>(
                                 value: null,
@@ -106,16 +103,19 @@ class _FieldReaderView extends StatelessWidget {
                           if (state.status == MetersLoadStatus.loading && state.meters.isNotEmpty)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),
-                              child: LinearProgressIndicator(minHeight: 2),
+                              child: ShimmerSkeleton(height: 4),
                             ),
                         ],
                       ),
                     ),
                   ),
                   if (state.status == MetersLoadStatus.loading && state.meters.isEmpty)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: List.generate(6, (_) => ShimmerSkeleton(height: 230)),
+                      ),
                     )
                   else if (state.meters.isEmpty)
                     SliverFillRemaining(

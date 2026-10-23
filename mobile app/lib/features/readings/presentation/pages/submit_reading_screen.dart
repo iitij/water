@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../data/models/reading.dart';
 import '../../data/services/reading_invoice_actions_service.dart';
@@ -345,7 +346,12 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       decoration: const InputDecoration(
                         labelText: 'تاريخ القراءة الفعلي',
                         prefixIcon: Icon(Icons.calendar_month_outlined),
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(16)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(16)),
+                        ),
                       ),
                       child: Text(_formatDate(_readingDate)),
                     ),
@@ -361,7 +367,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       hintText: 'أدخل الرقم الظاهر على العداد',
                       prefixIcon: const Icon(Icons.speed_outlined),
                       suffixText: 'وحدة',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onChanged: (_) => setState(() {}),
                     validator: (value) {
@@ -654,7 +660,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       ),
                     ],
                   ),
-                  if (_isRunningInvoiceAction) const LinearProgressIndicator(),
+                  if (_isRunningInvoiceAction) const ShimmerSkeleton(height: 4),
                 ],
                 const SizedBox(height: 10),
                 Row(

@@ -15,6 +15,7 @@ import '../../domain/accounting/finance_enums.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../../core/widgets/finance_badges.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 
 /// إنشاء/تعديل يدوي لفاتورة — يطابق مخطط `InvoiceResource::form` حقلاً حقلاً:
 /// بيانات الفاتورة (مشترك/رقم مولَّد/تاريخ/حالة)، تفاصيل المبالغ السبعة مع حساب
@@ -463,7 +464,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
             onPressed: _searchSubscribers,
           ),
         ),
-        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        if (_loading) const ShimmerSkeleton(height: 4),
         if (_results.isNotEmpty)
           Container(
             constraints: const BoxConstraints(maxHeight: 220),

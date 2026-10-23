@@ -241,7 +241,7 @@ class _UsersView extends StatelessWidget {
                       TextFormField(
                         controller: nameController,
                         validator: (value) => value == null || value.trim().isEmpty ? 'الاسم مطلوب' : null,
-                        decoration: const InputDecoration(labelText: 'الاسم', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'الاسم'),
                       ),
                       const SizedBox(height: 12),
                       Directionality(
@@ -255,7 +255,7 @@ class _UsersView extends StatelessWidget {
                                 ? null
                                 : 'أدخل بريداً إلكترونياً صالحاً';
                           },
-                          decoration: const InputDecoration(labelText: 'Email address', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(labelText: 'Email address'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -275,7 +275,6 @@ class _UsersView extends StatelessWidget {
                           },
                           decoration: InputDecoration(
                             labelText: user == null ? 'كلمة المرور' : 'كلمة مرور جديدة (اختياري)',
-                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               onPressed: () => setState(() => obscurePassword = !obscurePassword),
                               icon: Icon(obscurePassword ? Icons.visibility : Icons.visibility_off),
@@ -363,13 +362,12 @@ class _UsersFilters extends StatelessWidget {
             decoration: const InputDecoration(
               labelText: 'بحث بالاسم أو البريد أو الدور',
               prefixIcon: Icon(Icons.search_rounded),
-              border: OutlineInputBorder(),
             ),
           );
           final filter = DropdownButtonFormField<String>(
             key: ValueKey(state.roleFilter),
             initialValue: state.roleFilter,
-            decoration: const InputDecoration(labelText: 'فلترة بالدور', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'فلترة بالدور'),
             items: [
               const DropdownMenuItem(child: Text('كل الأدوار')),
               for (final role in state.availableRoles)

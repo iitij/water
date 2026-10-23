@@ -8,6 +8,11 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/widgets/app_numeric_field.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
@@ -62,20 +67,16 @@ Future<bool> launchDefaultSubscriberPayment(
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text('تحصيل دفعة — ${subscriber.name}'),
-      content: TextField(
+      icon: const Icon(Icons.payments_rounded, size: 32, color: AppColors.success),
+      title: Text('تحصيل دفعة — ${subscriber.name}', style: const TextStyle(fontWeight: FontWeight.w800)),
+      content: AppNumericField(
         controller: amountCtrl,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          labelText: 'المبلغ (ريال)',
-          border: OutlineInputBorder(),
-        ),
+        label: 'المبلغ (ريال)',
+        suffixText: 'ريال',
+        autofocus: true,
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('إلغاء'),
-        ),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
         FilledButton(
           onPressed: () async {
             final amount = double.tryParse(normalizeDigits(amountCtrl.text));
@@ -105,7 +106,7 @@ Future<bool> launchDefaultSubscriberPayment(
   return collected;
 }
 
-/// SCR-05 — قائمة المشتركين: بحث + فلترة مربع/حالة + رصيد ملون + 3 أزرار سريعة.
+/// قائمة المشتركين: بحث + فلترة مربع/حالة + رصيد ملون + 3 أزرار سريعة.
 class SubscribersScreen extends StatelessWidget {
   const SubscribersScreen({super.key, this.onOpen360, this.onCollectPayment});
 
@@ -233,10 +234,10 @@ class _SubscribersView extends StatelessWidget {
     return BlocBuilder<SubscribersCubit, SubscribersState>(
       builder: (context, state) {
         return Scaffold(
-          appBar: AppBar(title: const Text('SCR-05 • المشتركون')),
+          appBar: AppBar(title: const Text('المشتركون')),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _handleOpenForm(context),
-            icon: const Icon(Icons.person_add),
+            icon: const Icon(Icons.person_add_rounded),
             label: const Text('مشترك جديد'),
           ),
           body: MasterDetailLayout(
@@ -255,53 +256,105 @@ class _SubscribersView extends StatelessWidget {
   }
 
   Widget _list(BuildContext context, SubscribersState state) {
+    final cubit = context.read<SubscribersCubit>();
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        child: TextField(
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'بحث بالاسم / الهاتف / كود العداد...', border: OutlineInputBorder()),
-          onChanged: context.read<SubscribersCubit>().search,
+        child: SearchTextField(
+          query: state.query,
+          hintText: 'بحث بالاسم / الهاتف / كود العداد...',
+          onChanged: cubit.search,
         ),
       ),
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(children: [
-          DropdownButton<int?>(
-            value: state.squareId,
-            hint: const Text('كل المربعات'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('كل المربعات')),
-              for (final sq in state.squares) DropdownMenuItem(value: sq.id, child: Text(sq.name)),
-            ],
-            onChanged: context.read<SubscribersCubit>().filterSquare,
+          SizedBox(
+            width: 170,
+            child: _FilterSelect<int?>(
+              hint: 'كل المربعات',
+              value: state.squareId,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('كل المربعات')),
+                for (final sq in state.squares) DropdownMenuItem(value: sq.id, child: Text(sq.name)),
+              ],
+              onChanged: cubit.filterSquare,
+            ),
           ),
           const SizedBox(width: 12),
-          DropdownButton<SubscriberStatus?>(
-            value: state.status,
-            hint: const Text('كل الحالات'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('كل الحالات')),
-              for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label)),
-            ],
-            onChanged: context.read<SubscribersCubit>().filterStatus,
+          SizedBox(
+            width: 170,
+            child: _FilterSelect<SubscriberStatus?>(
+              hint: 'كل الحالات',
+              value: state.status,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('كل الحالات')),
+                for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label)),
+              ],
+              onChanged: cubit.filterStatus,
+            ),
           ),
         ]),
       ),
-      if (state.loading) const LinearProgressIndicator(),
       Expanded(
-        child: state.subscribers.isEmpty && !state.loading
-            ? const EmptyState(message: 'لا يوجد مشتركون مطابقون')
-            : ListView.builder(
-                itemCount: state.subscribers.length,
-                itemBuilder: (_, i) => _SubscriberCard(
-                  subscriber: state.subscribers[i],
-                  onOpen360: (s) => _handleOpen360(context, s),
-                  onCollectPayment: onCollectPayment,
-                ),
-              ),
+        child: state.loading
+            ? ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                children: List.generate(6, (_) => ShimmerSkeleton(height: 118)),
+              )
+            : state.subscribers.isEmpty
+                ? const EmptyState(message: 'لا يوجد مشتركون مطابقون')
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    itemCount: state.subscribers.length,
+                    itemBuilder: (_, i) => _SubscriberCard(
+                      subscriber: state.subscribers[i],
+                      onOpen360: (s) => _handleOpen360(context, s),
+                      onCollectPayment: onCollectPayment,
+                    ),
+                  ),
       ),
     ]);
+  }
+}
+
+/// dropdown معلم عصري يطابق ثيم الإدخالات (مستطيل ممتلئ بزوايا دائرية).
+class _FilterSelect<T> extends StatelessWidget {
+  const _FilterSelect({
+    required this.hint,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String hint;
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      isDense: true,
+      isExpanded: true,
+      hint: Text(hint),
+      items: items,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        isCollapsed: true,
+        filled: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.7),
+        ),
+        floatingLabelBehavior: FloatingLabelBehavior.never,
+      ),
+    );
   }
 }
 
@@ -314,58 +367,78 @@ class _SubscriberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = subscriber;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text('#${s.id} • ${s.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-            StatusBadge(
-              label: s.status.label,
-              color: switch (s.status) {
-                SubscriberStatus.active => AppColors.success,
-                SubscriberStatus.suspended => AppColors.warning,
-                SubscriberStatus.inactive => AppColors.danger,
-              },
-            ),
-          ]),
-          const SizedBox(height: 4),
-          Text('${s.squareName ?? ''} • ${s.metersCount} عداد • بدء الاشتراك: ${s.subscriptionStartDate ?? '-'}',
-              style: const TextStyle(color: AppColors.neutral, fontSize: 12)),
-          if (s.phone != null)
-            Directionality(textDirection: TextDirection.ltr, child: Text(s.phone!, style: const TextStyle(fontSize: 13))),
-          const SizedBox(height: 6),
-          Row(children: [
-            const Text('الرصيد الصافي: '),
-            BalanceText(s.netBalance),
-            const Spacer(),
-            if (s.debitBalance > 0)
-              Text('مدين: ${CurrencyFormatter.format(s.debitBalance)}', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
-          ]),
-          const Divider(),
-          // الأزرار السريعة الثلاثة (SCR-05)
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            TextButton.icon(
-              icon: const Icon(Icons.payments, color: AppColors.success),
-              label: const Text('تحصيل دفعة'),
-              onPressed: () => _collect(context),
-            ),
-            TextButton.icon(
-              icon: const Icon(Icons.local_shipping, color: AppColors.info),
-              label: const Text('طلب وايت'),
-              onPressed: () => _quickTanker(context),
-            ),
-            TextButton.icon(
-              icon: const Icon(Icons.folder_open, color: AppColors.primary),
-              label: const Text('ملف 360°'),
-              onPressed: () => onOpen360(s),
-            ),
-          ]),
+    return AdminCard(
+      padding: const EdgeInsets.all(15),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('#${s.id} • ${s.name}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+          StatusBadge(
+            label: s.status.label,
+            color: switch (s.status) {
+              SubscriberStatus.active => AppColors.success,
+              SubscriberStatus.suspended => AppColors.warning,
+              SubscriberStatus.inactive => AppColors.danger,
+            },
+          ),
         ]),
-      ),
+        const SizedBox(height: 6),
+        Text('${s.squareName ?? ''} • ${s.metersCount} عداد • بدء الاشتراك: ${s.subscriptionStartDate ?? '-'}',
+            style: TextStyle(color: AppColors.neutral, fontSize: 12)),
+        if (s.phone != null)
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(s.phone!, style: const TextStyle(fontSize: 13)),
+          ),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Text('الرصيد الصافي: '),
+          BalanceText(s.netBalance),
+          const Spacer(),
+          if (s.debitBalance > 0)
+            Text('مدين: ${CurrencyFormatter.format(s.debitBalance)}', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+        ]),
+        const SizedBox(height: 12),
+        Divider(color: context.theme.dividerColor.withValues(alpha: .6)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilledButton.tonalIcon(
+              style: _quickActionStyle,
+              onPressed: () => _collect(context),
+              icon: const Icon(Icons.payments_outlined, size: 18),
+              label: const Text('تحصيل دفعة'),
+            ),
+            FilledButton.tonalIcon(
+              style: _quickActionStyle,
+              onPressed: () => _quickTanker(context),
+              icon: const Icon(Icons.local_shipping_outlined, size: 18),
+              label: const Text('طلب وايت'),
+            ),
+            FilledButton.tonalIcon(
+              style: _quickActionStyle,
+              onPressed: () => onOpen360(s),
+              icon: const Icon(Icons.folder_open_outlined, size: 18),
+              label: const Text('ملف 360°'),
+            ),
+          ],
+        ),
+      ]),
     );
   }
+
+  static final ButtonStyle _quickActionStyle = ButtonStyle(
+    minimumSize: const WidgetStateProperty.resolveWith<Size>((states) => Size.zero),
+    padding: const WidgetStateProperty.resolveWith<EdgeInsets>(
+      (states) => EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    ),
+    textStyle: const WidgetStateProperty.resolveWith<TextStyle>(
+      (states) => TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    ),
+    iconSize: const WidgetStateProperty.resolveWith<double>((states) => 18),
+  );
 
   Future<void> _collect(BuildContext context) async {
     if (onCollectPayment != null) return onCollectPayment!(context, subscriber);
@@ -380,7 +453,7 @@ class _SubscriberCard extends StatelessWidget {
     }
   }
 
-  /// طلب وايت سريع: السعر الافتراضي = آخر طلب للمشترك أو 5000 (SCR-05 / الخطة).
+  /// طلب وايت سريع: السعر الافتراضي = آخر طلب للمشترك أو 5000.
   Future<void> _quickTanker(BuildContext context) async {
     final cubit = context.read<SubscribersCubit>();
     final requestsCubit = context.read<ServiceRequestsCubit>();
@@ -391,11 +464,12 @@ class _SubscriberCard extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('طلب وايت سريع — ${subscriber.name}'),
+        icon: const Icon(Icons.local_shipping_rounded, size: 32, color: AppColors.info),
+        title: Text('طلب وايت سريع — ${subscriber.name}', style: const TextStyle(fontWeight: FontWeight.w800)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر الوايت (ريال)', border: OutlineInputBorder())),
-          const SizedBox(height: 8),
-          TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'ملاحظات', border: OutlineInputBorder())),
+          AppNumericField(controller: amountCtrl, label: 'سعر الوايت (ريال)', suffixText: 'ريال'),
+          const SizedBox(height: 10),
+          AppTextField(controller: notesCtrl, label: 'ملاحظات', maxLines: 2),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
@@ -429,19 +503,21 @@ class _SubscriberPeek extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(subscriber.name, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text('المربع: ${subscriber.squareName ?? '-'}'),
-          Text('الهاتف: ${subscriber.phone ?? '-'}'),
-          const SizedBox(height: 8),
-          Row(children: [const Text('الرصيد الصافي: '), BalanceText(subscriber.netBalance, fontSize: 18)]),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => onOpen360(subscriber),
-            icon: const Icon(Icons.folder_open),
-            label: const Text('فتح الملف المالي الشامل 360°'),
-          ),
-        ]),
+        child: AdminCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(subscriber.name, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            Text('المربع: ${subscriber.squareName ?? '-'}'),
+            Text('الهاتف: ${subscriber.phone ?? '-'}'),
+            const SizedBox(height: 8),
+            Row(children: [const Text('الرصيد الصافي: '), BalanceText(subscriber.netBalance, fontSize: 18)]),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => onOpen360(subscriber),
+              icon: const Icon(Icons.folder_open),
+              label: const Text('فتح الملف المالي الشامل 360°'),
+            ),
+          ]),
+        ),
       );
 }

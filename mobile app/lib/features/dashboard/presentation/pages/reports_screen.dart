@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
+import '../../../core/widgets/shimmer_skeleton.dart';
 import '../../domain/entities/dashboard_entities.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../cubit/reports_cubit.dart';
@@ -71,7 +72,7 @@ class _ReportsView extends StatelessWidget {
                       if (state.status == ReportsRequestStatus.loading)
                         const Padding(
                           padding: EdgeInsets.only(top: 12),
-                          child: LinearProgressIndicator(),
+                          child: ShimmerSkeleton(height: 8),
                         ),
                       if (snapshot.isFromCache)
                         Padding(

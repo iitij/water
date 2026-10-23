@@ -24,6 +24,7 @@ class AppTheme {
       tertiary: AppColors.brandAmber,
       error: AppColors.danger,
       surface: surface,
+      outlineVariant: border,
     );
 
     return ThemeData(
@@ -45,6 +46,69 @@ class AppTheme {
         errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppColors.danger)),
         focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppColors.danger, width: 1.7)),
         labelStyle: TextStyle(color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF526477)),
+        hintStyle: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF94A3B8)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(50),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(50),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(50),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        color: surface,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titleTextStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: scheme.onSurface,
+        ),
+        contentTextStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 15,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: border,
+        thickness: 1,
+        space: 1,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
@@ -53,10 +117,13 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: AppTypography.textTheme(brightness).titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(bottomLeft: Radius.circular(0), bottomRight: Radius.circular(0)),
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        indicatorColor: AppColors.primary.withOpacity(isDark ? .28 : .12),
+        indicatorColor: AppColors.primary.withValues(alpha: isDark ? .28 : .12),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
           fontFamily: AppTypography.fontFamily,
           fontSize: 12,
@@ -66,6 +133,15 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          color: scheme.onInverseSurface,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        labelStyle: TextStyle(fontFamily: AppTypography.fontFamily),
       ),
     );
   }

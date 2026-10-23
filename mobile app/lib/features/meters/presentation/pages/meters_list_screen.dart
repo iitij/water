@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/widgets/filled_dropdown.dart';
 import '../../../../core/widgets/search_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
 import '../../../readings/domain/readings_repository.dart';
 import '../../../readings/presentation/widgets/record_reading_sheet.dart';
@@ -88,9 +90,12 @@ class _MetersListView extends StatelessWidget {
                 slivers: [
                   SliverToBoxAdapter(child: _filters(context, state, cubit)),
                   if (state.status == MetersLoadStatus.loading && state.meters.isEmpty)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: List.generate(6, (_) => ShimmerSkeleton(height: 230)),
+                      ),
                     )
                   else if (state.status == MetersLoadStatus.failure && state.meters.isEmpty)
                     SliverFillRemaining(
@@ -171,14 +176,9 @@ class _MetersListView extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final children = [
-                DropdownButtonFormField<int?>(
+                FilledDropdown<int?>(
                   value: state.squareFilter,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'المربع السكني',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
+                  label: 'المربع السكني',
                   items: [
                     const DropdownMenuItem<int?>(value: null, child: Text('كل المربعات')),
                     ...state.squares.map((square) => DropdownMenuItem<int?>(
@@ -188,14 +188,9 @@ class _MetersListView extends StatelessWidget {
                   ],
                   onChanged: cubit.setSquareFilter,
                 ),
-                DropdownButtonFormField<String?>(
+                FilledDropdown<String?>(
                   value: state.statusFilter,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'الحالة',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
+                  label: 'الحالة',
                   items: const [
                     DropdownMenuItem<String?>(value: null, child: Text('كل الحالات')),
                     DropdownMenuItem<String?>(value: 'active', child: Text('نشط')),
@@ -219,7 +214,7 @@ class _MetersListView extends StatelessWidget {
             },
           ),
           if (state.status == MetersLoadStatus.loading && state.meters.isNotEmpty)
-            const LinearProgressIndicator(minHeight: 2),
+            const ShimmerSkeleton(height: 4),
         ],
       ),
     );

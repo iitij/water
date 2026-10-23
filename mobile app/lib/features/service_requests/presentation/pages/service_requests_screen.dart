@@ -7,6 +7,10 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/widgets/app_numeric_field.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
@@ -23,8 +27,7 @@ bool _hasServiceRequestsCubit(BuildContext context) {
   }
 }
 
-/// SCR-20 — طلبات الوايت: Sum Summarizer + فلتر حالة/تاريخ (created_from..until)
-/// + شارة 📝 + زر إنجاز (mark_completed) + إصدار فاتورة وايت.
+/// طلبات الوايت: Sum Summarizer + فلتر حالة/تاريخ + شارة 📝 + إنجاز + إصدار فاتورة وايت.
 class ServiceRequestsScreen extends StatelessWidget {
   const ServiceRequestsScreen({super.key, this.onAddRequest, this.onGenerateInvoice});
   final VoidCallback? onAddRequest;
@@ -95,7 +98,8 @@ class _ServiceRequestsView extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('طلب وايت جديد'),
+        icon: const Icon(Icons.local_shipping_rounded, size: 32, color: AppColors.info),
+        title: const Text('طلب وايت جديد', style: TextStyle(fontWeight: FontWeight.w800)),
         content: SizedBox(
           width: 420,
           child: SingleChildScrollView(
@@ -117,31 +121,15 @@ class _ServiceRequestsView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'سعر الوايت (ريال) *',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: notesCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ملاحظات',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
+                AppNumericField(controller: amountCtrl, label: 'سعر الوايت (ريال) *', suffixText: 'ريال'),
+                const SizedBox(height: 10),
+                AppTextField(controller: notesCtrl, label: 'ملاحظات', maxLines: 2),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           FilledButton(
             onPressed: () async {
               final sub = pickedSub;
@@ -167,104 +155,154 @@ class _ServiceRequestsView extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('SCR-20 • طلبات الوايت'),
+            title: const Text('طلبات الوايت'),
             actions: [
               IconButton(
                 icon: const Icon(Icons.receipt_long_outlined),
-                tooltip: 'إصدار فاتورة وايت (SCR-16)',
+                tooltip: 'إصدار فاتورة وايت',
                 onPressed: () => _openGenerateTankerInvoice(context),
               ),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _defaultAddRequest(context),
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_rounded),
             label: const Text('طلب وايت جديد'),
           ),
           body: Column(children: [
             Padding(
               padding: const EdgeInsets.all(12),
               child: SumBar(items: [
-                (label: 'إجمالي مبالغ الطلبات المعروضة', value: state.totalSum, color: Colors.white),
+                (label: 'إجمالي مبالغ الطلبات المعروضة', value: state.totalSum, color: AppColors.primaryDark),
               ]),
             ),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(children: [
-                ChoiceChip(label: const Text('الكل'), selected: state.status == null, onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(null)),
+                FilterChip(
+                  label: const Text('الكل'),
+                  selected: state.status == null,
+                  onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(null),
+                ),
                 for (final s in TankerStatus.values)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(start: 8),
-                    child: ChoiceChip(label: Text(s.label), selected: state.status == s, onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(s)),
+                    child: FilterChip(
+                      label: Text(s.label),
+                      selected: state.status == s,
+                      onSelected: (_) => context.read<ServiceRequestsCubit>().filterStatus(s),
+                    ),
                   ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.date_range),
+                  icon: const Icon(Icons.date_range_rounded),
                   label: Text(state.from == null ? 'نطاق التاريخ' : '${state.from} ← ${state.until}'),
                   onPressed: () => _pickRange(context, state),
                 ),
                 if (state.from != null)
-                  IconButton(icon: const Icon(Icons.clear), onPressed: () => context.read<ServiceRequestsCubit>().filterRange(null, null)),
+                  IconButton(icon: const Icon(Icons.clear_rounded), onPressed: () => context.read<ServiceRequestsCubit>().filterRange(null, null)),
               ]),
             ),
-            if (state.loading) const LinearProgressIndicator(),
             Expanded(
-              child: state.requests.isEmpty && !state.loading
-                  ? const EmptyState(message: 'لا توجد طلبات وايت مطابقة', icon: Icons.local_shipping)
-                  : ListView.builder(
-                      itemCount: state.requests.length,
-                      itemBuilder: (_, i) {
-                        final r = state.requests[i];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          child: ListTile(
-                            leading: const Icon(Icons.local_shipping, color: AppColors.info),
-                            title: Text('${r.subscriberName ?? 'مشترك #${r.subscriberId}'}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}'),
-                            subtitle: Text('${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}${r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}${r.hasNote ? '\n${r.notes}' : ''}'),
-                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                              StatusBadge(
-                                label: r.status.label,
-                                color: switch (r.status) {
-                                  TankerStatus.pending => AppColors.warning,
-                                  TankerStatus.completed => AppColors.info,
-                                  TankerStatus.invoiced => AppColors.primary,
-                                  TankerStatus.paid => AppColors.success,
-                                },
+              child: state.loading
+                  ? ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      children: List.generate(6, (_) => ShimmerSkeleton(height: 96)),
+                    )
+                  : state.requests.isEmpty
+                      ? const EmptyState(message: 'لا توجد طلبات وايت مطابقة', icon: Icons.local_shipping)
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          itemCount: state.requests.length,
+                          itemBuilder: (_, i) {
+                            final r = state.requests[i];
+                            return AdminCard(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.info.withValues(alpha: .12),
+                                      borderRadius: BorderRadius.circular(13),
+                                    ),
+                                    child: const Icon(Icons.local_shipping_rounded, color: AppColors.info, size: 21),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('${r.subscriberName ?? 'مشترك #${r.subscriberId}'}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}'),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          '${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}${r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}',
+                                          style: TextStyle(fontSize: 12, color: AppColors.neutral),
+                                        ),
+                                        if (r.hasNote)
+                                          Text(r.notes ?? '', style: const TextStyle(fontSize: 12, color: AppColors.neutral)),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      StatusBadge(
+                                        label: r.status.label,
+                                        color: switch (r.status) {
+                                          TankerStatus.pending => AppColors.warning,
+                                          TankerStatus.completed => AppColors.info,
+                                          TankerStatus.invoiced => AppColors.primary,
+                                          TankerStatus.paid => AppColors.success,
+                                        },
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 4,
+                                        runSpacing: 4,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          if (r.canComplete)
+                                            IconButton(
+                                              icon: const Icon(Icons.check_circle_rounded, size: 20, color: AppColors.success),
+                                              tooltip: 'إنجاز',
+                                              onPressed: () async {
+                                                if (await confirmAction(context, 'إنجاز الطلب', 'تأكيد إنجاز طلب الوايت بقيمة ${r.amount}؟')) {
+                                                  if (context.mounted) {
+                                                    context.read<ServiceRequestsCubit>().markCompleted(r.id);
+                                                  }
+                                                }
+                                              },
+                                            ),
+                                          if (r.canInvoice)
+                                            IconButton(
+                                              icon: const Icon(Icons.receipt_long_rounded, size: 20, color: AppColors.primary),
+                                              tooltip: 'إصدار فاتورة وايت',
+                                              onPressed: () => _openGenerateTankerInvoice(context, request: r),
+                                            ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
+                                            tooltip: 'حذف',
+                                            onPressed: () async {
+                                              if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟')) {
+                                                if (context.mounted) {
+                                                  context.read<ServiceRequestsCubit>().delete(r.id);
+                                                }
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              if (r.canComplete)
-                                IconButton(
-                                  icon: const Icon(Icons.check_circle, color: AppColors.success),
-                                  tooltip: 'إنجاز (mark_completed)',
-                                  onPressed: () async {
-                                    if (await confirmAction(context, 'إنجاز الطلب', 'تأكيد إنجاز طلب الوايت بقيمة ${r.amount}؟')) {
-                                      if (context.mounted) {
-                                        context.read<ServiceRequestsCubit>().markCompleted(r.id);
-                                      }
-                                    }
-                                  },
-                                ),
-                              if (r.canInvoice)
-                                IconButton(
-                                  icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-                                  tooltip: 'إصدار فاتورة وايت',
-                                  onPressed: () => _openGenerateTankerInvoice(context, request: r),
-                                ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                onPressed: () async {
-                                  if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟')) {
-                                    if (context.mounted) {
-                                      context.read<ServiceRequestsCubit>().delete(r.id);
-                                    }
-                                  }
-                                },
-                              ),
-                            ]),
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
             ),
           ]),
         );

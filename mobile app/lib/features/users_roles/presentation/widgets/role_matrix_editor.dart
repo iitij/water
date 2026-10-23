@@ -87,7 +87,6 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                               : null,
                       decoration: const InputDecoration(
                         labelText: 'اسم الدور (name)',
-                        border: OutlineInputBorder(),
                       ),
                     );
                     final guard = TextFormField(
@@ -96,7 +95,6 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                       textDirection: TextDirection.ltr,
                       decoration: const InputDecoration(
                         labelText: 'Guard',
-                        border: OutlineInputBorder(),
                       ),
                     );
                     final selectAll = SwitchListTile(

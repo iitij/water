@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../core/fouad/fouad_module.dart';
+import '../../core/widgets/app_text_field.dart';
+import '../../core/widgets/shimmer_skeleton.dart';
 import '../../features/subscribers/domain/entities/subscriber.dart';
 import '../../features/subscribers/domain/repositories/subscribers_repository.dart';
 
@@ -26,6 +29,7 @@ class _SubscriberMeterSelectorWidgetState extends State<SubscriberMeterSelectorW
   List<MeterBalance> _meters = [];
   Subscriber? _selected;
   bool _loading = false;
+  final TextEditingController _searchController = TextEditingController();
 
   SubscribersRepository get _repo =>
       widget.repository ?? FouadModule.deps.subscribers;
@@ -71,15 +75,14 @@ class _SubscriberMeterSelectorWidgetState extends State<SubscriberMeterSelectorW
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          decoration: const InputDecoration(
-            labelText: 'بحث عن مشترك (الاسم / الهاتف / كود العداد)',
-            prefixIcon: Icon(Icons.search),
-            border: OutlineInputBorder(),
-          ),
+        AppTextField(
+          controller: _searchController,
+          label: 'بحث عن مشترك (الاسم / الهاتف / كود العداد)',
+          prefixIcon: Icons.search,
           onChanged: _search,
         ),
-        if (_loading) const LinearProgressIndicator(),
+        const SizedBox(height: 8),
+        if (_loading) const ShimmerSkeleton(height: 4),
         Flexible(
           child: ListView.builder(
             shrinkWrap: true,

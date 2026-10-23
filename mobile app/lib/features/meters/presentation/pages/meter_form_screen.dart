@@ -4,6 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/filled_dropdown.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
 
@@ -253,12 +256,30 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
       child: Scaffold(
         appBar: AppBar(title: Text(widget.meter == null ? 'إضافة عداد' : 'تعديل العداد')),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  SizedBox(height: 60, child: ShimmerSkeleton(radius: 16)),
+                  SizedBox(height: 12),
+                  SizedBox(height: 60, child: ShimmerSkeleton(radius: 16)),
+                  SizedBox(height: 12),
+                  SizedBox(height: 60, child: ShimmerSkeleton(radius: 16)),
+                  SizedBox(height: 20),
+                  SizedBox(height: 60, child: ShimmerSkeleton(radius: 16)),
+                ],
+              )
             : _loadError != null
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Text(_loadError!, textAlign: TextAlign.center),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.wifi_off_outlined, size: 48, color: AppColors.danger),
+                          const SizedBox(height: 14),
+                          Text(_loadError!, textAlign: TextAlign.center),
+                        ],
+                      ),
                     ),
                   )
                 : Form(
@@ -273,14 +294,11 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                               padding: const EdgeInsets.all(16),
                               children: [
                                 _sectionHeader(context, 'بيانات العداد'),
-                                TextFormField(
+                                AppTextField(
                                   controller: _uniqueCodeController,
+                                  label: 'رقم العداد',
+                                  prefixIcon: Icons.speed_outlined,
                                   textDirection: TextDirection.ltr,
-                                  decoration: const InputDecoration(
-                                    labelText: 'رقم العداد',
-                                    prefixIcon: Icon(Icons.speed_outlined),
-                                    border: OutlineInputBorder(),
-                                  ),
                                   textInputAction: TextInputAction.next,
                                   validator: (value) => value == null || value.trim().isEmpty
                                       ? 'رقم العداد مطلوب.'
@@ -289,36 +307,33 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                           : null,
                                 ),
                                 const SizedBox(height: 12),
-                                TextFormField(
+                                AppTextField(
                                   controller: _pathController,
+                                  label: 'رقم المسار (اختياري)',
+                                  hint: 'مثال: 1',
+                                  prefixIcon: Icons.route_outlined,
+                                  suffixIcon: _isCheckingPath
+                                      ? Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                        )
+                                      : _pathConflict == true
+                                          ? const Icon(Icons.error_outline, color: Colors.red)
+                                          : _pathConflict == false && _pathController.text.isNotEmpty
+                                              ? const Icon(Icons.check_circle_outline, color: Colors.green)
+                                              : null,
+                                  helperText: _pathConflict == true
+                                      ? 'رقم المسار مستخدم بالفعل في هذا المربع.'
+                                      : 'يجب أن يكون رقم المسار فريداً داخل المربع السكني.',
+                                  helperStyle: TextStyle(
+                                    color: _pathConflict == true ? Colors.red : null,
+                                  ),
                                   textDirection: TextDirection.ltr,
                                   keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'رقم المسار (اختياري)',
-                                    hintText: 'مثال: 1',
-                                    prefixIcon: const Icon(Icons.route_outlined),
-                                    suffixIcon: _isCheckingPath
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(12),
-                                            child: SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                            ),
-                                          )
-                                        : _pathConflict == true
-                                            ? const Icon(Icons.error_outline, color: Colors.red)
-                                            : _pathConflict == false && _pathController.text.isNotEmpty
-                                                ? const Icon(Icons.check_circle_outline, color: Colors.green)
-                                                : null,
-                                    helperText: _pathConflict == true
-                                        ? 'رقم المسار مستخدم بالفعل في هذا المربع.'
-                                        : 'يجب أن يكون رقم المسار فريداً داخل المربع السكني.',
-                                    helperStyle: TextStyle(
-                                      color: _pathConflict == true ? Colors.red : null,
-                                    ),
-                                    border: const OutlineInputBorder(),
-                                  ),
                                   onChanged: _schedulePathValidation,
                                   validator: (value) {
                                     final text = value?.trim() ?? '';
@@ -333,17 +348,13 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 12),
-                                DropdownButtonFormField<int>(
+                                FilledDropdown<int>(
                                   value: _selectedSubscriber?.id,
-                                  isExpanded: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'المشترك المالك',
-                                    prefixIcon: const Icon(Icons.person_outline),
-                                    border: const OutlineInputBorder(),
-                                    helperText: widget.meter == null
-                                        ? null
-                                        : 'تغيير مالك العداد غير مدعوم من واجهة الخادم الحالية.',
-                                  ),
+                                  label: 'المشترك المالك',
+                                  prefixIcon: const Icon(Icons.person_outline),
+                                  helperText: widget.meter == null
+                                      ? null
+                                      : 'تغيير مالك العداد غير مدعوم من واجهة الخادم الحالية.',
                                   items: _subscribers
                                       .map((subscriber) => DropdownMenuItem<int>(
                                             value: subscriber.id,
@@ -357,9 +368,9 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   onChanged: widget.meter == null
                                       ? (id) => _onSubscriberChanged(
                                             _subscribers.cast<SubscriberOption?>().firstWhere(
-                                                  (item) => item?.id == id,
-                                                  orElse: () => null,
-                                                ),
+                                              (item) => item?.id == id,
+                                              orElse: () => null,
+                                            ),
                                           )
                                       : null,
                                 ),
@@ -373,38 +384,29 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                 if (_showTenantFields) ...[
                                   const SizedBox(height: 20),
                                   _sectionHeader(context, 'بيانات المستأجر (اختيارية)'),
-                                  TextFormField(
+                                  AppTextField(
                                     controller: _tenantNameController,
+                                    label: 'اسم المستأجر',
+                                    prefixIcon: Icons.person_pin_outlined,
                                     textInputAction: TextInputAction.next,
-                                    decoration: const InputDecoration(
-                                      labelText: 'اسم المستأجر',
-                                      prefixIcon: Icon(Icons.person_pin_outlined),
-                                      border: OutlineInputBorder(),
-                                    ),
                                     onChanged: (_) => setState(() {}),
                                   ),
                                   const SizedBox(height: 12),
-                                  TextFormField(
+                                  AppTextField(
                                     controller: _tenantPhoneController,
+                                    label: 'هاتف المستأجر',
+                                    prefixIcon: Icons.phone_outlined,
+                                    hint: '+967…',
                                     textDirection: TextDirection.ltr,
                                     keyboardType: TextInputType.phone,
-                                    decoration: const InputDecoration(
-                                      labelText: 'هاتف المستأجر',
-                                      prefixIcon: Icon(Icons.phone_outlined),
-                                      hintText: '+967…',
-                                      border: OutlineInputBorder(),
-                                    ),
                                     onChanged: (_) => setState(() {}),
                                   ),
                                 ],
                                 const SizedBox(height: 20),
-                                DropdownButtonFormField<String>(
+                                FilledDropdown<String>(
                                   value: _status,
-                                  decoration: const InputDecoration(
-                                    labelText: 'حالة العداد',
-                                    prefixIcon: Icon(Icons.toggle_on_outlined),
-                                    border: OutlineInputBorder(),
-                                  ),
+                                  label: 'حالة العداد',
+                                  prefixIcon: const Icon(Icons.toggle_on_outlined),
                                   items: const [
                                     DropdownMenuItem(value: 'active', child: Text('نشط')),
                                     DropdownMenuItem(value: 'inactive', child: Text('غير نشط')),

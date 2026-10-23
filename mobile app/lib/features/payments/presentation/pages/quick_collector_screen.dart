@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/finance/finance_search.dart';
 import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -245,7 +246,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
             if (state.loadingSquares)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: LinearProgressIndicator(minHeight: 2),
+                child: ShimmerSkeleton(height: 4),
               )
             else
               Flexible(
