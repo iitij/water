@@ -49,7 +49,7 @@ class ArabicNumberSpellout {
 
   static const List<String> _hundreds = <String>[
     '',
-    'مائة',
+    'مئة',
     'مئتان',
     'ثلاثمئة',
     'أربعمئة',

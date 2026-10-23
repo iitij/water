@@ -28,6 +28,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
         : Platform.isWindows ? 'http://localhost:8000/api' : '',
   );
   bool _loading = false;
+  bool _initializationFailed = false;
   String? _error;
 
   @override
@@ -52,6 +53,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
       if (mounted) {
         setState(() {
           _loading = false;
+          _initializationFailed = true;
           _error = 'تعذر تهيئة التطبيق. أغلق التطبيق وأعد المحاولة.';
         });
       }
@@ -85,7 +87,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
                   const SizedBox(height: 24),
                   TextFormField(
                     controller: _url,
-                    enabled: !_loading,
+                    enabled: !_loading && !_initializationFailed,
                     textDirection: TextDirection.ltr,
                     keyboardType: TextInputType.url,
                     autocorrect: false,
@@ -115,7 +117,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: _loading ? null : _start,
+                    onPressed: _loading || _initializationFailed ? null : _start,
                     child: Text(_loading ? 'جارٍ التهيئة…' : 'حفظ ومتابعة'),
                   ),
                 ],
