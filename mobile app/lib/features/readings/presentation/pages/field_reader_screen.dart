@@ -13,6 +13,8 @@ import '../../data/services/reading_invoice_actions_service.dart';
 import '../../domain/readings_repository.dart';
 import '../widgets/offline_pack_dialog.dart';
 import 'submit_reading_screen.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class FieldReaderScreen extends StatelessWidget {
   const FieldReaderScreen({

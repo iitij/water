@@ -31,6 +31,9 @@ import '../cubit/subscriber360_cubit.dart';
 import '../widgets/statement_pdf_service.dart';
 import 'subscriber_form_screen.dart';
 import 'subscribers_screen.dart'
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
     show CollectPaymentLauncher, launchDefaultSubscriberPayment;
 
 /// منافذ تكامل: أنور (Dev 2) بطاقة عداد + تسجيل قراءة — أكرم (Dev 3) تحصيل/فواتير/مدفوعات.

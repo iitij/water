@@ -8,6 +8,7 @@ import '../../domain/entities/dashboard_entities.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../cubit/reports_cubit.dart';
 import '../widgets/monthly_revenue_chart_card.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({required this.repository, super.key});

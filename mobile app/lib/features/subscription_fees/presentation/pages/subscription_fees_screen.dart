@@ -13,6 +13,9 @@ import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/subscription_fee.dart';
 import '../cubit/subscription_fees_cubit.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 bool _hasSubscriptionFeesCubit(BuildContext context) {
   try {
