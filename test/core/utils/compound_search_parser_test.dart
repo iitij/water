@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/utils/compound_search_parser.dart';
+import 'package:water_project/core/utils/compound_search_parser.dart';
 
 void main() {
   group('CompoundSearchQuery', () {

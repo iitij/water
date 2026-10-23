@@ -1,0 +1,11 @@
+export 'data/datasources/rbac_remote_data_source.dart';
+export 'data/repositories/rbac_repository_impl.dart';
+export 'domain/entities/rbac_entities.dart';
+export 'domain/repositories/rbac_repository.dart';
+export 'domain/shield_permission_catalog.dart';
+export 'presentation/cubit/roles_cubit.dart';
+export 'presentation/cubit/users_cubit.dart';
+export 'presentation/pages/roles_and_permissions_screen.dart';
+export 'presentation/pages/users_management_screen.dart';
+export 'presentation/routes.dart';
+export 'presentation/widgets/role_matrix_editor.dart';

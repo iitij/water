@@ -1,26 +1,34 @@
-name: water_mobile
-publish_to: "none"
-description: Flutter field operations modules for water meter readings, meters, and offline sync.
-version: 1.0.0+1
+name: water_project
+description: Flutter administration and field-operations modules for the Water Project.
+publish_to: none
+version: 0.1.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
-  flutter: ">=3.24.0"
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.33.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_bloc: ^9.1.1
   dio: ^5.8.0+1
+  equatable: ^2.0.7
+  fl_chart: ^0.69.2
+  flutter_bloc: ^9.1.1
+  go_router: ^15.1.2
+  image_picker: ^1.1.2
+  intl: ^0.20.2
+  open_filex: ^4.5.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+  shared_preferences: ^2.5.3
+  connectivity_plus: ^6.1.4
   drift: ^2.27.0
   sqlite3_flutter_libs: ^0.5.34
-  path_provider: ^2.1.5
-  connectivity_plus: ^6.1.4
-  image_picker: ^1.1.2
   flutter_image_compress: ^2.4.0
   mobile_scanner: ^7.0.1
-  url_launcher: ^6.3.1
   printing: ^5.14.2
+  url_launcher: ^6.3.1
   uuid: ^4.5.1
 
 dev_dependencies:

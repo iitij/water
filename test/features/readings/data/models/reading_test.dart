@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/features/readings/data/models/reading.dart';
+import 'package:water_project/features/readings/data/models/reading.dart';
 
 void main() {
   group('Reading models', () {

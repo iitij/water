@@ -1,6 +1,9 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
   exclude:
     - build/**
     - .dart_tool/**
@@ -9,7 +12,15 @@ analyzer:
 
 linter:
   rules:
+    always_declare_return_types: true
+    avoid_dynamic_calls: true
     avoid_print: true
+    cancel_subscriptions: true
+    close_sinks: true
+    directives_ordering: true
+    no_leading_underscores_for_local_identifiers: true
     prefer_const_constructors: true
     prefer_final_locals: true
+    prefer_single_quotes: true
     unawaited_futures: true
+    use_super_parameters: true

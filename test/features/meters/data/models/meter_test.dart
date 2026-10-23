@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/features/meters/data/models/meter.dart';
+import 'package:water_project/features/meters/data/models/meter.dart';
 
 void main() {
   group('Meter.fromJson', () {

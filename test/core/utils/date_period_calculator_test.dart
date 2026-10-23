@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/utils/date_period_calculator.dart';
+import 'package:water_project/core/utils/date_period_calculator.dart';
 
 void main() {
   group('DatePeriodCalculator', () {
