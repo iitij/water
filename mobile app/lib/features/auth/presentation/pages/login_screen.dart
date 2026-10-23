@@ -325,21 +325,25 @@ class _BrandPanel extends StatelessWidget {
           children: <Widget>[
             const AppBrandMark(size: 56, glow: false),
             const SizedBox(width: 13),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'مياه الوشاح',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    AppConfig.appName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                Text(
-                  'منصة إدارة المشروع',
-                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70),
-                ),
-              ],
+                  Text(
+                    'منصة إدارة المشروع',
+                    style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -527,7 +531,8 @@ class _CompactBrand extends StatelessWidget {
         const AppBrandMark(size: 68),
         const SizedBox(height: 12),
         Text(
-          'مياه الوشاح',
+          AppConfig.appName,
+          textAlign: TextAlign.center,
           style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 2),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/auth/session_service.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/ui/app_brand.dart';
 import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -69,7 +70,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                       const SizedBox(height: 22),
                       Text(
-                        'مياه الوشاح',
+                        AppConfig.appName,
+                        textAlign: TextAlign.center,
                         style: theme.textTheme.headlineLarge?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,

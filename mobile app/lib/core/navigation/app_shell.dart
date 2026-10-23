@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../auth/session_service.dart';
+import '../config/app_config.dart';
 import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import '../ui/app_brand.dart';
 import '../ui/app_controls.dart';
 import '../ui/app_tokens.dart';
 
@@ -364,23 +366,14 @@ class _SideRail extends StatelessWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: AppColors.oceanGradient,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: AppShadows.brand(AppColors.primary, opacity: .28),
-                    ),
-                    child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 24),
-                  ),
+                  const AppBrandMark(size: 44, glow: false),
                   const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          'مياه الوشاح',
+                          AppConfig.appName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
+import '../theme/app_colors.dart';
 import 'app_tokens.dart';
 
 /// The product mark: a rounded squircle with the aqua water-drop artwork.
@@ -13,7 +15,7 @@ class AppBrandMark extends StatelessWidget {
     super.key,
     this.size = 64,
     this.glow = true,
-    this.semanticLabel = 'مياه الوشاح',
+    this.semanticLabel = AppConfig.appName,
   });
 
   /// Edge length of the square mark.
@@ -60,15 +62,17 @@ class AppBrandLockup extends StatelessWidget {
   const AppBrandLockup({
     super.key,
     this.markSize = 56,
-    this.title = 'مياه الوشاح',
+    this.title = AppConfig.appName,
     this.subtitle,
     this.onDark = true,
+    this.useMarkGlow = false,
   });
 
   final double markSize;
   final String title;
   final String? subtitle;
   final bool onDark;
+  final bool useMarkGlow;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +85,7 @@ class AppBrandLockup extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        AppBrandMark(size: markSize),
+        AppBrandMark(size: markSize, glow: useMarkGlow),
         const SizedBox(width: 13),
         Flexible(
           child: Column(
