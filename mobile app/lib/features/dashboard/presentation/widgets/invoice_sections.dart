@@ -224,7 +224,6 @@ class _OverdueTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
     var busy = false;
     return StatefulBuilder(
       builder: (context, setState) {
