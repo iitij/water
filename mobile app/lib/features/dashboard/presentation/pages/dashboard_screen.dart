@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_motion.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../cubit/dashboard_cubit.dart';
+import '../widgets/collection_progress_card.dart';
 import '../widgets/custom_account_banner.dart';
 import '../widgets/invoice_sections.dart';
 import '../widgets/monthly_revenue_chart_card.dart';
@@ -95,24 +103,27 @@ class _DashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('لوحة القيادة'),
-        actions: [
-          if (onOpenReports != null)
-            IconButton(
-              tooltip: 'التقارير المالية',
-              onPressed: onOpenReports,
-              icon: const Icon(Icons.analytics_outlined),
-            ),
-          IconButton(
-            tooltip: 'تحديث',
-            onPressed: () => context.read<DashboardCubit>().refresh(),
-            icon: const Icon(Icons.refresh_rounded),
+    return SubPageScaffold(
+      title: 'لوحة القيادة',
+      subtitle: 'مؤشرات حية من الخادم',
+      actions: <Widget>[
+        if (onOpenReports != null) ...<Widget>[
+          AppIconButton(
+            icon: Icons.analytics_outlined,
+            tooltip: 'التقارير المالية',
+            onPressed: onOpenReports,
+            color: AppColors.info,
           ),
+          const SizedBox(width: 8),
         ],
-      ),
-      body: BlocConsumer<DashboardCubit, DashboardState>(
+        AppIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: 'تحديث البيانات',
+          onPressed: () => context.read<DashboardCubit>().refresh(),
+          color: AppColors.primary,
+        ),
+      ],
+      child: BlocConsumer<DashboardCubit, DashboardState>(
         listenWhen: (previous, current) =>
             current.errorMessage != null && previous.errorMessage != current.errorMessage,
         listener: (context, state) => showAdminSnackBar(
@@ -123,7 +134,7 @@ class _DashboardView extends StatelessWidget {
         builder: (context, state) {
           if (state.status == DashboardRequestStatus.loading && state.snapshot == null) {
             return const Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.all(AppSpacing.md),
               child: AdminLoadingView(itemCount: 4),
             );
           }
@@ -135,117 +146,156 @@ class _DashboardView extends StatelessWidget {
           }
           final snapshot = state.snapshot!;
           final data = snapshot.data;
-          return RefreshIndicator(
+
+          return AppPageBody(
             onRefresh: () => context.read<DashboardCubit>().refresh(),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1500),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AdminPermissionGuard(
-                        permission: AdminPermissions.viewDashboard,
-                        can: can,
-                        child: CustomAccountBanner(
-                          userName: userName,
-                          roleLabel: roleLabel,
-                          avatarUrl: avatarUrl,
-                          isOnline: isOnline,
-                          pendingSyncCount: pendingSyncCount,
-                          onAddReading: onAddReading,
-                          onAddSubscriber: onAddSubscriber,
-                        ),
-                      ),
-                      if (snapshot.isFromCache) ...[
-                        const SizedBox(height: 12),
-                        _CacheBanner(updatedAt: snapshot.updatedAt),
-                      ],
-                      const SizedBox(height: 16),
-                      AdminPermissionGuard(
-                        permission: AdminPermissions.viewStats,
-                        can: can,
-                        child: StatsOverviewGrid(stats: data.stats),
-                      ),
-                      const SizedBox(height: 16),
-                      AdminPermissionGuard(
-                        permission: AdminPermissions.viewRevenue,
-                        can: can,
-                        child: MonthlyRevenueChartCard(revenue: data.monthlyRevenue),
-                      ),
-                      const SizedBox(height: 16),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final latest = AdminPermissionGuard(
-                            permission: AdminPermissions.viewLatestInvoices,
-                            can: can,
-                            child: LatestInvoicesSection(
-                              invoices: data.latestInvoices,
-                              onOpenInvoice: onOpenInvoice,
-                            ),
-                          );
-                          final overdue = AdminPermissionGuard(
-                            permission: AdminPermissions.viewOverdueInvoices,
-                            can: can,
-                            child: OverdueInvoicesSection(
-                              invoices: data.overdueInvoices,
-                              onOpenInvoice: onOpenInvoice,
-                              onCollectPayment: !can(AdminPermissions.createPayment)
-                                  ? null
-                                  : (sheetContext, invoice) async {
-                                      final collected =
-                                          await onCollectPayment(sheetContext, invoice);
-                                      if (collected && context.mounted) {
-                                        await context.read<DashboardCubit>().refresh();
-                                      }
-                                      return collected;
-                                    },
-                              onSendReminder: onSendReminder,
-                              isRefreshing: state.isRefreshing,
-                            ),
-                          );
-                          if (constraints.maxWidth < 1050) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [latest, const SizedBox(height: 16), overdue],
-                            );
-                          }
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: latest),
-                              const SizedBox(width: 16),
-                              Expanded(child: overdue),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                    ],
+            children: <Widget>[
+              AppReveal(
+                child: AdminPermissionGuard(
+                  permission: AdminPermissions.viewDashboard,
+                  can: can,
+                  child: CustomAccountBanner(
+                    userName: userName,
+                    roleLabel: roleLabel,
+                    avatarUrl: avatarUrl,
+                    isOnline: isOnline,
+                    pendingSyncCount: pendingSyncCount,
+                    onAddReading: onAddReading,
+                    onAddSubscriber: onAddSubscriber,
                   ),
                 ),
               ),
-            ),
+              if (snapshot.isFromCache) ...<Widget>[
+                const Gap(AppSpacing.md),
+                AppNotice(
+                  title: 'أنت تعرض نسخة محفوظة',
+                  message: 'آخر تحديث ${AdminFormat.dateTime(snapshot.updatedAt)} — سيتم التحديث عند عودة الاتصال.',
+                  icon: Icons.offline_bolt_outlined,
+                  color: AppColors.warning,
+                ),
+              ],
+              const Gap(AppSpacing.xl),
+              AppReveal(
+                delay: const Duration(milliseconds: 60),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    const SectionHeading(
+                      title: 'المؤشرات الرئيسية',
+                      subtitle: 'نظرة فورية على أداء المشروع',
+                    ),
+                    const Gap(AppSpacing.sm),
+                    AdminPermissionGuard(
+                      permission: AdminPermissions.viewStats,
+                      can: can,
+                      child: StatsOverviewGrid(stats: data.stats),
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(AppSpacing.lg),
+              AppReveal(
+                delay: const Duration(milliseconds: 100),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final chart = AdminPermissionGuard(
+                      permission: AdminPermissions.viewRevenue,
+                      can: can,
+                      child: MonthlyRevenueChartCard(revenue: data.monthlyRevenue),
+                    );
+                    final collection = AdminPermissionGuard(
+                      permission: AdminPermissions.viewStats,
+                      can: can,
+                      child: CollectionProgressCard(
+                        stats: data.stats,
+                        onOpenReports: onOpenReports,
+                      ),
+                    );
+                    if (constraints.maxWidth < 1020) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[chart, const Gap(AppSpacing.md), collection],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(flex: 3, child: chart),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(flex: 2, child: collection),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const Gap(AppSpacing.lg),
+              AppReveal(
+                delay: const Duration(milliseconds: 140),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final latest = AdminPermissionGuard(
+                      permission: AdminPermissions.viewLatestInvoices,
+                      can: can,
+                      child: LatestInvoicesSection(
+                        invoices: data.latestInvoices,
+                        onOpenInvoice: onOpenInvoice,
+                      ),
+                    );
+                    final overdue = AdminPermissionGuard(
+                      permission: AdminPermissions.viewOverdueInvoices,
+                      can: can,
+                      child: OverdueInvoicesSection(
+                        invoices: data.overdueInvoices,
+                        onOpenInvoice: onOpenInvoice,
+                        onCollectPayment: !can(AdminPermissions.createPayment)
+                            ? null
+                            : (sheetContext, invoice) async {
+                                final collected = await onCollectPayment(sheetContext, invoice);
+                                if (collected && context.mounted) {
+                                  await context.read<DashboardCubit>().refresh();
+                                }
+                                return collected;
+                              },
+                        onSendReminder: onSendReminder,
+                        isRefreshing: state.isRefreshing,
+                      ),
+                    );
+                    if (constraints.maxWidth < 1050) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[latest, const Gap(AppSpacing.md), overdue],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(child: latest),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(child: overdue),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              if (data.overdueInvoices.isNotEmpty) ...<Widget>[
+                const Gap(AppSpacing.md),
+                AppReveal(
+                  delay: const Duration(milliseconds: 180),
+                  child: InsightCard(
+                    title: '${data.overdueInvoices.length} فاتورة تحتاج متابعة',
+                    message: 'يمكنك التحصيل الفوري أو إرسال تذكير واتساب من القائمة أعلاه.',
+                    icon: Icons.bolt_rounded,
+                    color: AppColors.brandAmber,
+                    actionLabel: onOpenReports == null ? null : 'التقارير',
+                    onAction: onOpenReports,
+                  ),
+                ),
+              ],
+              const Gap(AppSpacing.xxl),
+            ],
           );
         },
       ),
-    );
-  }
-}
-
-class _CacheBanner extends StatelessWidget {
-  const _CacheBanner({required this.updatedAt});
-
-  final DateTime updatedAt;
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialBanner(
-      content: Text('بيانات مخزنة منذ ${AdminFormat.dateTime(updatedAt)}'),
-      leading: const Icon(Icons.offline_bolt_outlined),
-      actions: const [SizedBox.shrink()],
     );
   }
 }

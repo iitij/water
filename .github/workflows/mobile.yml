@@ -1,7 +1,7 @@
 name: Mobile test builds
 on:
   push:
-    branches: [arena/99b63ce7-water]
+    branches: [arena/99b63ce7-water, arena/2a33faf4-water]
     paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
   workflow_dispatch:
 permissions:

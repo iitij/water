@@ -5,6 +5,10 @@ class RouteNames {
   static const splash = '/splash';
   static const login = '/login';
   static const home = '/home';
+  static const fieldHub = '/field';
+  static const billingHub = '/billing';
+  static const crmHub = '/crm';
+  static const moreHub = '/more';
   static const profile = '/profile';
   static const offlineSync = '/sync';
 

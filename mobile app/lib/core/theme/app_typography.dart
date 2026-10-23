@@ -1,30 +1,48 @@
 import 'package:flutter/material.dart';
 
-class AppTypography {
+/// Typography scale for the platform. Tajawal is bundled with the app so the
+/// Arabic interface keeps identical metrics on every device, including Windows.
+abstract final class AppTypography {
   const AppTypography._();
 
   static const fontFamily = 'Tajawal';
 
   static TextTheme textTheme(Brightness brightness) {
-    final color = brightness == Brightness.dark
-        ? const Color(0xFFF1F5F9)
-        : const Color(0xFF102A43);
+    final ink = brightness == Brightness.dark ? const Color(0xFFF2F8FB) : const Color(0xFF0A1F2B);
+    final muted = brightness == Brightness.dark ? const Color(0xFFA9C1CC) : const Color(0xFF5B7385);
+
+    TextStyle style(
+      double size,
+      FontWeight weight, {
+      double height = 1.35,
+      Color? color,
+      double letterSpacing = 0,
+    }) =>
+        TextStyle(
+          fontFamily: fontFamily,
+          fontSize: size,
+          height: height,
+          fontWeight: weight,
+          color: color ?? ink,
+          letterSpacing: letterSpacing,
+        );
+
     return TextTheme(
-      displayLarge: TextStyle(fontFamily: fontFamily, fontSize: 34, height: 1.15, fontWeight: FontWeight.w800, color: color),
-      displayMedium: TextStyle(fontFamily: fontFamily, fontSize: 30, height: 1.2, fontWeight: FontWeight.w800, color: color),
-      displaySmall: TextStyle(fontFamily: fontFamily, fontSize: 26, height: 1.2, fontWeight: FontWeight.w700, color: color),
-      headlineLarge: TextStyle(fontFamily: fontFamily, fontSize: 26, height: 1.25, fontWeight: FontWeight.w800, color: color),
-      headlineMedium: TextStyle(fontFamily: fontFamily, fontSize: 22, height: 1.3, fontWeight: FontWeight.w700, color: color),
-      headlineSmall: TextStyle(fontFamily: fontFamily, fontSize: 20, height: 1.3, fontWeight: FontWeight.w700, color: color),
-      titleLarge: TextStyle(fontFamily: fontFamily, fontSize: 20, height: 1.3, fontWeight: FontWeight.w700, color: color),
-      titleMedium: TextStyle(fontFamily: fontFamily, fontSize: 16, height: 1.35, fontWeight: FontWeight.w700, color: color),
-      titleSmall: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.35, fontWeight: FontWeight.w600, color: color),
-      bodyLarge: TextStyle(fontFamily: fontFamily, fontSize: 16, height: 1.5, color: color),
-      bodyMedium: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.5, color: color),
-      bodySmall: TextStyle(fontFamily: fontFamily, fontSize: 12, height: 1.45, color: color.withOpacity(.72)),
-      labelLarge: TextStyle(fontFamily: fontFamily, fontSize: 14, height: 1.2, fontWeight: FontWeight.w700, color: color),
-      labelMedium: TextStyle(fontFamily: fontFamily, fontSize: 12, height: 1.2, fontWeight: FontWeight.w600, color: color),
-      labelSmall: TextStyle(fontFamily: fontFamily, fontSize: 11, height: 1.2, fontWeight: FontWeight.w500, color: color),
+      displayLarge: style(40, FontWeight.w800, height: 1.16),
+      displayMedium: style(34, FontWeight.w800, height: 1.18),
+      displaySmall: style(28, FontWeight.w800, height: 1.2),
+      headlineLarge: style(28, FontWeight.w800, height: 1.22),
+      headlineMedium: style(24, FontWeight.w800, height: 1.26),
+      headlineSmall: style(21, FontWeight.w700, height: 1.3),
+      titleLarge: style(19, FontWeight.w700, height: 1.32),
+      titleMedium: style(16, FontWeight.w700, height: 1.36),
+      titleSmall: style(14, FontWeight.w700, height: 1.4),
+      bodyLarge: style(16, FontWeight.w400, height: 1.62),
+      bodyMedium: style(14, FontWeight.w400, height: 1.6),
+      bodySmall: style(12.5, FontWeight.w400, height: 1.55, color: muted),
+      labelLarge: style(14, FontWeight.w700, height: 1.25),
+      labelMedium: style(12.5, FontWeight.w600, height: 1.25),
+      labelSmall: style(11.5, FontWeight.w600, height: 1.25, color: muted, letterSpacing: .1),
     );
   }
 }

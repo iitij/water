@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -34,6 +35,7 @@ class WaterApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
+            scrollBehavior: const _AppScrollBehavior(),
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeController.mode,
@@ -43,4 +45,19 @@ class WaterApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Enables drag-to-scroll with a mouse and trackpad, which matters for the
+/// Windows build without changing touch behaviour.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => <PointerDeviceKind>{
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+      };
 }

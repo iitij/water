@@ -3,6 +3,16 @@
 Testing builds of the integrated Arabic Water app. Android APKs are attached to
 `mobile-test-*` releases; Windows ZIPs are attached to `windows-test-*` releases.
 
+## What's new in this prerelease
+
+- A full interface redesign: new design system, light/dark themes and a calmer,
+  higher-contrast Arabic layout.
+- Five-tab navigation (Overview, Field, Billing, Subscribers, More) replacing the
+  single long home page, plus redesigned dashboard, login, splash and sync
+  screens.
+- Richer dashboard widgets: KPI cards with sparklines, collection health ring,
+  revenue chart summary and actionable overdue-invoice cards.
+
 **Testing only — not a production release.** Android uses the generated debug
 signing key, so a later build may require uninstalling the previous APK. Sync
 pending operations before uninstalling; uninstalling deletes local app data.
