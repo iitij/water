@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../features/meters/data/models/meter.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/readings/domain/readings_repository.dart';
+import '../network/api_endpoints.dart';
 import 'app_database.dart';
 
 class OfflinePackResult {
@@ -26,8 +27,8 @@ class OfflinePackResult {
 typedef OfflinePackProgress = void Function(String stage, double progress);
 
 /// Downloads the field team's working set before entering a low-connectivity area.
-/// All remote calls still use the feature repositories, so the same Drift cache
-/// is updated whether the user refreshes a single screen or requests a full pack.
+/// Uses `GET squares/{id}/offline-pack` when a specific square is requested, with
+/// automatic fallback to repository-level downloads across all squares.
 class OfflinePackDownloader {
   const OfflinePackDownloader({
     required MetersRepository metersRepository,
@@ -48,6 +49,11 @@ class OfflinePackDownloader {
     int? squareId,
     OfflinePackProgress? onProgress,
   }) async {
+    if (squareId != null) {
+      final fastPack = await _trySingleSquarePack(squareId, onProgress: onProgress);
+      if (fastPack != null) return fastPack;
+    }
+
     onProgress?.call('جلب المربعات والمشتركين', .05);
     final results = await Future.wait<Object>([
       _metersRepository.getSquares(),
@@ -64,8 +70,6 @@ class OfflinePackDownloader {
     onProgress?.call('حفظ إعدادات دورة القراءة', .55);
     await _cacheReadingSettings();
 
-    // Cache the current period/fee information as well. Limit concurrency to
-    // avoid flooding the API when a square contains a large number of meters.
     final eligibleMeters = meters.where((meter) => meter.isActive).toList(growable: false);
     var cachedPeriods = 0;
     const chunkSize = 6;
@@ -95,8 +99,10 @@ class OfflinePackDownloader {
 
     onProgress?.call('اكتمل تنزيل حزمة العمل الأوفلاين', 1);
     return OfflinePackResult(
-      squareCount: squares.length,
-      subscriberCount: subscribers.length,
+      squareCount: squareId != null ? 1 : squares.length,
+      subscriberCount: squareId != null
+          ? subscribers.where((s) => s.squareId == squareId).length
+          : subscribers.length,
       meterCount: meters.length,
       readingCount: readings.length,
       cachedPeriodCount: cachedPeriods,
@@ -104,14 +110,88 @@ class OfflinePackDownloader {
     );
   }
 
+  Future<OfflinePackResult?> _trySingleSquarePack(
+    int squareId, {
+    OfflinePackProgress? onProgress,
+  }) async {
+    try {
+      onProgress?.call('جلب حزمة المربع الأوفلاين من الخادم', .15);
+      final response = await _dio.get(ApiEndpoints.squareOfflinePack(squareId));
+      final body = response.data;
+      if (body is! Map) return null;
+
+      onProgress?.call('تخزين بيانات المربع والمشتركين محلياً', .45);
+      final squareMap = body['square'] is Map ? Map<String, dynamic>.from(body['square'] as Map) : null;
+      if (squareMap != null) {
+        await _database.cacheSquares([squareMap]);
+      }
+
+      final subscribers = _mapList(body['subscribers']);
+      if (subscribers.isNotEmpty) {
+        await _database.cacheSubscribers(subscribers);
+      }
+
+      onProgress?.call('تخزين العدادات وفترات القراءة', .70);
+      final meters = _mapList(body['meters']);
+      if (meters.isNotEmpty) {
+        await _database.cacheMeters(meters);
+      }
+
+      var cachedPeriods = 0;
+      for (final meterRow in meters) {
+        final meterId = int.tryParse('${meterRow['id'] ?? ''}');
+        final rawPeriod = meterRow['period'];
+        if (meterId != null && rawPeriod is Map) {
+          final periodMap = Map<String, dynamic>.from(rawPeriod);
+          periodMap['last_reading'] ??= meterRow['last_reading'] ?? meterRow['initial_reading'] ?? 0;
+          await _database.cacheMeterPeriod(meterId, periodMap);
+          cachedPeriods++;
+        }
+      }
+
+      onProgress?.call('تخزين سجل القراءات وإعدادات الدورة', .88);
+      final readings = _mapList(body['readings']);
+      if (readings.isNotEmpty) {
+        await _database.cacheReadings(readings);
+      }
+
+      final settings = body['reading_settings'];
+      if (settings is Map) {
+        for (final entry in settings.entries) {
+          if (entry.value != null) {
+            await _database.setCachedSetting(entry.key.toString(), entry.value);
+          }
+        }
+      }
+
+      onProgress?.call('اكتمل تنزيل حزمة العمل الأوفلاين', 1);
+      return OfflinePackResult(
+        squareCount: 1,
+        subscriberCount: subscribers.length,
+        meterCount: meters.length,
+        readingCount: readings.length,
+        cachedPeriodCount: cachedPeriods,
+        completedAt: DateTime.now(),
+      );
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  List<Map<String, dynamic>> _mapList(Object? raw) {
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
   Future<void> _cacheReadingSettings() async {
     try {
       Response<dynamic> response;
       try {
-        response = await _dio.get('/settings/reading');
+        response = await _dio.get(ApiEndpoints.readingSettings);
       } on DioException catch (error) {
         if (error.response?.statusCode != 404) rethrow;
-        response = await _dio.get('/settings');
+        response = await _dio.get(ApiEndpoints.settings);
       }
       final body = response.data;
       if (body is Map) {

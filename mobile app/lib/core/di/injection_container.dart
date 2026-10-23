@@ -14,6 +14,7 @@ import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../database/offline_pack_downloader.dart';
 import '../field_operations/field_operations_module.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
@@ -63,6 +64,7 @@ Future<void> configureDependencies() async {
   getIt.registerSingleton<FieldOperationsModule>(fieldModule);
   getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
   getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
+  getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
   getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
 
   // Dev 3: Finance Module (Invoices, Payments, Tariffs, PDF/Thermal Print & WhatsApp)

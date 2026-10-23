@@ -34,6 +34,9 @@ class ServiceRequestsRepositoryImpl implements ServiceRequestsRepository {
   Future<void> deleteRequest(int id) => _remote.delete(id);
 
   @override
+  Future<int> bulkDelete(List<int> ids) => _remote.bulkDelete(ids);
+
+  @override
   Future<ServiceRequest> markCompleted(int id) => _remote.complete(id);
 
   @override

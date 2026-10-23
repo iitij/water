@@ -240,11 +240,19 @@ class ReadingsCubit extends Cubit<ReadingsState> {
     }
   }
 
-  Future<bool> updateReading(Reading reading, double currentReading) async {
+  Future<bool> updateReading(
+    Reading reading,
+    double currentReading, {
+    DateTime? newReadingDate,
+  }) async {
     if (reading.isInvoiced) return false;
     emit(state.copyWith(isMutating: true, clearError: true));
     try {
-      await _readingsRepository.updateReading(reading, currentReading);
+      await _readingsRepository.updateReading(
+        reading,
+        currentReading,
+        newReadingDate: newReadingDate,
+      );
       emit(state.copyWith(isMutating: false));
       await load();
       return true;

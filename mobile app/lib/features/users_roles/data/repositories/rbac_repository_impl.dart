@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../domain/entities/rbac_entities.dart';
 import '../../domain/repositories/rbac_repository.dart';
 import '../datasources/rbac_remote_data_source.dart';
@@ -18,12 +20,34 @@ class RbacRepositoryImpl implements RbacRepository {
   Future<ShieldPermissionCatalog> getPermissionCatalog() => _remote.getPermissionCatalog();
 
   @override
-  Future<SystemUser> createUser(SystemUser user, String password) =>
-      _remote.createUser(_userModel(user), password);
+  Future<SystemUser> createUser(
+    SystemUser user,
+    String password, {
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+  }) =>
+      _remote.createUser(
+        _userModel(user),
+        password,
+        avatarBytes: avatarBytes,
+        avatarFileName: avatarFileName,
+      );
 
   @override
-  Future<SystemUser> updateUser(SystemUser user, {String? password}) =>
-      _remote.updateUser(_userModel(user), password: password);
+  Future<SystemUser> updateUser(
+    SystemUser user, {
+    String? password,
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+    bool removeAvatar = false,
+  }) =>
+      _remote.updateUser(
+        _userModel(user),
+        password: password,
+        avatarBytes: avatarBytes,
+        avatarFileName: avatarFileName,
+        removeAvatar: removeAvatar,
+      );
 
   @override
   Future<void> deleteUser(int id) => _remote.deleteUser(id);

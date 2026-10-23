@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
@@ -12,18 +13,29 @@ Future<void> showInvoiceFiltersSheet(
   required List<BillingPeriodOption> billingPeriods,
   required ValueChanged<InvoiceQuery> onSubmit,
   Future<List<SubscriberOption>> Function(String search)? subscribersLoader,
-}) =>
-    InvoiceFiltersSheet.show(
-      context,
-      query: query,
-      billingPeriods: billingPeriods,
-      squares: const <SquareOption>[],
-      onSubmit: onSubmit,
-      subscribersLoader: subscribersLoader,
-    );
+}) async {
+  List<SquareOption> squares = const <SquareOption>[];
+  Future<List<SubscriberOption>> Function(String search)? resolvedLoader = subscribersLoader;
+  if (sl.isRegistered<ReferencesRemoteDataSource>()) {
+    final refs = sl<ReferencesRemoteDataSource>();
+    try {
+      squares = await refs.squares();
+    } catch (_) {}
+    resolvedLoader ??= (search) => refs.subscribers(search: search);
+  }
+  if (!context.mounted) return;
+  await InvoiceFiltersSheet.show(
+    context,
+    query: query,
+    billingPeriods: billingPeriods,
+    squares: squares,
+    onSubmit: onSubmit,
+    subscribersLoader: resolvedLoader,
+  );
+}
 
-/// الفلاتر الأربعة المطابقة لـ `InvoiceResource::table()->filters()`:
-/// `billing_period`, `square_id`, `status`, `subscriber_id` + بحث ذكي.
+/// الفلاتر المطابقة لـ `InvoiceResource::table()->filters()`:
+/// `billing_period`, `square_id`, `status`, `invoice_type`, `trashed`, `subscriber_id`.
 class InvoiceFiltersSheet extends StatefulWidget {
   const InvoiceFiltersSheet({
     super.key,
@@ -75,6 +87,19 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
     ('draft', 'مسودة'),
   ];
 
+  static const List<(String, String)> _typeOptions = <(String, String)>[
+    ('', 'كل الأنواع'),
+    ('meter', 'فاتورة عداد'),
+    ('subscription', 'رسوم اشتراك'),
+    ('tanker', 'طلب وايت'),
+  ];
+
+  static const List<(String, String)> _trashedOptions = <(String, String)>[
+    ('without', 'بدون المحذوف'),
+    ('with', 'مع المحذوف'),
+    ('only', 'سلة المحذوفات فقط'),
+  ];
+
   late InvoiceQuery _draft = widget.query;
   List<SubscriberOption> _subscribers = const <SubscriberOption>[];
   bool _loadingSubscribers = false;
@@ -101,7 +126,7 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,7 +139,14 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
+              _sectionLabel('حالة الفاتورة'),
               _statusChips(),
+              const SizedBox(height: 14),
+              _sectionLabel('نوع الفاتورة'),
+              _invoiceTypeChips(),
+              const SizedBox(height: 14),
+              _sectionLabel('سلة المحذوفات (Trashed)'),
+              _trashedChips(),
               const SizedBox(height: 16),
               _periodDropdown(),
               const SizedBox(height: 16),
@@ -155,6 +187,14 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
     );
   }
 
+  Widget _sectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      );
+
   Widget _statusChips() {
     return Wrap(
       spacing: 8,
@@ -172,6 +212,49 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
           label: Text(option.$2),
           avatar: selected
               ? const Icon(Icons.check, size: 16, color: AppColors.primary)
+              : null,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _invoiceTypeChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _typeOptions.map((option) {
+        final value = option.$1.isEmpty ? null : option.$1;
+        final selected = _draft.invoiceType == value;
+        return ChoiceChip(
+          selected: selected,
+          onSelected: (_) => setState(
+            () => _draft = value == null
+                ? _draft.copyWith(clearInvoiceType: true)
+                : _draft.copyWith(invoiceType: value),
+          ),
+          label: Text(option.$2),
+          avatar: selected
+              ? const Icon(Icons.check, size: 16, color: AppColors.primary)
+              : null,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _trashedChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _trashedOptions.map((option) {
+        final selected = _draft.trashed == option.$1;
+        return ChoiceChip(
+          selected: selected,
+          onSelected: (_) => setState(
+            () => _draft = _draft.copyWith(trashed: option.$1),
+          ),
+          label: Text(option.$2),
+          avatar: selected
+              ? const Icon(Icons.delete_sweep_outlined, size: 16, color: AppColors.danger)
               : null,
         );
       }).toList(),
@@ -202,7 +285,7 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   Widget _squareDropdown() {
     return DropdownButtonFormField<int?>(
-      value: _draft.squareId,
+      value: widget.squares.any((s) => s.id == _draft.squareId) ? _draft.squareId : null,
       decoration: const InputDecoration(labelText: 'المربع السكني'),
       isExpanded: true,
       items: <DropdownMenuItem<int?>>[
@@ -286,7 +369,6 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
   }
 }
 
-/// بديل محلي عن `firstOrNull` (يتفادي الاعتماد على `package:collection`).
 T? _firstWhereOrNull<T>(Iterable<T> items, bool Function(T) test) {
   for (final item in items) {
     if (test(item)) return item;

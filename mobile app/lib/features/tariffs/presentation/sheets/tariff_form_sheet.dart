@@ -281,6 +281,7 @@ class TariffCard extends StatelessWidget {
     required this.isActive,
     this.busy = false,
     this.onTap,
+    this.onSoftDelete,
     this.onRestore,
     this.onForceDelete,
   });
@@ -289,6 +290,7 @@ class TariffCard extends StatelessWidget {
   final bool isActive;
   final bool busy;
   final VoidCallback? onTap;
+  final VoidCallback? onSoftDelete;
   final VoidCallback? onRestore;
   final VoidCallback? onForceDelete;
 
@@ -368,12 +370,30 @@ class TariffCard extends StatelessWidget {
                       ],
                     )
                   else
-                    Text(
-                      tariff.isActive ? 'مفعّلة' : 'غير مفعّلة',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: tariff.isActive ? AppColors.success : AppColors.neutral,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          tariff.isActive ? 'مفعّلة' : 'غير مفعّلة',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: tariff.isActive ? AppColors.success : AppColors.neutral,
+                          ),
+                        ),
+                        if (onSoftDelete != null) ...<Widget>[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'نقل إلى سلة المحذوفات',
+                            onPressed: onSoftDelete,
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: AppColors.danger,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                 ],
               ),

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../../admin_shared/data/admin_api_client.dart';
 import '../../../admin_shared/data/admin_api_endpoints.dart';
 import '../../../admin_shared/data/admin_json.dart';
@@ -34,7 +36,27 @@ class RbacRemoteDataSource {
     return ShieldPermissionCatalogModel.fromJson(response);
   }
 
-  Future<SystemUserModel> createUser(SystemUserModel user, String password) async {
+  Future<SystemUserModel> createUser(
+    SystemUserModel user,
+    String password, {
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+  }) async {
+    if (avatarBytes != null) {
+      final response = await _api.upload(
+        AdminApiEndpoints.users,
+        field: 'avatar',
+        bytes: avatarBytes,
+        fileName: avatarFileName ?? 'avatar.jpg',
+        fields: {
+          'name': user.name,
+          'email': user.email,
+          'password': password,
+          'roles[]': user.roles,
+        },
+      );
+      return _userResponse(response, user);
+    }
     final response = await _api.post(
       AdminApiEndpoints.users,
       data: user.toJson(password: password),
@@ -42,10 +64,35 @@ class RbacRemoteDataSource {
     return _userResponse(response, user);
   }
 
-  Future<SystemUserModel> updateUser(SystemUserModel user, {String? password}) async {
+  Future<SystemUserModel> updateUser(
+    SystemUserModel user, {
+    String? password,
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+    bool removeAvatar = false,
+  }) async {
+    if (avatarBytes != null) {
+      final response = await _api.upload(
+        '${AdminApiEndpoints.users}/${user.id}',
+        field: 'avatar',
+        bytes: avatarBytes,
+        fileName: avatarFileName ?? 'avatar.jpg',
+        fields: {
+          'name': user.name,
+          'email': user.email,
+          if (password != null && password.isNotEmpty) 'password': password,
+          'roles[]': user.roles,
+        },
+      );
+      return _userResponse(response, user);
+    }
+    final payload = <String, dynamic>{
+      ...user.toJson(password: password),
+      if (removeAvatar) 'remove_avatar': true,
+    };
     final response = await _api.put(
       '${AdminApiEndpoints.users}/${user.id}',
-      data: user.toJson(password: password),
+      data: payload,
     );
     return _userResponse(response, user);
   }

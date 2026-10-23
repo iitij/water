@@ -6,15 +6,25 @@ class MeterCardWidget extends StatelessWidget {
   const MeterCardWidget({
     required this.meter,
     this.onTap,
+    this.onLongPress,
     this.onRecordReading,
     this.onEdit,
+    this.onDelete,
+    this.selected = false,
+    this.selectionMode = false,
+    this.onSelectChanged,
     super.key,
   });
 
   final Meter meter;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback? onRecordReading;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final bool selected;
+  final bool selectionMode;
+  final ValueChanged<bool?>? onSelectChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +33,10 @@ class MeterCardWidget extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
-        onTap: onTap,
+        onTap: selectionMode && onSelectChanged != null
+            ? () => onSelectChanged!(!selected)
+            : onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -39,6 +52,15 @@ class MeterCardWidget extends StatelessWidget {
                     spacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      if (onSelectChanged != null)
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: Checkbox(
+                            value: selected,
+                            onChanged: onSelectChanged,
+                          ),
+                        ),
                       if (meter.pathNumber != null)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -110,7 +132,7 @@ class MeterCardWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              if (onRecordReading != null || onEdit != null) ...[
+              if (onRecordReading != null || onEdit != null || onDelete != null) ...[
                 const SizedBox(height: 8),
                 const Divider(height: 1),
                 Row(
@@ -122,12 +144,20 @@ class MeterCardWidget extends StatelessWidget {
                           icon: const Icon(Icons.add_chart_outlined),
                           label: const Text('تسجيل قراءة'),
                         ),
-                      ),
+                      )
+                    else
+                      const Spacer(),
                     if (onEdit != null)
                       IconButton(
                         tooltip: 'تعديل العداد',
                         onPressed: onEdit,
                         icon: const Icon(Icons.edit_outlined),
+                      ),
+                    if (onDelete != null)
+                      IconButton(
+                        tooltip: 'حذف العداد',
+                        onPressed: onDelete,
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                       ),
                   ],
                 ),

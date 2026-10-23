@@ -40,13 +40,13 @@ class ServiceRequestController extends ApiController
             'service_type' => ['sometimes', 'string', 'max:50'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'service_date' => ['required', 'date'],
-            'status' => ['sometimes', 'in:pending,completed'],
+            'status' => ['sometimes', 'in:pending,completed,invoiced,paid'],
             'notes' => ['nullable', 'string'],
         ]);
         $data['service_type'] ??= 'water_tanker';
-        $data['status'] ??= 'pending';
+        $data['status'] ??= 'completed';
         $requestRecord = ServiceRequest::create($data);
-        return response()->json(['message' => 'تم تسجيل طلب الخدمة.', 'service_request' => $requestRecord->load('subscriber')], 201);
+        return response()->json(['message' => 'تم تسجيل طلب الخدمة.', 'service_request' => $requestRecord->load(['subscriber', 'invoice'])], 201);
     }
 
     public function show(int $id)
@@ -59,19 +59,22 @@ class ServiceRequestController extends ApiController
     {
         $this->authorizeApi(ServiceRequest::class, 'update');
         $record = ServiceRequest::findOrFail($id);
-        if ($record->invoice_id || in_array($record->status, ['invoiced', 'paid'], true)) {
-            return response()->json(['message' => 'لا يمكن تعديل طلب مرتبط بفاتورة.'], 409);
-        }
         $data = $request->validate([
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'service_type' => ['sometimes', 'required', 'string', 'max:50'],
             'amount' => ['sometimes', 'required', 'numeric', 'gt:0'],
             'service_date' => ['sometimes', 'required', 'date'],
-            'status' => ['sometimes', 'required', 'in:pending,completed'],
+            'status' => ['sometimes', 'required', 'in:pending,completed,invoiced,paid'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        if ($record->invoice_id && (
+            (array_key_exists('amount', $data) && (float) $data['amount'] !== (float) $record->amount)
+            || (array_key_exists('subscriber_id', $data) && (int) $data['subscriber_id'] !== (int) $record->subscriber_id)
+        )) {
+            return response()->json(['message' => 'لا يمكن تغيير مبلغ أو مشترك طلب مرتبط بفاتورة صادرة.'], 409);
+        }
         $record->update($data);
-        return response()->json(['message' => 'تم تحديث طلب الخدمة.', 'service_request' => $record->fresh('subscriber')]);
+        return response()->json(['message' => 'تم تحديث طلب الخدمة.', 'service_request' => $record->fresh(['subscriber', 'invoice'])]);
     }
 
     public function destroy(int $id)

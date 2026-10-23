@@ -98,6 +98,7 @@ class InvoiceQuery extends Equatable {
         subscriberId,
         invoiceType,
         billingPeriod,
+        if (trashed != 'without') trashed,
       ].where((e) => e != null).length;
 
   @override
@@ -222,7 +223,12 @@ class BulkActionResult extends Equatable {
 
   factory BulkActionResult.fromJson(Map<String, dynamic> json) => BulkActionResult(
         processed: JsonUtils.asInt(
-          json['processed'] ?? json['success_count'] ?? json['count'],
+          json['processed'] ??
+              json['deleted_count'] ??
+              json['restored_count'] ??
+              json['recalculated_count'] ??
+              json['success_count'] ??
+              json['count'],
         ),
         failed: JsonUtils.asInt(json['failed'] ?? json['skipped_count']),
         message: JsonUtils.asStringOrNull(json['message']),

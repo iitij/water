@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/auth/session_service.dart';
 import '../../../core/network/api_endpoints.dart';
@@ -45,6 +47,7 @@ class SyncQueueManager extends ChangeNotifier {
     _items = (await _repository.loadAll()).map((item) => item.status == SyncQueueStatus.syncing
         ? item.copyWith(status: SyncQueueStatus.queued)
         : item).toList(growable: true);
+    await _migrateLegacyFinanceQueue();
     await _repository.saveAll(_items);
     _isOnline = await _networkInfo.isConnected;
     _session.addListener(_handleSessionChanged);
@@ -52,11 +55,66 @@ class SyncQueueManager extends ChangeNotifier {
       final online = results.any((result) => result != ConnectivityResult.none);
       _isOnline = online;
       notifyListeners();
-      if (online && _items.isNotEmpty && _session.isReady && _session.isAuthenticated) unawaited(syncPending());
+      if (online && (_items.isNotEmpty) && _session.isReady && _session.isAuthenticated) {
+        unawaited(syncPending());
+      }
     });
     _initialized = true;
     notifyListeners();
     _handleSessionChanged();
+  }
+
+  /// استيراد أي سندات تحصيل قديمة محفوظة في `sync.queue.pending` إلى الطابور الموحّد.
+  Future<void> _migrateLegacyFinanceQueue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList('sync.queue.pending');
+      if (raw == null || raw.isEmpty) return;
+      final ownerUserId = _session.user?['id']?.toString();
+      var migratedAny = false;
+      final remaining = <String>[];
+      for (final encoded in raw) {
+        try {
+          final decoded = jsonDecode(encoded);
+          if (decoded is Map) {
+            final map = decoded.cast<String, dynamic>();
+            final module = map['source_module']?.toString() ?? '';
+            final type = map['type']?.toString() ?? '';
+            if (module == 'payments' || type == 'payment.create' || type == 'invoice.pay') {
+              final rawPayload = map['payload'];
+              final payload = rawPayload is Map
+                  ? Map<String, dynamic>.from(rawPayload)
+                  : <String, dynamic>{};
+              payload['sync_uuid'] ??= _newUuid();
+              if (map['idempotency_key'] != null) {
+                payload['local_receipt_number'] ??= map['idempotency_key'];
+              }
+              _items.add(
+                SyncQueueItem(
+                  id: _newUuid(),
+                  type: SyncQueueType.payment,
+                  payload: payload,
+                  status: SyncQueueStatus.queued,
+                  createdAt: DateTime.tryParse('${map['created_at']}') ?? DateTime.now(),
+                  ownerUserId: ownerUserId,
+                ),
+              );
+              migratedAny = true;
+              continue;
+            }
+          }
+          remaining.add(encoded);
+        } catch (_) {}
+      }
+      if (migratedAny) {
+        if (remaining.isEmpty) {
+          await prefs.remove('sync.queue.pending');
+        } else {
+          await prefs.setStringList('sync.queue.pending', remaining);
+        }
+        _items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      }
+    } catch (_) {}
   }
 
   Future<SyncQueueItem> enqueueReading(Map<String, dynamic> payload) =>
@@ -91,6 +149,7 @@ class SyncQueueManager extends ChangeNotifier {
   }
 
   Future<void> syncPending() async {
+    await _migrateLegacyFinanceQueue();
     if (_isSyncing || _items.isEmpty || !_session.isReady || !_session.isAuthenticated) return;
     // Lock before the first await so manual, automatic, and enqueue-triggered syncs
     // cannot submit the same UUID concurrently.
@@ -179,7 +238,9 @@ class SyncQueueManager extends ChangeNotifier {
 
   Future<void> _send(SyncQueueItem item) async {
     final currentUserId = _session.user?['id']?.toString();
-    if (item.ownerUserId == null || item.ownerUserId != currentUserId) {
+    if (item.ownerUserId != null &&
+        item.ownerUserId!.isNotEmpty &&
+        item.ownerUserId != currentUserId) {
       throw StateError('هذه العملية محفوظة لحساب مستخدم آخر؛ سجّل الدخول بالحساب نفسه لمزامنتها.');
     }
     switch (item.type) {
@@ -216,9 +277,14 @@ class SyncQueueManager extends ChangeNotifier {
   }
 
   Future<void> _sendPayment(SyncQueueItem item) async {
+    final payload = Map<String, dynamic>.from(item.payload)
+      ..remove('local_receipt_number');
+    final endpoint = payload['invoice_id'] != null
+        ? ApiEndpoints.collectInvoicePayment
+        : ApiEndpoints.payments;
     final response = await _dio.post<dynamic>(
-      ApiEndpoints.collectInvoicePayment,
-      data: item.payload,
+      endpoint,
+      data: payload,
     );
     if ((response.statusCode ?? 0) >= 400) {
       throw StateError('تعذر اعتماد عملية الدفع.');

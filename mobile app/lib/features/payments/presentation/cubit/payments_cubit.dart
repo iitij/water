@@ -127,6 +127,14 @@ class PaymentsCubit extends Cubit<PaymentsState> {
     emit(state.copyWith(selectedIds: selected));
   }
 
+  void selectAll() {
+    emit(state.copyWith(selectedIds: state.payments.map((p) => p.id).toSet()));
+  }
+
+  void clearSelection() {
+    emit(state.copyWith(selectedIds: const <int>{}));
+  }
+
   /// يعيد تحميل سند واحد بعد التعديل/الدفع ودمجه في القائمة.
   Future<void> upsert(PaymentModel payment) async {
     final exists = state.payments.any((p) => p.id == payment.id);

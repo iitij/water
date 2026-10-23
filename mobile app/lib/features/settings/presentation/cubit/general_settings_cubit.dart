@@ -13,6 +13,7 @@ class GeneralSettingsState extends Equatable {
     this.isLoading = false,
     this.isSaving = false,
     this.deletingIds = const {},
+    this.selectedIds = const {},
     this.errorMessage,
   });
 
@@ -21,6 +22,7 @@ class GeneralSettingsState extends Equatable {
   final bool isLoading;
   final bool isSaving;
   final Set<int> deletingIds;
+  final Set<int> selectedIds;
   final String? errorMessage;
 
   List<GeneralSetting> get visibleItems {
@@ -41,6 +43,7 @@ class GeneralSettingsState extends Equatable {
     bool? isLoading,
     bool? isSaving,
     Set<int>? deletingIds,
+    Set<int>? selectedIds,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -50,12 +53,21 @@ class GeneralSettingsState extends Equatable {
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
       deletingIds: deletingIds ?? this.deletingIds,
+      selectedIds: selectedIds ?? this.selectedIds,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
 
   @override
-  List<Object?> get props => [items, query, isLoading, isSaving, deletingIds, errorMessage];
+  List<Object?> get props => [
+        items,
+        query,
+        isLoading,
+        isSaving,
+        deletingIds,
+        selectedIds,
+        errorMessage,
+      ];
 }
 
 class GeneralSettingsCubit extends Cubit<GeneralSettingsState> {
@@ -75,6 +87,26 @@ class GeneralSettingsCubit extends Cubit<GeneralSettingsState> {
   }
 
   void search(String query) => emit(state.copyWith(query: query));
+
+  void toggleSelected(int id, bool selected) {
+    emit(
+      state.copyWith(
+        selectedIds: selected
+            ? {...state.selectedIds, id}
+            : ({...state.selectedIds}..remove(id)),
+      ),
+    );
+  }
+
+  void selectAllVisible() {
+    emit(
+      state.copyWith(
+        selectedIds: state.visibleItems.map((e) => e.id).toSet(),
+      ),
+    );
+  }
+
+  void clearSelection() => emit(state.copyWith(selectedIds: const {}));
 
   Future<bool> save(GeneralSetting setting) async {
     if (state.isSaving) return false;
@@ -112,6 +144,7 @@ class GeneralSettingsCubit extends Cubit<GeneralSettingsState> {
         state.copyWith(
           items: state.items.where((item) => item.id != setting.id).toList(),
           deletingIds: {...state.deletingIds}..remove(setting.id),
+          selectedIds: {...state.selectedIds}..remove(setting.id),
         ),
       );
     } catch (error) {
@@ -121,6 +154,30 @@ class GeneralSettingsCubit extends Cubit<GeneralSettingsState> {
           errorMessage: error.toString(),
         ),
       );
+    }
+  }
+
+  Future<bool> bulkDelete() async {
+    final ids = state.selectedIds;
+    if (ids.isEmpty || state.isSaving) return false;
+    final targetSettings = state.items
+        .where((item) => ids.contains(item.id))
+        .toList(growable: false);
+    if (targetSettings.isEmpty) return false;
+    emit(state.copyWith(isSaving: true, clearError: true));
+    try {
+      await _repository.bulkDeleteGeneralSettings(targetSettings);
+      emit(
+        state.copyWith(
+          items: state.items.where((item) => !ids.contains(item.id)).toList(),
+          selectedIds: const {},
+          isSaving: false,
+        ),
+      );
+      return true;
+    } catch (error) {
+      emit(state.copyWith(isSaving: false, errorMessage: error.toString()));
+      return false;
     }
   }
 

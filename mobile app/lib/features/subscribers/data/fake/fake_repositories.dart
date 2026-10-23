@@ -87,6 +87,8 @@ class FakeSubscribersRepository implements SubscribersRepository {
   @override
   Future<void> deleteSubscriber(int id) async {}
   @override
+  Future<int> bulkDelete(List<int> ids) async => ids.length;
+  @override
   Future<List<LedgerEntry>> getStatement(int subscriberId, {PartyFilter party = const PartyAll()}) async {
     const all = <LedgerEntry>[
       LedgerEntry(id: 3, type: 'payment', amount: 8200, description: 'سند قبض REC-202609-0012', createdAt: '2026-09-05 10:30', runningBalance: -1300),
@@ -123,12 +125,14 @@ class FakeSubscriptionFeesRepository implements SubscriptionFeesRepository {
   }
 
   @override
-  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, String? notes}) async =>
-      SubscriptionFee(id: 99, subscriberId: subscriberId, meterId: meterId, amount: amount, notes: notes);
+  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) async =>
+      SubscriptionFee(id: 99, subscriberId: subscriberId, meterId: meterId, amount: amount, status: status, notes: notes);
   @override
   Future<SubscriptionFee> updateFee(SubscriptionFee fee) async => fee;
   @override
   Future<void> deleteFee(int id) async {}
+  @override
+  Future<int> bulkDelete(List<int> ids) async => ids.length;
   @override
   Future<Map<String, dynamic>> invoiceFee(int id) async => {'message': 'تم إصدار الفاتورة (وضع تجريبي)', 'invoice': {'bill_number': 'INV-DEMO-001'}};
 }
@@ -156,6 +160,8 @@ class FakeServiceRequestsRepository implements ServiceRequestsRepository {
   Future<ServiceRequest> updateRequest(ServiceRequest r) async => r;
   @override
   Future<void> deleteRequest(int id) async {}
+  @override
+  Future<int> bulkDelete(List<int> ids) async => ids.length;
   @override
   Future<ServiceRequest> markCompleted(int id) async =>
       ServiceRequest(id: id, subscriberId: 1, amount: 7000, serviceDate: '2026-10-20', status: TankerStatus.completed);

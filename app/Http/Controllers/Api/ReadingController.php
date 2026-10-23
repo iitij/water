@@ -81,7 +81,9 @@ class ReadingController extends ApiController
             }
         }
 
-        return $query->paginate($this->perPage($request))->appends($request->query());
+        return $query->paginate($this->perPage($request))->through(function (Reading $reading) {
+            return $this->decorateReading($reading);
+        })->appends($request->query());
     }
 
     /** Legacy fast meter search path; kept as an alias for existing clients. */
@@ -130,7 +132,8 @@ class ReadingController extends ApiController
         $this->authorizeApi(Reading::class, 'viewAny');
         $meter = Meter::with('subscriber.square')->findOrFail($meterId);
         $readings = $meter->readings()->with(['invoice:id,bill_number,status', 'creator:id,name'])
-            ->latest('reading_date')->paginate(50);
+            ->latest('reading_date')->paginate(50)
+            ->through(fn (Reading $reading) => $this->decorateReading($reading));
         return response()->json(['meter' => $meter, 'readings' => $readings]);
     }
 
@@ -184,7 +187,7 @@ class ReadingController extends ApiController
             return response()->json(['errors' => ['period_start' => ['توجد قراءة أخرى مسجلة لنفس الفترة.']]], 422);
         }
         $reading->update($data);
-        return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $reading->fresh(['meter.subscriber', 'invoice'])]);
+        return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
     }
 
     public function destroy(int $id)
@@ -414,12 +417,18 @@ class ReadingController extends ApiController
         }
 
         return [
-            'reading' => $reading->fresh(['meter.subscriber.square', 'invoice']),
+            'reading' => $this->decorateReading($reading->fresh(['meter.subscriber.square', 'invoice'])),
             'duplicate' => false,
             'invoice_issued' => $invoiceIssued,
             'invoice_data' => $invoice ? $this->invoicePayload($invoice, $request) : null,
             'invoice_error' => $invoiceError,
         ];
+    }
+
+    private function decorateReading(Reading $reading): Reading
+    {
+        $reading->setAttribute('image_url', $reading->image_path ? url(Storage::disk('public')->url($reading->image_path)) : null);
+        return $reading;
     }
 
     private function invoicePayload(Invoice $invoice, Request $request): array
