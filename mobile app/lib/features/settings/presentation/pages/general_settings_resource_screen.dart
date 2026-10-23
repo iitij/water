@@ -90,7 +90,6 @@ class _GeneralSettingsView extends StatelessWidget {
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search_rounded),
                     labelText: 'بحث بالمفتاح أو الاسم أو القيمة',
-                    border: OutlineInputBorder(),
                   ),
                 ),
               ),
@@ -300,7 +299,6 @@ class _GeneralSettingsView extends StatelessWidget {
                         initialValue: type,
                         decoration: const InputDecoration(
                           labelText: 'نوع الإعداد',
-                          border: OutlineInputBorder(),
                         ),
                         items: const [
                           DropdownMenuItem(value: 'text', child: Text('نص')),

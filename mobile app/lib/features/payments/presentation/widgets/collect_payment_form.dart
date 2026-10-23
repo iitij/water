@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../domain/accounting/payment_allocator.dart';
@@ -124,7 +125,7 @@ class DueHeaderCard extends StatelessWidget {
           if (state.loadingInvoices)
             const Padding(
               padding: EdgeInsets.only(top: 6),
-              child: LinearProgressIndicator(minHeight: 2),
+              child: ShimmerSkeleton(height: 4),
             ),
           const SizedBox(height: 6),
           Row(

@@ -139,7 +139,6 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
             initialValue: settings.method,
             decoration: const InputDecoration(
               labelText: 'طريقة الإرسال المعتمدة',
-              border: OutlineInputBorder(),
             ),
             items: const [
               DropdownMenuItem(value: 'click_to_chat', child: Text('الرابط المباشر (مجاناً وبدون قيود)')),
