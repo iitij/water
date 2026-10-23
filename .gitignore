@@ -73,3 +73,8 @@ coverage/
 **/android/local.properties
 **/android/key.properties
 **/android/*.jks
+
+# Local mobile release artifacts
+/mobile app/release/
+/mobile app/*.zip
+/mobile app/windows/flutter/ephemeral/

@@ -1,3 +1,10 @@
+## Mobile / Windows application
+
+The Flutter app is in [`mobile app/`](mobile%20app/README.md). Laravel remains at
+the repository root. See the app README for build commands, first-launch server
+setup and testing-release limitations. The master plan is a specification, not
+proof that production acceptance tests have passed.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

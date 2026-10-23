@@ -1,3 +1,9 @@
+> Historical foundation handoff. The integrated Flutter app has since moved to
+> `mobile app/`; all Flutter paths below are relative to that directory.
+> Current build instructions and readiness notes: `mobile app/README.md`.
+> The Android and Windows runners now exist; old environment/build observations
+> below describe the original handoff, not the current verification status.
+
 # Flutter Foundation / Dev 1 Handoff
 
 ## Scope delivered
