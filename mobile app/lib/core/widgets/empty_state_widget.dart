@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../ui/app_surfaces.dart';
 import '../ui/app_tokens.dart';
 
 /// Calm empty state: a soft squircle glyph, a short title and one line of

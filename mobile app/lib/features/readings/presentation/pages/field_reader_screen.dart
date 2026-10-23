@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/search_text_field.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
@@ -13,8 +15,6 @@ import '../../data/services/reading_invoice_actions_service.dart';
 import '../../domain/readings_repository.dart';
 import '../widgets/offline_pack_dialog.dart';
 import 'submit_reading_screen.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 class FieldReaderScreen extends StatelessWidget {
   const FieldReaderScreen({

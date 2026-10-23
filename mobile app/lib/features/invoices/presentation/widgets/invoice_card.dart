@@ -401,7 +401,6 @@ class InvoicesSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -472,7 +471,7 @@ class _Strip extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: <Widget>[const Text(count, style: label), Text(value, style: number)],
+          children: <Widget>[Text(count, style: label), Text(value, style: number)],
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
-import '../../../meters/data/models/meter.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../meters/data/models/meter.dart';
 
 class OfflinePackDialog extends StatefulWidget {
   const OfflinePackDialog({

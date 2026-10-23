@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../theme/app_colors.dart';
-import 'package:shimmer/shimmer.dart';
 
 class ShimmerSkeleton extends StatelessWidget {
   const ShimmerSkeleton({super.key, this.height = 84, this.width = double.infinity, this.radius = 18});

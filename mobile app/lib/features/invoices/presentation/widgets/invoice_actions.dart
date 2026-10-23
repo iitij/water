@@ -6,6 +6,7 @@ import '../../../../core/services/pdf_print_service.dart';
 import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
 import '../../data/models/invoice_model.dart';
@@ -13,7 +14,6 @@ import '../../domain/repositories/invoices_repository.dart';
 import '../cubit/invoices_cubit.dart';
 import '../thermal/invoice_thermal_ticket.dart';
 import '../whatsapp/invoice_whatsapp_builder.dart';
-import '../../../../core/theme/app_colors.dart';
 
 /// مجموعة إجراءات الفاتورة (تحصيل / PDF / حراري / واتساب / إعادة احتساب / حذف)
 /// معبّأة في دوال واحدة يستدعيها: `SCR-13`, `SCR-14`, `SCR-15`, وودجات

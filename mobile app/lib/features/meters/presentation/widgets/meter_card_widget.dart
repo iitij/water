@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../data/models/meter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../data/models/meter.dart';
 
 class MeterCardWidget extends StatelessWidget {
   const MeterCardWidget({
@@ -31,13 +31,14 @@ class MeterCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
       child: AppCard(
         padding: EdgeInsets.zero,
-        borderColor: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: .45) : null,
+        borderColor: selected ? colorScheme.primary.withValues(alpha: .45) : null,
         color: selected
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: .04)
+            ? colorScheme.primary.withValues(alpha: .04)
             : null,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.xl),

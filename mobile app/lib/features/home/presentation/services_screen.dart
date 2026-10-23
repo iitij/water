@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/session_service.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
+import '../../../core/ui/app_filters.dart';
 import '../domain/workspace_catalog.dart';
 import 'widgets/workspace_widgets.dart';
-import '../../../core/ui/app_filters.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key, this.autofocus = false});

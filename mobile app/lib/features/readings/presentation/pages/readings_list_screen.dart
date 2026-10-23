@@ -6,10 +6,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
-import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../meters/data/models/meter.dart';
@@ -1017,8 +1017,8 @@ class _ReadingCard extends StatelessWidget {
                           label: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة',
                         ),
                         if (!reading.isSynced)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4),
                             child: StatusBadge(
                               status: 'pending',
                               label: 'بانتظار المزامنة',

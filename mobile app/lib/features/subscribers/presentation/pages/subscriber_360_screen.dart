@@ -9,6 +9,9 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
@@ -31,9 +34,6 @@ import '../cubit/subscriber360_cubit.dart';
 import '../widgets/statement_pdf_service.dart';
 import 'subscriber_form_screen.dart';
 import 'subscribers_screen.dart'
-import '../../../../core/ui/app_filters.dart';
-import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tokens.dart';
     show CollectPaymentLauncher, launchDefaultSubscriberPayment;
 
 /// منافذ تكامل: أنور (Dev 2) بطاقة عداد + تسجيل قراءة — أكرم (Dev 3) تحصيل/فواتير/مدفوعات.
@@ -1268,7 +1268,8 @@ class _StatementTab extends StatelessWidget {
                     entries: state.statement,
                   ),
                   style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.surfaceAlt,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     minimumSize: const Size(38, 38),
                   ),
                   icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),

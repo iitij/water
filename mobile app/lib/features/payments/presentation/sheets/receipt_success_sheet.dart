@@ -6,13 +6,13 @@ import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/arabic_number_spellout.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
 import '../widgets/payment_actions.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 /// نتيجة التحصيل الناجحة — تعرض رقم السند والتفقيط والمتبقي، وتوفر الطباعة
 /// الحرارية والواتساب والـ PDF بضغطة واحدة (قاعدة «مسار التالي» §3.4-2).

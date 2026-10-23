@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
@@ -8,7 +9,6 @@ import '../../domain/entities/dashboard_entities.dart';
 import '../../domain/repositories/dashboard_repository.dart';
 import '../cubit/reports_cubit.dart';
 import '../widgets/monthly_revenue_chart_card.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({required this.repository, super.key});

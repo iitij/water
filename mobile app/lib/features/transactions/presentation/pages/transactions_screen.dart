@@ -4,9 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../cubit/transactions_cubit.dart';
-import '../../../../core/ui/app_filters.dart';
 
 bool _hasTransactionsCubit(BuildContext context) {
   try {

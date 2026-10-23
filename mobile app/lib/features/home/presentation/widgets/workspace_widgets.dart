@@ -95,7 +95,6 @@ class _ShortcutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return AppCard(
       padding: EdgeInsets.zero,
       onTap: onTap,
@@ -135,7 +134,7 @@ class WorkspaceSearchButton extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Material(
-      color: scheme.surfaceAlt,
+      color: scheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onTap,

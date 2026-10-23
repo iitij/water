@@ -8,6 +8,7 @@ import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_search.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -17,7 +18,6 @@ import '../../../invoices/presentation/widgets/invoice_card.dart';
 import '../cubit/quick_collector_cubit.dart';
 import '../cubit/quick_collector_state.dart';
 import '../sheets/collect_payment_sheet.dart';
-import '../../../../core/ui/app_tokens.dart';
 
 /// `SCR-13` — المحصل السريع (Field Collector).
 ///

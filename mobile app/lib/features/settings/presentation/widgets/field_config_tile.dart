@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../admin_shared/presentation/theme/admin_palette.dart';
 
 /// Unified show/hide + alternate-label editor matching Filament's
 /// buildFieldConfig() for invoice and receipt fields.

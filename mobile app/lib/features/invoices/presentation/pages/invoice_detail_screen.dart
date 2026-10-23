@@ -326,11 +326,10 @@ class _AmountsCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.icon, this.trailing});
+  const _SectionTitle({required this.title, required this.icon});
 
   final String title;
   final IconData icon;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +347,6 @@ class _SectionTitle extends StatelessWidget {
             ),
           ),
         ),
-        if (trailing != null) trailing!,
       ],
     );
   }
@@ -367,7 +365,7 @@ class _ItemsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _SectionTitle(title: 'بنود الفاتورة', icon: Icons.list_alt_rounded),
+          const _SectionTitle(title: 'بنود الفاتورة', icon: Icons.list_alt_rounded),
           const SizedBox(height: 8),
           for (final item in invoice.items)
             Padding(
@@ -411,7 +409,7 @@ class _ReadingsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _SectionTitle(title: 'القراءات', icon: Icons.speed_rounded),
+          const _SectionTitle(title: 'القراءات', icon: Icons.speed_rounded),
           const SizedBox(height: 8),
           for (final reading in invoice.readings)
             Padding(
@@ -463,7 +461,7 @@ class _PaymentsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _SectionTitle(title: 'المدفوعات المرتبطة', icon: Icons.payments_rounded),
+          const _SectionTitle(title: 'المدفوعات المرتبطة', icon: Icons.payments_rounded),
           const SizedBox(height: 8),
           for (final payment in invoice.payments)
             Padding(
