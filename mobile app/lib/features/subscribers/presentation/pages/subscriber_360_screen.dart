@@ -372,7 +372,7 @@ class _MetersTab extends StatelessWidget {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
       try {
-        await context.push('/meters/new?subscriber_id=${sub.id}');
+        await context.push<Object?>('/meters/new?subscriber_id=${sub.id}');
         if (context.mounted) {
           await context.read<Subscriber360Cubit>().load(sub.id);
         }
@@ -614,7 +614,7 @@ class _InvoicesTab extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StatusBadge(
-                  label: model.status.labelAr,
+                  label: model.status.label,
                   color: isPaid ? AppColors.success : AppColors.warning,
                 ),
                 if (!isPaid)
@@ -755,7 +755,7 @@ class _PaymentsTab extends StatelessWidget {
                 : null,
             leading: const Icon(Icons.receipt, color: AppColors.success),
             title: Text('${model.receiptNumber} • ${p['payment_date'] ?? ''}'),
-            subtitle: Text(model.method.labelAr),
+            subtitle: Text(model.method.label),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1228,11 +1228,9 @@ class _StatementTab extends StatelessWidget {
             child: Row(children: [
               Expanded(
                 child: DropdownButtonFormField<PartyFilter>(
-                  value: state.party,
-                  decoration: const InputDecoration(
-                    labelText: 'فلتر الجهة (الحساب)',
-                    border: OutlineInputBorder(),
-                  ),
+                  key: ValueKey<PartyFilter>(state.party),
+                  initialValue: state.party,
+                  decoration: const InputDecoration(labelText: 'فلتر الجهة (الحساب)', border: OutlineInputBorder()),
                   items: [for (final p in parties) DropdownMenuItem(value: p, child: Text(p.label))],
                   onChanged: (p) {
                     if (p != null) context.read<Subscriber360Cubit>().filterParty(p);

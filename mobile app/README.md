@@ -38,11 +38,10 @@ That writes the Android mipmaps and adaptive-icon XML, the Windows
 generated PNG/ICO files by hand; change the SVGs and re-run.
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md) for local-network setup and limitations.
-The GitHub Actions workflow builds Android and Windows and publishes a testing
+The GitHub Actions workflow builds Android and Windows and publishes testing
 prereleases per platform, directly to Releases (without Actions artifact storage).
-Android publication requires its build and analyzer/test gates to succeed.
-Windows publication requires its own build to succeed.
-It runs on the Arena working branch or manually, not on arbitrary pull requests.
+Analyzer and tests run on both jobs; publication is skipped for pull requests.
+It runs on `main`/`master`/`develop`, any `arena/**` branch, and manually.
 Production signing is deliberately not implied: configure a persistent private
 keystore through GitHub Actions secrets before shipping a production build.
 Never commit signing keys or backend credentials.
@@ -53,11 +52,15 @@ The Arabic home is task-first; **الخدمات** opens the searchable, permissi
 service directory. See [FEATURE_COVERAGE.md](FEATURE_COVERAGE.md) for the Laravel
 module inventory, delivered UX/workflow changes, and remaining parity checks.
 
+See [../docs/MOBILE_PHASE1_ARCHITECTURE.md](../docs/MOBILE_PHASE1_ARCHITECTURE.md)
+for the unified offline-queue design, account isolation rules and server-switch guard.
+
 ## Remaining acceptance work
 
 - Run the master plan's full device/backend acceptance checklist.
-- Consolidate/audit the two offline queue implementations; the shared auth queue
-  still uses SharedPreferences, not the field module's SQLite store.
 - Exercise login, permission enforcement, account switching, read/payment retries,
   printing, camera and Windows platform support against a test backend.
-- Resolve remaining analyzer warnings and replace debug signing for production.
+- Physical Bluetooth 58/80 mm printing, barcode camera, and the Node WhatsApp bridge.
+- Resolve remaining analyzer warnings (mostly legacy deprecations) and replace
+  debug signing with a production keystore + Play App Signing.
+- Enforce HTTPS in release builds (`usesCleartextTraffic` is still enabled for LAN QA).

@@ -56,7 +56,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
-        indicatorColor: AppColors.primary.withOpacity(isDark ? .28 : .12),
+        indicatorColor: AppColors.primary.withValues(alpha: isDark ? .28 : .12),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
           fontFamily: AppTypography.fontFamily,
           fontSize: 12,

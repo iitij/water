@@ -239,7 +239,8 @@ class _MetersListView extends StatelessWidget {
             builder: (context, constraints) {
               final children = [
                 DropdownButtonFormField<int?>(
-                  value: state.squareFilter,
+                  key: ValueKey<String>('square-${state.squareFilter}'),
+                  initialValue: state.squareFilter,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'المربع السكني',
@@ -256,7 +257,8 @@ class _MetersListView extends StatelessWidget {
                   onChanged: cubit.setSquareFilter,
                 ),
                 DropdownButtonFormField<String?>(
-                  value: state.statusFilter,
+                  key: ValueKey<String>('status-${state.statusFilter}'),
+                  initialValue: state.statusFilter,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'الحالة',
@@ -385,7 +387,7 @@ class _MetersListView extends StatelessWidget {
 
   Future<void> _openForm(BuildContext context, [Meter? meter]) async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      MaterialPageRoute<bool>(
         builder: (_) => MeterFormScreen(
           repository: metersRepository,
           meter: meter,

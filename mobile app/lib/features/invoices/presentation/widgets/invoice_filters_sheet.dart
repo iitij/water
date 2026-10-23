@@ -16,7 +16,7 @@ Future<void> showInvoiceFiltersSheet(
 }) async {
   List<SquareOption> squares = const <SquareOption>[];
   Future<List<SubscriberOption>> Function(String search)? resolvedLoader = subscribersLoader;
-  if (sl.isRegistered<ReferencesRemoteDataSource>()) {
+  if (getIt.isRegistered<ReferencesRemoteDataSource>()) {
     final refs = sl<ReferencesRemoteDataSource>();
     try {
       squares = await refs.squares();
@@ -263,7 +263,8 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
 
   Widget _periodDropdown() {
     return DropdownButtonFormField<String?>(
-      value: _draft.billingPeriod,
+      key: ValueKey<String?>('period-${_draft.billingPeriod}'),
+      initialValue: _draft.billingPeriod,
       decoration: const InputDecoration(labelText: 'فترة الفوترة'),
       isExpanded: true,
       items: <DropdownMenuItem<String?>>[
@@ -284,8 +285,11 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
   }
 
   Widget _squareDropdown() {
+    final squareId =
+        widget.squares.any((s) => s.id == _draft.squareId) ? _draft.squareId : null;
     return DropdownButtonFormField<int?>(
-      value: widget.squares.any((s) => s.id == _draft.squareId) ? _draft.squareId : null,
+      key: ValueKey<int?>(squareId),
+      initialValue: squareId,
       decoration: const InputDecoration(labelText: 'المربع السكني'),
       isExpanded: true,
       items: <DropdownMenuItem<int?>>[

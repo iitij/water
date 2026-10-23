@@ -81,7 +81,7 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'ترسل القراءات إلى /api/readings/sync-batch، والمدفوعات إلى /api/invoices/pay. لكل عملية معرّف فريد يمنع تكرارها عند إعادة المحاولة.',
+                    'ترسل القراءات إلى /api/readings/sync-batch، والمدفوعات إلى /api/invoices/pay أو /api/payments. لكل عملية معرّف UUID فريد يمنع تكرارها عند إعادة المحاولة.',
                     style: theme.textTheme.bodySmall,
                     textAlign: TextAlign.center,
                   ),
@@ -115,7 +115,7 @@ class _SyncHero extends StatelessWidget {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
           Text('كل عملية محفوظة', style: theme.textTheme.headlineMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          Text('تابع القراءات والمدفوعات المحلية وأعد إرسال ما تعذر عند عودة الشبكة.', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withOpacity(.79), height: 1.55)),
+          Text('تابع القراءات والمدفوعات المحلية وأعد إرسال ما تعذر عند عودة الشبكة.', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: .79), height: 1.55)),
           const SizedBox(height: 15),
           Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
             Icon(online == true ? Icons.wifi_rounded : Icons.wifi_off_rounded, color: Colors.white, size: 18),
@@ -124,7 +124,7 @@ class _SyncHero extends StatelessWidget {
           ]),
         ])),
         const SizedBox(width: 12),
-        Container(width: 62, height: 62, decoration: BoxDecoration(color: Colors.white.withOpacity(.13), borderRadius: BorderRadius.circular(21)), child: Icon(isSyncing ? Icons.cloud_sync_rounded : Icons.cloud_queue_rounded, color: Colors.white, size: 31)),
+        Container(width: 62, height: 62, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .13), borderRadius: BorderRadius.circular(21)), child: Icon(isSyncing ? Icons.cloud_sync_rounded : Icons.cloud_queue_rounded, color: Colors.white, size: 31)),
       ]),
     );
   }
@@ -158,10 +158,13 @@ class _QueueItemCard extends StatelessWidget {
     final isReading = item.type == SyncQueueType.reading;
     final payload = item.payload;
     final amount = payload['amount']?.toString();
-    final title = isReading ? 'قراءة عداد' : 'دفعة تحصيل';
+    final invoiceId = payload['invoice_id'];
+    final title = isReading ? 'قراءة عداد' : 'سند قبض / تحصيل';
     final detail = isReading
-        ? 'عداد ${payload['meter_id'] ?? '—'} • القراءة ${payload['current_reading'] ?? '—'}'
-        : 'فاتورة ${payload['invoice_id'] ?? '—'} • المبلغ ${amount ?? '—'} ريال';
+        ? 'عداد #${payload['meter_id'] ?? '—'} • القراءة ${payload['current_reading'] ?? '—'}'
+        : invoiceId != null
+            ? 'فاتورة #$invoiceId • المبلغ ${amount ?? '—'} ريال'
+            : 'مشترك #${payload['subscriber_id'] ?? '—'} (FIFO) • المبلغ ${amount ?? '—'} ريال';
     final status = switch (item.status) {
       SyncQueueStatus.queued => 'queued',
       SyncQueueStatus.syncing => 'syncing',
@@ -171,10 +174,10 @@ class _QueueItemCard extends StatelessWidget {
     final shortId = item.id.length > 8 ? item.id.substring(0, 8) : item.id;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.dividerColor.withOpacity(.7))),
+      decoration: BoxDecoration(color: theme.colorScheme.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.dividerColor.withValues(alpha: .7))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
         Row(children: <Widget>[
-          Container(width: 42, height: 42, decoration: BoxDecoration(color: (isReading ? AppColors.info : AppColors.success).withOpacity(.1), borderRadius: BorderRadius.circular(14)), child: Icon(isReading ? Icons.speed_rounded : Icons.payments_outlined, color: isReading ? AppColors.info : AppColors.success)),
+          Container(width: 42, height: 42, decoration: BoxDecoration(color: (isReading ? AppColors.info : AppColors.success).withValues(alpha: .1), borderRadius: BorderRadius.circular(14)), child: Icon(isReading ? Icons.speed_rounded : Icons.payments_outlined, color: isReading ? AppColors.info : AppColors.success)),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[Text(title, style: theme.textTheme.titleMedium), Text(detail, style: theme.textTheme.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis)])),
           const SizedBox(width: 8),
@@ -188,7 +191,7 @@ class _QueueItemCard extends StatelessWidget {
         ]),
         if (item.lastError != null && item.lastError!.isNotEmpty) ...<Widget>[
           const SizedBox(height: 10),
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.danger.withOpacity(.06), borderRadius: BorderRadius.circular(12)), child: Text(item.lastError!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.danger), maxLines: 3, overflow: TextOverflow.ellipsis)),
+          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: .06), borderRadius: BorderRadius.circular(12)), child: Text(item.lastError!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.danger), maxLines: 3, overflow: TextOverflow.ellipsis)),
         ],
         if (item.status == SyncQueueStatus.failed) ...<Widget>[
           const SizedBox(height: 10),

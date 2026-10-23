@@ -72,6 +72,22 @@ class SyncQueueItem extends Equatable {
   static String encodeList(List<SyncQueueItem> items) =>
       jsonEncode(items.map((item) => item.toJson()).toList(growable: false));
 
+  /// Tolerant decoder used by the legacy SharedPreferences migration: a single
+  /// corrupt row must never discard the whole local queue.
+  static List<SyncQueueItem> decodeList(String? raw) {
+    if (raw == null || raw.isEmpty) return <SyncQueueItem>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <SyncQueueItem>[];
+      return decoded
+          .whereType<Map<Object?, Object?>>()
+          .map((row) => SyncQueueItem.fromJson(Map<String, dynamic>.from(row)))
+          .toList(growable: true);
+    } on FormatException {
+      return <SyncQueueItem>[];
+    }
+  }
+
   @override
   List<Object?> get props => <Object?>[id, type, payload, status, createdAt, ownerUserId, attempts, lastError];
 }

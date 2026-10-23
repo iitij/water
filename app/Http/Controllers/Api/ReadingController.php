@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ReadingController extends ApiController
@@ -278,7 +279,11 @@ class ReadingController extends ApiController
             'readings.*.period_start' => ['nullable', 'date'],
             'readings.*.period_end' => ['nullable', 'date'],
             'readings.*.sync_uuid' => ['nullable', 'uuid'],
+            'readings.*.client_action_id' => ['nullable', 'string', 'max:100'],
+            'readings.*.local_id' => ['nullable', 'string', 'max:100'],
             'readings.*.image' => ['nullable', 'image', 'max:5120'],
+            'readings.*.image_base64' => ['nullable', 'string'],
+            'readings.*.image_filename' => ['nullable', 'string', 'max:255'],
             'readings.*.has_subscription_fee' => ['sometimes', 'boolean'],
             'readings.*.subscription_installment' => ['nullable', 'numeric', 'min:0'],
             'readings.*.has_tanker_fee' => ['sometimes', 'boolean'],
@@ -287,11 +292,16 @@ class ReadingController extends ApiController
 
         $results = [];
         foreach ($payload['readings'] as $index => $item) {
+            $clientActionId = $item['client_action_id'] ?? $item['local_id'] ?? $item['sync_uuid'] ?? null;
+            if (empty($item['sync_uuid']) && is_string($clientActionId) && Str::isUuid($clientActionId)) {
+                $item['sync_uuid'] = strtolower($clientActionId);
+            }
             try {
                 $result = $this->createReading($item, $request, $index);
                 $results[] = [
                     'index' => $index,
                     'sync_uuid' => $item['sync_uuid'] ?? null,
+                    'client_action_id' => $clientActionId,
                     'success' => true,
                     'duplicate' => $result['duplicate'],
                     'reading' => $result['reading'],
@@ -303,6 +313,7 @@ class ReadingController extends ApiController
                 $results[] = [
                     'index' => $index,
                     'sync_uuid' => $item['sync_uuid'] ?? null,
+                    'client_action_id' => $clientActionId,
                     'success' => false,
                     'message' => $exception instanceof ValidationException ? collect($exception->errors())->flatten()->first() : $exception->getMessage(),
                 ];
@@ -327,7 +338,11 @@ class ReadingController extends ApiController
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'client_action_id' => ['nullable', 'string', 'max:100'],
+            'local_id' => ['nullable', 'string', 'max:100'],
             'image' => ['nullable', 'image', 'max:5120'],
+            'image_base64' => ['nullable', 'string'],
+            'image_filename' => ['nullable', 'string', 'max:255'],
             'has_subscription_fee' => ['sometimes', 'boolean'],
             'subscription_installment' => ['nullable', 'numeric', 'min:0'],
             'has_tanker_fee' => ['sometimes', 'boolean'],
@@ -338,6 +353,12 @@ class ReadingController extends ApiController
 
     private function createReading(array $data, Request $request, ?int $batchIndex = null): array
     {
+        if (empty($data['sync_uuid'])) {
+            $fallbackId = $data['client_action_id'] ?? $data['local_id'] ?? $request->header('Idempotency-Key');
+            if (is_string($fallbackId) && Str::isUuid($fallbackId)) {
+                $data['sync_uuid'] = strtolower($fallbackId);
+            }
+        }
         $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
         if (! empty($data['sync_uuid'])) {
             $existing = Reading::withTrashed()->where('sync_uuid', $data['sync_uuid'])->first();
@@ -378,6 +399,17 @@ class ReadingController extends ApiController
         $imageFile = $batchIndex === null ? $request->file('image') : $request->file("readings.$batchIndex.image");
         if ($imageFile && (int) $data['meter_id'] === $meter->id) {
             $imagePath = $imageFile->store('readings', 'public');
+        } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
+            $decodedImage = base64_decode($data['image_base64'], true);
+            if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
+                $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
+                if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                    $ext = 'jpg';
+                }
+                $storedName = 'readings/' . Str::uuid() . '.' . $ext;
+                Storage::disk('public')->put($storedName, $decodedImage);
+                $imagePath = $storedName;
+            }
         }
 
         $reading = DB::transaction(function () use ($meter, $data, $request, $previous, $current, $periodStart, $periodEnd, $imagePath) {

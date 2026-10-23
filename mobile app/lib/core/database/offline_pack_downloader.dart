@@ -188,10 +188,10 @@ class OfflinePackDownloader {
     try {
       Response<dynamic> response;
       try {
-        response = await _dio.get(ApiEndpoints.readingSettings);
+        response = await _dio.get<dynamic>(ApiEndpoints.readingSettings);
       } on DioException catch (error) {
         if (error.response?.statusCode != 404) rethrow;
-        response = await _dio.get(ApiEndpoints.settings);
+        response = await _dio.get<dynamic>(ApiEndpoints.settings);
       }
       final body = response.data;
       if (body is Map) {

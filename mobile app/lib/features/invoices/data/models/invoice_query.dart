@@ -2,7 +2,6 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../core/finance/finance_search.dart';
 import '../../../../core/utils/json_utils.dart';
-import 'invoice_model.dart';
 
 /// فلاتر قائمة الفواتير الأربعة + البحث الذكي (الخطة §4.4، §2.3-33).
 class InvoiceQuery extends Equatable {

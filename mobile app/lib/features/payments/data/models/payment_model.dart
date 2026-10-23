@@ -136,22 +136,26 @@ class PaymentModel extends Equatable {
   static Map<String, dynamic> createPayload({
     required int subscriberId,
     int? invoiceId,
+    int? meterId,
     required double amount,
     required PaymentMethod method,
     DateTime? paymentDate,
     String? referenceNumber,
     String? reason,
     String? notes,
+    String? syncUuid,
   }) =>
       <String, dynamic>{
         'subscriber_id': subscriberId,
         if (invoiceId != null) 'invoice_id': invoiceId,
+        if (meterId != null) 'meter_id': meterId,
         'amount': amount,
         'payment_date': DateFormat.dateTime(paymentDate ?? DateTime.now()),
         'payment_method': method.wire,
         if (method.requiresReference) 'reference_number': referenceNumber,
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        if (syncUuid != null && syncUuid.trim().isNotEmpty) 'sync_uuid': syncUuid.trim(),
       };
 
   @override

@@ -116,7 +116,7 @@ Future<({Subscriber subscriber, MeterBalance? meter})?> showSubscriberMeterPicke
   SubscribersRepository? repository,
 }) {
   ({Subscriber subscriber, MeterBalance? meter})? result;
-  return showModalBottomSheet(
+  return showModalBottomSheet<({Subscriber subscriber, MeterBalance? meter})>(
     context: context,
     isScrollControlled: true,
     builder: (sheetCtx) => Padding(

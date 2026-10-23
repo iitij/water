@@ -3,12 +3,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/aqua_glass_card.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/aqua_glass_card.dart';
 import '../cubit/auth_cubit.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -42,6 +44,15 @@ class _LoginScreenState extends State<LoginScreen> {
         );
   }
 
+  Future<void> _openServerConfig() async {
+    final updated = await ServerConfigSheet.show(context);
+    if (!mounted || updated == null) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم تحديث عنوان الخادم إلى: $updated')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,10 +72,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 top: 15,
                 left: 14,
                 child: SafeArea(
-                  child: IconButton.filledTonal(
-                    tooltip: 'تبديل المظهر',
-                    onPressed: GetIt.I<AppThemeController>().toggle,
-                    icon: Icon(theme.brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      IconButton.filledTonal(
+                        tooltip: 'تبديل المظهر',
+                        onPressed: GetIt.I<AppThemeController>().toggle,
+                        icon: Icon(theme.brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'تغيير عنوان الخادم',
+                        onPressed: loading ? null : _openServerConfig,
+                        icon: const Icon(Icons.dns_outlined),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -113,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 28),
                           loginCard,
                           const SizedBox(height: 22),
-                          Text('آمن • سريع • جاهز للعمل الميداني', style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withOpacity(.82))),
+                          Text('آمن • سريع • جاهز للعمل الميداني', style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: .82))),
                         ],
                       ),
                     ),
@@ -200,6 +222,20 @@ class _LoginScreenState extends State<LoginScreen> {
               Text('اتصال محمي عبر رمز دخول آمن', style: theme.textTheme.bodySmall),
             ],
           ),
+          const SizedBox(height: 10),
+          Center(
+            child: TextButton.icon(
+              onPressed: loading ? null : _openServerConfig,
+              icon: const Icon(Icons.dns_outlined, size: 16),
+              label: Text(
+                AppConfig.currentApiBaseUrl == null
+                    ? 'إعدادات الاتصال بالخادم'
+                    : 'الخادم: ${Uri.tryParse(AppConfig.currentApiBaseUrl!)?.authority ?? AppConfig.currentApiBaseUrl} (تغيير)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -251,7 +287,7 @@ class _CompactBrand extends StatelessWidget {
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(.14), borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white.withOpacity(.25))),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .14), borderRadius: BorderRadius.circular(22), border: Border.all(color: Colors.white.withValues(alpha: .25))),
             child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 34),
           ),
           const SizedBox(height: 12),
@@ -275,13 +311,13 @@ class _BrandPanel extends StatelessWidget {
           Container(
             width: 76,
             height: 76,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(.13), borderRadius: BorderRadius.circular(25), border: Border.all(color: Colors.white.withOpacity(.26))),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .13), borderRadius: BorderRadius.circular(25), border: Border.all(color: Colors.white.withValues(alpha: .26))),
             child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 40),
           ),
           const SizedBox(height: 28),
           Text('إدارة أكثر وضوحاً،\nمن الميدان إلى المكتب', style: style.displayMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800, height: 1.25)),
           const SizedBox(height: 14),
-          Text('منظومة موحدة للقراءات والفواتير والتحصيل، مصممة لتعمل معك حتى عندما تضعف الشبكة.', style: style.titleMedium?.copyWith(color: Colors.white.withOpacity(.8), height: 1.7)),
+          Text('منظومة موحدة للقراءات والفواتير والتحصيل، مصممة لتعمل معك حتى عندما تضعف الشبكة.', style: style.titleMedium?.copyWith(color: Colors.white.withValues(alpha: .8), height: 1.7)),
           const SizedBox(height: 32),
           const _FeaturePill(icon: Icons.wifi_off_rounded, label: 'جاهز للعمل دون اتصال'),
           const SizedBox(height: 10),
@@ -300,7 +336,7 @@ class _FeaturePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(.1), borderRadius: BorderRadius.circular(99), border: Border.all(color: Colors.white.withOpacity(.13))),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .1), borderRadius: BorderRadius.circular(99), border: Border.all(color: Colors.white.withValues(alpha: .13))),
         child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
           Icon(icon, size: 17, color: Colors.white),
           const SizedBox(width: 8),

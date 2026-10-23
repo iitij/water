@@ -5,6 +5,7 @@ import 'package:water_project/core/router/route_names.dart';
 import 'package:water_project/core/theme/app_theme.dart';
 import 'package:water_project/features/home/presentation/home_screen.dart';
 import 'package:water_project/features/home/presentation/services_screen.dart';
+import 'package:water_project/features/home/presentation/widgets/workspace_widgets.dart';
 
 Widget _app(Widget child, {double scale = 1, bool dark = false}) => MaterialApp(
   locale: const Locale('ar'),
@@ -87,10 +88,11 @@ void main() {
     await tester.pumpWidget(_app(ServicesDirectory(can: (_) => true, onNavigate: (_) {})));
     await tester.enterText(find.byType(TextField), 'المستخدمون');
     await tester.pumpAndSettle();
-    expect(find.text('المستخدمون'), findsOneWidget);
+    // `find.text` also matches the search field's EditableText, so assert on the tile.
+    expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsOneWidget);
     await tester.pumpWidget(_app(ServicesDirectory(can: (_) => false, onNavigate: (_) {})));
     await tester.pumpAndSettle();
-    expect(find.text('المستخدمون'), findsNothing);
+    expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsNothing);
     expect(find.text('0 خدمة متاحة'), findsOneWidget);
   });
 

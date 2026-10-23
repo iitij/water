@@ -60,5 +60,25 @@ void main() {
       expect(period.hasTankerFee, isTrue);
       expect(period.tankerInstallment, 20);
     });
+
+    test('offline submission payload carries the sync UUID and consumption', () {
+      const localId = '6f1c1f1e-8a1e-4c1f-9f7a-1c2d3e4f5a6b';
+      final submission = ReadingSubmission(
+        meterId: 17,
+        readingDate: DateTime(2026, 6, 20),
+        periodStart: DateTime(2026, 6, 1),
+        periodEnd: DateTime(2026, 6, 30),
+        previousReading: 100,
+        currentReading: 145.5,
+      );
+
+      final payload = submission.toJson(localId: localId);
+
+      expect(payload['sync_uuid'], localId);
+      expect(payload['client_action_id'], localId);
+      expect(payload['consumption_units'], 45.5);
+      expect(payload['reading_date'], '2026-06-20');
+      expect(payload['period_start'], '2026-06-01');
+    });
   });
 }

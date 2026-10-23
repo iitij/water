@@ -1,7 +1,8 @@
-/// طابور المزامنة المحلي للوحدة المالية — يربط عمليات التحصيل الأوفلاين مباشرة
-/// بـ `SyncQueueManager` الموحّد (لتظهر في شاشة المزامنة وتُرسَل تلقائياً فور عودة الاتصال)،
-/// مع الاحتفاظ بـ SharedPreferences كاحتياط آمن في بيئات الاختبار المعزولة.
+/// طابور المزامنة للوحدة المالية: يوجّه الدفعات الأوفلاين مباشرةً إلى
+/// `SyncQueueManager` الموحّد المدعوم بـ Drift/SQLite (`AppDatabase`)، مع الاحتفاظ
+/// بـ `LocalSyncQueueRepository` كخيار احتياطي للاختبارات المنعزلة فقط.
 import 'dart:convert';
+
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,12 +18,12 @@ class SyncAction {
     this.sourceModule = 'payments',
   });
 
-  /// `payment.create` | `invoice.pay` | `invoice.generate_meter` | ...
+  /// `invoice.pay` | `payment.create`
   final String type;
   final Map<String, dynamic> payload;
   final DateTime createdAt;
 
-  /// مفتاح يمنع تكرار السند عند إعادة المحاولة (رقم السند المحلي).
+  /// مفتاح يمنع تكرار السند عند إعادة المحاولة.
   final String? idempotencyKey;
   final String sourceModule;
 
@@ -52,8 +53,46 @@ abstract interface class FinanceSyncQueueRepository {
 
 typedef SyncQueueRepository = FinanceSyncQueueRepository;
 
-/// تنفيذ متكامل يمرّر الدفعات الأوفلاين إلى `SyncQueueManager` الموحّد فور تسجيلها،
-/// ويعود إلى SharedPreferences فقط عند غياب مدير المزامنة (مثلاً في اختبارات الوحدات).
+/// المحوّل الرسمي للإنتاج: يربط الوحدة المالية بطابور Drift/SQLite الموحد
+/// (`SyncQueueManager`) لتظهر كل سندات القبض الأوفلاين فوراً في `SCR-28` والشاشة الرئيسية.
+class UnifiedFinanceSyncQueueAdapter implements FinanceSyncQueueRepository {
+  const UnifiedFinanceSyncQueueAdapter(this._manager);
+
+  final SyncQueueManager _manager;
+
+  @override
+  Future<void> enqueue(SyncAction action) async {
+    await _manager.enqueuePayment(
+      action.payload,
+      idempotencyKey: action.idempotencyKey,
+    );
+  }
+
+  @override
+  Future<List<SyncAction>> pending({String? module}) async {
+    return _manager.items
+        .where((item) => item.type == SyncQueueType.payment)
+        .map(
+          (item) => SyncAction(
+            type: item.payload['invoice_id'] != null
+                ? 'invoice.pay'
+                : 'payment.create',
+            payload: item.payload,
+            createdAt: item.createdAt,
+            idempotencyKey: item.id,
+            sourceModule: 'payments',
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> markSynced(SyncAction action) async {
+    // يُدار الانتقال إلى `synced` تلقائياً بواسطة `SyncQueueManager`.
+  }
+}
+
+/// تنفيذ احتياطي بسيط (SharedPreferences) للاختبارات المنعزلة التي لا تهيئ `SyncQueueManager`.
 class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
   LocalSyncQueueRepository({SharedPreferences? prefs}) : _prefs = prefs;
 
