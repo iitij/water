@@ -59,15 +59,27 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
   Future<void> load() async {
     emit(state.copyWith(loading: true));
     try {
-      final page = await _repo.getRequests(status: state.status, subscriberId: subscriberId, from: state.from, until: state.until);
+      final page = await _repo.getRequests(
+        status: state.status,
+        subscriberId: subscriberId,
+        from: state.from,
+        until: state.until,
+      );
       emit(state.copyWith(loading: false, requests: page.requests, totalSum: page.totalSum));
     } catch (e) {
       emit(state.copyWith(loading: false, error: friendlyError(e)));
     }
   }
 
-  void filterStatus(TankerStatus? s) { emit(s == null ? state.copyWith(clearStatus: true) : state.copyWith(status: s)); load(); }
-  void filterRange(String? from, String? until) { emit(state.copyWith(from: from, clearFrom: from == null, until: until, clearUntil: until == null)); load(); }
+  void filterStatus(TankerStatus? s) {
+    emit(s == null ? state.copyWith(clearStatus: true) : state.copyWith(status: s));
+    load();
+  }
+
+  void filterRange(String? from, String? until) {
+    emit(state.copyWith(from: from, clearFrom: from == null, until: until, clearUntil: until == null));
+    load();
+  }
 
   void toggleSelect(int id) {
     final ids = {...state.selectedIds};
@@ -98,22 +110,23 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
     }
   }
 
+  Future<void> updateRequest(ServiceRequest request) async {
+    if (!request.canEdit) throw StateError('لا يمكن تعديل طلب مرتبط بفاتورة.');
+    await _repo.updateRequest(request);
+    await load();
+  }
+
   Future<void> update(ServiceRequest request) async {
     try {
-      await _repo.updateRequest(request);
-      await load();
+      await updateRequest(request);
     } catch (e) {
       emit(state.copyWith(error: friendlyError(e)));
     }
   }
 
   Future<void> markCompleted(int id) async {
-    try {
-      await _repo.markCompleted(id);
-      await load();
-    } catch (e) {
-      emit(state.copyWith(error: friendlyError(e)));
-    }
+    await _repo.markCompleted(id);
+    await load();
   }
 
   Future<String> invoice(int id) async {

@@ -41,8 +41,10 @@ class ServiceRequest extends Equatable {
   final String? notes;
 
   bool get hasNote => notes != null && notes!.trim().isNotEmpty;
-  bool get canComplete => status == TankerStatus.pending;
-  bool get canInvoice => status == TankerStatus.completed;
+  bool get canEdit => invoiceId == null &&
+      (status == TankerStatus.pending || status == TankerStatus.completed);
+  bool get canComplete => invoiceId == null && status == TankerStatus.pending;
+  bool get canInvoice => invoiceId == null && status == TankerStatus.completed;
   @override
-  List<Object?> get props => [id, amount, status, invoiceId];
+  List<Object?> get props => [id, subscriberId, subscriberName, amount, serviceDate, status, invoiceId, invoiceNumber, notes];
 }
