@@ -6,8 +6,8 @@ import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/auth/session_service.dart';
-import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -82,7 +82,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       confirmLabel: 'تسجيل الخروج',
       destructive: true,
     );
-    if (confirmed && mounted) context.read<AuthCubit>().logout();
+    if (confirmed && mounted) await context.read<AuthCubit>().logout();
   }
 
   Future<void> _openServerConfig() async {
@@ -225,7 +225,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: roles.isEmpty
-                            ? <Widget>[
+                            ? const <Widget>[
                                 AppPill(
                                   label: 'موظف',
                                   icon: Icons.person_outline_rounded,
@@ -288,7 +288,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           : _logout,
                       child: Row(
                         children: <Widget>[
-                          AppIconBubble(
+                          const AppIconBubble(
                             icon: Icons.logout_rounded,
                             color: AppColors.danger,
                             size: 42,

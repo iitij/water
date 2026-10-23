@@ -97,16 +97,16 @@ class FieldHubScreen extends StatelessWidget {
           ),
         ),
         const Gap(AppSpacing.xl),
-        AppReveal(
-          delay: const Duration(milliseconds: 160),
+        const AppReveal(
+          delay: Duration(milliseconds: 160),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const SectionHeading(
+              SectionHeading(
                 title: 'دورة القراءة في ثلاث خطوات',
                 subtitle: 'مصممة لتقليل الأخطاء وتسريع العمل',
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 1,
                 title: 'ابحث عن المسار أو امسح الباركود',
@@ -114,7 +114,7 @@ class FieldHubScreen extends StatelessWidget {
                 icon: Icons.qr_code_scanner_rounded,
                 color: AppColors.primary,
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 2,
                 title: 'أدخل القراءة وراجع الفارق',
@@ -122,7 +122,7 @@ class FieldHubScreen extends StatelessWidget {
                 icon: Icons.speed_rounded,
                 color: AppColors.info,
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 3,
                 title: 'أصدر الفاتورة أو اطبع السند',

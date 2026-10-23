@@ -105,7 +105,7 @@ class SumBar extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(it.label, style: TextStyle(color: AppColors.neutral, fontSize: 12)),
+                Text(it.label, style: const TextStyle(color: AppColors.neutral, fontSize: 12)),
                 const SizedBox(height: 3),
                 Directionality(
                   textDirection: TextDirection.ltr,
@@ -219,7 +219,7 @@ class MasterDetailLayout extends StatelessWidget {
         Expanded(
           child: hasSelection
               ? detail
-              : EmptyState(message: 'اختر عنصراً من القائمة لعرض تفاصيله', icon: Icons.touch_app_outlined),
+              : const EmptyState(message: 'اختر عنصراً من القائمة لعرض تفاصيله', icon: Icons.touch_app_outlined),
         ),
       ],
     );

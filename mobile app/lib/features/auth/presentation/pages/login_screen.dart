@@ -8,11 +8,11 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/ui/app_brand.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
-import '../../../../core/ui/app_brand.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/app_viz.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -209,7 +209,7 @@ class _LoginFormCard extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                AppIconBubble(icon: Icons.lock_person_rounded, color: AppColors.primary, size: 44),
+                const AppIconBubble(icon: Icons.lock_person_rounded, color: AppColors.primary, size: 44),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -392,10 +392,10 @@ class _BrandPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 26),
-        Wrap(
+        const Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: const <Widget>[
+          children: <Widget>[
             _FeaturePill(icon: Icons.wifi_off_rounded, label: 'جاهز دون اتصال'),
             _FeaturePill(icon: Icons.shield_outlined, label: 'صلاحيات دقيقة'),
             _FeaturePill(icon: Icons.bolt_rounded, label: 'تحصيل فوري'),
@@ -477,17 +477,17 @@ class _PreviewCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Row(
+          const Row(
             children: <Widget>[
-              const Expanded(
+              Expanded(
                 child: _PreviewMetric(
                   label: 'محصّل اليوم',
                   value: '12,480',
                   color: Color(0xFF6EE7B7),
                 ),
               ),
-              const SizedBox(width: 10),
-              const Expanded(
+              SizedBox(width: 10),
+              Expanded(
                 child: _PreviewMetric(
                   label: 'قراءات',
                   value: '86',

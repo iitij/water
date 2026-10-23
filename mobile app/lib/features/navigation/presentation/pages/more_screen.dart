@@ -112,14 +112,14 @@ class MoreScreen extends StatelessWidget {
           ),
         ),
         const Gap(AppSpacing.lg),
-        AppReveal(
-          delay: const Duration(milliseconds: 180),
-          child: const _AppearanceCard(),
+        const AppReveal(
+          delay: Duration(milliseconds: 180),
+          child: _AppearanceCard(),
         ),
         const Gap(AppSpacing.lg),
-        AppReveal(
-          delay: const Duration(milliseconds: 210),
-          child: const _ServerCard(),
+        const AppReveal(
+          delay: Duration(milliseconds: 210),
+          child: _ServerCard(),
         ),
         const Gap(AppSpacing.xl),
         AppReveal(
@@ -128,7 +128,7 @@ class MoreScreen extends StatelessWidget {
             onTap: () => _confirmLogout(context),
             child: Row(
               children: <Widget>[
-                AppIconBubble(
+                const AppIconBubble(
                   icon: Icons.logout_rounded,
                   color: AppColors.danger,
                   size: 42,
@@ -150,7 +150,7 @@ class MoreScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: AppColors.danger),
+                const Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: AppColors.danger),
               ],
             ),
           ),
@@ -315,7 +315,7 @@ class _AppearanceCard extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              AppIconBubble(
+              const AppIconBubble(
                 icon: Icons.palette_outlined,
                 color: AppColors.violet,
                 size: 40,
@@ -379,7 +379,7 @@ class _ServerCard extends StatelessWidget {
     return AppCard(
       child: Row(
         children: <Widget>[
-          AppIconBubble(
+          const AppIconBubble(
             icon: Icons.dns_outlined,
             color: AppColors.info,
             size: 40,

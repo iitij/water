@@ -13,7 +13,7 @@ class AppTextField extends StatelessWidget {
     this.textDirection,
     this.textAlign,
     this.textInputAction,
-    this.textCapitalization,
+    this.textCapitalization = TextCapitalization.none,
     this.obscureText = false,
     this.enabled = true,
     this.readOnly = false,
@@ -42,7 +42,7 @@ class AppTextField extends StatelessWidget {
   final TextDirection? textDirection;
   final TextAlign? textAlign;
   final TextInputAction? textInputAction;
-  final TextCapitalization? textCapitalization;
+  final TextCapitalization textCapitalization;
   final bool obscureText;
   final bool enabled;
   final bool readOnly;

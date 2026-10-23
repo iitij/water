@@ -138,11 +138,6 @@ class SyncSummaryCard extends StatelessWidget {
         final online = queue.isOnline;
         final pending = queue.pendingCount;
         final failed = queue.failedCount;
-        final color = failed > 0
-            ? AppColors.danger
-            : pending > 0
-                ? AppColors.warning
-                : AppColors.success;
         final headline = queue.isSyncing
             ? 'جارٍ إرسال العمليات الآن'
             : failed > 0

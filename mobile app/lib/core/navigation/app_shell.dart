@@ -363,9 +363,9 @@ class _SideRail extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Row(
+              const Row(
                 children: <Widget>[
-                  const AppBrandLockup(
+                  AppBrandLockup(
                     markSize: 44,
                     subtitle: 'منصة إدارة المشروع',
                     onDark: false,

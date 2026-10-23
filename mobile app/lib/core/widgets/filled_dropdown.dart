@@ -39,7 +39,7 @@ class FilledDropdown<T> extends StatelessWidget {
     final scheme = theme.colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       isExpanded: isExpanded,
       isDense: isDense,
       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),

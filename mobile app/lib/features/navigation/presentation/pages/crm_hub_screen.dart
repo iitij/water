@@ -77,17 +77,17 @@ class CrmHubScreen extends StatelessWidget {
           ),
         ),
         const Gap(AppSpacing.xl),
-        AppReveal(
-          delay: const Duration(milliseconds: 110),
+        const AppReveal(
+          delay: Duration(milliseconds: 110),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const SectionHeading(
+              SectionHeading(
                 title: 'كل ما يخص المشترك',
                 subtitle: 'مبني على رحلة العميل داخل المشروع',
                 icon: Icons.auto_awesome_rounded,
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 1,
                 title: 'الملف الأساسي',
@@ -95,7 +95,7 @@ class CrmHubScreen extends StatelessWidget {
                 icon: Icons.person_search_rounded,
                 color: AppColors.primary,
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 2,
                 title: 'العدادات والقراءات',
@@ -103,7 +103,7 @@ class CrmHubScreen extends StatelessWidget {
                 icon: Icons.water_damage_outlined,
                 color: AppColors.info,
               ),
-              const Gap(AppSpacing.sm),
+              Gap(AppSpacing.sm),
               ProcessStepCard(
                 index: 3,
                 title: 'الحساب والتحصيل',
