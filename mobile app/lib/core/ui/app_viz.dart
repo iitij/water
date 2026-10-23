@@ -138,7 +138,7 @@ class _RingPainter extends CustomPainter {
 
     if (progress <= 0) return;
     final rect = Rect.fromCircle(center: center, radius: radius);
-    final sweep = (2 * math.pi * progress).clamp(0, 2 * math.pi);
+    final sweep = (2 * math.pi * progress).clamp(0.0, 2 * math.pi).toDouble();
     final gradient = SweepGradient(
       startAngle: -math.pi / 2,
       endAngle: 3 * math.pi / 2,

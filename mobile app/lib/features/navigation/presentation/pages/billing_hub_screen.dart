@@ -57,7 +57,7 @@ class BillingHubScreen extends StatelessWidget {
                   children: <Widget>[
                     HeroMetaChip(icon: Icons.bolt_rounded, label: 'تحصيل فوري'),
                     HeroMetaChip(icon: Icons.print_rounded, label: 'طباعة سندات'),
-                    HeroMetaChip(icon: Icons.whatsapp_rounded, label: 'إشعار واتساب'),
+                    HeroMetaChip(icon: Icons.chat_rounded, label: 'إشعار واتساب'),
                   ],
                 ),
                 const Gap(AppSpacing.lg),
