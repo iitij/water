@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/utils/arabic_number_spellout.dart';
+import 'package:water_project/core/utils/arabic_number_spellout.dart';
 
 /// اختبارات التفقيط العربي المستعمل في سند القبض (PDF) والطابعة الحرارية.
 /// المرجع: `resources/views/pdf/receipt.blade.php` (`المبلغ المستلم كتابتا`).

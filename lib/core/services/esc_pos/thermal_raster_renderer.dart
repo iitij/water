@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/painting.dart';
+
 import 'thermal_ticket.dart';
 
 /// ناتج التحويل إلى صورة نقطية جاهزة لأمر `GS v 0`.
@@ -41,7 +43,7 @@ class ThermalRasterRenderer {
     final contentWidth = (renderWidth - padding * 2).toDouble();
 
     // ── المرور الأول: تخطيط الأسطر وحساب الارتفاع الكلي ──────────────────
-    final painters = <ui.TextPainter?>[];
+    final painters = <TextPainter?>[];
     final heights = <double>[];
     var totalHeight = padding.toDouble();
 
@@ -120,23 +122,22 @@ class ThermalRasterRenderer {
     );
   }
 
-  static ui.TextPainter _painterFor(ThermalLine line, double fontSize) {
-    final style = ui.TextStyle(
+  static TextPainter _painterFor(ThermalLine line, double fontSize) {
+    final style = TextStyle(
       fontSize: fontSize,
       height: line.lineHeight,
-      fontWeight: line.isBold ? ui.FontWeight.bold : ui.FontWeight.normal,
-      color: const ui.Color(0xFF000000),
+      fontWeight: line.isBold ? FontWeight.bold : FontWeight.normal,
+      color: const Color(0xFF000000),
     );
 
-    return ui.TextPainter(
-      text: ui.TextSpan(text: line.text, style: style),
-      textDirection: line.ltr ? ui.TextDirection.ltr : ui.TextDirection.rtl,
+    return TextPainter(
+      text: TextSpan(text: line.text, style: style),
+      textDirection: line.ltr ? TextDirection.ltr : TextDirection.rtl,
       textAlign: switch (line.align) {
-        ThermalAlign.center => ui.TextAlign.center,
-        ThermalAlign.left => ui.TextAlign.left,
-        ThermalAlign.right => ui.TextAlign.right,
+        ThermalAlign.center => TextAlign.center,
+        ThermalAlign.left => TextAlign.left,
+        ThermalAlign.right => TextAlign.right,
       },
-      softWrap: true,
     )..maxLines = line.maxLines ?? 6;
   }
 

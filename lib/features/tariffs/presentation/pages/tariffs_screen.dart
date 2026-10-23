@@ -248,7 +248,7 @@ class _TrashFilterRow extends StatelessWidget {
                 icon: Icon(
                   filter == TariffsTrashFilter.only
                       ? Icons.delete_outline
-                      : (filter == TariffsTrashFilter.with ? Icons.filter_alt : Icons.verified_outlined),
+                      : (filter == TariffsTrashFilter.withTrashed ? Icons.filter_alt : Icons.verified_outlined),
                 ),
               ),
             )

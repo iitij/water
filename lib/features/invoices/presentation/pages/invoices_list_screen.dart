@@ -14,6 +14,7 @@ import '../cubit/invoices_state.dart';
 import '../sheets/generate_invoice_sheets.dart';
 import '../widgets/invoice_actions.dart';
 import '../widgets/invoice_card.dart';
+import '../widgets/invoice_filters_sheet.dart';
 import 'invoice_detail_screen.dart';
 
 /// `SCR-14 — InvoicesListScreen`: قائمة الفواتير الشاملة بفلاترها الأربعة،

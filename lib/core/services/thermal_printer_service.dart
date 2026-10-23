@@ -35,7 +35,7 @@ class BluetoothThermalChannel implements ThermalPrinterChannel {
   @override
   Future<bool> isConnected() async {
     try {
-      return await PrintBluetoothThermal.isConnected();
+      return await PrintBluetoothThermal.connectionStatus;
     } catch (_) {
       return false;
     }
@@ -44,20 +44,21 @@ class BluetoothThermalChannel implements ThermalPrinterChannel {
   @override
   Future<bool> connect(String address) async {
     try {
-      return await PrintBluetoothThermal.connectBlt(address);
+      return await PrintBluetoothThermal.connect(macPrinterAddress: address);
     } catch (_) {
       return false;
     }
   }
 
   @override
-  Future<void> writeBytes(Uint8List bytes) =>
-      PrintBluetoothThermal.writeBytes(bytes: bytes);
+  Future<void> writeBytes(Uint8List bytes) async {
+    await PrintBluetoothThermal.writeBytes(bytes);
+  }
 
   @override
   Future<void> disconnect() async {
     try {
-      await PrintBluetoothThermal.disconnect();
+      await PrintBluetoothThermal.disconnect;
     } catch (_) {
       // تجاهل: انقطاع الاتصال ليس خطأ المستخدم.
     }

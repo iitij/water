@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
+import '../../../../core/widgets/finance_badges.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/invoice_accounting.dart';
 import '../../../../core/finance/finance_colors.dart';
@@ -121,7 +122,7 @@ class InvoiceCard extends StatelessWidget {
                 children: <Widget>[
                   PathChip(
                     squareName: invoice.subscriber?.squareName,
-                    pathNumber: invoice.meter?.pathNumber,
+                    pathNumber: invoice.meter?.pathNumber?.toString(),
                     highlighted: invoice.isPathMatch,
                   ),
                   _Pill(

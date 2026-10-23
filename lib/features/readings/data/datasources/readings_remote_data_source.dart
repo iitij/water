@@ -132,13 +132,17 @@ class ReadingsRemoteDataSource {
   }) {
     Object? value = body;
     if (value is Map) {
+      final map = value;
       for (final key in keys) {
-        if (value[key] is List) {
-          value = value[key];
+        final candidate = map[key];
+        if (candidate is List) {
+          value = candidate;
           break;
         }
       }
-      if (value is Map && value['data'] is List) value = value['data'];
+      if (value is Map && (value as Map)['data'] is List) {
+        value = (value as Map)['data'];
+      }
     }
     if (value is! List) return const [];
     return value

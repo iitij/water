@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/features/invoices/data/models/invoice_model.dart';
-import 'package:water_mobile/features/invoices/domain/accounting/finance_enums.dart';
-import 'package:water_mobile/features/payments/data/models/payment_model.dart';
-import 'package:water_mobile/features/payments/domain/accounting/payment_allocator.dart';
+import 'package:water_project/features/invoices/data/models/invoice_model.dart';
+import 'package:water_project/features/invoices/domain/accounting/finance_enums.dart';
+import 'package:water_project/features/payments/data/models/payment_model.dart';
+import 'package:water_project/features/payments/domain/accounting/payment_allocator.dart';
 
 /// اختبارات قاعدة FIFO §3.4-3 — المرجع `PaymentService::distributePayment`
 /// (`app/Services/PaymentService.php` سطر 116-190) و`recalculateInvoices`

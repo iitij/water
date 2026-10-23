@@ -359,7 +359,7 @@ class _GenerateSheetBody extends StatelessWidget {
                   const LiveSummaryCard(),
                   const SizedBox(height: 16),
                   BlocBuilder<InvoiceGenerationCubit, InvoiceGenerationState>(
-                    builder: (context, state) => GenerateSubmitBar(
+                    builder: (context, state) => _GenerateSubmitBar(
                       state: state,
                       chrome: chrome,
                       onSubmit: () => _submit(sheetContext, cubit),
@@ -671,7 +671,7 @@ class _SubscriberSearchFieldState extends State<SubscriberSearchField> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Chip(
-                  avatar: const Icon(Icons.person_check_outlined, size: 18),
+                  avatar: const Icon(Icons.person_outline, size: 18),
                   label: Text(
                     '${selected.name}'
                     '${selected.squareName == null ? '' : ' • ${selected.squareName}'}',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+export 'finance_badges.dart';
 
 class StatusBadge extends StatelessWidget {
   const StatusBadge({super.key, required this.status, this.label});

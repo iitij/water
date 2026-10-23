@@ -13,6 +13,8 @@ import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/finance_enums.dart';
 import '../../domain/repositories/invoices_repository.dart';
+import '../../../../core/widgets/status_badge.dart';
+import '../../../../core/widgets/finance_badges.dart';
 
 /// إنشاء/تعديل يدوي لفاتورة — يطابق مخطط `InvoiceResource::form` حقلاً حقلاً:
 /// بيانات الفاتورة (مشترك/رقم مولَّد/تاريخ/حالة)، تفاصيل المبالغ السبعة مع حساب
@@ -85,7 +87,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       TextEditingController(text: value == null || value == 0 ? '' : value.toString());
 
   double get _liveTotal =>
-      _parse(_consumption.text) + _parse(_subscription.text) + _parse(_tanker.text);
+      _parse(_consumption) + _parse(_subscription) + _parse(_tanker);
 
   static double _parse(TextEditingController controller) =>
       double.tryParse(controller.text.trim()) ?? 0;

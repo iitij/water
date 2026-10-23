@@ -39,6 +39,7 @@ class ErrorInterceptor extends Interceptor {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
         return 'انتهت مهلة الاتصال. تحقق من الشبكة ثم أعد المحاولة.';
       case DioExceptionType.connectionError:
         return 'لا يوجد اتصال بالخادم. يمكنك متابعة العمل ومزامنة التغييرات لاحقاً.';

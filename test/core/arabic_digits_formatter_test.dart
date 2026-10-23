@@ -4,7 +4,7 @@ import 'package:water_project/core/widgets/app_numeric_field.dart';
 
 void main() {
   test('converts Arabic and Persian digits to English without changing length', () {
-    const formatter = ArabicToEnglishDigitsFormatter();
+    final formatter = ArabicToEnglishDigitsFormatter();
     final value = formatter.formatEditUpdate(
       const TextEditingValue(text: ''),
       const TextEditingValue(text: '٠١۲۳-45', selection: TextSelection.collapsed(offset: 7)),
@@ -19,7 +19,7 @@ void main() {
   });
 
   test('keeps the cursor in bounds when grouping separators are removed', () {
-    const formatter = ArabicToEnglishDigitsFormatter();
+    final formatter = ArabicToEnglishDigitsFormatter();
     final value = formatter.formatEditUpdate(
       const TextEditingValue(text: ''),
       const TextEditingValue(text: '١٬٢٠٠', selection: TextSelection.collapsed(offset: 5)),

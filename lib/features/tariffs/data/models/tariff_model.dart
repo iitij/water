@@ -43,7 +43,7 @@ class TariffModel extends Equatable {
   bool isEffectiveOn(DateTime date) {
     if (!isActive) return false;
     if (startDate != null && date.isBefore(startDate!)) return false;
-    if (endDate != null && date.isAfter(endDate)) return false;
+    if (endDate != null && date.isAfter(endDate!)) return false;
     return true;
   }
 
@@ -111,7 +111,7 @@ class TariffModel extends Equatable {
 /// حالة فلتر المحذوفات في `SCR-21` (يطابق `TrashedFilter` في Filament).
 enum TariffsTrashFilter {
   without('without', 'الحية فقط'),
-  with('with', 'الكل (مع المحذوفة)'),
+  withTrashed('with', 'الكل (مع المحذوفة)'),
   only('only', 'المحذوفة فقط');
 
   const TariffsTrashFilter(this.wire, this.label);

@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/services/whatsapp_launcher_service.dart';
-import 'package:water_mobile/core/settings/finance_config.dart';
-import 'package:water_mobile/core/utils/phone_formatter.dart';
-import 'package:water_mobile/features/invoices/data/models/invoice_model.dart';
-import 'package:water_mobile/features/invoices/domain/accounting/finance_enums.dart';
-import 'package:water_mobile/features/invoices/presentation/whatsapp/invoice_whatsapp_builder.dart';
+import 'package:water_project/core/services/whatsapp_launcher_service.dart';
+import 'package:water_project/core/settings/finance_config.dart';
+import 'package:water_project/core/utils/phone_formatter.dart';
+import 'package:water_project/features/invoices/data/models/invoice_model.dart';
+import 'package:water_project/features/invoices/domain/accounting/finance_enums.dart';
+import 'package:water_project/features/invoices/presentation/whatsapp/invoice_whatsapp_builder.dart';
 
 /// اختبارات محرك رسائل الواتساب — المرجع `WhatsAppService` (`app/Services/WhatsAppService.php`):
 ///  - المتغيرات `{name}` `{receipt_number}` `{amount}` `{invoice_remaining}`

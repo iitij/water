@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/core/utils/compound_search_parser.dart';
+import 'package:water_project/core/utils/compound_search_parser.dart';
 
 /// اختبارات محلل البحث المركّب — المرجع `InvoiceController::search`
 /// (`preg_match('/^(\d+)[\/\-\\\\_](\d+)$/', $query, $matches)`) والخطة §1.3 القاعدة 5

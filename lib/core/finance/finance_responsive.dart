@@ -29,4 +29,6 @@ extension FinanceLayoutX on BuildContext {
   bool get compactWidth => screenWidth < FinanceBreakpoints.compactWidth;
 
   bool get tablet => AdaptiveScaffold.isExpanded(this);
+
+  double get gutter => screenWidth < 600 ? 16.0 : 24.0;
 }

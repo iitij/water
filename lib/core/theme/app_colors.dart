@@ -19,4 +19,8 @@ class AppColors {
   static const darkBackground = Color(0xFF0F172A);
   static const darkSurface = Color(0xFF1E293B);
   static const darkBorder = Color(0xFF334155);
+
+  static const cardBackground = lightSurface;
+  static const border = lightBorder;
+  static const textSecondary = neutral;
 }

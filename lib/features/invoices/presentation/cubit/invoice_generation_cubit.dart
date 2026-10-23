@@ -271,7 +271,7 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
 
   static String _read(Object error) {
     final text = error.toString();
-    final match = RegExp(r'message["\']?\s*[:=]\s*["\']([^"\']+)').firstMatch(text);
+    final match = RegExp(r'''message["']?\s*[:=]\s*["']([^"']+)''').firstMatch(text);
     return match?.group(1) ?? text.replaceFirst('Exception: ', '');
   }
 }

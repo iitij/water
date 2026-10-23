@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:water_mobile/features/invoices/data/models/invoice_model.dart';
-import 'package:water_mobile/features/invoices/domain/accounting/finance_enums.dart';
-import 'package:water_mobile/features/invoices/domain/accounting/invoice_accounting.dart';
+import 'package:water_project/features/invoices/data/models/invoice_model.dart';
+import 'package:water_project/features/invoices/domain/accounting/finance_enums.dart';
+import 'package:water_project/features/invoices/domain/accounting/invoice_accounting.dart';
 
 /// اختبارات قاعدة «العزل + total_due + المتبقي التراكمي» — المرجع:
 /// `app/Models/Invoice.php` (`getTotalDueAttribute`, `getRemainingAmount`,

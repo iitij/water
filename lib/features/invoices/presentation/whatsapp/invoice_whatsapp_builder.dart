@@ -14,7 +14,8 @@ import '../../domain/accounting/finance_enums.dart';
 ///  - البلوكات الشرطية `{if:subscription_fee}` و`{if:tanker_fee}` و`{if:previous_balance}`
 ///    و`{if:credit_applied}`.
 class InvoiceWhatsAppBuilder {
-  const InvoiceWhatsAppBuilder({required FinanceConfigRepository configRepository});
+  InvoiceWhatsAppBuilder({required FinanceConfigRepository configRepository})
+      : _configRepository = configRepository;
 
   final FinanceConfigRepository _configRepository;
 

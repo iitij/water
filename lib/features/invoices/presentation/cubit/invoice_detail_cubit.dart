@@ -8,10 +8,12 @@ import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/invoice_model.dart';
+import '../../domain/accounting/finance_enums.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../thermal/invoice_thermal_ticket.dart';
 import '../whatsapp/invoice_whatsapp_builder.dart';
 import 'invoice_detail_state.dart';
+import 'invoices_state.dart';
 
 /// `InvoiceDetailCubit` — تحميل الفاتورة + إجراءات SCR-15:
 /// إعادة الاحتساب، التعديل اليدوي، الحذف، طباعة PDF، طباعة حرارية، وواتساب.

@@ -73,8 +73,8 @@ class FakeAdminApiClient implements AdminApiClient {
     String? fallbackPath,
   }) async {
     requests.add(RecordedRequest('DOWNLOAD', path, null, query));
-    final download = downloads[path];
-    if (download != null) return download;
+    final downloadItem = downloads[path];
+    if (downloadItem != null) return downloadItem;
     final error = handlers['DOWNLOAD:$path'];
     if (error is Exception) throw error;
     if (fallbackPath != null) return download(fallbackPath, query: query);

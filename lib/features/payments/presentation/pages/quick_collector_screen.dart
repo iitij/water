@@ -388,7 +388,7 @@ class _CollectorCard extends StatelessWidget {
                 style: FilledButton.styleFrom(backgroundColor: AppColors.success),
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
-                  unawaited(onCollect());
+                  onCollect();
                 },
                 icon: const Icon(Icons.payments_outlined),
                 label: Text('تحصيل ${CurrencyFormatter.amount(due)} ريال'),

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../invoices/domain/accounting/finance_enums.dart';
 import 'payment_model.dart';
 
 /// ناتج عملية تحصيل (سواء نُفّذ فوراً أو أُدرج في طابور المزامنة الأوفلاين).

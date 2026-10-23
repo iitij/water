@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 

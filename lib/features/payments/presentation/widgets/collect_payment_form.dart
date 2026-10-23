@@ -44,6 +44,7 @@ class CollectPaymentForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<CollectPaymentCubit>();
     return BlocBuilder<CollectPaymentCubit, CollectPaymentState>(
       builder: (context, state) => ListView(
         controller: scrollController,
@@ -72,7 +73,7 @@ class CollectPaymentForm extends StatelessWidget {
             state: state,
             cubit: cubit,
             invoice: invoice,
-            onSubmitted: onSubmitted,
+            onSubmitted: onSubmitted ?? (_) {},
           ),
           const SizedBox(height: 8),
         ],

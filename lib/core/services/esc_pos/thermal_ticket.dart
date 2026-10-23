@@ -56,6 +56,7 @@ class ThermalLine {
 
   bool get isDivider => kind == ThermalLineKind.divider;
   bool get isGap => kind == ThermalLineKind.gap;
+  bool get isBold => bold;
 
   @override
   String toString() => isDivider ? 'ThermalLine.divider' : 'ThermalLine($text)';

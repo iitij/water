@@ -17,7 +17,8 @@ import '../../data/models/payment_model.dart';
 ///    - المدفوع قبل هذه الدفعة - مبلغها` (سطر 187-199).
 ///  - `{outstanding_balance}` و`{credit_balance}` من حساب المشترك العام.
 class PaymentWhatsAppBuilder {
-  const PaymentWhatsAppBuilder({required FinanceConfigRepository configRepository});
+  PaymentWhatsAppBuilder({required FinanceConfigRepository configRepository})
+      : _configRepository = configRepository;
 
   final FinanceConfigRepository _configRepository;
 

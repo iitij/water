@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../auth/session_service.dart';
 import '../finance/finance_locator.dart';
-import '../finance/finance_locator.dart';
 import '../finance/finance_session.dart';
+import 'permission_service.dart';
 
 /// مصفوفة الصلاحيات الخاصة بالوحدة المالية — **ملف إضافي من Dev 3** يُدمج مع
 /// `core/permissions/` الخاص بـ Dev 1 (لم يُنشأ هناك بعد باسمنا، فاستعملنا اسماً

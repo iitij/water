@@ -59,6 +59,8 @@ class WhatsAppSendResult {
   bool get isSuccess =>
       outcome == WhatsAppSendOutcome.launched ||
       outcome == WhatsAppSendOutcome.sentByApi;
+
+  bool get ok => isSuccess;
 }
 
 /// payload محايد تبنيه طبقة الميزات (فواتير/سندات) ثم تُنفّذه النواة.
@@ -141,6 +143,23 @@ class WhatsAppLauncherService {
             message: payload.message,
             error: 'تعذّر فتح تطبيق واتساب على هذا الجهاز.',
           );
+  }
+
+  /// إرسال سريع موحّد للمدخلات المباشرة
+  Future<WhatsAppSendResult> dispatch({
+    required String? recipientPhone,
+    required String message,
+    String? serverEndpoint,
+    Map<String, dynamic>? payload,
+  }) async {
+    return send(WhatsAppPayload(
+      kind: 'message',
+      recordId: (payload?['invoice_id'] as int?) ?? (payload?['reading_id'] as int?) ?? 0,
+      phone: recipientPhone,
+      message: message,
+      linkPath: serverEndpoint ?? '',
+      sendPath: serverEndpoint ?? '',
+    ));
   }
 
   /// نص الرسالة فقط (لمعاينته قبل الإرسال أو نسخه).

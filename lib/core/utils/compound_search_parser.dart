@@ -28,6 +28,22 @@ class CompoundSearchQuery {
     );
   }
 
+  bool get hasSplitParams =>
+      isCompoundPathSearch && squareId != null && pathNumber != null;
+
+  bool get isEmpty => rawQuery.trim().isEmpty;
+
+  Map<String, dynamic> toQueryMap({String key = 'query'}) {
+    if (hasSplitParams) {
+      return <String, dynamic>{
+        key: rawQuery,
+        'square_id': squareId,
+        'path_number': pathNumber,
+      };
+    }
+    return <String, dynamic>{key: rawQuery};
+  }
+
   static String normalizeDigits(String value) {
     const arabic = '٠١٢٣٤٥٦٧٨٩';
     const persian = '۰۱۲۳۴۵۶۷۸۹';
@@ -47,3 +63,5 @@ class CompoundSearchQuery {
     return output.toString();
   }
 }
+
+typedef FinanceSearchQuery = CompoundSearchQuery;

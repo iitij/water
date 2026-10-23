@@ -39,11 +39,13 @@ class SyncAction {
       );
 }
 
-abstract interface class SyncQueueRepository {
+abstract interface class FinanceSyncQueueRepository {
   Future<void> enqueue(SyncAction action);
   Future<List<SyncAction>> pending({String? module});
   Future<void> markSynced(SyncAction action);
 }
+
+typedef SyncQueueRepository = FinanceSyncQueueRepository;
 
 /// تنفيذ احتياطي بسيط (SharedPreferences) يبقيه Dev 3 قابلاً للتشغيل إلى أن يُدمج
 /// تنفيذ Drift الخاص بـ Dev 2. السلوك: قائمة FIFO واحدة لكل عملية.

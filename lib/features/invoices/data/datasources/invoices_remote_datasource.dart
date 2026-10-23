@@ -145,7 +145,7 @@ class InvoicesRemoteDataSource {
     return _bulkResult(response, fallbackProcessed: ids.length);
   }
 
-  Future<BulkActionResult> _bulkResult(Object? response, {required int fallbackProcessed}) {
+  BulkActionResult _bulkResult(Object? response, {required int fallbackProcessed}) {
     final map = JsonUtils.asMap(response);
     if (map == null) {
       return BulkActionResult(processed: fallbackProcessed, failed: 0);

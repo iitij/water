@@ -4,12 +4,13 @@
 /// من تسجيلها — فلا يحتاج المضيف إلى تعديل أي ملف لتشغيل الوحدة المالية.
 import 'package:get_it/get_it.dart';
 
+import 'finance_api_client.dart';
 import 'finance_module.dart';
 
 export '../di/injection_container.dart' show getIt, configureDependencies;
 
 /// الاختصار المستعمل في طبقة Dev 3 كلها (`sl<InvoicesRepository>()`).
-T sl<T>() {
+T sl<T extends Object>() {
   FinanceModule.ensure();
   return GetIt.I<T>();
 }

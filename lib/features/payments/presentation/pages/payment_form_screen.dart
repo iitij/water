@@ -110,7 +110,7 @@ class _PaymentCreateScreen extends StatelessWidget {
                     return const EmptyStateWidget(
                       title: 'اختر المشترك أولاً',
                       message: 'سيُجلب تلقائياً أحدث فاتورة غير مسددة وقيمة المستحق.',
-                      icon: Icons.person_search_alt,
+                      icon: Icons.person_search,
                       compact: true,
                     );
                   }

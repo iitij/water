@@ -31,8 +31,16 @@ class UnauthorizedFailure extends AppFailure {
 }
 
 class ForbiddenFailure extends AppFailure {
-  const ForbiddenFailure(this.permission)
-      : super('لا تملك صلاحية $permission للتنفيذ.', statusCode: 403);
+  const ForbiddenFailure([
+    String? message,
+    this.permission,
+  ]) : super(
+          message ??
+              (permission != null
+                  ? 'لا تملك صلاحية $permission للتنفيذ.'
+                  : 'ممنوع الوصول.'),
+          statusCode: 403,
+        );
 
   /// الصلاحية الناقصة (Spatie/Shield) إن عرفها الخادم.
   final String? permission;
@@ -81,6 +89,7 @@ class FailureMapper {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
         return const TimeoutFailure();
       case DioExceptionType.connectionError:
       case DioExceptionType.cancel:
@@ -127,7 +136,7 @@ class FailureMapper {
         final permission = data is Map ? data['required_permission'] : null;
         return ForbiddenFailure(
           serverMessage ?? 'ممنوع الوصول',
-          permission: permission?.toString(),
+          permission?.toString(),
         );
       case 404:
         return NotFoundFailure(serverMessage ?? 'السجل غير موجود أو تم حذفه.');

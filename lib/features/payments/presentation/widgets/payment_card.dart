@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/payment_model.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../widgets/payment_actions.dart';
 
 /// `PaymentCard` — تسليم Dev 3 → Dev 5 (`SCR-17`) وDev 4 (سندات التحصيل في `SCR-19/20`).
