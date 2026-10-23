@@ -14,15 +14,21 @@ class TransactionController extends ApiController
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name',
             'meter:id,unique_code,path_number,tenant_name', 'reference',
         ])->latest('created_at')->latest('id');
-        foreach (['subscriber_id', 'meter_id', 'type'] as $filter) {
+        foreach (['subscriber_id', 'type'] as $filter) {
             if ($request->filled($filter)) $query->where($filter, $request->query($filter));
+        }
+        if ($request->filled('meter_id')) {
+            $meterId = (string) $request->query('meter_id');
+            $meterId === 'general'
+                ? $query->whereNull('meter_id')
+                : $query->where('meter_id', (int) $meterId);
         }
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
         }
         if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
-        if ($search = trim((string) $request->query('q', ''))) {
+        if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
             $query->where(function ($builder) use ($search) {
                 $builder->where('description', 'like', "%{$search}%")
                     ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%"))

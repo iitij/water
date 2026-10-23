@@ -94,7 +94,8 @@ class SubscriberController extends ApiController
         });
         $subscriber->invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
-        return response()->json(['subscriber' => $subscriber]);
+        // Keep the detail object flat; mobile's 360° mapper reads financial_summary/meters directly.
+        return response()->json($subscriber);
     }
 
     public function update(Request $request, int $id)
@@ -200,7 +201,25 @@ class SubscriberController extends ApiController
             $query->where('type', $request->query('type'));
         }
 
-        return $query->latest('created_at')->paginate($this->perPage($request))->appends($request->query());
+        $runningBalance = 0.0;
+        $rows = $query->orderBy('created_at')->orderBy('id')->get()->map(function (Transaction $transaction) use (&$runningBalance) {
+            $runningBalance += (float) $transaction->amount;
+
+            return [
+                'id' => $transaction->id,
+                'type' => $transaction->type,
+                'amount' => (float) $transaction->amount,
+                'meter_id' => $transaction->meter_id,
+                'party' => $transaction->meter_id
+                    ? 'عداد رقم: ' . $transaction->meter_id . ($transaction->meter?->unique_code ? ' (' . $transaction->meter->unique_code . ')' : '')
+                    : 'الحساب العام للمشترك',
+                'description' => $transaction->description,
+                'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
+                'running_balance' => round($runningBalance, 2),
+            ];
+        });
+
+        return response()->json($rows->reverse()->values());
     }
 
     public function collectPayment(Request $request, int $id, PaymentService $paymentService)

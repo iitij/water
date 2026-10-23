@@ -20,7 +20,11 @@ class SquareController extends ApiController
             });
         }
 
-        return $query->paginate($this->perPage($request))->appends($request->query());
+        if ($request->filled('per_page')) {
+            return $query->paginate($this->perPage($request))->appends($request->query());
+        }
+
+        return $query->get();
     }
 
     public function store(Request $request)
@@ -57,7 +61,8 @@ class SquareController extends ApiController
             return $subscriber;
         }));
 
-        return response()->json(['square' => $square]);
+        // Return the square at the top level for the SCR-04 mobile model.
+        return response()->json($square);
     }
 
     public function update(Request $request, int $id)

@@ -50,6 +50,7 @@ All paths below are relative to `/api` and except login are protected by `auth:s
 ## Ownership and integration notes
 
 - The requested sub-agent tools were not available in this session; integration decisions and contracts are recorded here for the other engineers.
+- The updated `main` base also contains a separate `mobile/` Flutter package from the SCR feature work. This foundation remains at the repository root per the initial plan; before product rollout, decide whether to consolidate the root app/core into `mobile/` or keep both packages intentionally.
 - Dev 1 owns `lib/core/`, `lib/main.dart`, `lib/app.dart`, `lib/bootstrap.dart`, `lib/core/router/`, the auth session/login/profile foundation, and the shared sync monitor contract.
 - Feature teams should add their APIs/repositories/screens within their own feature directories, inject Dio/permissions/queue through GetIt, and must not create a second router, network client, or app root.
 - Use `AppNumericField` for amounts, phone numbers, IDs, and compound square/path input. It fixes direction to LTR and normalizes Arabic/Persian digits. Use `AppTextField` with explicit `TextDirection.ltr` for email/password/phone where appropriate.

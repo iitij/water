@@ -20,9 +20,17 @@ class SubscriptionFeeController extends ApiController
         if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
         $total = (clone $query)->sum('amount');
+        $invoiced = (clone $query)->whereIn('status', ['invoiced', 'partially_paid', 'paid'])->sum('amount');
+        $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
-            'data' => $query->paginate($this->perPage($request))->appends($request->query()),
+            'data' => $page->items(),
             'total_sum' => round((float) $total, 2),
+            'invoiced_sum' => round((float) $invoiced, 2),
+            'remaining_sum' => round((float) ($total - $invoiced), 2),
+            'current_page' => $page->currentPage(),
+            'per_page' => $page->perPage(),
+            'last_page' => $page->lastPage(),
+            'total' => $page->total(),
         ]);
     }
 

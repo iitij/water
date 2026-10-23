@@ -21,9 +21,14 @@ class ServiceRequestController extends ApiController
         if ($request->filled('from_date')) $query->whereDate('service_date', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('service_date', '<=', $request->query('to_date'));
         $total = (clone $query)->sum('amount');
+        $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
-            'data' => $query->paginate($this->perPage($request))->appends($request->query()),
+            'data' => $page->items(),
             'total_sum' => round((float) $total, 2),
+            'current_page' => $page->currentPage(),
+            'per_page' => $page->perPage(),
+            'last_page' => $page->lastPage(),
+            'total' => $page->total(),
         ]);
     }
 
