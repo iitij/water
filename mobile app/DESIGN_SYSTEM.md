@@ -82,7 +82,8 @@ label to the left of the figure.
 
 | File | Pieces |
 | --- | --- |
-| `app_surfaces.dart` | `AppCard` (flat + hairline), `AppHeroPanel` (ink panel), `SectionHeading`, `AppPageBody`, `AppDivider`, `Gap` |
+| `app_surfaces.dart` | `AppCard` (flat + hairline), `AppHeroPanel` (ink panel), `AppGlyph` (squircle icon plate), `AppPhotoAvatar`, `AppField` (label → value), `SectionHeading`, `AppPageBody`, `AppDivider`, `Gap` |
+| `app_filters.dart` | **The filter kit**: `AppFilterBar`, `AppFilterChips`, `AppFilterChip`, `AppActiveFilters`, `AppFilterSheet`, `AppFilterSection`, `AppFilterOptionTile`, `AppFilterDateRange`, `AppFilterDropdown`, `AppSegmentedFilter` |
 | `app_controls.dart` | `AppPrimaryButton` (solid accent), `AppSecondaryButton`, `AppIconButton`, `AppAvatar`, `AppPill` (neutral body, coloured icon), `AppSegmentedControl` |
 | `app_tiles.dart` | `AppIconBubble`, `AppModuleTile/Grid/Rail`, `AppQuickAction`, `AppMetricCard` (label → figure → unit → context), `AppSettingRow`, `AppNotice`, `AppStatStrip`, `AppMetricGrid` |
 | `app_viz.dart` | `AppSparkline`, `AppProgressRing` (solid stroke), `AppMiniBars` (flat bars), `AppTrendChip` |
@@ -110,6 +111,44 @@ Navigation widgets live in `lib/core/navigation`: `AppHomeShell` (greeting heade
 Empty states use `AdminEmptyView`; failures use `AppNotice` with a retry text
 button. The tab bar is 62 px tall, floats 10 px above the safe area, and pages
 reserve 110 px of scroll padding for it.
+
+## Filters — one designed system
+
+Filtering is not a pile of controls; it is a fixed sequence of five pieces.
+Every list screen uses them in the same order, so the header looks identical on
+invoices, readings, payments, subscribers, tariffs and service requests.
+
+| Row | Widget | Rule |
+| --- | --- | --- |
+| 1 | `AppFilterBar` | One filled search field (46 px, `surfaceAlt`, no outline) with an inline clear, plus a square filter button. The button turns accent-filled and shows a count badge when `activeCount > 0`. |
+| 2 | `AppFilterChips` | A single horizontally scrolling rail of the **primary** facet (status, method, trash, invoice state). Never wrap to two rows: the list header must keep one height. 34 px pills, hairline border, accent only when selected. |
+| 3 | `AppActiveFilters` | Only when something outside the rail is applied. Removable chips (`x`) plus «مسح الكل». Hidden otherwise — no empty grey bar. |
+| 4 | Result line | `n نتيجة` on the start edge, `جارٍ التحديث…` while loading. Selection mode shows its own label on the end edge. |
+| 5 | `AppFilterSheet` | Every secondary facet (squares, dates, types, subscribers, trashed) lives here. Sectioned with `AppFilterSection`; a sticky footer holds the live result count, «إعادة تعيين» and the primary «عرض النتائج». Never more than one sheet per screen. |
+
+Sheet rules:
+
+- Opened only through `AppFilterSheet.show(context, builder: …)` — it owns the
+  drag handle, the 22 px top radius, the 88 % height cap and the scrim.
+- Draft state lives inside the sheet. «إعادة تعيين» clears the draft, not the
+  applied query; «تطبيق/عرض النتائج» writes once and closes. Screens that hold
+  several facets in one cubit expose a single `applyFilters(...)` so the list
+  reloads **once**.
+- Long option lists become `AppFilterOptionTile`s inside a 216 px scroll area
+  (squares, methods), never a second dropdown.
+- Dates always use `AppFilterDateRange` (two compact tiles + a clear action),
+  not two `OutlinedButton`s.
+- Form dropdowns use `AppFilterDropdown`; their visuals come from the theme, so
+  no screen repeats fill colours or radii.
+
+Empty results are part of the filter design: `EmptyStateWidget` explains *why*
+(nothing matches the current filters) and offers «مسح الفلاتر». The same widget
+is used for first-run emptiness with different copy — never a bare “لا توجد
+بيانات”.
+
+Do not: use `ChoiceChip`, `FilterChip`, `ActionChip`, `SegmentedButton`,
+`OutlineInputBorder`, or a bespoke `showModalBottomSheet` for filtering. They are
+all replaced by the kit above.
 
 ## Responsive rules
 
@@ -141,6 +180,12 @@ Page content is capped at 1120 px (dashboards may pass a larger `maxWidth`).
 5. Replace `Icon(Icons.arrow_back_ios_new_rounded)` chevrons with
    `Icons.chevron_left_rounded`.
 6. Delete any `Colors.white.withValues(alpha: …)` shadows or glows.
+7. Replace `Card(` with `AppCard(` (keep `padding: EdgeInsets.zero` if the child
+   already pads itself) and `CircleAvatar` with `AppGlyph`/`AppPhotoAvatar`.
+8. Replace every filter block with the five-component sequence above, and move
+   its secondary facets into one `AppFilterSheet`.
+9. Replace raw radii (`circular(12/14/16/18/20)`) with `AppRadius.*`, and raw
+   `Color(0x…)` values with `AppColors`/`AppSemantic.resolve`.
 
 `gradient` parameters on `AppCard`, `AppHeroPanel`, `AppPrimaryButton` and
 `AquaBackdrop` are accepted and ignored, so step 1 can be done gradually.
