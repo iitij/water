@@ -456,29 +456,29 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: <Widget>[
-              Expanded(
+              const Expanded(
                 child: _PreviewMetric(
                   label: 'محصّل اليوم',
                   value: '12,480',
-                  color: const Color(0xFF6EE7B7),
+                  color: Color(0xFF6EE7B7),
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
+              const Expanded(
                 child: _PreviewMetric(
                   label: 'قراءات',
                   value: '86',
-                  color: const Color(0xFF7DD3FC),
+                  color: Color(0xFF7DD3FC),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
+          const SizedBox(
             height: 44,
             child: AppMiniBars(
-              values: const <double>[18, 26, 21, 34, 30, 42, 38],
-              color: const Color(0xFF5EEAD4),
+              values: <double>[18, 26, 21, 34, 30, 42, 38],
+              color: Color(0xFF5EEAD4),
               height: 44,
             ),
           ),

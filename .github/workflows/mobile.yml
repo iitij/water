@@ -2,7 +2,7 @@ name: Mobile test builds
 on:
   push:
     branches: [arena/99b63ce7-water, arena/2a33faf4-water]
-    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/ci_run.py']
+    paths: ['mobile app/**', '.github/workflows/mobile.yml', 'scripts/**']
   workflow_dispatch:
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Analyze (legacy lint warnings are reported, errors fail)
-        run: python ../scripts/ci_run.py flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: python ../scripts/ci_analyze.py flutter analyze --no-fatal-infos --no-fatal-warnings
       - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - name: Build testing APK (debug signing, runtime server setup)
         run: python ../scripts/ci_run.py flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }}

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
-import '../../domain/entities/dashboard_entities.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/app_viz.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
+import '../../domain/entities/dashboard_entities.dart';
 
 /// Visual summary of how much of the billed money has actually been collected.
 class CollectionProgressCard extends StatelessWidget {

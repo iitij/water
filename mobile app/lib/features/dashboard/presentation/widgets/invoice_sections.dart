@@ -262,7 +262,7 @@ class _OverdueTile extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    AppIconBubble(
+                    const AppIconBubble(
                       icon: Icons.schedule_rounded,
                       color: AppColors.danger,
                       size: 40,

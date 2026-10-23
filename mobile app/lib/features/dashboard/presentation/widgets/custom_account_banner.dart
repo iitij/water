@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/navigation/sub_page.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';

@@ -16,13 +16,13 @@ import '../../../core/ui/app_tiles.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../../../core/utils/arabic_date.dart';
 import '../../../core/widgets/shimmer_skeleton.dart';
+import '../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../dashboard/domain/repositories/dashboard_repository.dart';
 import '../../dashboard/presentation/cubit/dashboard_cubit.dart';
 import '../../dashboard/presentation/widgets/collection_progress_card.dart';
 import '../../dashboard/presentation/widgets/monthly_revenue_chart_card.dart';
 import '../../navigation/presentation/widgets/module_section.dart';
 import '../../offline_sync/services/sync_queue_manager.dart';
-import '../../admin_shared/presentation/widgets/admin_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -369,7 +369,7 @@ class _QuickActionsCard extends StatelessWidget {
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const Spacer(),
-                AppPill(
+                const AppPill(
                   label: 'الأكثر استخداماً',
                   icon: Icons.bolt_rounded,
                   color: AppColors.brandAmber,
@@ -603,8 +603,8 @@ class _DashboardExtras extends StatelessWidget {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      if (chart != null) Expanded(flex: 3, child: chart),
-                      if (chart != null) const SizedBox(width: AppSpacing.md),
+                      Expanded(flex: 3, child: chart),
+                      const SizedBox(width: AppSpacing.md),
                       if (collection != null) Expanded(flex: 2, child: collection),
                     ],
                   );
