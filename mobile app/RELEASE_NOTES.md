@@ -3,6 +3,22 @@
 Testing builds of the integrated Arabic Water app. Android APKs are attached to
 `mobile-test-*` releases; Windows ZIPs are attached to `windows-test-*` releases.
 
+## What's new in this prerelease
+
+- A full interface redesign: new design system, light/dark themes and a calmer,
+  higher-contrast Arabic layout.
+- Five-tab navigation (Overview, Field, Billing, Subscribers, More) replacing the
+  single long home page, plus redesigned dashboard, login, splash and sync
+  screens.
+- Richer dashboard widgets: KPI cards with sparklines, collection health ring,
+  revenue chart summary and actionable overdue-invoice cards.
+- A real app identity: the new water-drop mark is now the launcher icon on
+  Android (legacy, round, adaptive and themed), and it matches the splash and
+  login screens, the navigation rail and the Windows/Linux icons.
+- The IBM Plex Sans Arabic type scale and the search-first services directory
+  from `main` are preserved: field collectors still land on the action-first
+  workspace, while office roles get the analytics overview.
+
 **Testing only — not a production release.** Android uses the generated debug
 signing key, so a later build may require uninstalling the previous APK. Sync
 pending operations before uninstalling; uninstalling deletes local app data.

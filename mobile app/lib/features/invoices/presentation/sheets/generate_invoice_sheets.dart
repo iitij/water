@@ -9,6 +9,7 @@ import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/info_notice.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../tariffs/domain/repositories/tariffs_repository.dart';
 import '../../data/datasources/invoices_remote_datasource.dart';
 import '../../data/datasources/references_remote_datasource.dart';
@@ -682,7 +683,7 @@ class _SubscriberSearchFieldState extends State<SubscriberSearchField> {
             else if (state.loadingReferences)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
-                child: LinearProgressIndicator(minHeight: 2),
+                child: ShimmerSkeleton(height: 4),
               ),
             if (selected == null && state.subscribers.isNotEmpty)
               _QuickPickRow(

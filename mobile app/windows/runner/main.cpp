@@ -27,7 +27,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"water_project", origin, size)) {
+  if (!window.Create(L"\u0645\u0634\u0631\u0648\u0639 \u0645\u064a\u0627\u0647 \u0627\u0644\u0648\u0634\u0627\u062d", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

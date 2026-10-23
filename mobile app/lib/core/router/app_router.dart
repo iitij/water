@@ -15,6 +15,10 @@ import '../../features/meters/data/models/meter.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/meters/presentation/pages/meter_form_screen.dart';
 import '../../features/meters/presentation/pages/meters_list_screen.dart';
+import '../../features/navigation/presentation/pages/billing_hub_screen.dart';
+import '../../features/navigation/presentation/pages/crm_hub_screen.dart';
+import '../../features/navigation/presentation/pages/field_hub_screen.dart';
+import '../../features/navigation/presentation/pages/more_screen.dart';
 import '../../features/offline_sync/presentation/offline_sync_monitor_screen.dart';
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../../features/payments/presentation/sheets/collect_payment_sheet.dart';
@@ -29,9 +33,9 @@ import '../finance/finance_locator.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
 import '../permissions/permission_service.dart';
-import '../responsive/adaptive_scaffold.dart';
+import '../navigation/app_shell.dart';
+import '../navigation/sub_page.dart';
 import '../services/whatsapp_launcher_service.dart';
-import '../theme/app_theme.dart';
 import 'route_names.dart';
 
 class AppRouter {
@@ -77,30 +81,62 @@ class AppRouter {
               StatefulShellBranch(
                 routes: <RouteBase>[
                   GoRoute(
-                    path: RouteNames.services,
-                    builder: (context, state) => ServicesScreen(
-                      autofocus: state.uri.queryParameters['search'] == '1',
-                    ),
+                    path: RouteNames.fieldHub,
+                    builder: (context, state) => const FieldHubScreen(),
                   ),
                 ],
               ),
               StatefulShellBranch(
                 routes: <RouteBase>[
                   GoRoute(
-                    path: RouteNames.offlineSync,
-                    builder: (context, state) => const OfflineSyncMonitorScreen(),
+                    path: RouteNames.billingHub,
+                    builder: (context, state) => const BillingHubScreen(),
                   ),
                 ],
               ),
               StatefulShellBranch(
                 routes: <RouteBase>[
                   GoRoute(
-                    path: RouteNames.profile,
-                    builder: (context, state) => const EditProfileScreen(),
+                    path: RouteNames.crmHub,
+                    builder: (context, state) => const CrmHubScreen(),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: RouteNames.moreHub,
+                    builder: (context, state) => const MoreScreen(),
                   ),
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: RouteNames.services,
+            builder: (context, state) => SubPageScaffold(
+              title: 'كل الخدمات',
+              subtitle: 'ابحث عن أي شاشة أو إجراء في المشروع',
+              child: ServicesScreen(
+                autofocus: state.uri.queryParameters['search'] == '1',
+              ),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.offlineSync,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'مراقب المزامنة',
+              subtitle: 'العمليات المحفوظة محلياً وحالة الاتصال',
+              child: OfflineSyncMonitorScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.profile,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'الملف الشخصي',
+              subtitle: 'بياناتك وكلمة المرور والصورة',
+              child: EditProfileScreen(),
+            ),
           ),
 
           // ── Dev 2: Field Operations, Meters & Readings (SCR-08..SCR-12) ──
@@ -120,7 +156,7 @@ class AppRouter {
               metersRepository: GetIt.I<MetersRepository>(),
               readingsRepository: GetIt.I<ReadingsRepository>(),
               invoiceActions: GetIt.I<ReadingInvoiceActionsService>(),
-              onOpenFieldReader: () => context.push<Object?>(RouteNames.fieldReader),
+              onOpenFieldReader: () => context.push(RouteNames.fieldReader),
             ),
             routes: <RouteBase>[
               GoRoute(
@@ -129,9 +165,6 @@ class AppRouter {
                 builder: (context, state) => MeterFormScreen(
                   repository: GetIt.I<MetersRepository>(),
                   meter: state.extra is Meter ? state.extra as Meter : null,
-                  initialSubscriberId: int.tryParse(
-                    state.uri.queryParameters['subscriber_id'] ?? '',
-                  ),
                 ),
               ),
             ],
@@ -174,10 +207,10 @@ class AppRouter {
                   isOnline: queue.isOnline ?? true,
                   pendingSyncCount: queue.pendingCount,
                   can: permissions.can,
-                  onAddReading: () => context.push<Object?>(RouteNames.fieldReader),
-                  onAddSubscriber: () => context.push<Object?>(RouteNames.subscriberNew),
-                  onOpenReports: () => context.push<Object?>(RouteNames.reports),
-                  onOpenInvoice: (invoice) => context.push<Object?>('${RouteNames.invoices}/${invoice.id}'),
+                  onAddReading: () => context.push(RouteNames.fieldReader),
+                  onAddSubscriber: () => context.push(RouteNames.subscriberNew),
+                  onOpenReports: () => context.push(RouteNames.reports),
+                  onOpenInvoice: (invoice) => context.push('${RouteNames.invoices}/${invoice.id}'),
                   onCollectPayment: (ctx, dashInvoice) async {
                     await CollectPaymentSheet.show(
                       ctx,
@@ -226,8 +259,7 @@ class AppRouter {
             ),
           ),
           ...SettingsRoutes.routes(
-            sectionBuilder: (section) => SettingsStudioScreen(
-              initialSection: section,
+            studioBuilder: () => SettingsStudioScreen(
               repository: GetIt.I<SettingsRepository>(),
               can: GetIt.I<PermissionService>().can,
             ),
@@ -255,75 +287,4 @@ class AppRouter {
           ),
         ],
       );
-}
-
-class AppHomeShell extends StatelessWidget {
-  const AppHomeShell({super.key, required this.shell});
-
-  final StatefulNavigationShell shell;
-
-  static const _destinations = <AdaptiveDestination>[
-    AdaptiveDestination(label: 'الرئيسية', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded),
-    AdaptiveDestination(label: 'الخدمات', icon: Icons.apps_outlined, selectedIcon: Icons.apps_rounded),
-    AdaptiveDestination(label: 'المزامنة', icon: Icons.sync_outlined, selectedIcon: Icons.sync_rounded),
-    AdaptiveDestination(label: 'حسابي', icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final titles = <String>['مشروع المياه', 'الخدمات', 'المزامنة', 'حسابي'];
-    final currentIndex = shell.currentIndex.clamp(0, titles.length - 1).toInt();
-    final session = GetIt.I<SessionService>();
-    final permissions = GetIt.I<PermissionService>();
-
-    return ListenableBuilder(
-      listenable: session,
-      builder: (context, _) {
-        final canFieldRead = permissions.isAdmin ||
-            permissions.hasAnyPermission(
-              const <String>['Create:Reading', 'Update:Reading'],
-            );
-        final canQuickCollect = permissions.isAdmin ||
-            permissions.hasAnyPermission(
-              const <String>['Create:Payment', 'payments.collect'],
-            );
-        return AdaptiveScaffold(
-          currentIndex: currentIndex,
-          destinations: _destinations,
-          onDestinationSelected: (index) => shell.goBranch(
-            index,
-            initialLocation: index == shell.currentIndex,
-          ),
-          appBar: AppBar(
-            title: Text(titles[currentIndex]),
-            actions: <Widget>[
-              if (canFieldRead)
-                IconButton(
-                  tooltip: 'القارئ الميداني السريع',
-                  onPressed: () => context.push<Object?>(RouteNames.fieldReader),
-                  icon: const Icon(Icons.speed_rounded),
-                ),
-              if (canQuickCollect)
-                IconButton(
-                  tooltip: 'المحصل الميداني السريع',
-                  onPressed: () => context.push<Object?>(RouteNames.quickCollector),
-                  icon: const Icon(Icons.point_of_sale_rounded),
-                ),
-              IconButton(
-                tooltip: 'تبديل المظهر',
-                onPressed: () => GetIt.I<AppThemeController>().toggle(),
-                icon: Icon(
-                  Theme.of(context).brightness == Brightness.dark
-                      ? Icons.light_mode_rounded
-                      : Icons.dark_mode_rounded,
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-          ),
-          body: shell,
-        );
-      },
-    );
-  }
 }

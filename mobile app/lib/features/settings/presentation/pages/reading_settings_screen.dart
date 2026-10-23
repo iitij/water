@@ -97,7 +97,6 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                                 initialValue: settings.readingPeriod,
                                 decoration: const InputDecoration(
                                   labelText: 'دورة القراءات',
-                                  border: OutlineInputBorder(),
                                 ),
                                 items: const [
                                   DropdownMenuItem(value: 'weekly', child: Text('أسبوعية (كل 7 أيام)')),
@@ -117,7 +116,6 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                                   initialValue: settings.readingDay,
                                   decoration: const InputDecoration(
                                     labelText: 'يوم إدخال القراءة',
-                                    border: OutlineInputBorder(),
                                     helperText: 'يحدد نهاية فترة الاستهلاك في الدورة الشهرية.',
                                   ),
                                   items: [
@@ -144,7 +142,6 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                                   decoration: const InputDecoration(
                                     labelText: 'مدة السماح (أيام)',
                                     helperText: 'الأيام بعد إصدار الفاتورة قبل اعتبارها متأخرة.',
-                                    border: OutlineInputBorder(),
                                   ),
                                   onChanged: (value) => _update(
                                     context,

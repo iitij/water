@@ -267,7 +267,6 @@ class _ExportCard extends StatelessWidget {
                   initialValue: filters.squareId,
                   decoration: const InputDecoration(
                     labelText: 'المربع السكني',
-                    border: OutlineInputBorder(),
                   ),
                   items: [
                     const DropdownMenuItem(child: Text('كل المربعات')),
@@ -286,7 +285,6 @@ class _ExportCard extends StatelessWidget {
                     initialValue: filters.status,
                     decoration: InputDecoration(
                       labelText: kind == ExportKind.subscribers ? 'حالة المشترك' : 'حالة الفاتورة',
-                      border: const OutlineInputBorder(),
                     ),
                     items: [
                       const DropdownMenuItem(child: Text('كل الحالات')),
@@ -312,7 +310,6 @@ class _ExportCard extends StatelessWidget {
                     initialValue: filters.isInvoiced,
                     decoration: const InputDecoration(
                       labelText: 'حالة الفوترة',
-                      border: OutlineInputBorder(),
                     ),
                     items: const [
                       DropdownMenuItem(child: Text('الكل')),
@@ -467,7 +464,7 @@ class _DateField extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: InputDecorator(
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        decoration: InputDecoration(labelText: label),
         child: Row(
           children: [
             Expanded(child: LtrText(AdminFormat.date(value))),

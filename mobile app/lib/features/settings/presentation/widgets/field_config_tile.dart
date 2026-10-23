@@ -58,7 +58,6 @@ class FieldConfigTile extends StatelessWidget {
                 value == null || value.trim().isEmpty ? 'المسمى البديل مطلوب' : null,
             decoration: const InputDecoration(
               labelText: 'النص البديل (المسمى)',
-              border: OutlineInputBorder(),
             ),
           ),
         ],

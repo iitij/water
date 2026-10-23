@@ -9,6 +9,12 @@ class RouteNames {
   static const profile = '/profile';
   static const offlineSync = '/sync';
 
+  // Shell destinations (five-tab navigation)
+  static const fieldHub = '/field';
+  static const billingHub = '/billing';
+  static const crmHub = '/crm';
+  static const moreHub = '/more';
+
   // Dev 2: Field Operations, Meters & Readings
   static const meters = '/meters';
   static const meterNew = '/meters/new';

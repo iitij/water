@@ -4,6 +4,23 @@ The single Flutter project lives here; Laravel stays at the repository root.
 Android and Windows runners, Dart source, tests and bundled fonts all live inside
 `mobile app/`. Historical handoff/plan paths are relative to this folder now.
 
+## Interface & design system
+
+The Flutter client now ships a complete in-house design system:
+
+- **Five-tab navigation** — Overview, Field, Billing, Subscribers and More — with
+  a floating pill bar on phones and a branded side rail on wide screens.
+- **A reusable widget kit** (`lib/core/ui`) for cards, gradient heroes, KPI
+  cards, module tiles, pills, avatars, progress rings, sparklines and notices.
+- **A catalog-driven module map** (`lib/core/navigation/module_catalog.dart`) so
+  new features appear automatically in the correct hub with permission-aware
+  visibility.
+- **Light / dark / system themes** persisted across launches, with a one-tap
+  toggle in the header.
+
+Read [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) for the palette, typography, component
+inventory and navigation map.
+
 ## Development
 
 Install Flutter **3.44.0** (Dart 3.12), Java 17 and the Android SDK. For Windows,

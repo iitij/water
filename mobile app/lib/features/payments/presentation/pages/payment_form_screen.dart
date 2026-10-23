@@ -11,6 +11,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
@@ -208,7 +209,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
         if (_loading)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: LinearProgressIndicator(minHeight: 2),
+            child: ShimmerSkeleton(height: 4),
           ),
         if (_error != null)
           Padding(
