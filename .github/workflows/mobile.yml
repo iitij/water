@@ -30,14 +30,15 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Analyze (legacy lint warnings are reported, errors fail)
         run: python ../scripts/ci_analyze.py flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Upload analyzer report
+      - name: Upload analyzer report (best effort, artifact quota may block it)
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: flutter-analyze-log
           path: mobile app/analyze.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
       - run: python ../scripts/ci_run.py flutter test --reporter expanded
       - name: Build testing APK (debug signing, runtime server setup)
         run: python ../scripts/ci_run.py flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }}

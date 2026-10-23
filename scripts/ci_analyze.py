@@ -49,6 +49,23 @@ with open("analyze.log", "w", encoding="utf-8") as handle:
     handle.write("\n".join(complete))
     handle.write(f"\n\n{len(errors)} error line(s), exit code {code}\n")
 
+# The job summary survives without artifact storage, which is quota-limited.
+summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+if summary_path:
+    summary = ["## Flutter analyze", ""]
+    summary.append(f"- diagnostics: **{len(complete)}**")
+    summary.append(f"- errors: **{len(errors)}**")
+    summary.append(f"- exit code: **{code}**")
+    if complete:
+        summary.extend(["", "<details><summary>All diagnostics</summary>", "", "```"])
+        summary.extend(complete[:2000])
+        summary.append("```")
+        summary.extend(["</details>", ""])
+    else:
+        summary.extend(["", "No analyzer diagnostics. :white_check_mark:", ""])
+    with open(summary_path, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(summary) + "\n")
+
 if code and os.environ.get("GITHUB_ACTIONS"):
     if errors:
         for line in errors[:40]:
