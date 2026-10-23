@@ -110,6 +110,11 @@ class InvoicesRemoteDataSource {
     await _client.delete(FinanceEndpoints.invoice(id));
   }
 
+  /// `DELETE /api/invoices/{id}/force` — حذف نهائي للفاتورة.
+  Future<void> forceDelete(int id) async {
+    await _client.delete(FinanceEndpoints.invoiceForce(id));
+  }
+
   /// #42 `POST /api/invoices/bulk-delete`
   Future<BulkActionResult> bulkDelete(List<int> ids) async {
     final response = await _client.post(
@@ -122,6 +127,24 @@ class InvoicesRemoteDataSource {
   /// #43 `POST /api/invoices/{id}/restore`
   Future<void> restore(int id) async {
     await _client.post(FinanceEndpoints.invoiceRestore(id));
+  }
+
+  /// `POST /api/invoices/bulk-restore` — استعادة جماعية للفواتير المحذوفة ناعماً.
+  Future<BulkActionResult> bulkRestore(List<int> ids) async {
+    final response = await _client.post(
+      FinanceEndpoints.invoicesBulkRestore,
+      body: <String, dynamic>{'ids': ids},
+    );
+    return _bulkResult(response, fallbackProcessed: ids.length);
+  }
+
+  /// `POST /api/invoices/bulk-force-delete` — حذف نهائي جماعي للفواتير.
+  Future<BulkActionResult> bulkForceDelete(List<int> ids) async {
+    final response = await _client.post(
+      FinanceEndpoints.invoicesBulkForceDelete,
+      body: <String, dynamic>{'ids': ids},
+    );
+    return _bulkResult(response, fallbackProcessed: ids.length);
   }
 
   /// ⚠️ `POST /api/invoices/{id}/recalculate` — مطلوب من Dev 1

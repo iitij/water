@@ -398,21 +398,36 @@ class PaymentDateField extends StatelessWidget {
     final date = state.paymentDate ?? DateTime.now();
     return InkWell(
       onTap: () async {
-        final picked = await showDatePicker(
+        final pickedDate = await showDatePicker(
           context: context,
           initialDate: date,
           firstDate: DateTime(date.year - 2),
           lastDate: DateTime.now().add(const Duration(days: 1)),
         );
-        if (picked != null) cubit.setDate(picked);
+        if (pickedDate == null || !context.mounted) return;
+        final pickedTime = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.fromDateTime(date),
+        );
+        final combined = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime?.hour ?? date.hour,
+          pickedTime?.minute ?? date.minute,
+        );
+        cubit.setDate(combined);
       },
       child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'تاريخ الدفعة'),
+        decoration: const InputDecoration(labelText: 'تاريخ ووقت الدفعة'),
         child: Row(
           children: <Widget>[
-            const Icon(Icons.calendar_today_outlined, size: 16),
+            const Icon(Icons.schedule_outlined, size: 16),
             const SizedBox(width: 8),
-            Text(DateFormat.day(date)),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(DateFormat.dateTime(date)),
+            ),
           ],
         ),
       ),

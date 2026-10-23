@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -123,7 +125,13 @@ class UsersCubit extends Cubit<UsersState> {
     );
   }
 
-  Future<bool> save(SystemUser user, {String? password}) async {
+  Future<bool> save(
+    SystemUser user, {
+    String? password,
+    Uint8List? avatarBytes,
+    String? avatarFileName,
+    bool removeAvatar = false,
+  }) async {
     if (state.isSaving) return false;
     if (user.roles.isEmpty) {
       emit(state.copyWith(errorMessage: 'اختر دوراً واحداً على الأقل للمستخدم.'));
@@ -132,8 +140,19 @@ class UsersCubit extends Cubit<UsersState> {
     emit(state.copyWith(isSaving: true, clearError: true));
     try {
       final saved = user.id == 0
-          ? await _repository.createUser(user, password ?? '')
-          : await _repository.updateUser(user, password: password);
+          ? await _repository.createUser(
+              user,
+              password ?? '',
+              avatarBytes: avatarBytes,
+              avatarFileName: avatarFileName,
+            )
+          : await _repository.updateUser(
+              user,
+              password: password,
+              avatarBytes: avatarBytes,
+              avatarFileName: avatarFileName,
+              removeAvatar: removeAvatar,
+            );
       final users = [...state.users];
       final index = users.indexWhere((item) => item.id == saved.id);
       if (index >= 0) {

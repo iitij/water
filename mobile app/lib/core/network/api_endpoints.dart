@@ -21,6 +21,7 @@ class ApiEndpoints {
   static const squares = 'squares';
   static const bulkDeleteSquares = 'squares/bulk-delete';
   static String square(int id) => 'squares/$id';
+  static String squareOfflinePack(int id) => 'squares/$id/offline-pack';
 
   static const subscribers = 'subscribers';
   static const bulkDeleteSubscribers = 'subscribers/bulk-delete';

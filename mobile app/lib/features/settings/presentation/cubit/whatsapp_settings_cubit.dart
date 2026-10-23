@@ -14,6 +14,7 @@ class WhatsAppSettingsState extends Equatable {
     this.saved = false,
     this.errorMessage,
     this.serverError,
+    this.serverSuccessMessage,
   });
 
   final WhatsAppSettings? settings;
@@ -24,6 +25,7 @@ class WhatsAppSettingsState extends Equatable {
   final bool saved;
   final String? errorMessage;
   final String? serverError;
+  final String? serverSuccessMessage;
 
   WhatsAppSettingsState copyWith({
     WhatsAppSettings? settings,
@@ -34,8 +36,10 @@ class WhatsAppSettingsState extends Equatable {
     bool? saved,
     String? errorMessage,
     String? serverError,
+    String? serverSuccessMessage,
     bool clearError = false,
     bool clearServerError = false,
+    bool clearServerSuccess = false,
   }) {
     return WhatsAppSettingsState(
       settings: settings ?? this.settings,
@@ -46,6 +50,9 @@ class WhatsAppSettingsState extends Equatable {
       saved: saved ?? false,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       serverError: clearServerError ? null : serverError ?? this.serverError,
+      serverSuccessMessage: clearServerSuccess
+          ? null
+          : serverSuccessMessage ?? this.serverSuccessMessage,
     );
   }
 
@@ -59,6 +66,7 @@ class WhatsAppSettingsState extends Equatable {
         saved,
         errorMessage,
         serverError,
+        serverSuccessMessage,
       ];
 }
 
@@ -143,12 +151,54 @@ class WhatsAppSettingsCubit extends Cubit<WhatsAppSettingsState> {
 
   Future<void> stopLocalServer() async {
     if (state.isServerBusy) return;
-    emit(state.copyWith(isServerBusy: true, clearServerError: true));
+    emit(state.copyWith(isServerBusy: true, clearServerError: true, clearServerSuccess: true));
     try {
       final status = await _repository.stopLocalServer();
       emit(state.copyWith(serverStatus: status, isServerBusy: false));
     } catch (error) {
       emit(state.copyWith(isServerBusy: false, serverError: error.toString()));
+    }
+  }
+
+  Future<void> logoutLocalServer() async {
+    if (state.isServerBusy) return;
+    emit(state.copyWith(isServerBusy: true, clearServerError: true, clearServerSuccess: true));
+    try {
+      final status = await _repository.logoutLocalServer();
+      emit(
+        state.copyWith(
+          serverStatus: status,
+          isServerBusy: false,
+          serverSuccessMessage: 'تم تسجيل الخروج وفصل رقم الواتساب المرتبط.',
+        ),
+      );
+      await refreshLocalServerStatus();
+    } catch (error) {
+      emit(state.copyWith(isServerBusy: false, serverError: error.toString()));
+    }
+  }
+
+  Future<bool> sendTestMessage({
+    required String phone,
+    required String message,
+  }) async {
+    if (state.isServerBusy) return false;
+    emit(state.copyWith(isServerBusy: true, clearServerError: true, clearServerSuccess: true));
+    try {
+      final info = await _repository.sendWhatsAppTestMessage(
+        phone: phone,
+        message: message,
+      );
+      emit(
+        state.copyWith(
+          isServerBusy: false,
+          serverSuccessMessage: info,
+        ),
+      );
+      return true;
+    } catch (error) {
+      emit(state.copyWith(isServerBusy: false, serverError: error.toString()));
+      return false;
     }
   }
 }

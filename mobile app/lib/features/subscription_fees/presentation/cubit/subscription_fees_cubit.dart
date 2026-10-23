@@ -5,16 +5,36 @@ import '../../domain/entities/subscription_fee.dart';
 import '../../domain/repositories/subscription_fees_repository.dart';
 
 class SubscriptionFeesState extends Equatable {
-  const SubscriptionFeesState({this.loading = false, this.fees = const [], this.totalSum = 0, this.invoicedSum = 0, this.remainingSum = 0, this.status, this.error});
+  const SubscriptionFeesState({
+    this.loading = false,
+    this.fees = const [],
+    this.totalSum = 0,
+    this.invoicedSum = 0,
+    this.remainingSum = 0,
+    this.status,
+    this.selectedIds = const {},
+    this.error,
+  });
   final bool loading;
   final List<SubscriptionFee> fees;
   final double totalSum;
   final double invoicedSum;
   final double remainingSum;
   final FeeStatus? status;
+  final Set<int> selectedIds;
   final String? error;
 
-  SubscriptionFeesState copyWith({bool? loading, List<SubscriptionFee>? fees, double? totalSum, double? invoicedSum, double? remainingSum, FeeStatus? status, bool clearStatus = false, String? error}) =>
+  SubscriptionFeesState copyWith({
+    bool? loading,
+    List<SubscriptionFee>? fees,
+    double? totalSum,
+    double? invoicedSum,
+    double? remainingSum,
+    FeeStatus? status,
+    bool clearStatus = false,
+    Set<int>? selectedIds,
+    String? error,
+  }) =>
       SubscriptionFeesState(
         loading: loading ?? this.loading,
         fees: fees ?? this.fees,
@@ -22,10 +42,11 @@ class SubscriptionFeesState extends Equatable {
         invoicedSum: invoicedSum ?? this.invoicedSum,
         remainingSum: remainingSum ?? this.remainingSum,
         status: clearStatus ? null : (status ?? this.status),
+        selectedIds: selectedIds ?? this.selectedIds,
         error: error,
       );
   @override
-  List<Object?> get props => [loading, fees, totalSum, invoicedSum, remainingSum, status, error];
+  List<Object?> get props => [loading, fees, totalSum, invoicedSum, remainingSum, status, selectedIds, error];
 }
 
 class SubscriptionFeesCubit extends Cubit<SubscriptionFeesState> {
@@ -45,9 +66,30 @@ class SubscriptionFeesCubit extends Cubit<SubscriptionFeesState> {
 
   void filterStatus(FeeStatus? s) { emit(s == null ? state.copyWith(clearStatus: true) : state.copyWith(status: s)); load(); }
 
-  Future<void> create({required int subscriberId, int? meterId, required double amount, String? notes}) async {
-    await _repo.createFee(subscriberId: subscriberId, meterId: meterId, amount: amount, notes: notes);
-    await load();
+  void toggleSelect(int id) {
+    final ids = {...state.selectedIds};
+    ids.contains(id) ? ids.remove(id) : ids.add(id);
+    emit(state.copyWith(selectedIds: ids));
+  }
+
+  void clearSelection() => emit(state.copyWith(selectedIds: const {}));
+
+  Future<void> create({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) async {
+    try {
+      await _repo.createFee(subscriberId: subscriberId, meterId: meterId, amount: amount, status: status, notes: notes);
+      await load();
+    } catch (e) {
+      emit(state.copyWith(error: friendlyError(e)));
+    }
+  }
+
+  Future<void> update(SubscriptionFee fee) async {
+    try {
+      await _repo.updateFee(fee);
+      await load();
+    } catch (e) {
+      emit(state.copyWith(error: friendlyError(e)));
+    }
   }
 
   Future<String> invoice(int feeId) async {
@@ -56,5 +98,27 @@ class SubscriptionFeesCubit extends Cubit<SubscriptionFeesState> {
     return (res['invoice'] as Map?)?['bill_number']?.toString() ?? '';
   }
 
-  Future<void> delete(int id) async { await _repo.deleteFee(id); await load(); }
+  Future<void> delete(int id) async {
+    try {
+      await _repo.deleteFee(id);
+      final ids = {...state.selectedIds}..remove(id);
+      emit(state.copyWith(selectedIds: ids));
+      await load();
+    } catch (e) {
+      emit(state.copyWith(error: friendlyError(e)));
+    }
+  }
+
+  Future<int> bulkDelete() async {
+    if (state.selectedIds.isEmpty) return 0;
+    try {
+      final deleted = await _repo.bulkDelete(state.selectedIds.toList());
+      emit(state.copyWith(selectedIds: const {}));
+      await load();
+      return deleted;
+    } catch (e) {
+      emit(state.copyWith(error: friendlyError(e)));
+      return 0;
+    }
+  }
 }

@@ -126,6 +126,40 @@ class SettingsRemoteDataSource {
     return LocalServerStatusModel.fromJson(json);
   }
 
+  Future<LocalServerStatusModel> logoutLocalServer() async {
+    final response = await _api.post(
+      AdminApiEndpoints.whatsappServerLogout,
+      fallbackPath: AdminApiEndpoints.whatsappLocalLogout,
+    );
+    final json = adminDataMap(response);
+    if (!json.containsKey('status') &&
+        !json.containsKey('localServerStatus') &&
+        !json.containsKey('connected') &&
+        !json.containsKey('qr')) {
+      return LocalServerStatusModel(
+        state: LocalServerState.waiting,
+        checkedAt: DateTime.now(),
+        message: adminNullableString(json['message']) ??
+            'تم تسجيل الخروج وفصل الجلسة المرتبطة.',
+      );
+    }
+    return LocalServerStatusModel.fromJson(json);
+  }
+
+  Future<String> sendWhatsAppTestMessage({
+    required String phone,
+    required String message,
+  }) async {
+    final response = await _api.post(
+      AdminApiEndpoints.whatsappServerSendTest,
+      data: {'phone': phone.trim(), 'message': message.trim()},
+      fallbackPath: AdminApiEndpoints.whatsappLocalSendTest,
+    );
+    final json = adminDataMap(response);
+    return adminNullableString(json['message']) ??
+        'تم إرسال الرسالة التجريبية بنجاح.';
+  }
+
   Future<List<GeneralSettingModel>> getGeneralSettings() async {
     final response = await _api.get(AdminApiEndpoints.settingsItems);
     return adminList(response, const ['settings', 'items'])
@@ -159,4 +193,9 @@ class SettingsRemoteDataSource {
 
   Future<void> deleteGeneralSetting(int id) =>
       _api.delete('${AdminApiEndpoints.settingsItems}/$id');
+
+  Future<void> bulkDeleteGeneralSettings(List<int> ids) => _api.post(
+        AdminApiEndpoints.settingsItemsBulkDelete,
+        data: {'ids': ids},
+      );
 }

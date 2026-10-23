@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/models/meter.dart';
@@ -15,7 +16,9 @@ class MetersState {
     this.query = '',
     this.statusFilter,
     this.squareFilter,
+    this.selectedIds = const <int>{},
     this.errorMessage,
+    this.actionMessage,
     this.isMutating = false,
   });
 
@@ -25,8 +28,12 @@ class MetersState {
   final String query;
   final String? statusFilter;
   final int? squareFilter;
+  final Set<int> selectedIds;
   final String? errorMessage;
+  final String? actionMessage;
   final bool isMutating;
+
+  bool get isSelecting => selectedIds.isNotEmpty;
 
   MetersState copyWith({
     MetersLoadStatus? status,
@@ -35,10 +42,13 @@ class MetersState {
     String? query,
     String? statusFilter,
     int? squareFilter,
+    Set<int>? selectedIds,
     String? errorMessage,
+    String? actionMessage,
     bool clearStatusFilter = false,
     bool clearSquareFilter = false,
     bool clearError = false,
+    bool clearActionMessage = false,
     bool? isMutating,
   }) {
     return MetersState(
@@ -48,7 +58,9 @@ class MetersState {
       query: query ?? this.query,
       statusFilter: clearStatusFilter ? null : statusFilter ?? this.statusFilter,
       squareFilter: clearSquareFilter ? null : squareFilter ?? this.squareFilter,
+      selectedIds: selectedIds ?? this.selectedIds,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      actionMessage: clearActionMessage ? null : actionMessage ?? this.actionMessage,
       isMutating: isMutating ?? this.isMutating,
     );
   }
@@ -60,10 +72,11 @@ class MetersCubit extends Cubit<MetersState> {
   final MetersRepository _repository;
   Timer? _searchTimer;
 
-  Future<void> load() async {
+  Future<void> load({bool keepSelection = false}) async {
     emit(state.copyWith(
       status: MetersLoadStatus.loading,
       clearError: true,
+      selectedIds: keepSelection ? state.selectedIds : const <int>{},
     ));
     try {
       final results = await Future.wait<Object>([
@@ -109,6 +122,19 @@ class MetersCubit extends Cubit<MetersState> {
     load();
   }
 
+  void toggleSelection(int meterId) {
+    final next = Set<int>.from(state.selectedIds);
+    if (!next.add(meterId)) next.remove(meterId);
+    emit(state.copyWith(selectedIds: next));
+  }
+
+  void selectAllVisible() {
+    final next = <int>{...state.selectedIds, ...state.meters.map((m) => m.id)};
+    emit(state.copyWith(selectedIds: next));
+  }
+
+  void clearSelection() => emit(state.copyWith(selectedIds: const <int>{}));
+
   Future<Meter?> nextPath(Meter current) async {
     final squareId = current.squareId ?? state.squareFilter;
     if (squareId == null || current.pathNumber == null) return null;
@@ -121,10 +147,37 @@ class MetersCubit extends Cubit<MetersState> {
   }
 
   Future<bool> deleteMeter(Meter meter) async {
-    emit(state.copyWith(isMutating: true, clearError: true));
+    emit(state.copyWith(isMutating: true, clearError: true, clearActionMessage: true));
     try {
       await _repository.deleteMeter(meter.id);
-      emit(state.copyWith(isMutating: false));
+      final nextSelected = Set<int>.from(state.selectedIds)..remove(meter.id);
+      emit(state.copyWith(
+        isMutating: false,
+        selectedIds: nextSelected,
+        actionMessage: 'تم حذف العداد ${meter.uniqueCode} بنجاح.',
+      ));
+      await load(keepSelection: true);
+      return true;
+    } catch (error) {
+      emit(state.copyWith(isMutating: false, errorMessage: _messageFor(error)));
+      return false;
+    }
+  }
+
+  Future<bool> deleteSelectedMeters() async {
+    final ids = state.selectedIds.toList(growable: false);
+    if (ids.isEmpty) return false;
+    emit(state.copyWith(isMutating: true, clearError: true, clearActionMessage: true));
+    try {
+      final result = await _repository.bulkDeleteMeters(ids);
+      final summary = result.skippedCount > 0
+          ? 'تم حذف ${result.deletedCount} عداد، وتعذر حذف ${result.skippedCount} لوجود سجل قراءات أو فواتير مرتبط.'
+          : 'تم حذف ${result.deletedCount} عداد بنجاح.';
+      emit(state.copyWith(
+        isMutating: false,
+        selectedIds: const <int>{},
+        actionMessage: summary,
+      ));
       await load();
       return true;
     } catch (error) {
@@ -135,7 +188,22 @@ class MetersCubit extends Cubit<MetersState> {
 
   static String _messageFor(Object error) {
     if (error is StateError) return error.message.toString();
-    return 'تعذر تحميل بيانات العدادات. تحقق من الاتصال وحاول مرة أخرى.';
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        final errors = data['errors'];
+        if (errors is Map && errors.isNotEmpty) {
+          final first = errors.values.first;
+          if (first is List && first.isNotEmpty) return first.first.toString();
+          return first.toString();
+        }
+        if (data['message'] != null) return data['message'].toString();
+      }
+      if (error.response == null) {
+        return 'لا يوجد اتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.';
+      }
+    }
+    return 'تعذر تنفيذ العملية على بيانات العدادات. تحقق من الاتصال وحاول مرة أخرى.';
   }
 
   @override

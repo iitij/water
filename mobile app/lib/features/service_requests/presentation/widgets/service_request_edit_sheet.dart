@@ -132,7 +132,7 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                 initialValue: _status,
                 decoration: const InputDecoration(labelText: 'حالة الطلب'),
                 items: [for (final status in widget.request.canEdit
-                    ? [TankerStatus.pending, TankerStatus.completed] : [widget.request.status])
+                    ? TankerStatus.values : [widget.request.status])
                   DropdownMenuItem(value: status, child: Text(status.label))],
                 onChanged: _saving || !widget.request.canEdit ? null : (value) => setState(() => _status = value!),
               ),

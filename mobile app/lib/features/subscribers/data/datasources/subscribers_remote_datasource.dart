@@ -34,6 +34,11 @@ class SubscribersRemoteDatasource {
 
   Future<void> delete(int id) => _api.delete('/subscribers/$id');
 
+  Future<int> bulkDelete(List<int> ids) async {
+    final j = await _api.post('/subscribers/bulk-delete', data: {'ids': ids}) as Map<String, dynamic>;
+    return (j['deleted_count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<List<LedgerEntryModel>> getTransactions(int id, {String? meterId}) async {
     final data = await _api.get('/subscribers/$id/transactions', query: {
       if (meterId != null) 'meter_id': meterId,

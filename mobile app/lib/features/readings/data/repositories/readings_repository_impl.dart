@@ -258,16 +258,22 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
   }
 
   @override
-  Future<Reading> updateReading(Reading reading, double newCurrentReading) async {
+  Future<Reading> updateReading(
+    Reading reading,
+    double newCurrentReading, {
+    DateTime? newReadingDate,
+  }) async {
     if (reading.isInvoiced) {
       throw StateError('لا يمكن تعديل قراءة مفوترة.');
     }
     if (newCurrentReading < reading.previousReading) {
       throw StateError('القراءة الحالية لا يمكن أن تكون أقل من القراءة السابقة.');
     }
+    final effectiveDate = newReadingDate ?? reading.readingDate;
+    final effectiveActualDate = newReadingDate ?? reading.actualReadingDate ?? reading.readingDate;
     final payload = {
-      'reading_date': _dateOnly(reading.readingDate),
-      'actual_reading_date': _dateOnly(reading.actualReadingDate ?? reading.readingDate),
+      'reading_date': _dateOnly(effectiveDate),
+      'actual_reading_date': _dateOnly(effectiveActualDate),
       'period_start': _dateOnly(reading.periodStart),
       'period_end': _dateOnly(reading.periodEnd),
       'previous_reading': reading.previousReading,
@@ -307,8 +313,8 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         id: reading.id,
         localId: localId,
         meterId: reading.meterId,
-        readingDate: reading.readingDate,
-        actualReadingDate: reading.actualReadingDate,
+        readingDate: effectiveDate,
+        actualReadingDate: effectiveActualDate,
         periodStart: reading.periodStart,
         periodEnd: reading.periodEnd,
         previousReading: reading.previousReading,
@@ -322,6 +328,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         subscriberName: reading.subscriberName,
         tenantName: reading.tenantName,
         imagePath: reading.imagePath,
+        imageUrl: reading.imageUrl,
         isSynced: false,
       );
     }
@@ -339,6 +346,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       'tenant_name': reading.tenantName,
       'square_id': reading.squareId,
       'square_name': reading.squareName,
+      'image_url': updated['image_url'] ?? reading.imageUrl,
     };
     await _database.cacheReadings([enriched]);
     return Reading.fromJson(enriched);

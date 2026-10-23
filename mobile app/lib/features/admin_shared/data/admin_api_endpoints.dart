@@ -13,14 +13,19 @@ abstract final class AdminApiEndpoints {
   static const whatsappSettings = '/settings/whatsapp';
   static const settings = '/settings';
   static const settingsItems = '/settings/items';
+  static const settingsItemsBulkDelete = '/settings/items/bulk-delete';
   static const uploadSettingImage = '/settings/upload-logo';
 
   static const whatsappLocalStatus = '/whatsapp/local-status';
   static const whatsappLocalStart = '/whatsapp/local-start';
   static const whatsappLocalStop = '/whatsapp/local-stop';
+  static const whatsappLocalLogout = '/whatsapp/local-logout';
+  static const whatsappLocalSendTest = '/whatsapp/local-send-test';
   static const whatsappServerStatus = '/whatsapp-server/status';
   static const whatsappServerStart = '/whatsapp-server/start';
   static const whatsappServerStop = '/whatsapp-server/stop';
+  static const whatsappServerLogout = '/whatsapp-server/logout';
+  static const whatsappServerSendTest = '/whatsapp-server/send-test';
 
   static const users = '/users';
   static const usersBulkDelete = '/users/bulk-delete';

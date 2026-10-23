@@ -68,7 +68,7 @@ class PaymentsRemoteDataSource {
     final map = JsonUtils.asMap(response);
     if (map == null) return ids.length;
     final count = JsonUtils.asIntOrNull(
-      map['deleted'] ?? map['processed'] ?? map['count'],
+      map['deleted_count'] ?? map['deleted'] ?? map['processed'] ?? map['count'],
     );
     return count ?? ids.length;
   }

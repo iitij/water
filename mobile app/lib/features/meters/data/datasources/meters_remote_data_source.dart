@@ -80,6 +80,14 @@ class MetersRemoteDataSource {
     await _dio.delete('${ApiEndpoints.meters}/$meterId');
   }
 
+  Future<Map<String, dynamic>> bulkDeleteMeters(List<int> meterIds) async {
+    final response = await _dio.post(
+      ApiEndpoints.bulkDeleteMeters,
+      data: {'ids': meterIds},
+    );
+    return _extractObject(response.data, keys: const []);
+  }
+
   static List<Map<String, dynamic>> _extractList(
     Object? body, {
     required List<String> keys,

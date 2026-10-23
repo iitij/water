@@ -22,9 +22,15 @@ abstract class SettingsRepository {
   Future<LocalServerStatus> getLocalServerStatus();
   Future<LocalServerStatus> startLocalServer();
   Future<LocalServerStatus> stopLocalServer();
+  Future<LocalServerStatus> logoutLocalServer();
+  Future<String> sendWhatsAppTestMessage({
+    required String phone,
+    required String message,
+  });
 
   Future<List<GeneralSetting>> getGeneralSettings();
   Future<GeneralSetting> createGeneralSetting(GeneralSetting setting);
   Future<GeneralSetting> updateGeneralSetting(GeneralSetting setting);
   Future<void> deleteGeneralSetting(GeneralSetting setting);
+  Future<void> bulkDeleteGeneralSettings(List<GeneralSetting> settings);
 }

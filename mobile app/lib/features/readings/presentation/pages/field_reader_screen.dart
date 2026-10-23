@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/widgets/search_text_field.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
@@ -10,6 +11,7 @@ import '../../../meters/presentation/widgets/meter_card_widget.dart';
 import '../../data/models/reading.dart';
 import '../../data/services/reading_invoice_actions_service.dart';
 import '../../domain/readings_repository.dart';
+import '../widgets/offline_pack_dialog.dart';
 import 'submit_reading_screen.dart';
 
 class FieldReaderScreen extends StatelessWidget {
@@ -17,12 +19,14 @@ class FieldReaderScreen extends StatelessWidget {
     required this.metersRepository,
     required this.readingsRepository,
     this.invoiceActions,
+    this.offlinePackDownloader,
     super.key,
   });
 
   final MetersRepository metersRepository;
   final ReadingsRepository readingsRepository;
   final ReadingInvoiceActionsService? invoiceActions;
+  final OfflinePackDownloader? offlinePackDownloader;
 
   @override
   Widget build(BuildContext context) => BlocProvider(
@@ -30,6 +34,7 @@ class FieldReaderScreen extends StatelessWidget {
         child: _FieldReaderView(
           readingsRepository: readingsRepository,
           invoiceActions: invoiceActions,
+          offlinePackDownloader: offlinePackDownloader,
         ),
       );
 }
@@ -38,10 +43,12 @@ class _FieldReaderView extends StatelessWidget {
   const _FieldReaderView({
     required this.readingsRepository,
     this.invoiceActions,
+    this.offlinePackDownloader,
   });
 
   final ReadingsRepository readingsRepository;
   final ReadingInvoiceActionsService? invoiceActions;
+  final OfflinePackDownloader? offlinePackDownloader;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +59,25 @@ class _FieldReaderView extends StatelessWidget {
         appBar: AppBar(
           title: const Text('القارئ الميداني'),
           actions: [
+            BlocBuilder<MetersCubit, MetersState>(
+              buildWhen: (prev, curr) =>
+                  prev.squares != curr.squares || prev.squareFilter != curr.squareFilter,
+              builder: (context, state) => IconButton(
+                tooltip: 'تنزيل حزمة العمل أوفلاين',
+                onPressed: () async {
+                  final res = await OfflinePackDialog.show(
+                    context,
+                    downloader: offlinePackDownloader,
+                    squares: state.squares,
+                    initialSquareId: state.squareFilter,
+                  );
+                  if (res != null && context.mounted) {
+                    await cubit.load();
+                  }
+                },
+                icon: const Icon(Icons.cloud_download_outlined),
+              ),
+            ),
             IconButton(
               tooltip: 'مسح باركود العداد',
               onPressed: () => _scan(context, cubit),

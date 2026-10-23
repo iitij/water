@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Squares.
     Route::post('/squares/bulk-delete', [SquareController::class, 'bulkDelete']);
+    Route::get('/squares/{id}/offline-pack', [SquareController::class, 'offlinePack']);
     Route::apiResource('squares', SquareController::class)->parameters(['squares' => 'id']);
 
     // Subscribers: custom actions must precede the resource's /{id} route.
@@ -81,7 +82,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/generate-tanker', [InvoiceController::class, 'generateTankerInvoice']);
     Route::post('/invoices/bulk-recalculate', [InvoiceController::class, 'bulkRecalculate']);
     Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
+    Route::post('/invoices/bulk-restore', [InvoiceController::class, 'bulkRestore']);
+    Route::post('/invoices/bulk-force-delete', [InvoiceController::class, 'bulkForceDelete']);
     Route::post('/invoices/{id}/restore', [InvoiceController::class, 'restore']);
+    Route::delete('/invoices/{id}/force', [InvoiceController::class, 'forceDestroy']);
     Route::post('/invoices/{id}/recalculate', [InvoiceController::class, 'recalculate']);
     Route::post('/invoices/{id}/pay', [InvoiceController::class, 'pay']);
     Route::get('/invoices/{id}/pdf', [InvoiceController::class, 'downloadPdf'])->name('api.invoices.pdf');
@@ -130,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/settings/upload-logo', [SettingController::class, 'uploadLogo']);
     Route::get('/settings/items', [SettingController::class, 'items']);
     Route::post('/settings/items', [SettingController::class, 'storeItem']);
+    Route::post('/settings/items/bulk-delete', [SettingController::class, 'bulkDestroyItems']);
     Route::put('/settings/items/{id}', [SettingController::class, 'updateItem']);
     Route::patch('/settings/items/{id}', [SettingController::class, 'updateItem']);
     Route::delete('/settings/items/{id}', [SettingController::class, 'destroyItem']);
@@ -143,6 +148,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/whatsapp-server/stop', [WhatsAppServerController::class, 'stop']);
     Route::post('/whatsapp-server/logout', [WhatsAppServerController::class, 'logout']);
     Route::post('/whatsapp-server/test', [WhatsAppServerController::class, 'sendTest']);
+    Route::post('/whatsapp-server/send-test', [WhatsAppServerController::class, 'sendTest']);
     // Names used in the earlier API gap report.
     Route::get('/whatsapp/local-status', [WhatsAppServerController::class, 'status']);
     Route::post('/whatsapp/local-start', [WhatsAppServerController::class, 'start']);
@@ -152,6 +158,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/roles/permissions-matrix', [RoleController::class, 'permissionsMatrix']);
     Route::get('/permissions', [RoleController::class, 'permissionsMatrix']);
     Route::post('/users/bulk-delete', [UserController::class, 'bulkDelete']);
+    Route::post('/users/{id}', [UserController::class, 'update'])->whereNumber('id');
     Route::apiResource('users', UserController::class)->parameters(['users' => 'id']);
     Route::post('/roles/bulk-delete', [RoleController::class, 'bulkDelete']);
     Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);

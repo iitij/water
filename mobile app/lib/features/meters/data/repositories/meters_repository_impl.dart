@@ -195,6 +195,16 @@ class MetersRepositoryImpl implements MetersRepository {
   Future<void> deleteMeter(int meterId) => _remote.deleteMeter(meterId);
 
   @override
+  Future<({int deletedCount, int skippedCount})> bulkDeleteMeters(List<int> meterIds) async {
+    if (meterIds.isEmpty) return (deletedCount: 0, skippedCount: 0);
+    final res = await _remote.bulkDeleteMeters(meterIds);
+    return (
+      deletedCount: _asInt(res['deleted_count']) ?? 0,
+      skippedCount: _asInt(res['skipped_count']) ?? 0,
+    );
+  }
+
+  @override
   Future<bool> isPathNumberAvailable({
     required int pathNumber,
     required int squareId,
