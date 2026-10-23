@@ -18,12 +18,15 @@ class FinanceEndpoints {
   static const String invoicesGenerateSubscription = '/invoices/generate-subscription';
   static const String invoicesGenerateTanker = '/invoices/generate-tanker';
   static const String invoicesBulkDelete = '/invoices/bulk-delete';
+  static const String invoicesBulkRestore = '/invoices/bulk-restore';
+  static const String invoicesBulkForceDelete = '/invoices/bulk-force-delete';
 
   /// ➕ مسار جديد مطلوب من Dev 1 (مطابق لـ `PaymentService::recalculateInvoices`).
   static const String invoicesBulkRecalculate = '/invoices/bulk-recalculate';
 
   static String invoice(int id) => '/invoices/$id';
   static String invoiceRestore(int id) => '/invoices/$id/restore';
+  static String invoiceForce(int id) => '/invoices/$id/force';
   static String invoicePay(int id) => '/invoices/$id/pay';
   static String invoiceRecalculate(int id) => '/invoices/$id/recalculate';
   static String invoicePdf(int id) => '/invoices/$id/pdf';

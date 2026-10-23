@@ -10,8 +10,9 @@ import '../../domain/repositories/subscribers_repository.dart';
 
 /// SCR-06 — نموذج إضافة/تعديل مشترك (هاتف يمني +967، تاريخ بدء الاشتراك، مربع، حالة).
 class SubscriberFormScreen extends StatefulWidget {
-  const SubscriberFormScreen({super.key, this.existing, this.repository});
+  const SubscriberFormScreen({super.key, this.existing, this.initialSquareId, this.repository});
   final Subscriber? existing;
+  final int? initialSquareId;
   final SubscribersRepository? repository;
 
   @override
@@ -45,9 +46,11 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
     _name = TextEditingController(text: e?.name ?? '');
     _phone = TextEditingController(text: e?.phone ?? '+967');
     _address = TextEditingController(text: e?.address ?? '');
-    _squareId = e?.squareId;
+    _squareId = e?.squareId ?? widget.initialSquareId;
     _status = e?.status ?? SubscriberStatus.active;
-    _startDate = e?.subscriptionStartDate != null ? DateTime.tryParse(e!.subscriptionStartDate!) : null;
+    _startDate = e?.subscriptionStartDate != null
+        ? DateTime.tryParse(e!.subscriptionStartDate!)
+        : (e == null ? DateTime.now() : null);
     _resolveRepository().getSquaresLookup().then((s) {
       if (mounted) setState(() => _squares = s);
     });
@@ -57,7 +60,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'SCR-06 • تعديل مشترك' : 'SCR-06 • مشترك جديد')),
+      appBar: AppBar(title: Text(isEdit ? 'تعديل مشترك' : 'مشترك جديد')),
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -81,7 +84,8 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            value: _squareId,
+            key: ValueKey<int?>(_squareId),
+            initialValue: _squareId,
             decoration: const InputDecoration(labelText: 'المربع السكني *', border: OutlineInputBorder()),
             items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
             onChanged: (v) => setState(() => _squareId = v),
@@ -89,7 +93,8 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<SubscriberStatus>(
-            value: _status,
+            key: ValueKey<SubscriberStatus>(_status),
+            initialValue: _status,
             decoration: const InputDecoration(labelText: 'حالة المشترك', border: OutlineInputBorder()),
             items: [for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
             onChanged: (v) => setState(() => _status = v ?? _status),

@@ -114,7 +114,7 @@ class SettingController extends ApiController
     {
         $this->authorizeApi(Setting::class, 'update');
         $data = $request->validate([
-            'key' => ['required', Rule::in(['invoice_logo', 'site_favicon', 'invoice_watermark'])],
+            'key' => ['required', 'string', 'max:255', 'not_in:whatsapp_access_token'],
             'file' => ['required', 'image', 'max:5120'],
         ]);
         $oldPath = Setting::get($data['key']);
@@ -167,6 +167,20 @@ class SettingController extends ApiController
         abort_if(in_array($item->key, self::SECRET_KEYS, true), 403, 'لا يمكن حذف بيانات الاعتماد من شاشة الإعدادات العامة.');
         $item->delete();
         return response()->json(['message' => 'تم حذف الإعداد.']);
+    }
+
+    public function bulkDestroyItems(Request $request)
+    {
+        $this->authorizeApi(Setting::class, 'deleteAny');
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'distinct', 'exists:settings,id'],
+        ]);
+        $deleted = Setting::query()
+            ->whereIn('id', $data['ids'])
+            ->whereNotIn('key', self::SECRET_KEYS)
+            ->delete();
+        return response()->json(['deleted_count' => $deleted]);
     }
 
     private function readingPayload(): array

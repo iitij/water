@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/services/esc_pos/thermal_ticket.dart';
 import '../../../../core/services/pdf_print_service.dart';
@@ -7,7 +8,6 @@ import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../../core/widgets/thermal_printer_prompt.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -61,7 +61,8 @@ Future<void> printPaymentThermal(
 
   if (result.status == ThermalPrintStatus.notConnected) {
     final address = await promptThermalPrinterAddress(context, service);
-    if (address == null || address.isEmpty || !context.mounted) {
+    if (!context.mounted) return;
+    if (address == null || address.isEmpty) {
       AppFeedback.error(context, 'لم تُاختر طابعة حرارية.');
       return;
     }

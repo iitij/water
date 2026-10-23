@@ -41,12 +41,14 @@ class SubscriptionFeeController extends ApiController
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
             'amount' => ['required', 'numeric', 'gt:0'],
+            'status' => ['sometimes', 'in:uninvoiced,invoiced,partially_paid,paid'],
             'notes' => ['nullable', 'string'],
         ]);
         if (! empty($data['meter_id']) && ! \App\Models\Meter::where('id', $data['meter_id'])->where('subscriber_id', $data['subscriber_id'])->exists()) {
             return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
         }
-        $fee = SubscriptionFee::create($data + ['status' => 'uninvoiced']);
+        $data['status'] ??= 'uninvoiced';
+        $fee = SubscriptionFee::create($data);
         return response()->json(['message' => 'تمت إضافة رسوم الاشتراك.', 'subscription_fee' => $fee->load(['subscriber', 'meter'])], 201);
     }
 
@@ -60,21 +62,25 @@ class SubscriptionFeeController extends ApiController
     {
         $this->authorizeApi(SubscriptionFee::class, 'update');
         $fee = SubscriptionFee::findOrFail($id);
-        if ($fee->invoice_id || $fee->status !== 'uninvoiced') {
-            return response()->json(['message' => 'لا يمكن تعديل رسوم تم ربطها بفاتورة.'], 409);
-        }
         $data = $request->validate([
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['sometimes', 'nullable', 'integer', 'exists:meters,id'],
             'amount' => ['sometimes', 'required', 'numeric', 'gt:0'],
+            'status' => ['sometimes', 'required', 'in:uninvoiced,invoiced,partially_paid,paid'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        if ($fee->invoice_id && (
+            (array_key_exists('amount', $data) && (float) $data['amount'] !== (float) $fee->amount)
+            || (array_key_exists('subscriber_id', $data) && (int) $data['subscriber_id'] !== (int) $fee->subscriber_id)
+        )) {
+            return response()->json(['message' => 'لا يمكن تغيير مبلغ أو مشترك رسوم مرتبطة بفاتورة صادرة.'], 409);
+        }
         $subscriberId = $data['subscriber_id'] ?? $fee->subscriber_id;
         if (! empty($data['meter_id']) && ! \App\Models\Meter::where('id', $data['meter_id'])->where('subscriber_id', $subscriberId)->exists()) {
             return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
         }
         $fee->update($data);
-        return response()->json(['message' => 'تم تحديث رسوم الاشتراك.', 'subscription_fee' => $fee->fresh(['subscriber', 'meter'])]);
+        return response()->json(['message' => 'تم تحديث رسوم الاشتراك.', 'subscription_fee' => $fee->fresh(['subscriber', 'meter', 'invoice'])]);
     }
 
     public function destroy(int $id)

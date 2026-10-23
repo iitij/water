@@ -13,6 +13,9 @@ enum InvoiceStatus {
   final String wire;
   final String label;
 
+  /// اسم الحالة بالعربية (اسم مستعار لـ [label]).
+  String get labelAr => label;
+
   static InvoiceStatus parse(String? value) => InvoiceStatus.values.firstWhere(
         (s) => s.wire == value,
         orElse: () => InvoiceStatus.issued,
@@ -80,6 +83,9 @@ enum PaymentMethod {
 
   final String wire;
   final String label;
+
+  /// اسم طريقة الدفع بالعربية (اسم مستعار لـ [label]).
+  String get labelAr => label;
 
   static PaymentMethod parse(String? value) => PaymentMethod.values.firstWhere(
         (m) => m.wire == value,

@@ -104,6 +104,18 @@ abstract final class AppTheme {
         focusedErrorBorder: border(scheme.error, width: 1.6),
         errorStyle: TextStyle(fontFamily: AppTypography.fontFamily, color: scheme.error, fontSize: 12),
       ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: background,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: AppTypography.textTheme(brightness).titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          color: scheme.onSurface,
+        ),
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 50),
@@ -197,6 +209,7 @@ abstract final class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
         indicatorColor: scheme.primary.withValues(alpha: isDark ? .26 : .12),
         elevation: 0,
         labelTextStyle: WidgetStateProperty.resolveWith(
@@ -204,6 +217,7 @@ abstract final class AppTheme {
             fontFamily: AppTypography.fontFamily,
             fontSize: 12,
             fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w500,
+            color: states.contains(WidgetState.selected) ? scheme.primary : muted,
           ),
         ),
       ),

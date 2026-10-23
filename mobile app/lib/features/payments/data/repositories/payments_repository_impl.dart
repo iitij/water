@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_sync_queue.dart';
@@ -24,18 +26,21 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     required InvoicesRemoteDataSource invoices,
     required NetworkInfo networkInfo,
     FinanceSyncQueueRepository? syncQueue,
+    Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
   })  : _remote = remote,
         _invoices = invoices,
         _network = networkInfo,
-        _syncQueue = syncQueue;
+        _syncQueue = syncQueue,
+        _uuid = uuid;
 
   final PaymentsRemoteDataSource _remote;
   final InvoicesRemoteDataSource _invoices;
   final NetworkInfo _network;
   final FinanceSyncQueueRepository? _syncQueue;
+  final Uuid _uuid;
 
-  /// تعطيل الطابور المحلي عند اعتماد Dev 1 كاملًا على `SyncQueueManager` (drift).
+  /// تعطيل الطابور المحلي عند الحاجة في الاختبارات.
   final bool offlineEnabled;
 
   @override
@@ -47,31 +52,40 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   @override
   Future<CollectPaymentOutcome> collect(CollectPaymentRequest request) async {
     final validationError = request.validate();
-    if (validationError != null) throw ValidationFailure(validationError, <String, List<String>>{});
+    if (validationError != null) {
+      throw ValidationFailure(validationError, <String, List<String>>{});
+    }
+
+    // يُنشأ UUID v4 واحد قبل المحاولة الشبكية ويُعاد استخدامه عند السقوط أوفلاين
+    // لمنع ازدواجية السند إذا وصلت الحزمة للخادم وانقطع الرد.
+    final syncUuid = _uuid.v4();
 
     final online = await _network.isConnected;
     if (!online && offlineEnabled) {
-      return _enqueueOffline(request);
+      return _enqueueOffline(request, syncUuid: syncUuid);
     }
 
     try {
       if (request.invoiceId != null) {
         return await _remote.payInvoice(
           request.invoiceId!,
-          request.toPayPayload(),
+          request.toPayPayload(syncUuid: syncUuid),
         );
       }
-      return await _remote.create(request.toCreatePayload());
+      return await _remote.create(request.toCreatePayload(syncUuid: syncUuid));
     } on AppFailure catch (failure) {
-      // انقطاع أثناء الطلب → ندرجه في الطابور بدل إخبار المحصل بالفشل.
+      // انقطاع أثناء الطلب → ندرجه في الطابور بنفس sync_uuid بدل إخبار المحصل بالفشل.
       if (_isNetworkLike(failure) && offlineEnabled) {
-        return _enqueueOffline(request);
+        return _enqueueOffline(request, syncUuid: syncUuid);
       }
       rethrow;
     }
   }
 
-  Future<CollectPaymentOutcome> _enqueueOffline(CollectPaymentRequest request) async {
+  Future<CollectPaymentOutcome> _enqueueOffline(
+    CollectPaymentRequest request, {
+    required String syncUuid,
+  }) async {
     final localReceipt = 'REC-LOCAL-${DateTime.now().millisecondsSinceEpoch}';
     final queue = _syncQueue;
     if (queue == null) {
@@ -82,15 +96,13 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
 
     await queue.enqueue(
       SyncAction(
-        type: request.invoiceId != null
-            ? 'invoice.pay'
-            : 'payment.create',
+        type: request.invoiceId != null ? 'invoice.pay' : 'payment.create',
         payload: <String, dynamic>{
           if (request.invoiceId != null) 'invoice_id': request.invoiceId,
-          ...request.toCreatePayload(),
+          ...request.toCreatePayload(syncUuid: syncUuid),
         },
         createdAt: DateTime.now(),
-        idempotencyKey: localReceipt,
+        idempotencyKey: syncUuid,
         sourceModule: 'payments',
       ),
     );
@@ -99,6 +111,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
       payment: PaymentModel(
         id: 0,
         subscriberId: request.subscriberId,
+        meterId: request.meterId,
         invoiceId: request.invoiceId,
         receiptNumber: localReceipt,
         amount: request.amount,

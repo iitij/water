@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Typography scale for the platform. Tajawal is bundled with the app so the
-/// Arabic interface keeps identical metrics on every device, including Windows.
+/// Typography scale for the platform. IBM Plex Sans Arabic is bundled with the
+/// app so the Arabic interface keeps identical metrics on every device,
+/// including Windows.
 abstract final class AppTypography {
   const AppTypography._();
 

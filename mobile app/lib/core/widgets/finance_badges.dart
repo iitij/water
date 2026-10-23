@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../../features/invoices/domain/accounting/finance_enums.dart';
-import '../../features/payments/data/models/collect_payment_models.dart';
+import '../theme/app_colors.dart';
 
 class LtrNumberText extends StatelessWidget {
   const LtrNumberText(this.text, {super.key, this.style, this.textAlign});
@@ -41,9 +40,9 @@ class InvoiceTypeBadge extends StatelessWidget {
         vertical: compact ? 2 : 4,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -82,7 +81,7 @@ class PathChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: highlighted ? AppColors.primary.withOpacity(0.15) : AppColors.cardBackground,
+        color: highlighted ? AppColors.primary.withValues(alpha: 0.15) : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: highlighted ? AppColors.primary : AppColors.border,
@@ -132,7 +131,7 @@ class PaymentMethodBadge extends StatelessWidget {
         vertical: compact ? 2 : 4,
       ),
       decoration: BoxDecoration(
-        color: AppColors.neutral.withOpacity(0.1),
+        color: AppColors.neutral.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(

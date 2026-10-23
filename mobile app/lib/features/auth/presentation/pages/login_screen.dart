@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -47,6 +48,16 @@ class _LoginScreenState extends State<LoginScreen> {
           rememberSession: _rememberSession,
         );
   }
+
+  Future<void> _openServerConfig() async {
+    final updated = await ServerConfigSheet.show(context);
+    if (!mounted || updated == null) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم تحديث عنوان الخادم إلى: $updated')),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onToggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
                       onToggleRemember: () => setState(() => _rememberSession = !_rememberSession),
                       onSubmit: loading ? null : _submit,
+                      onOpenServerConfig: loading ? null : _openServerConfig,
                     );
 
                     if (wide) {
@@ -168,6 +180,7 @@ class _LoginFormCard extends StatelessWidget {
     required this.onToggleObscure,
     required this.onToggleRemember,
     required this.onSubmit,
+    required this.onOpenServerConfig,
   });
 
   final GlobalKey<FormState> formKey;
@@ -180,6 +193,7 @@ class _LoginFormCard extends StatelessWidget {
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleRemember;
   final VoidCallback? onSubmit;
+  final VoidCallback? onOpenServerConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -304,6 +318,19 @@ class _LoginFormCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            Center(
+              child: TextButton.icon(
+                onPressed: onOpenServerConfig,
+                icon: const Icon(Icons.dns_outlined, size: 16),
+                label: Text(
+                  AppConfig.currentApiBaseUrl == null
+                      ? 'إعدادات الاتصال بالخادم'
+                      : 'الخادم: ${Uri.tryParse(AppConfig.currentApiBaseUrl!)?.authority ?? AppConfig.currentApiBaseUrl} (تغيير)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ],
         ),

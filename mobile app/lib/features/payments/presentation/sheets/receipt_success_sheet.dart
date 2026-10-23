@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_number_spellout.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
 import '../widgets/payment_actions.dart';
@@ -166,8 +166,8 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                       ),
                   ],
                   if (receipt != null && receipt.isFullySettled)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
                       child: Text(
                         'تم سداد الفاتورة بالكامل ✅',
                         style: TextStyle(

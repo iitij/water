@@ -151,6 +151,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     return CollectPaymentRequest(
       subscriberId: subscriberId,
       invoiceId: state.invoiceId,
+      meterId: _meterId,
       amount: state.amount,
       method: state.method,
       referenceNumber: state.referenceNumber.trim().isEmpty

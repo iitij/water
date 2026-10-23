@@ -25,7 +25,13 @@ class InvoiceController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
-        $query = Invoice::with([
+        $trashed = (string) $request->query('trashed', 'without');
+        $query = match ($trashed) {
+            'with' => Invoice::withTrashed(),
+            'only' => Invoice::onlyTrashed(),
+            default => Invoice::query(),
+        };
+        $query->with([
             'subscriber:id,name,phone,square_id',
             'subscriber.square:id,name',
             'meter:id,unique_code,path_number,tenant_name,tenant_phone',
@@ -131,7 +137,7 @@ class InvoiceController extends ApiController
     public function show(int $id)
     {
         $this->authorizeApi(Invoice::class, 'view');
-        $invoice = Invoice::with([
+        $invoice = Invoice::withTrashed()->with([
             'subscriber.square', 'meter', 'items', 'readings',
             'payments' => fn ($q) => $q->with(['user:id,name', 'meter:id,unique_code,tenant_name'])->latest('payment_date'),
         ])->findOrFail($id);
@@ -304,6 +310,52 @@ class InvoiceController extends ApiController
         }
         $invoice->restore();
         return response()->json(['message' => 'تمت استعادة الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter']))]);
+    }
+
+    public function forceDestroy(int $id)
+    {
+        $this->authorizeApi(Invoice::class, 'forceDelete');
+        $invoice = Invoice::withTrashed()->findOrFail($id);
+        DB::transaction(function () use ($invoice) {
+            if (! $invoice->trashed()) {
+                $invoice->delete();
+            }
+            InvoiceItem::where('invoice_id', $invoice->id)->delete();
+            $invoice->forceDelete();
+        });
+        return response()->json(['message' => 'تم حذف الفاتورة نهائياً.']);
+    }
+
+    public function bulkRestore(Request $request)
+    {
+        $this->authorizeApi(Invoice::class, 'restoreAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
+        $restored = 0;
+        DB::transaction(function () use ($data, &$restored) {
+            foreach (Invoice::onlyTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $invoice) {
+                $invoice->restore();
+                $restored++;
+            }
+        });
+        return response()->json(['restored_count' => $restored]);
+    }
+
+    public function bulkForceDelete(Request $request)
+    {
+        $this->authorizeApi(Invoice::class, 'forceDeleteAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
+        $deleted = 0;
+        DB::transaction(function () use ($data, &$deleted) {
+            foreach (Invoice::withTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $invoice) {
+                if (! $invoice->trashed()) {
+                    $invoice->delete();
+                }
+                InvoiceItem::where('invoice_id', $invoice->id)->delete();
+                $invoice->forceDelete();
+                $deleted++;
+            }
+        });
+        return response()->json(['deleted_count' => $deleted]);
     }
 
     public function generateMeterInvoice(Request $request, InvoiceService $invoiceService)

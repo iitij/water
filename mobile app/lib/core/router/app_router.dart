@@ -8,6 +8,7 @@ import '../../features/auth/presentation/pages/splash_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/home/presentation/services_screen.dart';
 import '../../features/invoices/data/models/invoice_model.dart';
 import '../../features/invoices/domain/accounting/finance_enums.dart';
 import '../../features/meters/data/models/meter.dart';
@@ -110,6 +111,16 @@ class AppRouter {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: RouteNames.services,
+            builder: (context, state) => SubPageScaffold(
+              title: 'كل الخدمات',
+              subtitle: 'ابحث عن أي شاشة أو إجراء في المشروع',
+              child: ServicesScreen(
+                autofocus: state.uri.queryParameters['search'] == '1',
+              ),
+            ),
           ),
           GoRoute(
             path: RouteNames.offlineSync,

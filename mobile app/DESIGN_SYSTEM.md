@@ -8,7 +8,7 @@ including the pre-existing feature modules — shares the same visual language.
 1. **Calm surfaces, confident accents.** A soft blue-tinted background, white
    surfaces, hairline borders and diffuse shadows; saturation is reserved for
    brand gradients and state.
-2. **Arabic first.** Tajawal ships with the app; numbers and identifiers in
+2. **Arabic first.** IBM Plex Sans Arabic ships with the app; numbers and identifiers in
    Latin digits are wrapped in `Directionality(textDirection: ltr)` so they read
    correctly inside an RTL layout.
 3. **Thumb-first.** Primary actions are reachable at the bottom, tap targets are
@@ -41,7 +41,10 @@ plus mint/amber/rose/violet/sky variants for module accents.
 
 ## Typography
 
-Tajawal — 400 / 500 / 700 / 800. Scale in `AppTypography.textTheme`:
+IBM Plex Sans Arabic — 400 / 500 / 600 / 700, bundled in `assets/fonts`.
+Heading styles ask for `w800`, which Flutter resolves to the closest bundled
+weight (700) so the scale stays readable at small sizes. Scale in
+`AppTypography.textTheme`:
 `displayLarge 40`, `headlineMedium 24`, `titleLarge 19`, `titleMedium 16`,
 `bodyMedium 14`, `labelSmall 11.5`. Line heights are generous (1.35–1.62) for
 Arabic diacritics and descenders.
@@ -71,26 +74,30 @@ bottom bar + side rail), `SubPageScaffold` (pushed pages), `HeroCopy`,
 
 ## Brand assets
 
-The product mark is one master artwork, `assets/branding/app_icon_full.png`
-(full-bleed aqua gradient with the white water-drop). Everything else is
-generated from it so the home-screen icon, the splash screen and the in-app
-header can never drift apart:
+One icon kit is the single source of truth: the SVG masters in
+`assets/icons/` (see `assets/icons/README.md`) are compiled into every launcher
+icon, adaptive layer, themed monochrome silhouette, Windows `.ico` and Linux
+hicolor set by `tool/generate_icons.mjs`. The Flutter app draws the same mark
+through `AppBrandMark`, which loads `assets/branding/app_mark.png` — a squircle
+cut from the kit's `app_icon_compact_1024.png`.
 
 ```
-python3 scripts/generate_brand_assets.py     # from the repository root
+npm --prefix tool install && node tool/generate_icons.mjs   # platform icons
+python3 scripts/generate_brand_assets.py                    # in-app mark + Android splash
 ```
 
 | Output | Path |
 | --- | --- |
-| In-app mark (`AppBrandMark`) | `assets/branding/app_mark.png` (declared in `pubspec.yaml`) |
-| Android legacy + round icons | `android/app/src/main/res/mipmap-*/ic_launcher*.png` |
-| Android adaptive icon | `mipmap-*/ic_launcher_{background,foreground}.png` + `mipmap-anydpi-v26/ic_launcher*.xml` |
+| In-app mark (`AppBrandMark`, `AppBrandLockup`) | `assets/branding/app_mark.png` (declared in `pubspec.yaml`) |
+| Android legacy + round + adaptive + themed icons | `android/app/src/main/res/mipmap-*` |
 | Android launch screen | `drawable*/launch_background.xml`, `values*/colors.xml` (`#F2F7FA` / `#05131B`) |
-| Windows window icon | `windows/runner/resources/app_icon.ico` (16–256 px) |
+| Windows window icon | `windows/runner/resources/app_icon.ico` |
+| Linux hicolor + desktop entry | `linux/` |
 
 Rules: never paste a raw `Icons.water_drop_rounded` as the logo — use
-`AppBrandMark(size:)`; inside a white surface pass `glow: false`; the adaptive
-foreground keeps the mark inside the 62 % safe zone so no launcher masks it.
+`AppBrandMark(size:)`; inside a coloured surface pass `glow: false`; the mark is
+generated from the icon kit, so a new logo means editing the SVGs, never the
+PNGs.
 
 ## Navigation map
 

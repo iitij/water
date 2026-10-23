@@ -23,11 +23,10 @@ bool _hasSubscriptionFeesCubit(BuildContext context) {
   }
 }
 
-/// SCR-19 — رسوم الاشتراك: Sum Summarizer (إجمالي/مفوتر/متبقي) + فلتر حالة + إصدار فاتورة.
+/// SCR-19 — رسوم الاشتراك: Sum Summarizer + فلتر حالة + إضافة/تعديل/حذف/حذف جماعي + إصدار فاتورة.
 class SubscriptionFeesScreen extends StatelessWidget {
   const SubscriptionFeesScreen({super.key, this.onAddFee, this.onGenerateInvoice});
 
-  /// نافذة إضافة رسوم (اختيار مشترك ثم عداده) — تُبنى بمنتقي فؤاد المشترك.
   final VoidCallback? onAddFee;
   final Future<void> Function(BuildContext context, SubscriptionFee? fee)? onGenerateInvoice;
 
@@ -83,101 +82,206 @@ class _SubscriptionFeesView extends StatelessWidget {
     }
   }
 
-  Future<void> _defaultAddFee(BuildContext context) async {
-    if (onAddFee != null) {
+  Future<void> _openFeeDialog(BuildContext context, {SubscriptionFee? existing}) async {
+    if (existing == null && onAddFee != null) {
       onAddFee!();
       return;
     }
     final cubit = context.read<SubscriptionFeesCubit>();
     final repo = FouadModule.deps.subscribers;
     Subscriber? pickedSub;
-    MeterBalance? pickedMeter;
-    final amountCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
+    int? pickedMeterId = existing?.meterId;
+    var metersForExisting = <MeterBalance>[];
+    if (existing != null) {
+      try {
+        final detail = await repo.getSubscriber360(existing.subscriberId);
+        metersForExisting = detail.summary.meterBalances;
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
+
+    final amountCtrl = TextEditingController(
+      text: existing == null ? '' : existing.amount.toStringAsFixed(0),
+    );
+    final notesCtrl = TextEditingController(text: existing?.notes ?? '');
+    var selectedStatus = existing?.status ?? FeeStatus.uninvoiced;
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('إضافة رسوم اشتراك'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 220,
-                  child: SubscriberMeterSelectorWidget(
-                    repository: repo,
-                    onSelected: (s, m) {
-                      pickedSub = s;
-                      pickedMeter = m;
-                    },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(existing == null ? 'إضافة رسوم اشتراك' : 'تعديل رسوم الاشتراك'),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (existing == null)
+                    SizedBox(
+                      height: 220,
+                      child: SubscriberMeterSelectorWidget(
+                        repository: repo,
+                        onSelected: (s, m) {
+                          pickedSub = s;
+                          pickedMeterId = m?.meterId;
+                        },
+                      ),
+                    )
+                  else ...[
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'المشترك',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(existing.subscriberName ?? 'مشترك #${existing.subscriberId}'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int?>(
+                      initialValue: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
+                      decoration: const InputDecoration(
+                        labelText: 'العداد',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('بدون عداد محدد')),
+                        for (final m in metersForExisting)
+                          DropdownMenuItem<int?>(value: m.meterId, child: Text(m.title)),
+                      ],
+                      onChanged: (v) => setDialogState(() => pickedMeterId = v),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    enabled: existing?.invoiceId == null,
+                    decoration: const InputDecoration(
+                      labelText: 'مبلغ رسوم الاشتراك (ريال) *',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'مبلغ رسوم الاشتراك (ريال) *',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<FeeStatus>(
+                    initialValue: selectedStatus,
+                    decoration: const InputDecoration(
+                      labelText: 'الحالة',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final s in FeeStatus.values)
+                        DropdownMenuItem(value: s, child: Text(s.label)),
+                    ],
+                    onChanged: (v) => setDialogState(() => selectedStatus = v ?? selectedStatus),
                   ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: notesCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ملاحظات',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'ملاحظات',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final amount = double.tryParse(normalizeDigits(amountCtrl.text));
+                if (amount == null || amount <= 0) return;
+                final notes = notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim();
+                if (existing == null) {
+                  final sub = pickedSub;
+                  if (sub == null) return;
+                  await cubit.create(
+                    subscriberId: sub.id,
+                    meterId: pickedMeterId,
+                    amount: amount,
+                    status: selectedStatus,
+                    notes: notes,
+                  );
+                } else {
+                  await cubit.update(SubscriptionFee(
+                    id: existing.id,
+                    subscriberId: existing.subscriberId,
+                    meterId: pickedMeterId,
+                    amount: amount,
+                    status: selectedStatus,
+                    invoiceId: existing.invoiceId,
+                    notes: notes,
+                  ));
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final sub = pickedSub;
-              final amount = double.tryParse(normalizeDigits(amountCtrl.text));
-              if (sub == null || amount == null || amount <= 0) return;
-              await cubit.create(
-                subscriberId: sub.id,
-                meterId: pickedMeter?.meterId,
-                amount: amount,
-                notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
-              );
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
       ),
     );
   }
 
+  Future<void> _handleBulkDelete(BuildContext context, int count) async {
+    if (!await confirmAction(
+      context,
+      'حذف جماعي لرسوم الاشتراك',
+      'هل تريد حذف $count سجل رسوم محدد؟ سيتم تجاوز الرسوم المرتبطة بفواتير.',
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+    final deleted = await context.read<SubscriptionFeesCubit>().bulkDelete();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم حذف $deleted سجل رسوم بنجاح')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SubscriptionFeesCubit, SubscriptionFeesState>(
+    return BlocConsumer<SubscriptionFeesCubit, SubscriptionFeesState>(
+      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listener: (context, state) {
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.error!), backgroundColor: AppColors.danger),
+          );
+        }
+      },
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('SCR-19 • رسوم الاشتراك'),
+            title: const Text('رسوم الاشتراك'),
             actions: [
+              if (state.selectedIds.isNotEmpty) ...[
+                IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'إلغاء التحديد',
+                  onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep),
+                  tooltip: 'حذف المحدد (${state.selectedIds.length})',
+                  onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+                ),
+              ],
               IconButton(
                 icon: const Icon(Icons.receipt_long_outlined),
-                tooltip: 'إصدار فاتورة اشتراك (SCR-16)',
+                tooltip: 'إصدار فاتورة اشتراك',
                 onPressed: () => _openGenerateInvoiceSheet(context),
               ),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _defaultAddFee(context),
+            onPressed: () => _openFeeDialog(context),
             icon: const Icon(Icons.add),
             label: const Text('إضافة رسوم'),
           ),
@@ -194,14 +298,38 @@ class _SubscriptionFeesView extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(children: [
-                ChoiceChip(label: const Text('الكل'), selected: state.status == null, onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(null)),
+                ChoiceChip(
+                  label: const Text('الكل'),
+                  selected: state.status == null,
+                  onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(null),
+                ),
                 for (final s in FeeStatus.values)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(start: 8),
-                    child: ChoiceChip(label: Text(s.label), selected: state.status == s, onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(s)),
+                    child: ChoiceChip(
+                      label: Text(s.label),
+                      selected: state.status == s,
+                      onSelected: (_) => context.read<SubscriptionFeesCubit>().filterStatus(s),
+                    ),
                   ),
               ]),
             ),
+            if (state.selectedIds.isNotEmpty)
+              MaterialBanner(
+                content: Text('تم تحديد ${state.selectedIds.length} رسوم اشتراك'),
+                leading: const Icon(Icons.checklist),
+                actions: [
+                  TextButton(
+                    onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
+                    child: const Text('إلغاء'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+                    icon: const Icon(Icons.delete_sweep, color: AppColors.danger),
+                    label: const Text('حذف المحدد'),
+                  ),
+                ],
+              ),
             if (state.loading) const LinearProgressIndicator(),
             Expanded(
               child: state.fees.isEmpty && !state.loading
@@ -210,11 +338,23 @@ class _SubscriptionFeesView extends StatelessWidget {
                       itemCount: state.fees.length,
                       itemBuilder: (_, i) {
                         final f = state.fees[i];
+                        final checked = state.selectedIds.contains(f.id);
                         return Card(
                           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          color: checked ? AppColors.primary.withValues(alpha: 0.08) : null,
                           child: ListTile(
+                            onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
+                            leading: Checkbox(
+                              value: checked,
+                              onChanged: (_) => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
+                              visualDensity: VisualDensity.compact,
+                            ),
                             title: Text('${f.subscriberName ?? 'مشترك #${f.subscriberId}'} • ${f.meterCode ?? 'بدون عداد'}'),
-                            subtitle: Text('أُضيفت: ${f.createdAt?.substring(0, 10) ?? '-'}${f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}'),
+                            subtitle: Text(
+                              'أُضيفت: ${f.createdAt != null && f.createdAt!.length >= 10 ? f.createdAt!.substring(0, 10) : (f.createdAt ?? '-')}'
+                              '${f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}'
+                              '${f.notes != null && f.notes!.isNotEmpty ? '\n${f.notes}' : ''}',
+                            ),
                             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                               Text(CurrencyFormatter.format(f.amount), style: const TextStyle(fontWeight: FontWeight.bold)),
                               const SizedBox(width: 8),
@@ -234,11 +374,17 @@ class _SubscriptionFeesView extends StatelessWidget {
                                   onPressed: () => _openGenerateInvoiceSheet(context, fee: f),
                                 ),
                               IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'تعديل الرسوم',
+                                onPressed: () => _openFeeDialog(context, existing: f),
+                              ),
+                              IconButton(
                                 icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                                tooltip: 'حذف الرسوم',
                                 onPressed: () async {
                                   if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
                                     if (context.mounted) {
-                                      context.read<SubscriptionFeesCubit>().delete(f.id);
+                                      await context.read<SubscriptionFeesCubit>().delete(f.id);
                                     }
                                   }
                                 },

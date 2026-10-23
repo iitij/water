@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/finance/finance_colors.dart';
+import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../tariffs/domain/repositories/tariffs_repository.dart';
 import '../../data/datasources/invoices_remote_datasource.dart';
@@ -17,7 +18,6 @@ import '../cubit/invoice_generation_cubit.dart';
 import '../cubit/invoice_generation_state.dart';
 import '../pages/invoice_create_edit_screen.dart';
 import '../widgets/invoice_actions.dart';
-import '../../../../core/finance/finance_colors.dart';
 
 /// `SCR-16` — محركات إصدار الفواتير الثلاثة كأدراج سفلية، مطابقةً لـ
 /// `InvoiceResource` Header Actions:

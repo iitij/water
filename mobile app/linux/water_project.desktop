@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Water Project
+Name[ar]=مشروع المياه
+Comment=Water project administration and field operations
+Comment[ar]=إدارة مشروع المياه والعمل الميداني
+Exec=water_project
+Icon=water_project
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=water_project

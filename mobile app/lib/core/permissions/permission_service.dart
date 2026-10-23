@@ -20,6 +20,35 @@ class PermissionService {
     'print.pdf': <String>{'ViewAny:Invoice', 'ViewAny:Payment', 'view_any_payment', 'view_any_invoice'},
     'print.thermal': <String>{'ViewAny:Invoice', 'ViewAny:Payment', 'view_any_payment', 'view_any_invoice'},
     'whatsapp.send': <String>{'ViewAny:Invoice', 'ViewAny:Payment', 'view_any_payment', 'view_any_invoice'},
+    // Shield PascalCase <-> legacy snake_case bridges
+    'ViewAny:Reading': <String>{'view_any_reading', 'readings.view'},
+    'View:Reading': <String>{'view_reading', 'view_any_reading'},
+    'Create:Reading': <String>{'create_reading', 'readings.create'},
+    'Update:Reading': <String>{'update_reading', 'readings.edit'},
+    'ViewAny:Meter': <String>{'view_any_meter', 'meters.view'},
+    'View:Meter': <String>{'view_meter', 'view_any_meter'},
+    'Create:Meter': <String>{'create_meter', 'meters.create'},
+    'ViewAny:Invoice': <String>{'view_any_invoice', 'invoices.view'},
+    'View:Invoice': <String>{'view_invoice', 'view_any_invoice'},
+    'Create:Invoice': <String>{'create_invoice', 'invoices.create'},
+    'ViewAny:Payment': <String>{'view_any_payment', 'payments.view'},
+    'View:Payment': <String>{'view_payment', 'view_any_payment'},
+    'Create:Payment': <String>{'create_payment', 'payments.collect'},
+    'ViewAny:Tariff': <String>{'view_any_tariff', 'tariffs.view'},
+    'View:Tariff': <String>{'view_tariff', 'view_any_tariff'},
+    'ViewAny:Subscriber': <String>{'view_any_subscriber', 'subscribers.view'},
+    'View:Subscriber': <String>{'view_subscriber', 'view_any_subscriber'},
+    'ViewAny:Square': <String>{'view_any_square', 'squares.view'},
+    'View:Square': <String>{'view_square', 'view_any_square'},
+    'ViewAny:SubscriptionFee': <String>{'view_any_subscription_fee'},
+    'View:SubscriptionFee': <String>{'view_subscription_fee', 'view_any_subscription_fee'},
+    'ViewAny:ServiceRequest': <String>{'view_any_service_request'},
+    'View:ServiceRequest': <String>{'view_service_request', 'view_any_service_request'},
+    'ViewAny:Transaction': <String>{'view_any_transaction'},
+    'View:Transaction': <String>{'view_transaction', 'view_any_transaction'},
+    'ViewAny:User': <String>{'view_any_user'},
+    'ViewAny:Role': <String>{'view_any_role'},
+    'ViewAny:Setting': <String>{'view_any_setting'},
   };
 
   static const Set<String> _collectorDefaultPermissions = <String>{
@@ -42,6 +71,8 @@ class PermissionService {
     'View:Subscriber',
     'ViewAny:Meter',
     'View:Meter',
+    'ViewAny:Square',
+    'View:Square',
   };
 
   static const Set<String> _readerDefaultPermissions = <String>{
@@ -72,12 +103,14 @@ class PermissionService {
     }
 
     final granted = currentPermissions;
-    if (granted.contains('*') || granted.contains(permission)) {
+    bool isGranted(String name) => granted.contains(name) ||
+        granted.contains(_legacyPermission(name));
+    if (granted.contains('*') || isGranted(permission)) {
       return true;
     }
 
     final aliases = _abilityAliases[permission];
-    if (aliases != null && aliases.any(granted.contains)) {
+    if (aliases != null && aliases.any(isGranted)) {
       return true;
     }
 
@@ -91,6 +124,13 @@ class PermissionService {
 
     return false;
   }
+
+  // Match Laravel's authorizeApi/authorizeSystem snake_case compatibility.
+  // ViewAny:SubscriptionFee -> view_any_subscription_fee.
+  static String _legacyPermission(String permission) => permission
+      .replaceAll(':', '_')
+      .replaceAllMapped(RegExp(r'(?<=[a-z0-9])[A-Z]'), (match) => '_${match[0]}')
+      .toLowerCase();
 
   bool hasAnyPermission(Iterable<String> permissions) =>
       permissions.any(hasPermission);

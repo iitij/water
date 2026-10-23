@@ -34,8 +34,8 @@ import '../../features/transactions/data/repositories/transactions_repository_im
 import '../../features/transactions/domain/repositories/transactions_repository.dart';
 import '../../features/transactions/presentation/cubit/transactions_cubit.dart';
 import '../../features/transactions/presentation/pages/transactions_screen.dart';
-import 'app_config.dart';
 import 'api_client.dart';
+import 'app_config.dart';
 
 /// حاوية تبعيات وحدات فؤاد (Dev 4) — المربعات، المشتركون، رسوم الاشتراك، طلبات الوايت، ودفتر الأستاذ.
 class FouadDependencies {

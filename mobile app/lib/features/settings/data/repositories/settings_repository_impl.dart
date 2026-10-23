@@ -111,6 +111,16 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<LocalServerStatus> stopLocalServer() => _remote.stopLocalServer();
 
   @override
+  Future<LocalServerStatus> logoutLocalServer() => _remote.logoutLocalServer();
+
+  @override
+  Future<String> sendWhatsAppTestMessage({
+    required String phone,
+    required String message,
+  }) =>
+      _remote.sendWhatsAppTestMessage(phone: phone, message: message);
+
+  @override
   Future<List<GeneralSetting>> getGeneralSettings() => _remote.getGeneralSettings();
 
   @override
@@ -131,6 +141,17 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<void> deleteGeneralSetting(GeneralSetting setting) async {
     await _remote.deleteGeneralSetting(setting.id);
     await _cache.remove(SettingsSection.general, setting.key);
+  }
+
+  @override
+  Future<void> bulkDeleteGeneralSettings(List<GeneralSetting> settings) async {
+    if (settings.isEmpty) return;
+    await _remote.bulkDeleteGeneralSettings(
+      settings.map((s) => s.id).toList(growable: false),
+    );
+    for (final setting in settings) {
+      await _cache.remove(SettingsSection.general, setting.key);
+    }
   }
 
   Future<void> _cacheGeneral(GeneralSetting setting) => _cache.merge(

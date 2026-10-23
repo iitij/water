@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../auth/session_service.dart';
-import '../config/app_config.dart';
 import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
@@ -366,26 +365,10 @@ class _SideRail extends StatelessWidget {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  const AppBrandMark(size: 44, glow: false),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          AppConfig.appName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        Text(
-                          'منصة إدارة المشروع',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall,
-                        ),
-                      ],
-                    ),
+                  const AppBrandLockup(
+                    markSize: 44,
+                    subtitle: 'منصة إدارة المشروع',
+                    onDark: false,
                   ),
                 ],
               ),

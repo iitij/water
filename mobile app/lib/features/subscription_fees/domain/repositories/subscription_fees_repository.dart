@@ -10,8 +10,9 @@ class FeesPage {
 
 abstract class SubscriptionFeesRepository {
   Future<FeesPage> getFees({FeeStatus? status, int? subscriberId});
-  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, String? notes});
+  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes});
   Future<SubscriptionFee> updateFee(SubscriptionFee fee);
   Future<void> deleteFee(int id);
+  Future<int> bulkDelete(List<int> ids);
   Future<Map<String, dynamic>> invoiceFee(int id);
 }

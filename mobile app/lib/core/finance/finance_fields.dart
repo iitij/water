@@ -1,9 +1,11 @@
 /// حقول الوحدة المالية (نص/رقم بالأرقام العربية) — نسخة Dev 3 محفوظة الاسم
 /// `AppTextField`/`AppNumericField` لأن نواة Dev 1 تقدّم نفس الأسماء بواجهة مختلفة
 /// (`label` بدل `labelText`، بلا `onTap`/`readOnly`).
-import '../utils/compound_search_parser.dart';
+library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../utils/compound_search_parser.dart';
 
 class AppNumericField extends StatefulWidget {
   const AppNumericField({

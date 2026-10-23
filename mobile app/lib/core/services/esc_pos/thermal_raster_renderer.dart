@@ -82,7 +82,8 @@ class ThermalRasterRenderer {
       if (painter == null) {
         // فاصل: خط أسود أفقي بسمك نقطة واحدة عند 1x. الفارغ يتخطى الرسم.
         final thickness = scale.toDouble();
-        if (!line.isGap) canvas.drawRect(
+        if (!line.isGap) {
+          canvas.drawRect(
           ui.Rect.fromLTRB(
             padding.toDouble(),
             y,
@@ -91,6 +92,7 @@ class ThermalRasterRenderer {
           ),
           ui.Paint()..color = const ui.Color(0xFF000000),
         );
+        }
         y += heights[i];
         continue;
       }

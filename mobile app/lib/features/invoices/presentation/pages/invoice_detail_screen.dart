@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/services/pdf_print_service.dart';
@@ -10,7 +11,6 @@ import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
@@ -574,43 +574,85 @@ class _ActionGrid extends StatelessWidget {
                       }
                     }),
                   ),
+                if (invoice.isDeleted)
+                  _chip(
+                    context,
+                    icon: Icons.restore_from_trash_outlined,
+                    label: 'استعادة',
+                    color: AppColors.success,
+                    busy: busy,
+                    onTap: () async {
+                      final ok = await ConfirmDialog.show(
+                        context,
+                        title: 'استعادة الفاتورة ${invoice.billNumber}',
+                        message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب.',
+                        confirmLabel: 'استعادة',
+                      );
+                      if (!ok) return;
+                      await cubit.restore();
+                    },
+                  )
+                else ...<Widget>[
+                  _chip(
+                    context,
+                    icon: Icons.refresh,
+                    label: 'إعادة احتساب',
+                    busy: busy,
+                    onTap: () => cubit.recalculate(),
+                  ),
+                  _chip(
+                    context,
+                    icon: Icons.edit_outlined,
+                    label: 'تعديل',
+                    onTap: () async {
+                      final saved = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute<bool>(
+                          builder: (_) => InvoiceCreateEditScreen(invoice: invoice),
+                        ),
+                      );
+                      if (saved == true) await cubit.load();
+                    },
+                  ),
+                  _chip(
+                    context,
+                    icon: Icons.delete_outline,
+                    label: 'حذف ناعم',
+                    color: AppColors.danger,
+                    busy: busy,
+                    onTap: () async {
+                      final ok = await ConfirmDialog.show(
+                        context,
+                        title: 'حذف الفاتورة ${invoice.billNumber}',
+                        message: 'سيُفكّ ارتباط القراءات والأقساط والوايت وتُعاد '
+                            'توزيع الدفعات على هذا الحساب.',
+                        confirmLabel: 'حذف',
+                        destructive: true,
+                      );
+                      if (!ok) return;
+                      final deleted = await cubit.delete();
+                      if (!context.mounted) return;
+                      if (deleted) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
                 _chip(
                   context,
-                  icon: Icons.refresh,
-                  label: 'إعادة احتساب',
-                  busy: busy,
-                  onTap: () => cubit.recalculate(),
-                ),
-                _chip(
-                  context,
-                  icon: Icons.edit_outlined,
-                  label: 'تعديل',
-                  onTap: () async {
-                    final saved = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute<bool>(
-                        builder: (_) => InvoiceCreateEditScreen(invoice: invoice),
-                      ),
-                    );
-                    if (saved == true) await cubit.load();
-                  },
-                ),
-                _chip(
-                  context,
-                  icon: Icons.delete_outline,
-                  label: 'حذف',
-                  color: AppColors.danger,
+                  icon: Icons.delete_forever_outlined,
+                  label: 'حذف نهائي',
+                  color: Colors.red.shade900,
                   busy: busy,
                   onTap: () async {
                     final ok = await ConfirmDialog.show(
                       context,
-                      title: 'حذف الفاتورة ${invoice.billNumber}',
-                      message: 'سيُفكّ ارتباط القراءات والأقساط والوايت وتُعاد '
-                          'توزيع الدفعات على هذا الحساب.',
-                      confirmLabel: 'حذف',
+                      title: 'حذف نهائي للفاتورة ${invoice.billNumber}',
+                      message: 'تحذير: سيُحذف سجل الفاتورة نهائياً من قاعدة البيانات ولا يمكن استعادته!',
+                      confirmLabel: 'حذف نهائي',
                       destructive: true,
                     );
                     if (!ok) return;
-                    final deleted = await cubit.delete();
+                    final deleted = await cubit.forceDelete();
                     if (!context.mounted) return;
                     if (deleted) {
                       Navigator.of(context).pop();

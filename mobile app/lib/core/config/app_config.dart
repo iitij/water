@@ -30,6 +30,18 @@ class AppConfig {
     _runtimeApiBaseUrl = normalizeApiBaseUrl(url);
   }
 
+  static String? get currentApiBaseUrl {
+    if (_runtimeApiBaseUrl != null && _runtimeApiBaseUrl!.isNotEmpty) {
+      return _runtimeApiBaseUrl;
+    }
+    if (_configuredApiBaseUrl.trim().isEmpty) return null;
+    try {
+      return normalizeApiBaseUrl(_configuredApiBaseUrl);
+    } on FormatException {
+      return null;
+    }
+  }
+
   static String get apiBaseUrl => _runtimeApiBaseUrl ??
       normalizeApiBaseUrl(_configuredApiBaseUrl);
 

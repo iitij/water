@@ -126,6 +126,14 @@ final class DioAdminApiClient implements AdminApiClient {
 
   final Dio _dio;
 
+  String _resolvePath(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (_dio.options.baseUrl.endsWith('/') && path.startsWith('/')) {
+      return path.replaceFirst(RegExp(r'^/+'), '');
+    }
+    return path;
+  }
+
   @override
   Future<dynamic> get(
     String path, {
@@ -133,11 +141,14 @@ final class DioAdminApiClient implements AdminApiClient {
     String? fallbackPath,
   }) {
     return _jsonRequest(
-      () => _dio.get<dynamic>(path, queryParameters: _cleanQuery(query)),
+      () => _dio.get<dynamic>(
+        _resolvePath(path),
+        queryParameters: _cleanQuery(query),
+      ),
       () => fallbackPath == null
           ? null
           : _dio.get<dynamic>(
-              fallbackPath,
+              _resolvePath(fallbackPath),
               queryParameters: _cleanQuery(query),
             ),
     );
@@ -152,14 +163,14 @@ final class DioAdminApiClient implements AdminApiClient {
   }) {
     return _jsonRequest(
       () => _dio.post<dynamic>(
-        path,
+        _resolvePath(path),
         data: data,
         queryParameters: _cleanQuery(query),
       ),
       () => fallbackPath == null
           ? null
           : _dio.post<dynamic>(
-              fallbackPath,
+              _resolvePath(fallbackPath),
               data: data,
               queryParameters: _cleanQuery(query),
             ),
@@ -174,7 +185,7 @@ final class DioAdminApiClient implements AdminApiClient {
   }) async {
     try {
       final response = await _dio.put<dynamic>(
-        path,
+        _resolvePath(path),
         data: data,
         queryParameters: _cleanQuery(query),
       );
@@ -187,7 +198,7 @@ final class DioAdminApiClient implements AdminApiClient {
   @override
   Future<dynamic> delete(String path, {dynamic data}) async {
     try {
-      final response = await _dio.delete<dynamic>(path, data: data);
+      final response = await _dio.delete<dynamic>(_resolvePath(path), data: data);
       return response.data;
     } on DioException catch (error) {
       throw AdminApiException.fromDio(error);
@@ -209,10 +220,10 @@ final class DioAdminApiClient implements AdminApiClient {
         });
 
     return _jsonRequest(
-      () => _dio.post<dynamic>(path, data: form()),
+      () => _dio.post<dynamic>(_resolvePath(path), data: form()),
       () => fallbackPath == null
           ? null
-          : _dio.post<dynamic>(fallbackPath, data: form()),
+          : _dio.post<dynamic>(_resolvePath(fallbackPath), data: form()),
     );
   }
 
@@ -223,7 +234,7 @@ final class DioAdminApiClient implements AdminApiClient {
     String? fallbackPath,
   }) async {
     Future<Response<dynamic>> request(String target) => _dio.get<dynamic>(
-          target,
+          _resolvePath(target),
           queryParameters: _cleanQuery(query),
           options: Options(responseType: ResponseType.bytes),
         );

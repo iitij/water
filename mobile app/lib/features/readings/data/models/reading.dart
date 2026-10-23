@@ -19,6 +19,7 @@ class Reading {
     this.subscriberName,
     this.tenantName,
     this.imagePath,
+    this.imageUrl,
     this.isSynced = true,
     this.syncError,
   });
@@ -43,8 +44,13 @@ class Reading {
   final String? subscriberName;
   final String? tenantName;
   final String? imagePath;
+  final String? imageUrl;
   final bool isSynced;
   final String? syncError;
+
+  bool get hasPhoto =>
+      (imageUrl != null && imageUrl!.trim().isNotEmpty) ||
+      (imagePath != null && imagePath!.trim().isNotEmpty);
 
   String get selectionKey => id == null ? 'local:${localId ?? ''}' : 'server:$id';
 
@@ -77,6 +83,7 @@ class Reading {
       subscriberName: _string(json['subscriber_name'] ?? subscriber?['name']),
       tenantName: _string(json['tenant_name'] ?? meter?['tenant_name']),
       imagePath: _string(json['image_path']),
+      imageUrl: _string(json['image_url']),
       isSynced: json['is_synced'] != false,
       syncError: _string(json['sync_error']),
     );
@@ -108,6 +115,7 @@ class Reading {
 
   Map<String, dynamic> toSyncJson({String? imageBase64}) => {
         'client_action_id': localId,
+        'sync_uuid': localId,
         'meter_id': meterId,
         'reading_date': _dateOnly(readingDate),
         'actual_reading_date': _dateOnly(actualReadingDate ?? readingDate),
@@ -214,6 +222,7 @@ class ReadingSubmission {
 
   Map<String, dynamic> toJson({String? localId}) => {
         if (localId != null) 'client_action_id': localId,
+        if (localId != null) 'sync_uuid': localId,
         'meter_id': meterId,
         'reading_date': _dateOnly(readingDate),
         'actual_reading_date': _dateOnly(readingDate),
@@ -221,6 +230,9 @@ class ReadingSubmission {
         'period_end': _dateOnly(periodEnd),
         'previous_reading': previousReading,
         'current_reading': currentReading,
+        // Kept in the local queue payload so offline rows show the real
+        // consumption before the server recalculates it on sync.
+        'consumption_units': consumption,
         'has_subscription_fee': hasSubscriptionFee,
         'subscription_installment': subscriptionInstallment,
         'has_tanker_fee': hasTankerFee,
@@ -334,7 +346,7 @@ Map<String, dynamic>? _map(Object? value) {
   return null;
 }
 
-String? _string(Object? value) => value == null ? null : value.toString();
+String? _string(Object? value) => value?.toString();
 
 int? _int(Object? value) {
   if (value is int) return value;

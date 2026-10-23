@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../settings/finance_config.dart';
 import 'esc_pos/esc_pos_buffer.dart';
 import 'esc_pos/thermal_raster_renderer.dart';
 import 'esc_pos/thermal_ticket.dart';
-import '../settings/finance_config.dart';
 
 enum ThermalPrintStatus { printed, notConnected, failed }
 

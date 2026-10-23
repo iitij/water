@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/finance/finance_search.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
-import '../../../../core/finance/finance_search.dart';
-import '../../../../core/finance/finance_feedback.dart';
-import '../../../../core/finance/finance_responsive.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
@@ -71,13 +71,18 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       appBar: AppBar(
         title: Text(_selecting ? 'اختيار سندات' : 'سندات القبض'),
         actions: <Widget>[
-          if (_selecting)
+          if (_selecting) ...<Widget>[
+            IconButton(
+              tooltip: 'تحديد الكل',
+              onPressed: cubit.selectAll,
+              icon: const Icon(Icons.select_all),
+            ),
             IconButton(
               tooltip: 'حذف المحدد',
               onPressed: () => _bulkDelete(context, cubit),
               icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-            )
-          else
+            ),
+          ] else
             IconButton(
               tooltip: 'تحديد متعدد',
               onPressed: () => setState(() => _selecting = true),
@@ -92,7 +97,10 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
         leading: _selecting
             ? IconButton(
                 icon: const Icon(Icons.close),
-                onPressed: () => setState(() => _selecting = false),
+                onPressed: () {
+                  cubit.clearSelection();
+                  setState(() => _selecting = false);
+                },
               )
             : null,
       ),
@@ -127,7 +135,15 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                 ),
                 _PaymentsSummary(state: state),
                 if (_selecting && state.selectedIds.isNotEmpty)
-                  _SelectionBar(count: state.selectedIds.length),
+                  _SelectionBar(
+                    count: state.selectedIds.length,
+                    onSelectAll: cubit.selectAll,
+                    onClear: () {
+                      cubit.clearSelection();
+                      setState(() => _selecting = false);
+                    },
+                    onBulkDelete: () => _bulkDelete(context, cubit),
+                  ),
                 Expanded(child: _buildList(context, cubit, state)),
               ],
             );
@@ -241,13 +257,19 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           );
           if (!confirmed) return false;
           await cubit.deletePayment(payment.id);
-          if (context.mounted) AppFeedback.success(context, 'تم حذف السند.');
+          if (mounted) AppFeedback.success(context, 'تم حذف السند.');
           return true;
         },
-        child: PaymentCard(
-          payment: payment,
-          dense: true,
-          onTap: () => showPaymentActionSheet(context, payment: payment),
+        child: GestureDetector(
+          onLongPress: () {
+            setState(() => _selecting = true);
+            cubit.toggleSelection(payment.id);
+          },
+          child: PaymentCard(
+            payment: payment,
+            dense: true,
+            onTap: () => showPaymentActionSheet(context, payment: payment),
+          ),
         ),
       );
     }
@@ -328,16 +350,52 @@ class _Cell extends StatelessWidget {
 }
 
 class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({required this.count});
+  const _SelectionBar({
+    required this.count,
+    required this.onSelectAll,
+    required this.onClear,
+    required this.onBulkDelete,
+  });
 
   final int count;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+  final VoidCallback onBulkDelete;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-        child: Text(
-          'محدد: $count سند',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) => Material(
+        color: AppColors.primaryDark,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: <Widget>[
+              Text(
+                'محدد: $count سند',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: onSelectAll,
+                child: const Text('تحديد الكل', style: TextStyle(color: Colors.white70)),
+              ),
+              TextButton(
+                onPressed: onClear,
+                child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
+              ),
+              TextButton.icon(
+                onPressed: onBulkDelete,
+                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFCA5A5)),
+                label: const Text(
+                  'حذف المحدد',
+                  style: TextStyle(color: Color(0xFFFCA5A5)),
+                ),
+              ),
+            ],
+          ),
         ),
       );
 }

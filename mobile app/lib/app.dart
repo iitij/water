@@ -1,10 +1,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get_it/get_it.dart';
 
+import 'core/config/app_config.dart';
 import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -26,7 +27,7 @@ class WaterApp extends StatelessWidget {
         child: AnimatedBuilder(
           animation: themeController,
           builder: (context, _) => MaterialApp.router(
-            title: 'مياه الوشاح',
+            title: AppConfig.appName,
             debugShowCheckedModeBanner: false,
             locale: const Locale('ar'),
             supportedLocales: const <Locale>[Locale('ar'), Locale('en')],

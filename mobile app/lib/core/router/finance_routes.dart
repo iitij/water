@@ -6,6 +6,7 @@ import '../../features/invoices/data/models/invoice_query.dart';
 import '../../features/invoices/domain/repositories/invoices_repository.dart';
 import '../../features/invoices/presentation/pages/invoice_create_edit_screen.dart';
 import '../../features/invoices/presentation/pages/invoice_detail_screen.dart';
+import '../../features/invoices/presentation/pages/invoice_issue_screen.dart';
 import '../../features/invoices/presentation/pages/invoices_list_screen.dart';
 import '../../features/invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../features/payments/data/models/payment_model.dart';
@@ -14,9 +15,9 @@ import '../../features/payments/presentation/pages/payment_form_screen.dart';
 import '../../features/payments/presentation/pages/payments_list_screen.dart';
 import '../../features/payments/presentation/pages/quick_collector_screen.dart';
 import '../../features/tariffs/presentation/pages/tariffs_screen.dart';
+import '../finance/finance_feedback.dart';
 import '../finance/finance_locator.dart';
 import '../permissions/finance_permissions.dart';
-import '../finance/finance_feedback.dart';
 import 'finance_route_names.dart';
 
 /// مسارات الوحدة المالية (`SCR-13`…`SCR-21`) — قائمة `RouteBase` جاهزة للإضافة إلى
@@ -29,6 +30,14 @@ import 'finance_route_names.dart';
 /// كل مسار مغلّف بـ [PermissionRouteShell] بمفتاح صلاحية من `FinanceAbilities`،
 /// لأن دور `collector` في Laravel يملك `invoices.view` + `payments.collect` فقط.
 List<RouteBase> buildFinanceRoutes() => <RouteBase>[
+      GoRoute(
+        path: FinanceRouteNames.invoiceIssue,
+        name: 'invoice-issue',
+        builder: (context, state) => const PermissionRouteShell(
+          ability: FinanceAbilities.createInvoice,
+          child: InvoiceIssueScreen(),
+        ),
+      ),
       GoRoute(
         path: FinanceRouteNames.quickCollector,
         name: 'quick-collector',
@@ -246,7 +255,7 @@ class _GenerateEngineRouteState extends State<_GenerateEngineRoute> {
         actionLabel: 'اختيار محرّك',
         onAction: () async {
           await showGenerateInvoicePicker(context);
-          if (!mounted) return;
+          if (!context.mounted) return;
           if (GoRouter.of(context).canPop()) context.pop();
         },
       ),

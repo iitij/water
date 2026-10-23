@@ -15,7 +15,11 @@ abstract interface class ReadingsRepository {
     String? query,
   });
 
-  Future<Reading> updateReading(Reading reading, double newCurrentReading);
+  Future<Reading> updateReading(
+    Reading reading,
+    double newCurrentReading, {
+    DateTime? newReadingDate,
+  });
   Future<void> deleteReading(Reading reading);
   Future<BulkOperationResult> bulkDeleteReadings(List<Reading> readings);
   Future<BulkOperationResult> bulkIssueInvoices(List<Reading> readings);

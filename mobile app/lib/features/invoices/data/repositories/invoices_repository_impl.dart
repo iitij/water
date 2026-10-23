@@ -1,6 +1,6 @@
-import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_search.dart';
+import '../../../../core/network/finance_endpoints.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../datasources/invoices_remote_datasource.dart';
 import '../models/invoice_model.dart';
@@ -57,10 +57,20 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
   Future<void> delete(int id) => _remote.delete(id);
 
   @override
+  Future<void> forceDelete(int id) => _remote.forceDelete(id);
+
+  @override
   Future<BulkActionResult> bulkDelete(List<int> ids) => _remote.bulkDelete(ids);
 
   @override
   Future<void> restore(int id) => _remote.restore(id);
+
+  @override
+  Future<BulkActionResult> bulkRestore(List<int> ids) => _remote.bulkRestore(ids);
+
+  @override
+  Future<BulkActionResult> bulkForceDelete(List<int> ids) =>
+      _remote.bulkForceDelete(ids);
 
   @override
   Future<InvoiceModel> recalculate(int id) => _remote.recalculate(id);

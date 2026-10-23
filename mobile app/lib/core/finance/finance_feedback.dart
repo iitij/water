@@ -3,9 +3,11 @@
 /// ملكية Dev 3: نواة Dev 1 تقدّم `showConfirmDialog(...)` و`EmptyStateWidget(...)` و
 /// `ShimmerSkeleton(...)`؛ نسخنا هنا تحافظ على واجهة Dev 3 (حوار بـ `details:`، حالة خطأ بـ
 /// `onRetry:`، و`SkeletonList`) كي تبقى الشاشات كما هي. الدمج النهائي يمكن أن يوحّدها.
-import '../theme/app_colors.dart';
+library;
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+
+import '../theme/app_colors.dart';
 
 class ConfirmDialog extends StatelessWidget {
   const ConfirmDialog({
@@ -277,13 +279,13 @@ class SkeletonCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Row(
+            const Row(
               children: <Widget>[
-                const SkeletonBox(height: 34, width: 34, radius: 12),
-                const SizedBox(width: 10),
+                SkeletonBox(height: 34, width: 34, radius: 12),
+                SizedBox(width: 10),
                 Expanded(child: SkeletonBox(height: 14, width: double.infinity)),
-                const SizedBox(width: 8),
-                const SkeletonBox(height: 20, width: 64, radius: 999),
+                SizedBox(width: 8),
+                SkeletonBox(height: 20, width: 64, radius: 999),
               ],
             ),
             const SizedBox(height: 12),

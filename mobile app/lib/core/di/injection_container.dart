@@ -6,7 +6,7 @@ import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
 import '../../features/meters/domain/meters_repository.dart';
-import '../../features/offline_sync/data/shared_preferences_sync_queue_repository.dart';
+import '../../features/offline_sync/data/drift_sync_queue_repository.dart';
 import '../../features/offline_sync/domain/sync_queue_repository.dart';
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../../features/readings/data/services/reading_invoice_actions_service.dart';
@@ -14,6 +14,8 @@ import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../database/app_database.dart';
+import '../database/offline_pack_downloader.dart';
 import '../field_operations/field_operations_module.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
@@ -46,8 +48,29 @@ Future<void> configureDependencies() async {
   dioClient.errorInterceptor.onUnauthorized = session.expireSession;
   getIt.registerSingleton<PermissionService>(PermissionService(session));
   getIt.registerSingleton<AppThemeController>(AppThemeController());
+  getIt.registerFactory<AuthCubit>(() => AuthCubit(session));
 
-  final queueRepository = SharedPreferencesSyncQueueRepository();
+  // Dev 2: Field Operations & Shared Drift SQLite Database (`AppDatabase`).
+  // `autoStartSync: false` ensures only the unified `SyncQueueManager` below
+  // listens to connectivity and replays readings + payments in strict FIFO order.
+  final fieldModule = await FieldOperationsModule.initialize(
+    dio: dioClient.dio,
+    autoStartSync: false,
+    ownerUserIdProvider: () => session.user?['id']?.toString(),
+  );
+  getIt.registerSingleton<FieldOperationsModule>(fieldModule);
+  getIt.registerSingleton<AppDatabase>(fieldModule.database);
+  getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
+  getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
+  getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
+  getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
+
+  // Unified Drift/SQLite Offline Sync Queue (migrates any legacy SharedPreferences items).
+  final queueRepository = DriftSyncQueueRepository(database: fieldModule.database);
+  final cachedUser = await secureStorage.readCachedUser();
+  await queueRepository.migrateLegacyQueuesIfNeeded(
+    fallbackOwnerUserId: cachedUser?['id']?.toString(),
+  );
   getIt.registerSingleton<SyncQueueRepository>(queueRepository);
   final syncManager = SyncQueueManager(
     dio: dioClient.dio,
@@ -56,22 +79,14 @@ Future<void> configureDependencies() async {
     session: session,
   );
   getIt.registerSingleton<SyncQueueManager>(syncManager);
-  getIt.registerFactory<AuthCubit>(() => AuthCubit(session));
 
-  // Dev 2: Field Operations (Meters, Readings, Drift SQLite & Offline Pack)
-  final fieldModule = await FieldOperationsModule.initialize(dio: dioClient.dio);
-  getIt.registerSingleton<FieldOperationsModule>(fieldModule);
-  getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
-  getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
-  getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
-
-  // Dev 3: Finance Module (Invoices, Payments, Tariffs, PDF/Thermal Print & WhatsApp)
+  // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
   FinanceModule.ensure();
 
-  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger
+  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger.
   FouadModule.ensure(dio: dioClient.dio);
 
-  // Dev 5: Dashboard, Reports, Settings Studio, WhatsApp Local Server, RBAC & Exports
+  // Dev 5: Dashboard, Reports, Settings Studio, WhatsApp Local Server, RBAC & Exports.
   final adminApi = DioAdminApiClient(dioClient.dio);
   final settingsCache = SharedPreferencesSettingsCache();
   await settingsCache.rehydrate();

@@ -13,6 +13,7 @@ abstract interface class MetersRepository {
 
   Future<Meter> saveMeter(MeterDraft draft, {int? meterId});
   Future<void> deleteMeter(int meterId);
+  Future<({int deletedCount, int skippedCount})> bulkDeleteMeters(List<int> meterIds);
 
   Future<bool> isPathNumberAvailable({
     required int pathNumber,

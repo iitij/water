@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/finance/finance_locator.dart';
-import '../../../../core/permissions/finance_permissions.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/finance/finance_colors.dart';
 import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_search.dart';
+import '../../../../core/permissions/finance_permissions.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/tariff_model.dart';
 import '../../domain/repositories/tariffs_repository.dart';
 import '../cubit/tariffs_cubit.dart';
 import '../sheets/tariff_form_sheet.dart';
-import '../../../../core/finance/finance_colors.dart';
 
 /// `SCR-21` — إدارة التسعيرات، مطابقةً لـ `TariffResource` في Filament:
 /// قائمة + سعر نشط في الترويسة + `TrashedFilter` (الحية/الكل/المحذوفة) +
@@ -150,12 +149,35 @@ class _TariffsBodyState extends State<_TariffsBody> {
             isActive: state.activeTariff?.id == tariff.id,
             busy: state.busyId == tariff.id,
             onTap: () => TariffFormSheet.show(context, tariff: tariff),
+            onSoftDelete: !tariff.isTrashed && context.canManageTariffs
+                ? () => _softDelete(cubit, tariff)
+                : null,
             onRestore: tariff.isTrashed ? () => _restore(cubit, tariff) : null,
             onForceDelete: tariff.isTrashed ? () => _forceDelete(cubit, tariff) : null,
           );
         },
       ),
     );
+  }
+
+  Future<void> _softDelete(TariffsCubit cubit, TariffModel tariff) async {
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'حذف التسعيرة (سلة المحذوفات)',
+      message: 'ستُنقل التسعيرة إلى سلة المحذوفات ويمكن استعادتها لاحقاً. الفواتير السابقة لن تتأثر.',
+      details: <String>[tariff.name, CurrencyFormatter.withLabel(tariff.unitPrice)],
+      confirmLabel: 'حذف',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    final ok = await cubit.softDelete(tariff.id);
+    if (!mounted) return;
+    if (ok) {
+      AppFeedback.success(context, 'تم نقل «${tariff.name}» إلى سلة المحذوفات.');
+    } else {
+      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر حذف التسعيرة.');
+    }
   }
 
   Future<void> _restore(TariffsCubit cubit, TariffModel tariff) async {

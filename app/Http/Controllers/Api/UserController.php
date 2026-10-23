@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class UserController extends ApiController
@@ -31,9 +32,18 @@ class UserController extends ApiController
             'password' => ['required', 'string', 'min:8'],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', 'exists:roles,name'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
         ]);
-        $user = DB::transaction(function () use ($data) {
-            $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => Hash::make($data['password'])]);
+        $avatarPath = $request->hasFile('avatar')
+            ? $request->file('avatar')->store('avatars', 'public')
+            : null;
+        $user = DB::transaction(function () use ($data, $avatarPath) {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'avatar' => $avatarPath,
+            ]);
             $user->syncRoles($data['roles']);
             return $user;
         });
@@ -56,10 +66,26 @@ class UserController extends ApiController
             'password' => ['sometimes', 'nullable', 'string', 'min:8'],
             'roles' => ['sometimes', 'required', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', 'exists:roles,name'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
+            'remove_avatar' => ['sometimes', 'boolean'],
         ]);
-        DB::transaction(function () use ($user, $data) {
+        $avatarPath = null;
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+            $avatarPath = $request->file('avatar')->store('avatars', 'public');
+        } elseif ($request->boolean('remove_avatar') && $user->avatar) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+        DB::transaction(function () use ($user, $data, $request, $avatarPath) {
             $attributes = collect($data)->only(['name', 'email'])->all();
             if (! empty($data['password'])) $attributes['password'] = Hash::make($data['password']);
+            if ($avatarPath !== null) {
+                $attributes['avatar'] = $avatarPath;
+            } elseif ($request->boolean('remove_avatar')) {
+                $attributes['avatar'] = null;
+            }
             $user->update($attributes);
             if (array_key_exists('roles', $data)) $user->syncRoles($data['roles']);
         });
@@ -106,11 +132,12 @@ class UserController extends ApiController
         if ($roles->isEmpty() && ! empty($user->role)) {
             $roles = collect([$user->role])->values();
         }
+        $avatarUrl = $user->getFilamentAvatarUrl();
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'avatar' => $user->getFilamentAvatarUrl(),
+            'avatar' => $avatarUrl ? url($avatarUrl) : null,
             'roles' => $roles,
             'permissions' => $user->getAllPermissions()->pluck('name')->values(),
             'created_at' => $user->created_at?->toISOString(),

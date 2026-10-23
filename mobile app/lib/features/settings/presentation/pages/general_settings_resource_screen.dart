@@ -94,6 +94,33 @@ class _GeneralSettingsView extends StatelessWidget {
                   ),
                 ),
               ),
+              if (state.selectedIds.isNotEmpty && can(AdminPermissions.deleteSettings))
+                MaterialBanner(
+                  content: Text('تم تحديد ${state.selectedIds.length} إعداد'),
+                  leading: const Icon(Icons.checklist_rounded),
+                  actions: [
+                    TextButton(
+                      onPressed: state.isSaving
+                          ? null
+                          : context.read<GeneralSettingsCubit>().selectAllVisible,
+                      child: const Text('تحديد الكل'),
+                    ),
+                    TextButton(
+                      onPressed: state.isSaving
+                          ? null
+                          : context.read<GeneralSettingsCubit>().clearSelection,
+                      child: const Text('إلغاء'),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('bulk-delete-general-settings'),
+                      onPressed: state.isSaving
+                          ? null
+                          : () => _confirmBulkDelete(context, state.selectedIds.length),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('حذف المحدد'),
+                    ),
+                  ],
+                ),
               Expanded(child: _buildList(context, state)),
             ],
           ),
@@ -130,10 +157,43 @@ class _GeneralSettingsView extends StatelessWidget {
             padding: EdgeInsets.zero,
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                child: Icon(item.type == 'image' ? Icons.image_outlined : Icons.text_fields_rounded),
+              leading: can(AdminPermissions.deleteSettings)
+                  ? Checkbox(
+                      key: ValueKey('select-setting-${item.id}'),
+                      value: state.selectedIds.contains(item.id),
+                      onChanged: (val) => context
+                          .read<GeneralSettingsCubit>()
+                          .toggleSelected(item.id, val ?? false),
+                    )
+                  : CircleAvatar(
+                      child: Icon(
+                        item.type == 'image'
+                            ? Icons.image_outlined
+                            : Icons.text_fields_rounded,
+                      ),
+                    ),
+              title: Row(
+                children: [
+                  if (can(AdminPermissions.deleteSettings)) ...[
+                    CircleAvatar(
+                      radius: 16,
+                      child: Icon(
+                        item.type == 'image'
+                            ? Icons.image_outlined
+                            : Icons.text_fields_rounded,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
               ),
-              title: Text(item.label, style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -265,9 +325,18 @@ class _GeneralSettingsView extends StatelessWidget {
                           picker: imagePicker,
                           isUploading: isUploading,
                           onSelected: (file) async {
+                            final currentKey = keyController.text.trim();
+                            if (currentKey.isEmpty) {
+                              showAdminSnackBar(
+                                dialogContext,
+                                'أدخل المفتاح البرمجي (Key) أولاً قبل رفع الصورة.',
+                                isError: true,
+                              );
+                              return;
+                            }
                             setState(() => isUploading = true);
                             final path = await cubit.uploadImage(
-                              keyController.text.trim(),
+                              currentKey,
                               await file.readAsBytes(),
                               file.name,
                             );
@@ -319,5 +388,32 @@ class _GeneralSettingsView extends StatelessWidget {
       ),
     );
     if (confirmed ?? false) await cubit.delete(item);
+  }
+
+  Future<void> _confirmBulkDelete(BuildContext context, int count) async {
+    final cubit = context.read<GeneralSettingsCubit>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف جماعي للإعدادات'),
+        content: Text('سيتم حذف $count إعداد نهائياً. هل أنت متأكد؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف الكل'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) {
+      final ok = await cubit.bulkDelete();
+      if (ok && context.mounted) {
+        showAdminSnackBar(context, 'تم حذف $count إعداد بنجاح.');
+      }
+    }
   }
 }

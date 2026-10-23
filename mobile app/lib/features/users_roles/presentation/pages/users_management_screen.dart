@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
@@ -197,11 +200,41 @@ class _UsersView extends StatelessWidget {
     final selectedRoles = {...?user?.roles};
     var obscurePassword = true;
     var roleError = false;
+    Uint8List? avatarBytes;
+    String? avatarFileName;
+    var removeAvatar = false;
+    final picker = ImagePicker();
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) {
+          Future<void> pickAvatar(ImageSource source) async {
+            try {
+              final picked = await picker.pickImage(
+                source: source,
+                imageQuality: 85,
+                maxWidth: 1024,
+              );
+              if (picked == null) return;
+              final bytes = await picked.readAsBytes();
+              if (!dialogContext.mounted) return;
+              setState(() {
+                avatarBytes = bytes;
+                avatarFileName = picked.name;
+                removeAvatar = false;
+              });
+            } catch (_) {
+              if (dialogContext.mounted) {
+                showAdminSnackBar(
+                  dialogContext,
+                  'تعذّر اختيار الصورة الشخصية.',
+                  isError: true,
+                );
+              }
+            }
+          }
+
           Future<void> save() async {
             final valid = formKey.currentState?.validate() ?? false;
             setState(() => roleError = selectedRoles.isEmpty);
@@ -214,7 +247,7 @@ class _UsersView extends StatelessWidget {
               id: user?.id ?? 0,
               name: nameController.text.trim(),
               email: emailController.text.trim(),
-              avatarUrl: user?.avatarUrl,
+              avatarUrl: removeAvatar ? null : user?.avatarUrl,
               roles: selectedRoles.toList()..sort(),
               permissions: user?.permissions ?? const [],
               createdAt: user?.createdAt,
@@ -222,9 +255,18 @@ class _UsersView extends StatelessWidget {
             final success = await cubit.save(
               edited,
               password: passwordController.text.isEmpty ? null : passwordController.text,
+              avatarBytes: avatarBytes,
+              avatarFileName: avatarFileName,
+              removeAvatar: removeAvatar,
             );
             if (success && dialogContext.mounted) Navigator.pop(dialogContext);
           }
+
+          final ImageProvider<Object>? avatarProvider = avatarBytes != null
+              ? MemoryImage(avatarBytes!)
+              : (!removeAvatar && user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty)
+                  ? NetworkImage(user.avatarUrl!)
+                  : null;
 
           return AlertDialog(
             title: Text(user == null ? 'إضافة مستخدم' : 'تعديل ${user.name}'),
@@ -238,6 +280,51 @@ class _UsersView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 32,
+                            foregroundImage: avatarProvider,
+                            child: const Icon(Icons.person_outline, size: 32),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  key: const ValueKey('pick-user-avatar-gallery'),
+                                  onPressed: () => pickAvatar(ImageSource.gallery),
+                                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                                  label: const Text('اختيار صورة'),
+                                ),
+                                OutlinedButton.icon(
+                                  key: const ValueKey('pick-user-avatar-camera'),
+                                  onPressed: () => pickAvatar(ImageSource.camera),
+                                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                                  label: const Text('الكاميرا'),
+                                ),
+                                if (avatarProvider != null)
+                                  TextButton.icon(
+                                    key: const ValueKey('remove-user-avatar'),
+                                    onPressed: () => setState(() {
+                                      avatarBytes = null;
+                                      avatarFileName = null;
+                                      removeAvatar = true;
+                                    }),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AdminPalette.danger,
+                                    ),
+                                    icon: const Icon(Icons.delete_outline, size: 18),
+                                    label: const Text('إزالة الصورة'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       TextFormField(
                         controller: nameController,
                         validator: (value) => value == null || value.trim().isEmpty ? 'الاسم مطلوب' : null,

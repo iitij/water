@@ -15,6 +15,7 @@
 /// ```dart
 /// routes: <RouteBase>[...financeRoutes, ...FinanceModule.routes]
 /// ```
+library;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +24,7 @@ import '../../features/invoices/data/datasources/invoices_remote_datasource.dart
 import '../../features/invoices/data/datasources/references_remote_datasource.dart';
 import '../../features/invoices/data/repositories/invoices_repository_impl.dart';
 import '../../features/invoices/domain/repositories/invoices_repository.dart';
+import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../../features/payments/data/datasources/payments_remote_datasource.dart';
 import '../../features/payments/data/repositories/payments_repository_impl.dart';
 import '../../features/payments/domain/repositories/payments_repository.dart';
@@ -85,9 +87,11 @@ class FinanceModule {
       ..registerLazySingleton<TariffsRemoteDataSource>(
         () => TariffsRemoteDataSource(client),
       )
-      // طابور المزامنة المحلي (يُستبدل بـ SyncQueueManager عند Dev 1 عند اكتماله)
+      // طابور المزامنة الموحد (Drift/SQLite عبر SyncQueueManager، أو احتياطي للاختبارات)
       ..registerLazySingleton<FinanceSyncQueueRepository>(
-        LocalSyncQueueRepository.new,
+        () => getIt.isRegistered<SyncQueueManager>()
+            ? UnifiedFinanceSyncQueueAdapter(getIt<SyncQueueManager>())
+            : LocalSyncQueueRepository(),
       )
       // المستودعات
       ..registerLazySingleton<InvoicesRepository>(

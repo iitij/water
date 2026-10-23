@@ -7,7 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/auth/session_service.dart';
 import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -81,6 +83,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       destructive: true,
     );
     if (confirmed && mounted) context.read<AuthCubit>().logout();
+  }
+
+  Future<void> _openServerConfig() async {
+    final updated = await ServerConfigSheet.show(context);
+    if (!mounted || updated == null) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم تحديث عنوان الخادم إلى: $updated')),
+    );
   }
 
   @override
@@ -230,6 +241,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   ),
                                 )
                                 .toList(growable: false),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    AppCard(
+                      onTap: saving ? null : _openServerConfig,
+                      child: Row(
+                        children: <Widget>[
+                          const AppIconBubble(
+                            icon: Icons.dns_outlined,
+                            color: AppColors.primary,
+                            size: 42,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'الاتصال بالخادم',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  Uri.tryParse(AppConfig.apiBaseUrl)?.authority ??
+                                      AppConfig.apiBaseUrl,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textDirection: TextDirection.ltr,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_left_rounded, size: 20),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 18),

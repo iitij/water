@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../app.dart';
 import '../../bootstrap.dart';
 import '../config/app_config.dart';
+import 'server_config_sheet.dart';
 
 /// Server selection precedes all authenticated clients and offline workers.
 /// Once saved, changing servers requires clearing app data to avoid moving
@@ -66,7 +67,7 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
     locale: const Locale('ar'),
     supportedLocales: const [Locale('ar')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(colorSchemeSeed: const Color(0xFF075D73), fontFamily: 'Tajawal'),
+    theme: ThemeData(colorSchemeSeed: const Color(0xFF075D73), fontFamily: 'IBMPlexSansArabic'),
     home: Scaffold(
       appBar: AppBar(title: const Text('إعداد خادم مشروع المياه')),
       body: Center(
@@ -96,21 +97,10 @@ class _ServerSetupAppState extends State<ServerSetupApp> {
                       hintText: 'http://192.168.1.20:8000/api',
                       border: OutlineInputBorder(),
                     ),
-                    validator: (value) {
-                      try {
-                        final url = AppConfig.normalizeApiBaseUrl(value ?? '');
-                        final host = Uri.parse(url).host;
-                        if (Platform.isAndroid && const ['localhost', '127.0.0.1', '::1', '[::1]'].contains(host)) {
-                          return 'استخدم عنوان الكمبيوتر على الشبكة بدلاً من localhost.';
-                        }
-                        return null;
-                      } on FormatException {
-                        return 'أدخل عنواناً صحيحاً يبدأ بـ http:// أو https://';
-                      }
-                    },
+                    validator: ServerConnectionService.validateInput,
                   ),
                   const SizedBox(height: 16),
-                  const Text('HTTP للاختبار على شبكة موثوقة فقط؛ استخدم HTTPS للإنتاج. لتغيير الخادم لاحقاً يجب مسح بيانات التطبيق بعد مزامنة العمليات المعلقة.'),
+                  const Text('HTTP للاختبار على شبكة موثوقة فقط؛ استخدم HTTPS للإنتاج. يمكنك تغيير عنوان الخادم لاحقاً من شاشة تسجيل الدخول أو الملف الشخصي بشرط عدم وجود عمليات أوفلاين معلّقة.'),
                   if (_error != null) Padding(
                     padding: const EdgeInsets.only(top: 16),
                     child: Text(_error!, style: const TextStyle(color: Colors.red)),
