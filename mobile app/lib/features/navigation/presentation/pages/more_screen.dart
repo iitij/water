@@ -89,6 +89,14 @@ class MoreScreen extends StatelessWidget {
                 child: Column(
                   children: <Widget>[
                     AppSettingRow(
+                      title: 'كل الخدمات',
+                      subtitle: 'ابحث عن أي شاشة أو إجراء في المشروع',
+                      icon: Icons.apps_rounded,
+                      color: AppColors.primary,
+                      onTap: () => context.push(RouteNames.services),
+                    ),
+                    const SoftDivider(),
+                    AppSettingRow(
                       title: 'مراقب المزامنة',
                       subtitle: queue.pendingCount > 0
                           ? '${queue.pendingCount} عملية بانتظار الإرسال'
