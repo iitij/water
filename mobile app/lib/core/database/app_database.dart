@@ -445,6 +445,162 @@ class AppDatabase extends GeneratedDatabase {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// بيانات الميدان المحلية كاملةً — تُستخدم في النسخ الاحتياطي المحلي (S7-08).
+  ///
+  /// نُصدّر الصفوف كما هي في الجداول (لا نماذج ناقصة) حتى تعود النسخة مطابقة:
+  /// المزامنة تعتمد على `local_id` و`server_id` معاً، وأي تحويل يفقد أحدهما
+  /// يُنشئ صفوفاً مكرّرة عند الاستعادة.
+  Future<Map<String, dynamic>> exportFieldData() async => <String, dynamic>{
+        'squares': await _select('SELECT * FROM cached_squares ORDER BY server_id'),
+        'subscribers': await _select('SELECT * FROM cached_subscribers ORDER BY server_id'),
+        'meters': await _select('SELECT * FROM cached_meters ORDER BY server_id'),
+        'meter_periods': await _select('SELECT * FROM cached_meter_periods ORDER BY meter_id'),
+        'readings': await _select('SELECT * FROM cached_readings ORDER BY local_id'),
+        'pending_actions': await _select('SELECT * FROM pending_sync_actions ORDER BY created_at'),
+        'settings': await _select('SELECT * FROM cached_settings ORDER BY setting_key'),
+      };
+
+  /// استعادة نسخة محلية.
+  ///
+  /// الجداول الموجودة في `data` تُستبدل بالكامل (حذف ثم إدراج) داخل معاملة
+  /// واحدة، فلا يبقى نصف استعادة عند الفشل. الجداول الغائبة تُترك كما هي —
+  /// نسخة جزئية لا يجوز أن تمحو ما ليس فيها.
+  ///
+  /// [pendingActions] يتحكم في عمليات المزامنة غير المرسلة: استعادتها مفيدة
+  /// (قراءات ميدانية لم تُرسل بعد) لكنها قد تُكرّر عملية أُرسلت من الجهاز
+  /// الأصلي بعد أخذ النسخة؛ لذلك يقرّره المستخدم في الواجهة.
+  Future<void> importFieldData(
+    Map<String, dynamic> data, {
+    bool pendingActions = true,
+  }) async {
+    const tables = <String, List<String>>{
+      'squares': <String>['server_id', 'name', 'description', 'updated_at'],
+      'subscribers': <String>[
+        'server_id',
+        'name',
+        'phone',
+        'address',
+        'square_id',
+        'square_name',
+        'status',
+        'subscription_start_date',
+        'balance',
+        'meters_count',
+      ],
+      'meters': <String>[
+        'server_id',
+        'unique_code',
+        'path_number',
+        'subscriber_id',
+        'subscriber_name',
+        'square_id',
+        'square_name',
+        'subscription_start_date',
+        'tenant_name',
+        'tenant_phone',
+        'status',
+        'balance',
+        'initial_reading',
+        'last_reading',
+        'installed_at',
+        'removed_at',
+      ],
+      'meter_periods': <String>[
+        'meter_id',
+        'last_reading',
+        'period_start',
+        'period_end',
+        'auto_issue_invoice',
+        'has_subscription_fee',
+        'subscription_installment',
+        'has_tanker_fee',
+        'tanker_installment',
+        'cached_at',
+      ],
+      'readings': <String>[
+        'local_id',
+        'server_id',
+        'meter_id',
+        'reading_date',
+        'actual_reading_date',
+        'period_start',
+        'period_end',
+        'previous_reading',
+        'current_reading',
+        'consumption_units',
+        'is_invoiced',
+        'invoice_id',
+        'image_path',
+        'sync_error',
+        'updated_at',
+      ],
+      'settings': <String>['setting_key', 'setting_value', 'updated_at'],
+    };
+
+    await transaction(() async {
+      for (final entry in tables.entries) {
+        final rows = data[entry.key];
+        if (rows is! List) continue;
+        await _execute('DELETE FROM ${_tableName(entry.key)}');
+        final columns = entry.value;
+        final placeholders = List<String>.filled(columns.length, '?').join(', ');
+        final statement =
+            'INSERT OR REPLACE INTO ${_tableName(entry.key)}(${columns.join(', ')}) '
+            'VALUES ($placeholders)';
+        for (final row in rows.whereType<Map>()) {
+          await _execute(
+            statement,
+            columns.map((column) => row[column]).toList(growable: false),
+          );
+        }
+      }
+
+      if (pendingActions) {
+        final actions = data['pending_actions'];
+        if (actions is List) {
+          await _execute("DELETE FROM pending_sync_actions WHERE state != 'synced'");
+          for (final action in actions.whereType<Map>()) {
+            final id = action['id']?.toString();
+            if (id == null || id.isEmpty) continue;
+            await _execute(
+              '''INSERT OR REPLACE INTO pending_sync_actions(
+                 id, action_type, payload_json, state, attempt_count, created_at,
+                 updated_at, last_error, server_response_json, owner_user_id,
+                 next_attempt_at, last_status_code
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              [
+                id,
+                action['action_type'] ?? action['type'] ?? 'unknown',
+                action['payload_json'] ?? '{}',
+                action['state'] ?? 'pending',
+                _int(action['attempt_count']) ?? 0,
+                action['created_at'] ?? _now(),
+                _now(),
+                action['last_error'],
+                action['server_response_json'],
+                action['owner_user_id'],
+                action['next_attempt_at'],
+                _int(action['last_status_code']),
+              ],
+            );
+          }
+        }
+      }
+    });
+    _notifySyncQueueChanged();
+  }
+
+  /// اسم الجدول الفعلي للمفتاح المنطقي في النسخة الاحتياطية.
+  static String _tableName(String key) => switch (key) {
+        'squares' => 'cached_squares',
+        'subscribers' => 'cached_subscribers',
+        'meters' => 'cached_meters',
+        'meter_periods' => 'cached_meter_periods',
+        'readings' => 'cached_readings',
+        'settings' => 'cached_settings',
+        _ => key,
+      };
+
   Future<void> setCachedSetting(String key, Object? value) => _execute(
         '''INSERT OR REPLACE INTO cached_settings(setting_key, setting_value, updated_at)
            VALUES (?, ?, ?)''',

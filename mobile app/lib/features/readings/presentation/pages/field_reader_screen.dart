@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/barcode_scanner_screen.dart';
 import '../../../../core/widgets/search_text_field.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
@@ -192,77 +190,15 @@ class _FieldReaderView extends StatelessWidget {
 
   Future<void> _scan(BuildContext context, MetersCubit cubit) async {
     final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(builder: (_) => const MeterBarcodeScannerScreen()),
+      MaterialPageRoute<String>(
+        builder: (_) => const BarcodeScannerScreen(
+          title: 'مسح باركود العداد',
+          hint: 'وجّه الكاميرا إلى باركود أو QR الموجود على العداد.',
+        ),
+      ),
     );
     if (code != null && context.mounted) cubit.setQuery(code);
   }
-}
-
-class MeterBarcodeScannerScreen extends StatefulWidget {
-  const MeterBarcodeScannerScreen({super.key});
-
-  @override
-  State<MeterBarcodeScannerScreen> createState() => _MeterBarcodeScannerScreenState();
-}
-
-class _MeterBarcodeScannerScreenState extends State<MeterBarcodeScannerScreen> {
-  bool _didReturn = false;
-
-  @override
-  Widget build(BuildContext context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          appBar: AppBar(title: const Text('مسح باركود العداد')),
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              MobileScanner(
-                onDetect: (capture) {
-                  if (_didReturn) return;
-                  for (final barcode in capture.barcodes) {
-                    final value = barcode.rawValue?.trim();
-                    if (value != null && value.isNotEmpty) {
-                      _didReturn = true;
-                      Navigator.of(context).pop(value);
-                      break;
-                    }
-                  }
-                },
-              ),
-              IgnorePointer(
-                child: Center(
-                  child: Container(
-                    width: 280,
-                    height: 170,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 3),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 36,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                  decoration: BoxDecoration(
-                    color: AppColors.panel.withValues(alpha: .88),
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    border: Border.all(color: AppColors.panelLine),
-                  ),
-                  child: const Text(
-                    'وجّه الكاميرا إلى باركود أو QR الموجود على العداد.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.onPanel, fontSize: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
 }
 
 class _FieldEmptyState extends StatelessWidget {

@@ -86,6 +86,51 @@ void main() {
     });
   });
 
+  group('نصوص إضافات 2.0 (S8-01)', () {
+    test('كل النصوص الجديدة معرّفة في اللغتين وغير فارغة', () {
+      for (final strings in <AppStrings>[AppStrings.ar, AppStrings.en]) {
+        final values = <String>[
+          strings.devicesTitle,
+          strings.devicesSubtitle,
+          strings.backupTitle,
+          strings.backupSubtitle,
+          strings.remindersTitle,
+          strings.remindersSubtitle,
+          strings.dataQualityTitle,
+          strings.dataQualitySubtitle,
+          strings.saveAndAddAnother,
+          strings.savedFiltersTitle,
+          strings.savedFiltersHint,
+          strings.actionRestore,
+          strings.actionShare,
+          strings.actionDelete,
+        ];
+        expect(values.every((value) => value.trim().isNotEmpty), isTrue);
+      }
+    });
+
+    test('العربية تحمل المصطلحات المعتمدة في الشاشات', () {
+      expect(AppStrings.ar.devicesTitle, 'الأجهزة المسجّلة');
+      expect(AppStrings.ar.saveAndAddAnother, 'حفظ وإضافة آخر');
+      expect(AppStrings.ar.dataQualityTitle, 'جودة البيانات');
+      expect(AppStrings.ar.actionRestore, 'استعادة');
+    });
+
+    test('الإنجليزية لا تسرّب نصاً عربياً', () {
+      final arabic = RegExp(r'[\u0600-\u06FF]');
+      for (final text in <String>[
+        AppStrings.en.devicesTitle,
+        AppStrings.en.backupTitle,
+        AppStrings.en.remindersTitle,
+        AppStrings.en.dataQualityTitle,
+        AppStrings.en.saveAndAddAnother,
+        AppStrings.en.actionShare,
+      ]) {
+        expect(arabic.hasMatch(text), isFalse, reason: text);
+      }
+    });
+  });
+
   testWidgets('of() يقرأ لغة الـ Localizations', (tester) async {
     late AppStrings arabic;
     late AppStrings english;

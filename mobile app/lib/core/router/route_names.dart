@@ -49,5 +49,9 @@ class RouteNames {
   static const settings = '/settings';
   static const users = '/users';
   static const roles = '/roles';
+  static const devices = '/devices';
+  static const dataQuality = '/data-quality';
+  static const backup = '/backup';
+  static const reminders = '/reminders';
   static const exports = '/exports';
 }

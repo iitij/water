@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
+import 'package:water_project/core/notifications/notification_service.dart';
 
 import '../../features/admin_shared/data/admin_api_client.dart';
 import '../../features/audit/data/audit_event_store.dart';
@@ -10,6 +11,7 @@ import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/cash_sessions/data/cash_session_api.dart';
 import '../../features/cash_sessions/services/cash_session_service.dart';
 import '../../features/dashboard/dashboard.dart';
+import '../../features/devices/devices.dart';
 import '../../features/exports/exports.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/offline_sync/data/drift_sync_queue_repository.dart';
@@ -20,6 +22,9 @@ import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../backup/database_field_data_store.dart';
+import '../backup/local_backup.dart';
+import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../database/database_encryption.dart';
 import '../database/offline_pack_downloader.dart';
@@ -88,6 +93,17 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<FieldOperationsModule>(fieldModule);
   getIt.registerSingleton<AppDatabase>(fieldModule.database);
+  // S7-08: نسخة احتياطية محلية لبيانات الميدان (تكتب داخل مستندات التطبيق).
+  // S7-09: تذكيرات محلية — تُسجّل مرة واحدة، والجدولة تُعاد في bootstrap.
+  getIt.registerLazySingleton<ReminderScheduler>(FlutterReminderScheduler.new);
+  getIt.registerLazySingleton<ReminderPreferencesStore>(SharedPrefsReminderStore.new);
+  getIt.registerSingleton<LocalBackupService>(
+    LocalBackupService(
+      store: DatabaseFieldDataStore(fieldModule.database),
+      storage: DeviceBackupStorage(),
+      appVersion: AppConfig.appVersion,
+    ),
+  );
   getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
   getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
   getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
@@ -162,6 +178,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   final rbacRepository = RbacRepositoryImpl(RbacRemoteDataSource(adminApi));
   final exportRepository = ExportRepositoryImpl(ExportRemoteDataSource(adminApi));
+  final devicesRepository = DevicesRepositoryImpl(DevicesRemoteDataSource(adminApi));
   final excelService = ExcelExportService.platform(exportRepository);
 
   getIt.registerSingleton<AdminApiClient>(adminApi);
@@ -170,6 +187,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<DashboardRepository>(dashboardRepository);
   getIt.registerSingleton<RbacRepository>(rbacRepository);
   getIt.registerSingleton<ExportRepository>(exportRepository);
+  getIt.registerSingleton<DevicesRepository>(devicesRepository);
   getIt.registerSingleton<ExcelExportService>(excelService);
 
   getIt.registerSingleton<AppRouter>(AppRouter(session: session));

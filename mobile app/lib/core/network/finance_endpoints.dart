@@ -44,6 +44,9 @@ class FinanceEndpoints {
   static String paymentWhatsappLink(int id) => '/payments/$id/whatsapp-link';
   static String paymentSendWhatsapp(int id) => '/payments/$id/send-whatsapp';
 
+  /// تسجيل نتيجة إرسال واتساب على السند (خطة 2.0 — الفصل 6.2).
+  static String paymentWhatsappResult(int id) => '/payments/$id/whatsapp-result';
+
   /// `GET /api/subscribers/{id}/unpaid-invoices-summary` — للتحصيل التلقائي الأحدث.
   static String subscriberDueSummary(int subscriberId) =>
       '/subscribers/$subscriberId/unpaid-invoices-summary';
@@ -56,6 +59,10 @@ class FinanceEndpoints {
   static String tariff(int id) => '/tariffs/$id';
   static String tariffRestore(int id) => '/tariffs/$id/restore';
   static String tariffForce(int id) => '/tariffs/$id/force';
+
+  /// فجوة v1 رقم 1: استعادة/حذف نهائي جماعي للتعرفة (`TariffsTable` bulk actions).
+  static const String tariffsBulkRestore = '/tariffs/bulk-restore';
+  static const String tariffsBulkForceDelete = '/tariffs/bulk-force-delete';
 
   // ─── مراجع لازمة لنوافذ الإصدار الثلاثية (ملك Dev 2/4 لكن تُستهلك للقراءة) ──
   static const String squares = '/squares';

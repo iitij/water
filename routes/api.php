@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuditEventController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashSessionController;
+use App\Http\Controllers\Api\DataQualityController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController as ApiExportController;
 use App\Http\Controllers\Api\InvoiceController;
@@ -114,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/payments/{id}/whatsapp-link', [PaymentController::class, 'whatsappLink']);
     Route::post('/payments/{id}/send-whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
+    Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
     // Subscription fees and tanker/service requests.
@@ -192,6 +194,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // سجل التدقيق: قراءة للمشرف + رفع مجمّع من الأجهزة (خطة 2.0 — الفصل 9.6).
     Route::get('/audit-events', [AuditEventController::class, 'index']);
     Route::post('/audit-events', [AuditEventController::class, 'store']);
+
+    // جودة البيانات: مشكلات قابلة للإصلاح (خطة 2.0 — الفصل 6.1 و10.2).
+    Route::get('/data-quality/issues', [DataQualityController::class, 'index']);
 
     // أجهزة المستخدم وإبطالها (خطة 2.0 — الفصل 9.7).
     Route::get('/devices', [DeviceController::class, 'index']);

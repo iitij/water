@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
-
+import '../../features/admin_shared/data/admin_api_client.dart';
 import '../../features/auth/presentation/pages/edit_profile_screen.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/splash_screen.dart';
 import '../../features/cash_sessions/presentation/cash_session_screen.dart';
 import '../../features/dashboard/dashboard.dart';
+import '../../features/data_quality/data/data_quality_remote_data_source.dart';
+import '../../features/data_quality/presentation/pages/data_quality_screen.dart';
+import '../../features/devices/devices.dart';
 import '../../features/diagnostics/presentation/diagnostics_screen.dart';
 import '../../features/exports/exports.dart';
 import '../../features/field_route/presentation/route_mode_screen.dart';
@@ -38,12 +41,16 @@ import '../../features/security/presentation/app_lock_settings_screen.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../backup/backup_screen.dart';
+import '../backup/local_backup.dart';
 import '../finance/finance_locator.dart';
 import '../finance/finance_module.dart';
 import '../fouad/api_client.dart';
 import '../fouad/fouad_module.dart';
 import '../navigation/app_shell.dart';
 import '../navigation/sub_page.dart';
+import '../notifications/notification_service.dart';
+import '../notifications/notification_settings_screen.dart';
 import '../permissions/permission_service.dart';
 import '../services/whatsapp_launcher_service.dart';
 import 'route_names.dart';
@@ -329,6 +336,31 @@ class AppRouter {
             rolesBuilder: () => RolesAndPermissionsScreen(
               repository: GetIt.I<RbacRepository>(),
               can: GetIt.I<PermissionService>().can,
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.reminders,
+            builder: (context, state) => NotificationSettingsScreen(
+              scheduler: GetIt.I<ReminderScheduler>(),
+              store: GetIt.I<ReminderPreferencesStore>(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.backup,
+            builder: (context, state) => BackupRestoreScreen(
+              service: GetIt.I<LocalBackupService>(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.dataQuality,
+            builder: (context, state) => DataQualityScreen(
+              remote: DataQualityRemoteDataSource(GetIt.I<AdminApiClient>()),
+              can: GetIt.I<PermissionService>().can,
+            ),
+          ),
+          ...DeviceRoutes.routes(
+            screenBuilder: () => DevicesScreen(
+              repository: GetIt.I<DevicesRepository>(),
             ),
           ),
           ...ExportRoutes.routes(

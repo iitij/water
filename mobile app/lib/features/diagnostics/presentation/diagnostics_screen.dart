@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/diagnostics/error_reporter.dart';
 import '../../../core/finance/finance_feedback.dart';
 import '../../../core/finance/finance_locator.dart';
+import '../../../core/network/device_identity.dart';
 import '../../../core/network/network_info.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_surfaces.dart';
@@ -82,6 +84,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   String _supportReport() {
     final buffer = StringBuffer()
       ..writeln('تقرير دعم — نظام إدارة المياه')
+      ..writeln('إصدار التطبيق: ${AppConfig.appVersion}')
+      ..writeln('منصّة الجهاز: ${DeviceIdentity.platform}')
+      ..writeln('الخادم: ${AppConfig.apiBaseUrl}')
       ..writeln('الوقت: ${DateTime.now().toIso8601String()}')
       ..writeln('الاتصال: ${_online == true ? 'متصل' : 'غير متصل'}')
       ..writeln('عمليات في الطابور: ${_queue.pendingCount}')
@@ -143,6 +148,22 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   ),
                 ],
               ),
+            ),
+            const Gap(AppSpacing.md),
+            _Section(
+              title: 'إصدار التطبيق',
+              rows: <Widget>[
+                const _MetricRow(
+                  label: 'الإصدار الحالي',
+                  value: 0,
+                  valueLabel: AppConfig.appVersion,
+                ),
+                _MetricRow(
+                  label: 'الخادم',
+                  value: 0,
+                  valueLabel: Uri.tryParse(AppConfig.apiBaseUrl)?.host ?? AppConfig.apiBaseUrl,
+                ),
+              ],
             ),
             const Gap(AppSpacing.md),
             _Section(

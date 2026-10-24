@@ -271,6 +271,27 @@ abstract final class ModuleCatalog {
       requiredPermissions: <String>['ViewAny:User'],
     ),
     AppModule(
+      id: 'data-quality',
+      group: AppModuleGroup.admin,
+      title: 'جودة البيانات',
+      subtitle: 'هواتف ناقصة، عدادات بلا قراءة، وتعرفة غير سارية',
+      icon: Icons.fact_check_outlined,
+      color: AppColors.warning,
+      route: RouteNames.dataQuality,
+      requiredPermissions: <String>['ViewAny:User'],
+    ),
+    AppModule(
+      id: 'devices',
+      group: AppModuleGroup.admin,
+      title: 'الأجهزة المسجّلة',
+      subtitle: 'إبطال جهاز مفقود أو مسروق فوراً',
+      icon: Icons.devices_rounded,
+      color: AppColors.danger,
+      route: RouteNames.devices,
+      // بلا شرط صلاحية: كل موظف يحتاج إبطال جهازه المفقود، والخادم يقيّد
+      // الإبطال بمالك الجهاز أو مشرف.
+    ),
+    AppModule(
       id: 'roles',
       group: AppModuleGroup.admin,
       title: 'الأدوار والصلاحيات',
@@ -290,6 +311,24 @@ abstract final class ModuleCatalog {
       icon: Icons.sync_rounded,
       color: AppColors.info,
       route: RouteNames.offlineSync,
+    ),
+    AppModule(
+      id: 'reminders',
+      group: AppModuleGroup.system,
+      title: 'تذكيرات الجهاز',
+      subtitle: 'قراءات وفواتير وإقفال صندوق ونسخة احتياطية',
+      icon: Icons.notifications_active_outlined,
+      color: AppColors.warning,
+      route: RouteNames.reminders,
+    ),
+    AppModule(
+      id: 'backup',
+      group: AppModuleGroup.system,
+      title: 'نسخة احتياطية محلية',
+      subtitle: 'احفظ عمل الميدان واستعده إن تعطّل الجهاز',
+      icon: Icons.inventory_2_outlined,
+      color: AppColors.success,
+      route: RouteNames.backup,
     ),
     AppModule(
       id: 'profile',

@@ -33,6 +33,12 @@ abstract interface class PaymentsRepository {
   /// أحدث فاتورة غير مسددة للمشترك (تعبئة تلقائية في `SCR-18`).
   Future<InvoiceModel?> latestUnpaidInvoice(int subscriberId);
 
+  /// يسجّل على الخادم أن السند أُرسل عبر واتساب بطريقة معيّنة.
+  ///
+  /// `via`: `click_to_chat` / `meta_api` / `local_api` / `manual`.
+  /// يعيد `true` عند نجاح التسجيل، ولا يرمي عند فشل الشبكة (أوفلاين).
+  Future<bool> recordWhatsappSend(int paymentId, {required String via});
+
   String pdfPath(int paymentId);
   String whatsappLinkPath(int paymentId);
   String sendWhatsappPath(int paymentId);

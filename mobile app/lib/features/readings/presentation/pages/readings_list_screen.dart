@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -21,9 +22,8 @@ import '../cubit/readings_cubit.dart';
 import '../widgets/offline_pack_dialog.dart';
 import '../widgets/record_reading_sheet.dart';
 
-part '../widgets/readings_filters.dart';
-
 part '../widgets/reading_card.dart';
+part '../widgets/readings_filters.dart';
 
 class ReadingsListScreen extends StatelessWidget {
   const ReadingsListScreen({
@@ -44,7 +44,9 @@ class ReadingsListScreen extends StatelessWidget {
         create: (_) => ReadingsCubit(
           readingsRepository: readingsRepository,
           metersRepository: metersRepository,
-        )..load(),
+        )
+          ..load()
+          ..loadPresets(),
         child: _ReadingsListView(
           readingsRepository: readingsRepository,
           metersRepository: metersRepository,

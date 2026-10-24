@@ -11,6 +11,7 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
+import '../../data/services/daily_receipts_exporter.dart';
 import '../../domain/repositories/payments_repository.dart';
 import '../cubit/payments_cubit.dart';
 import '../widgets/payment_actions.dart';
@@ -64,6 +65,43 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     super.dispose();
   }
 
+  /// تصدير سندات اليوم من الجهاز ومشاركتها (خطة 2.0 — الفصل 6.2).
+  ///
+  /// نُصفّي على تاريخ اليوم داخل التطبيق لأن القائمة قد تكون مفلترة بفترة
+  /// أوسع؛ المطابقة النقدية تخصّ يوم الصندوق فقط. والمحذوف يُستثنى في
+  /// [DailyReceiptsExporter] نفسه.
+  Future<void> _exportToday(BuildContext context, PaymentsCubit cubit) async {
+    final now = DateTime.now();
+    final today = <PaymentModel>[
+      for (final payment in cubit.state.payments)
+        if (payment.paymentDate != null &&
+            payment.paymentDate!.year == now.year &&
+            payment.paymentDate!.month == now.month &&
+            payment.paymentDate!.day == now.day &&
+            !payment.isDeleted)
+          payment,
+    ];
+    if (today.isEmpty) {
+      AppFeedback.info(context, 'لا توجد سندات مسجّلة اليوم لتصديرها.');
+      return;
+    }
+
+    try {
+      final exporter = DailyReceiptsExporter(now: () => now);
+      final result = await exporter.save(today);
+      if (!context.mounted) return;
+      await exporter.share(result);
+      if (!context.mounted) return;
+      AppFeedback.success(
+        context,
+        'صدّرت ${result.rowCount} سنداً بإجمالي ${CurrencyFormatter.withLabel(result.totalAmount)}.',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      AppFeedback.error(context, 'تعذّر تصدير سندات اليوم: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<PaymentsCubit>();
@@ -83,12 +121,18 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               onPressed: () => _bulkDelete(context, cubit),
               icon: const Icon(Icons.delete_outline, color: AppColors.danger),
             ),
-          ] else
+          ] else ...<Widget>[
             IconButton(
               tooltip: 'تحديد متعدد',
               onPressed: () => setState(() => _selecting = true),
               icon: const Icon(Icons.checklist_rtl),
             ),
+            IconButton(
+              tooltip: 'تصدير سندات اليوم (CSV)',
+              onPressed: () => _exportToday(context, cubit),
+              icon: const Icon(Icons.ios_share_rounded),
+            ),
+          ],
           IconButton(
             tooltip: 'إعادة تحميل',
             onPressed: () => cubit.load(refresh: true),

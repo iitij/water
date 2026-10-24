@@ -32,6 +32,9 @@ class Payment extends Model
         'void_requested_by',
         'void_request_reason',
         'void_decision_notes',
+        'whatsapp_sent_at',
+        'whatsapp_sent_via',
+        'whatsapp_sent_by',
         'void_decided_by',
         'void_decided_at',
     ];
@@ -42,6 +45,7 @@ class Payment extends Model
         'voided_at' => 'datetime',
         'void_requested_at' => 'datetime',
         'void_decided_at' => 'datetime',
+        'whatsapp_sent_at' => 'datetime',
     ];
 
     // ─── Relationships ───

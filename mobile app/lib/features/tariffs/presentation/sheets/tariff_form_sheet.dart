@@ -285,12 +285,18 @@ class TariffCard extends StatelessWidget {
     this.onSoftDelete,
     this.onRestore,
     this.onForceDelete,
+    this.selected = false,
+    this.onSelectToggle,
   });
 
   final TariffModel tariff;
   final bool isActive;
   final bool busy;
   final VoidCallback? onTap;
+
+  /// وضع التحديد الجماعي: يظهر مربع اختيار ويُستبدل سلوك النقر بالتحديد.
+  final bool selected;
+  final VoidCallback? onSelectToggle;
   final VoidCallback? onSoftDelete;
   final VoidCallback? onRestore;
   final VoidCallback? onForceDelete;
@@ -301,11 +307,19 @@ class TariffCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: AppCard(
         padding: EdgeInsets.zero,
-        onTap: tariff.isTrashed ? null : onTap,
+        onTap: onSelectToggle ?? (tariff.isTrashed ? null : onTap),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: <Widget>[
+              if (onSelectToggle != null) ...<Widget>[
+                Icon(
+                  selected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                  size: 20,
+                  color: selected ? AppColors.primary : AppColors.neutral,
+                ),
+                const SizedBox(width: 10),
+              ],
               AppGlyph(
                 icon: isActive ? Icons.bolt_rounded : Icons.sell_outlined,
                 tone: isActive ? AppColors.success : AppColors.neutral,

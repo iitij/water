@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../data/models/reading.dart';
+import '../../data/reading_filter_preset_store.dart';
+import '../../domain/reading_filter_preset.dart';
 import '../../domain/readings_repository.dart';
 
 enum ReadingsLoadStatus { initial, loading, success, failure }
@@ -24,6 +26,7 @@ class ReadingsState {
     this.errorMessage,
     this.actionMessage,
     this.isMutating = false,
+    this.presets = const <ReadingFilterPreset>[],
   });
 
   final ReadingsLoadStatus status;
@@ -38,6 +41,9 @@ class ReadingsState {
   final String? errorMessage;
   final String? actionMessage;
   final bool isMutating;
+
+  /// فلاتر محفوظة على الجهاز (S7-06).
+  final List<ReadingFilterPreset> presets;
 
   bool get isSelecting => selectedKeys.isNotEmpty;
 
@@ -59,6 +65,7 @@ class ReadingsState {
     bool clearError = false,
     bool clearActionMessage = false,
     bool? isMutating,
+    List<ReadingFilterPreset>? presets,
   }) {
     return ReadingsState(
       status: status ?? this.status,
@@ -73,6 +80,7 @@ class ReadingsState {
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       actionMessage: clearActionMessage ? null : actionMessage ?? this.actionMessage,
       isMutating: isMutating ?? this.isMutating,
+      presets: presets ?? this.presets,
     );
   }
 }
@@ -81,12 +89,103 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   ReadingsCubit({
     required ReadingsRepository readingsRepository,
     required MetersRepository metersRepository,
+    ReadingFilterPresetStore? presetStore,
   })  : _readingsRepository = readingsRepository,
         _metersRepository = metersRepository,
+        _presets = presetStore ?? SharedPreferencesReadingFilterPresetStore(),
         super(const ReadingsState());
 
   final ReadingsRepository _readingsRepository;
   final MetersRepository _metersRepository;
+  final ReadingFilterPresetStore _presets;
+
+  /// تحميل الفلاتر المحفوظة — يُستدعى مرة عند فتح الشاشة.
+  Future<void> loadPresets() async {
+    try {
+      final presets = await _presets.load();
+      emit(state.copyWith(presets: presets));
+    } catch (_) {
+      // فشل التخزين المحلي لا يجوز أن يمنع عرض القراءات.
+    }
+  }
+
+  /// اسم مقترح للفلتر الحالي — يُستخدم كقيمة أولية في مربع الحفظ.
+  String suggestPresetName() => ReadingFilterPreset.suggestName(
+        squareId: state.squareFilter,
+        squareName: _squareNameOf(state.squareFilter),
+        invoiceFilterCode: state.invoiceFilter.name,
+        fromDate: state.fromDate,
+        toDate: state.toDate,
+        query: state.query,
+      );
+
+  String? _squareNameOf(int? id) {
+    if (id == null) return null;
+    for (final square in state.squares) {
+      if (square.id == id) return square.name;
+    }
+    return null;
+  }
+
+  /// يحفظ الفلاتر الحالية باسم. يعيد `true` عند النجاح.
+  ///
+  /// حفظ اسم موجود يستبدل محتواه بدل تكرار الشريحة — القارئ يقصد «حدّث هذا الفلتر».
+  Future<bool> savePreset(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return false;
+    final preset = ReadingFilterPreset(
+      id: trimmed,
+      name: trimmed,
+      squareId: state.squareFilter,
+      squareName: _squareNameOf(state.squareFilter),
+      invoiceFilterCode: state.invoiceFilter.name,
+      fromDate: state.fromDate,
+      toDate: state.toDate,
+      query: state.query,
+    );
+    final next = <ReadingFilterPreset>[
+      ...state.presets.where((item) => item.id != preset.id),
+      preset,
+    ];
+    try {
+      await _presets.save(next);
+      emit(state.copyWith(presets: next));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> deletePreset(String id) async {
+    final next = state.presets.where((item) => item.id != id).toList(growable: false);
+    try {
+      await _presets.save(next);
+    } catch (_) {
+      // نُحدّث الواجهة على أي حال؛ أسوأ حالة يعود الفلتر بعد إعادة التشغيل.
+    }
+    emit(state.copyWith(presets: next));
+  }
+
+  /// يطبّق فلتراً محفوظاً بضغطة واحدة ثم يعيد التحميل.
+  Future<void> applyPreset(ReadingFilterPreset preset) async {
+    _searchTimer?.cancel();
+    final filter = switch (preset.invoiceFilterCode) {
+      'invoiced' => ReadingInvoiceFilter.invoiced,
+      'notInvoiced' => ReadingInvoiceFilter.notInvoiced,
+      _ => ReadingInvoiceFilter.all,
+    };
+    emit(state.copyWith(
+      query: preset.query,
+      invoiceFilter: filter,
+      squareFilter: preset.squareId,
+      clearSquareFilter: preset.squareId == null,
+      fromDate: preset.fromDate,
+      toDate: preset.toDate,
+      clearFromDate: preset.fromDate == null,
+      clearToDate: preset.toDate == null,
+    ));
+    await load();
+  }
   Timer? _searchTimer;
 
   Future<void> load({bool keepSelection = false}) async {
