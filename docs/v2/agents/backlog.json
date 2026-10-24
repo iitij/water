@@ -32,10 +32,10 @@
       "agent": "A3",
       "subagent": "signing-officer",
       "task": "Play App Signing + مسار internal",
-      "files": "-",
+      "files": "docs/v2/PLAY_RELEASE_CHECKLIST_AR.md، mobile app/android/app/build.gradle.kts، mobile app/android/app/src/{main,debug}/**",
       "definition_of_done": "رفع ناجح ونسخة قابلة للتثبيت",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "دليل تنفيذي لـ Play App Signing والمسار الداخلي + بناء AAB موقّع (keystore يُنشأ خارج Git) + منع HTTP في الإصدار"
     },
     {
       "id": "S1-03",
@@ -428,10 +428,10 @@
       "agent": "A3",
       "subagent": "signing-officer",
       "task": "نشر متدرّج (5% ← 25% ← 100%)",
-      "files": "-",
+      "files": "docs/v2/PLAY_RELEASE_CHECKLIST_AR.md",
       "definition_of_done": "مراقبة 48 ساعة لكل نسبة",
-      "status": "todo",
-      "evidence": ""
+      "status": "partial",
+      "evidence": "خطة التدرّج 5%→25%→100% ومعايير الإيقاف مكتوبة؛ التنفيذ الفعلي في Play Console لم يحدث"
     },
     {
       "id": "S6-06",
