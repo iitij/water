@@ -145,7 +145,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListenableBuilder(
-        listenable: Listenable.merge(<Listenable>[_queue, _audit]),
+        listenable: Listenable.merge(<Listenable>[_queue, _audit, _apiLogs]),
         builder: (context, _) => AppPageBody(
           topPadding: 16,
           bottomPadding: 32,
@@ -166,6 +166,40 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   ),
                 ],
               ),
+            ),
+            const Gap(AppSpacing.md),
+            _Section(
+              title: 'سجل مكالمات API والشبكة',
+              rows: <Widget>[
+                _MetricRow(label: 'إجمالي طلبات الـ API المسجلة', value: _apiLogs.totalCount),
+                _MetricRow(
+                  label: 'العمليات الفاشلة / أخطاء',
+                  value: _apiLogs.errorCount,
+                  valueLabel: _apiLogs.errorCount == 0 ? 'لا توجد أخطاء' : '${_apiLogs.errorCount} خطأ',
+                ),
+                _MetricRow(
+                  label: 'عمليات بطيئة / لاق (>1200ms)',
+                  value: _apiLogs.slowCount,
+                  valueLabel: _apiLogs.slowCount == 0 ? 'طبيعي' : '${_apiLogs.slowCount} بطيئة',
+                ),
+                _MetricRow(
+                  label: 'متوسط سرعة الاستجابة',
+                  value: _apiLogs.avgDurationMs,
+                  valueLabel: '${_apiLogs.avgDurationMs}ms',
+                ),
+              ],
+              actions: <Widget>[
+                FilledButton.icon(
+                  onPressed: () => context.push(RouteNames.apiLogs),
+                  icon: const Icon(Icons.sync_alt_rounded),
+                  label: const Text('فتح سجل الـ API ومراقبة الأخطاء'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => _apiLogs.toggleFloatingPill()),
+                  icon: Icon(_apiLogs.showFloatingPill ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                  label: Text(_apiLogs.showFloatingPill ? 'إخفاء الزر العائم' : 'إظهار الزر العائم'),
+                ),
+              ],
             ),
             const Gap(AppSpacing.md),
             _Section(
