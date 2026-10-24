@@ -20,6 +20,7 @@ abstract final class AppStringsDefaults {
   static const String unauthorizedError = 'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.';
   static const String forbiddenError = 'لا تملك صلاحية تنفيذ هذه العملية.';
   static const String notFoundError = 'السجل غير موجود أو تم حذفه.';
+  static const String errorTitle = 'تعذّر تحميل البيانات';
   static const String conflictError =
       'العملية متعارضة مع حالة السجل الحالية. أعد التحميل ثم حاول.';
   static const String serverError = 'حدث خطأ في الخادم. حاول بعد قليل.';
@@ -54,6 +55,7 @@ class AppStrings {
     required this.unauthorizedError,
     required this.forbiddenError,
     required this.notFoundError,
+    required this.errorTitle,
     required this.conflictError,
     required this.serverError,
     required this.unknownError,
@@ -92,6 +94,9 @@ class AppStrings {
   final String unauthorizedError;
   final String forbiddenError;
   final String notFoundError;
+
+  /// عنوان موحّد لشاشة/بطاقة الخطأ القابلة لإعادة المحاولة.
+  final String errorTitle;
   final String conflictError;
   final String serverError;
   final String unknownError;
@@ -127,6 +132,7 @@ class AppStrings {
     unauthorizedError: AppStringsDefaults.unauthorizedError,
     forbiddenError: AppStringsDefaults.forbiddenError,
     notFoundError: AppStringsDefaults.notFoundError,
+    errorTitle: AppStringsDefaults.errorTitle,
     conflictError: AppStringsDefaults.conflictError,
     serverError: AppStringsDefaults.serverError,
     unknownError: AppStringsDefaults.unknownError,
@@ -163,6 +169,7 @@ class AppStrings {
     unauthorizedError: 'Your session expired. Please sign in again.',
     forbiddenError: 'You do not have permission to do this.',
     notFoundError: 'The record no longer exists.',
+    errorTitle: 'Could not load data',
     conflictError: 'This conflicts with the current record. Reload and try again.',
     serverError: 'Server error. Please try again shortly.',
     unknownError: 'The operation failed. Check the data or the connection.',

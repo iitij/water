@@ -4,9 +4,11 @@
 /// `ShimmerSkeleton(...)`؛ نسخنا هنا تحافظ على واجهة Dev 3 (حوار بـ `details:`، حالة خطأ بـ
 /// `onRetry:`، و`SkeletonList`) كي تبقى الشاشات كما هي. الدمج النهائي يمكن أن يوحّدها.
 library;
+
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_colors.dart';
 import '../ui/app_tokens.dart';
 import '../widgets/empty_state_widget.dart' as core;
@@ -191,11 +193,12 @@ class ErrorStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return EmptyStateWidget(
-      title: 'تعذّر تحميل البيانات',
+      title: strings.errorTitle,
       message: message,
       icon: icon,
-      actionLabel: onRetry == null ? null : 'إعادة المحاولة',
+      actionLabel: onRetry == null ? null : strings.retry,
       onAction: onRetry,
     );
   }
