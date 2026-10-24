@@ -303,6 +303,15 @@ abstract final class ModuleCatalog {
       route: RouteNames.offlineSync,
     ),
     AppModule(
+      id: 'reminders',
+      group: AppModuleGroup.system,
+      title: 'تذكيرات الجهاز',
+      subtitle: 'قراءات وفواتير وإقفال صندوق ونسخة احتياطية',
+      icon: Icons.notifications_active_outlined,
+      color: AppColors.warning,
+      route: RouteNames.reminders,
+    ),
+    AppModule(
       id: 'backup',
       group: AppModuleGroup.system,
       title: 'نسخة احتياطية محلية',

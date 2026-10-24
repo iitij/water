@@ -21,6 +21,8 @@ dependencies:
   fl_chart: ^0.69.2
   flutter_bloc: ^9.1.1
   flutter_image_compress: ^2.4.0
+  # S7-09: تذكيرات محلية (قراءة يومية، فواتير مستحقة، إقفال صندوق، نسخة احتياطية).
+  flutter_local_notifications: ^17.2.4
   flutter_screenutil: ^5.9.3
   flutter_secure_storage: ^9.2.4
   get_it: ^8.0.3
@@ -37,6 +39,9 @@ dependencies:
   share_plus: ^10.1.4
   shared_preferences: ^2.5.3
   shimmer: ^3.0.0
+  # منطقة زمنية ثابتة للجدولة (اليمن UTC+3 بلا توقيت صيفي) — تبعية لازمة
+  # لحساب `TZDateTime` في flutter_local_notifications.
+  timezone: ^0.9.4
   # S5-02: SQLCipher بدل SQLite العادي — نفس الـABI، لكن الملف يُفتح بمفتاح.
   # لا تُضِف sqlite3_flutter_libs معها: الحزمتان تُدخلان نفس الرموز.
   sqlcipher_flutter_libs: ^0.6.8

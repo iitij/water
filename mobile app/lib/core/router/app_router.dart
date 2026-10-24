@@ -12,6 +12,8 @@ import '../../features/field_route/presentation/route_mode_screen.dart';
 import '../../features/security/presentation/app_lock_settings_screen.dart';
 import '../backup/backup_screen.dart';
 import '../backup/local_backup.dart';
+import '../notifications/notification_service.dart';
+import '../notifications/notification_settings_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/devices/devices.dart';
 import '../../features/exports/exports.dart';
@@ -332,6 +334,13 @@ class AppRouter {
             rolesBuilder: () => RolesAndPermissionsScreen(
               repository: GetIt.I<RbacRepository>(),
               can: GetIt.I<PermissionService>().can,
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.reminders,
+            builder: (context, state) => NotificationSettingsScreen(
+              scheduler: GetIt.I<ReminderScheduler>(),
+              store: GetIt.I<ReminderPreferencesStore>(),
             ),
           ),
           GoRoute(

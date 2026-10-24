@@ -7,6 +7,7 @@ import '../../features/admin_shared/data/admin_api_client.dart';
 import '../backup/database_field_data_store.dart';
 import '../backup/local_backup.dart';
 import '../config/app_config.dart';
+import '../notifications/notification_service.dart';
 import '../../features/audit/data/audit_event_store.dart';
 import '../../features/audit/services/audit_log_service.dart';
 import '../../features/auth/presentation/cubit/auth_cubit.dart';
@@ -92,6 +93,9 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<FieldOperationsModule>(fieldModule);
   getIt.registerSingleton<AppDatabase>(fieldModule.database);
   // S7-08: نسخة احتياطية محلية لبيانات الميدان (تكتب داخل مستندات التطبيق).
+  // S7-09: تذكيرات محلية — تُسجّل مرة واحدة، والجدولة تُعاد في bootstrap.
+  getIt.registerLazySingleton<ReminderScheduler>(FlutterReminderScheduler.new);
+  getIt.registerLazySingleton<ReminderPreferencesStore>(SharedPrefsReminderStore.new);
   getIt.registerSingleton<LocalBackupService>(
     LocalBackupService(
       store: DatabaseFieldDataStore(fieldModule.database),
