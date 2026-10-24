@@ -194,8 +194,16 @@ Future<bool> voidPaymentWithReason(
   if (!context.mounted) return false;
 
   try {
-    await sl<PaymentsRepository>().voidPayment(payment.id, reason: reason);
+    final outcome = await sl<PaymentsRepository>().voidPayment(payment.id, reason: reason);
     if (!context.mounted) return true;
+    if (outcome.pendingApproval) {
+      AppFeedback.info(
+        context,
+        'مبلغ السند يتجاوز حدّ الإلغاء المسموح. أُرسل طلب إلغاء للمشرف، '
+        'والسند ما زال صالحاً حتى القرار.',
+      );
+      return false;
+    }
     AppFeedback.success(context, 'أُلغي السند وسُجّل السبب في سجل التدقيق.');
     return true;
   } on AppFailure catch (failure) {

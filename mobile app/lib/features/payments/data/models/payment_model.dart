@@ -344,3 +344,20 @@ class PaymentQuery extends Equatable {
   List<Object?> get props =>
       <Object?>[search, method, subscriberId, invoiceId, fromDate, toDate];
 }
+
+/// نتيجة طلب إلغاء سند: قد يُلغى فوراً، أو ينتظر اعتماد مشرف إذا تجاوز الحد
+/// المالي المحدد في إعدادات الخادم (خطة 2.0 — الفصل 5.3).
+class VoidPaymentOutcome extends Equatable {
+  const VoidPaymentOutcome({
+    required this.payment,
+    required this.pendingApproval,
+  });
+
+  final PaymentModel payment;
+
+  /// `true` يعني: السند ما زال صالحاً وطلب الإلغاء بانتظار المشرف.
+  final bool pendingApproval;
+
+  @override
+  List<Object?> get props => <Object?>[payment, pendingApproval];
+}

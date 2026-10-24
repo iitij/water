@@ -138,7 +138,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   /// الخادم لم يُلغِه. عند الانقطاع تُرمى `NetworkFailure` ويُطلب من المحصّل
   /// إعادة المحاولة (الإلغاء ليس عملية ميدانية حرجة كالتحصيل).
   @override
-  Future<PaymentModel> voidPayment(int id, {required String reason}) {
+  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(

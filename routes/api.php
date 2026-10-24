@@ -106,6 +106,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Payments / receipts.
     // إلغاء السند بدل حذفه — يجب أن يسبق مسار /payments/{id}.
     Route::post('/payments/{id}/void', [PaymentController::class, 'void'])->whereNumber('id');
+    // اعتماد الإلغاءات الكبيرة (2.0 — الفصل 5.3): القائمة ثم القرار.
+    Route::get('/payments/void-requests', [PaymentController::class, 'voidRequests']);
+    Route::post('/payments/{id}/void-decision', [PaymentController::class, 'voidDecision'])->whereNumber('id');
     Route::post('/payments/bulk-delete', [PaymentController::class, 'bulkDelete']);
     Route::get('/payments/{id}/pdf', [PaymentController::class, 'downloadPdf'])->name('api.payments.pdf');
     Route::get('/payments/{id}/whatsapp-link', [PaymentController::class, 'whatsappLink']);

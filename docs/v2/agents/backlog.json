@@ -285,10 +285,10 @@
       "agent": "A6",
       "subagent": "policy-enforcer",
       "task": "اعتماد المشرف للإلغاءات الكبيرة",
-      "files": "app/**, config/**",
+      "files": "app/Services/PaymentService.php, app/Http/Controllers/Api/PaymentController.php, app/Filament/Resources/VoidRequests/**, database/migrations/2026_10_24_000500_*, tests/Feature/PaymentVoidApprovalTest.php, lib/features/payments/**",
       "definition_of_done": "سند يتجاوز الحد ينتظر اعتماداً",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "طلب إلغاء معلّق (202) عند بلوغ حدّ Setting::void_approval_threshold + اعتماد/رفض مشرف + شاشة Filament + اختبار 7 حالات (لم يُشغَّل لعدم توفر PHP هنا)"
     },
     {
       "id": "S4-05",

@@ -63,7 +63,7 @@ class PaymentsRemoteDataSource {
   ///
   /// الخادم يحذف حركات دفتر الأستاذ ويعيد احتساب الفواتير والأرصدة، ويحفظ
   /// السبب والمُنفّذ في سجل التدقيق.
-  Future<PaymentModel> voidPayment(int id, {required String reason}) async {
+  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(
@@ -76,9 +76,10 @@ class PaymentsRemoteDataSource {
       body: <String, dynamic>{'reason': trimmed},
     );
     final map = JsonUtils.asMap(response);
-    if (map == null) return byId(id);
-    final data = JsonUtils.asMap(map['payment']) ?? JsonUtils.asMap(map['data']);
-    return data == null ? byId(id) : PaymentModel.fromJson(data);
+    final pending = map?['pending_approval'] == true;
+    final data = JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
+    final payment = data == null ? await byId(id) : PaymentModel.fromJson(data);
+    return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
   }
 
   /// #52 `POST /api/payments/bulk-delete`
