@@ -192,7 +192,7 @@ class ReminderPlanner {
         title: setting.kind.title,
         body: setting.kind.body,
         repeatsDaily: weekdays == null,
-        weekday: weekdays == null ? null : weekdays.first,
+        weekday: weekdays?.first,
       ));
     }
     planned.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));

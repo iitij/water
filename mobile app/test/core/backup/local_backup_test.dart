@@ -99,7 +99,7 @@ void main() {
       expect(decoded['format'], 'water-field-backup');
       expect(decoded['version'], BackupFormat.version);
       expect(decoded['app_version'], '2.0.0');
-      expect(decoded['counts']['readings'], 2);
+      expect((decoded['counts'] as Map<String, dynamic>)['readings'], 2);
       expect(decoded['checksum'], LocalBackupService.checksumOf(_sampleData()));
       expect(created.totalRows, 1 + 1 + 1 + 0 + 2 + 1 + 0);
     });
