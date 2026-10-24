@@ -15,6 +15,7 @@ import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
+import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
@@ -59,6 +60,7 @@ class PaymentFormScreen extends StatelessWidget {
           paymentsRepository: sl<PaymentsRepository>(),
           references: sl<ReferencesRemoteDataSource>(),
           meterId: invoice?.meterId ?? _singleMeterId(subscriber),
+          cashSessionService: trySl<CashSessionService>(),
         );
         if (invoice != null) {
           unawaited(cubit.openForInvoice(invoice!));

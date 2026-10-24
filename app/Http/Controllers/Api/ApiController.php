@@ -93,7 +93,10 @@ abstract class ApiController extends Controller
                 'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
             ],
             'collector' => [
-                'Invoice' => ['viewAny', 'view'], 'Payment' => ['viewAny', 'view', 'create', 'update'],
+                'Invoice' => ['viewAny', 'view'],
+                // `void`: المحصّل يطلب الإلغاء بسبب مكتوب؛ المبالغ الكبيرة تنتظر
+                // اعتماد مشرف داخل PaymentService::requestVoid.
+                'Payment' => ['viewAny', 'view', 'create', 'update', 'void'],
                 'Reading' => ['viewAny', 'view'], 'Meter' => ['viewAny', 'view'],
                 'Subscriber' => ['viewAny', 'view'], 'Square' => ['viewAny', 'view'],
             ],

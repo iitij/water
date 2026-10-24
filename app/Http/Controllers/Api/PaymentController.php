@@ -25,6 +25,14 @@ class PaymentController extends ApiController
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
         ])->latest('payment_date')->latest('id');
 
+        if ($request->filled('cash_session_id')) {
+            $query->where('cash_session_id', $request->integer('cash_session_id'));
+        }
+        if ($request->query('voided') === 'only') {
+            $query->whereNotNull('voided_at');
+        } elseif ($request->query('voided') !== 'all') {
+            $query->whereNull('voided_at');
+        }
         if ($request->filled('payment_method')) {
             $query->where('payment_method', $request->query('payment_method'));
         }
@@ -139,6 +147,107 @@ class PaymentController extends ApiController
         return response()->json(['message' => 'تم تحديث سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
 
+    /**
+     * إلغاء سند قبض (لا حذف). يتطلب سبباً وصلاحية `void:Payment`.
+     * مرجع: خطة الإصدار 2.0 — الفصل 5.3.
+     */
+    /**
+     * طلب إلغاء سند قبض.
+     *
+     * تحت الحد المالي: يُلغى فوراً ويُعاد 200 كما في v1.
+     * عند/فوق الحد: يُسجَّل طلب معلّق ويُعاد 202 مع `pending_approval: true`
+     * حتى يعتمده مشرف. لا يُحذف السند في أي حال.
+     */
+    public function void(Request $request, int $id, PaymentService $paymentService)
+    {
+        $this->authorizeApi(Payment::class, 'void');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+        ]);
+
+        $payment = Payment::findOrFail($id);
+        $result = $paymentService->requestVoid(
+            $payment,
+            (string) $data['reason'],
+            $request->user()->id,
+            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+        );
+
+        /** @var Payment $payment */
+        $payment = $result['payment'];
+        $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
+
+        if ($result['pending']) {
+            return response()->json([
+                'message' => 'السند يتجاوز حد الإلغاء المسموح؛ أُرسل طلب إلغاء لاعتماد المشرف.',
+                'pending_approval' => true,
+                'payment' => $payment,
+                'receipt_data' => $this->receiptData($payment),
+            ], 202);
+        }
+
+        return response()->json([
+            'message' => 'تم إلغاء سند القبض وإعادة احتساب الأرصدة.',
+            'pending_approval' => false,
+            'payment' => $payment,
+            'receipt_data' => $this->receiptData($payment),
+        ]);
+    }
+
+    /** طلبات الإلغاء المعلّقة — للمشرف فقط. */
+    public function voidRequests(Request $request)
+    {
+        $this->authorizeVoidApprover($request->user());
+
+        $payments = Payment::query()
+            ->voidRequested()
+            ->with(['subscriber:id,name,phone', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
+            ->latest('void_requested_at')
+            ->paginate($this->perPage($request));
+
+        return $payments->through(fn (Payment $payment) => [
+            'id' => $payment->id,
+            'receipt_number' => $payment->receipt_number,
+            'amount' => number_format((float) $payment->amount, 2, '.', ''),
+            'subscriber' => $payment->subscriber?->name,
+            'reason' => $payment->void_request_reason,
+            'requested_by' => $payment->voidRequester?->name,
+            'requested_at' => optional($payment->void_requested_at)->toIso8601String(),
+            'payment_date' => optional($payment->payment_date)->toDateString(),
+        ]);
+    }
+
+    /** قرار المشرف: اعتماد الإلغاء أو رفضه (مع ملاحظات). */
+    public function voidDecision(Request $request, int $id, PaymentService $paymentService)
+    {
+        $this->authorizeVoidApprover($request->user());
+
+        $data = $request->validate([
+            'approve' => ['required', 'boolean'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $payment = Payment::findOrFail($id);
+        $payment = $paymentService->decideVoidRequest(
+            $payment,
+            (bool) $data['approve'],
+            $request->user(),
+            $data['notes'] ?? null,
+            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+        );
+
+        $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
+
+        return response()->json([
+            'message' => $data['approve']
+                ? 'تم اعتماد إلغاء السند وإعادة احتساب الأرصدة.'
+                : 'تم رفض طلب الإلغاء وبقي السند صالحاً.',
+            'payment' => $payment,
+            'receipt_data' => $this->receiptData($payment),
+        ]);
+    }
+
     public function destroy(int $id)
     {
         $this->authorizeApi(Payment::class, 'delete');
@@ -195,9 +304,7 @@ class PaymentController extends ApiController
     {
         $payment->loadMissing(['subscriber.meters', 'meter', 'invoice', 'user']);
         $amount = (float) $payment->amount;
-        $amountInWords = class_exists(\NumberFormatter::class)
-            ? (new \NumberFormatter('ar', \NumberFormatter::SPELLOUT))->format($amount) . ' ريال يمني لا غير'
-            : null;
+        $amountInWords = \App\Support\ArabicNumber::spellout($amount);
         $invoiceRemaining = $payment->invoice ? $payment->invoice->getTrueRemainingAmount() : null;
         $subscriber = $payment->subscriber;
         $debit = $subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
@@ -219,7 +326,23 @@ class PaymentController extends ApiController
             'outstanding_balance' => number_format((float) $debit, 2, '.', ''),
             'credit_balance' => number_format((float) $credit, 2, '.', ''),
             'collector' => $payment->user?->name,
+            'voided' => $payment->voided_at !== null,
+            'void_reason' => $payment->void_reason,
+            'cash_session_id' => $payment->cash_session_id,
             'pdf_url' => url('/api/payments/' . $payment->id . '/pdf'),
         ];
+    }
+
+    /** اعتماد الإلغاء يحتاج صلاحية مشرف صريحة. */
+    private function authorizeVoidApprover(\App\Models\User $user): void
+    {
+        if ($this->isAdminUser($user)
+            || $user->can('payments.void.approve')
+            || $user->can('Approve:Payment')
+            || $user->can('approve_payment')) {
+            return;
+        }
+
+        abort(403, 'اعتماد إلغاء السند يتطلب صلاحية مشرف.');
     }
 }

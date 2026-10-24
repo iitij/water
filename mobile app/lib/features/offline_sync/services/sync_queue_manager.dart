@@ -10,7 +10,11 @@ import 'package:flutter/foundation.dart';
 import '../../../core/auth/session_service.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/network_info.dart';
+import '../../../core/sync/sync_retry_policy.dart';
+import '../domain/sync_batch.dart';
+import '../domain/sync_failure_planner.dart';
 import '../domain/sync_queue_item.dart';
+import '../domain/sync_queue_order.dart';
 import '../domain/sync_queue_repository.dart';
 
 class SyncQueueManager extends ChangeNotifier {
@@ -19,10 +23,12 @@ class SyncQueueManager extends ChangeNotifier {
     required SyncQueueRepository repository,
     required NetworkInfo networkInfo,
     required SessionService session,
+    SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
   })  : _dio = dio,
         _repository = repository,
         _networkInfo = networkInfo,
-        _session = session;
+        _session = session,
+        _retryPolicy = retryPolicy;
 
   static final RegExp _uuidPattern = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
@@ -32,6 +38,7 @@ class SyncQueueManager extends ChangeNotifier {
   final SyncQueueRepository _repository;
   final NetworkInfo _networkInfo;
   final SessionService _session;
+  final SyncRetryPolicy _retryPolicy;
 
   List<SyncQueueItem> _items = <SyncQueueItem>[];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -40,6 +47,7 @@ class SyncQueueManager extends ChangeNotifier {
   bool _isSyncing = false;
   bool _suppressExternalReload = false;
   bool? _isOnline;
+  Timer? _retryTimer;
 
   List<SyncQueueItem> get items => List<SyncQueueItem>.unmodifiable(_items);
   bool get isSyncing => _isSyncing;
@@ -48,16 +56,53 @@ class SyncQueueManager extends ChangeNotifier {
   int get failedCount =>
       _items.where((item) => item.status == SyncQueueStatus.failed).length;
 
+  /// صفوف تحتاج تدخلاً بشرياً (بيانات مرفوضة أو صلاحية) — لا تُعاد تلقائياً.
+  int get attentionCount => _items
+      .where((item) => item.status == SyncQueueStatus.needsAttention)
+      .length;
+
+  /// كل ما يحتاج تدخلاً: مرفوض + مستنفد.
+  int get blockedCount => failedCount + attentionCount;
+
+  /// عدد العمليات التي تنتظر مهلة إعادة المحاولة التلقائية.
+  int get waitingCount => _items
+      .where((item) =>
+          item.status == SyncQueueStatus.queued && item.nextAttemptAt != null)
+      .length;
+
+  /// أقرب موعد لمحاولة قادمة، أو `null` إن لم يكن هناك شيء مجدول.
+  DateTime? get nextRetryAt {
+    DateTime? earliest;
+    for (final item in _items) {
+      final next = item.nextAttemptAt;
+      if (next == null) continue;
+      if (earliest == null || next.isBefore(earliest)) earliest = next;
+    }
+    return earliest;
+  }
+
+  /// المهلة قبل المحاولة التالية لنفس عدد المحاولات — تعرضها شاشة المزامنة.
+  Duration? backoffFor(int attempts, {int? statusCode}) {
+    final decision = _retryPolicy.decide(
+      attempts: attempts,
+      statusCode: statusCode,
+    );
+    final next = decision.nextAttemptAt;
+    if (next == null) return null;
+    final delay = next.difference(DateTime.now().toUtc());
+    return delay.isNegative ? Duration.zero : delay;
+  }
+
   Future<void> initialize() async {
     if (_initialized) return;
     final loaded = await _repository.loadAll();
-    _items = loaded
-        .map(
-          (item) => item.status == SyncQueueStatus.syncing
-              ? item.copyWith(status: SyncQueueStatus.queued)
-              : item,
-        )
-        .toList(growable: true);
+    _items = SyncQueueOrder.sortForSync(
+      loaded.map(
+        (item) => item.status == SyncQueueStatus.syncing
+            ? item.copyWith(status: SyncQueueStatus.queued)
+            : item,
+      ),
+    ).toList(growable: true);
     await _runRepositoryWrite(() => _repository.saveAll(_items));
 
     _isOnline = await _networkInfo.isConnected;
@@ -87,7 +132,7 @@ class SyncQueueManager extends ChangeNotifier {
   /// another module (e.g. `ReadingsRepositoryImpl`) mutates `AppDatabase`.
   Future<void> reload() async {
     final fresh = await _repository.loadAll();
-    _items = fresh..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _items = SyncQueueOrder.sortForSync(fresh).toList(growable: true);
     notifyListeners();
     if (_isOnline == true &&
         !_isSyncing &&
@@ -132,12 +177,50 @@ class SyncQueueManager extends ChangeNotifier {
     );
   }
 
+  /// إلغاء سند قبض (بدل حذفه) — يُنفَّذ فوراً عند الاتصال، ويُحفظ في الطابور
+  /// عند الانقطاع حتى لا يضيع سبب الإلغاء.
+  Future<SyncQueueItem> enqueuePaymentVoid({
+    required int paymentId,
+    required String reason,
+  }) {
+    if (reason.trim().length < 10) {
+      throw StateError('سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.');
+    }
+    return _enqueue(
+      SyncQueueType.paymentVoid,
+      <String, dynamic>{
+        'payment_id': paymentId,
+        'reason': reason.trim(),
+        'requested_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+  }
+
+  /// إغلاق صندوق المحصّل من الميدان؛ يُعاد إرساله بعد الانقطاع بنفس المعرّف.
+  Future<SyncQueueItem> enqueueCashSessionClose({
+    required int cashSessionId,
+    required num countedCash,
+    String? notes,
+  }) {
+    return _enqueue(
+      SyncQueueType.cashSessionClose,
+      <String, dynamic>{
+        'cash_session_id': cashSessionId,
+        'counted_amount': countedCash,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        'client_closed_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+  }
+
   Future<void> retry(String id) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index < 0) return;
     final updated = _items[index].copyWith(
       status: SyncQueueStatus.queued,
       clearError: true,
+      clearNextAttempt: true,
+      clearStatusCode: true,
     );
     _items[index] = updated;
     await _runRepositoryWrite(() => _repository.upsert(updated));
@@ -148,10 +231,13 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> retryFailed() async {
     final updatedItems = <SyncQueueItem>[];
     for (var i = 0; i < _items.length; i++) {
-      if (_items[i].status == SyncQueueStatus.failed) {
+      if (_items[i].status == SyncQueueStatus.failed ||
+          _items[i].status == SyncQueueStatus.needsAttention) {
         final reset = _items[i].copyWith(
           status: SyncQueueStatus.queued,
           clearError: true,
+          clearNextAttempt: true,
+          clearStatusCode: true,
         );
         _items[i] = reset;
         updatedItems.add(reset);
@@ -173,8 +259,9 @@ class SyncQueueManager extends ChangeNotifier {
     _isSyncing = true;
     notifyListeners();
     try {
-      _items = (await _repository.loadAll())
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      // الترتيب: النقد أولاً ثم الأقدم؛ ومهلة التهدئة تُحترم داخل الحلقة.
+      _items = SyncQueueOrder.sortForSync(await _repository.loadAll())
+          .toList(growable: true);
       if (_items.isEmpty) {
         notifyListeners();
         return;
@@ -186,10 +273,14 @@ class SyncQueueManager extends ChangeNotifier {
         return;
       }
 
-      final orderedIds = _items
-          .where((item) => item.status != SyncQueueStatus.syncing)
+      final now = DateTime.now();
+      // الصفوف التي تحتاج تدخلاً بشرياً (`failed`) لا تُعاد تلقائياً؛ يعيدها
+      // المستخدم بزر «إعادة المحاولة». أما الأخطاء المؤقتة فتبقى `queued`
+      // بمهلة تهدئة ويُعاد إرسالها تلقائياً عند انقضائها.
+      final orderedIds = eligibleForSync(_items, now)
           .map((item) => item.id)
           .toList(growable: false);
+      _scheduleRetryWakeUp(now);
 
       for (final id in orderedIds) {
         final index = _items.indexWhere((item) => item.id == id);
@@ -197,21 +288,18 @@ class SyncQueueManager extends ChangeNotifier {
         final currentUserId = _session.user?['id']?.toString();
         var item = _items[index];
 
+        // احترام مهلة التهدئة: عنصر واحد ينتظر لا يجوز أن يعطّل بقية الطابور،
+        // لكن الترتيب الصارم (FIFO) يبقى قائماً لكل ما حان وقته.
+        if (!item.isReadyAt(now)) {
+          continue;
+        }
+
         // Adopt unowned legacy/field rows into the active authenticated account,
         // while strictly protecting items owned by a different user ID.
         if ((item.ownerUserId == null || item.ownerUserId!.isEmpty) &&
             currentUserId != null &&
             currentUserId.isNotEmpty) {
-          item = SyncQueueItem(
-            id: item.id,
-            type: item.type,
-            payload: item.payload,
-            status: item.status,
-            createdAt: item.createdAt,
-            ownerUserId: currentUserId,
-            attempts: item.attempts,
-            lastError: item.lastError,
-          );
+          item = item.copyWith(ownerUserId: currentUserId);
         }
 
         final syncingItem = item.copyWith(
@@ -228,47 +316,48 @@ class SyncQueueManager extends ChangeNotifier {
           _items.removeWhere((candidate) => candidate.id == id);
           notifyListeners();
         } catch (error) {
-          final errText = _errorMessage(error);
           final currentIndex = _items.indexWhere((candidate) => candidate.id == id);
           if (currentIndex >= 0) {
-            final failedItem = _items[currentIndex].copyWith(
-              status: SyncQueueStatus.failed,
-              lastError: errText,
-            );
-            _items[currentIndex] = failedItem;
+            final recorded = _applyFailure(_items[currentIndex], error);
+            _items[currentIndex] = recorded;
             await _runRepositoryWrite(
-              () => _repository.recordSyncFailure(item: failedItem, error: errText),
+              () => _repository.recordSyncFailure(
+                item: recorded,
+                error: recorded.lastError ?? 'تعذر إرسال العملية.',
+                retryAt: recorded.nextAttemptAt,
+              ),
             );
             notifyListeners();
           }
-          _isOnline = await _networkInfo.isConnected;
+          await _refreshOnlineState();
           // Keep strict FIFO ordering: later operations may depend on the first failure.
           break;
         }
       }
     } catch (error) {
-      final errText = _errorMessage(error);
       final syncingIndex = _items.indexWhere(
         (item) => item.status == SyncQueueStatus.syncing,
       );
       if (syncingIndex >= 0) {
-        final failedItem = _items[syncingIndex].copyWith(
-          status: SyncQueueStatus.failed,
-          lastError: errText,
-        );
-        _items[syncingIndex] = failedItem;
+        final recorded = _applyFailure(_items[syncingIndex], error);
+        _items[syncingIndex] = recorded;
         try {
           await _runRepositoryWrite(
-            () => _repository.recordSyncFailure(item: failedItem, error: errText),
+            () => _repository.recordSyncFailure(
+              item: recorded,
+              error: recorded.lastError ?? 'تعذر إرسال العملية.',
+              retryAt: recorded.nextAttemptAt,
+            ),
           );
         } catch (_) {
           // Keep the in-memory failure visible even if local storage is unavailable.
         }
       }
-      _isOnline = false;
+      await _refreshOnlineState();
       notifyListeners();
     } finally {
       _isSyncing = false;
+      _scheduleRetryWakeUp(DateTime.now());
       notifyListeners();
     }
   }
@@ -324,7 +413,70 @@ class SyncQueueManager extends ChangeNotifier {
         await _sendReading(item);
       case SyncQueueType.payment:
         await _sendPayment(item);
+      case SyncQueueType.paymentVoid:
+        await _sendPaymentVoid(item);
+      case SyncQueueType.cashSessionClose:
+        await _sendCashSessionClose(item);
     }
+  }
+
+  /// إلغاء سند قبض. الخادم يرفض طلباً بلا سبب واضح (10 أحرف على الأقل).
+  Future<void> _sendPaymentVoid(SyncQueueItem item) async {
+    final payload = Map<String, dynamic>.from(item.payload);
+    payload.remove('owner_user_id');
+    final paymentId = _toNullableInt(payload.remove('payment_id') ?? payload['id']);
+    if (paymentId == null) {
+      throw StateError('سند الإلغاء لا يحمل رقم سند صالحاً.');
+    }
+    final reason = payload['reason']?.toString().trim() ?? '';
+    if (reason.length < 10) {
+      throw StateError('سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.');
+    }
+
+    final response = await _dio.post<dynamic>(
+      ApiEndpoints.voidPayment(paymentId),
+      data: <String, dynamic>{
+        'reason': reason,
+        if (payload['sync_uuid'] != null) 'sync_uuid': payload['sync_uuid'],
+      },
+      options: Options(headers: <String, dynamic>{'Idempotency-Key': item.id}),
+    );
+    final responseMap = _asMap(response.data);
+    await _runRepositoryWrite(
+      () => _repository.markPaymentSynced(
+        id: item.id,
+        serverResponseJson: responseMap == null ? null : jsonEncode(responseMap),
+      ),
+    );
+  }
+
+  /// إغلاق صندوق المحصّل. يُرسل النقد المعدود فقط؛ الأرقام المتوقعة تُحسب
+  /// على الخادم من السندات الفعلية (خطة 2.0 — الفصل 5.2).
+  Future<void> _sendCashSessionClose(SyncQueueItem item) async {
+    final payload = Map<String, dynamic>.from(item.payload);
+    payload.remove('owner_user_id');
+    final sessionId = _toNullableInt(payload.remove('cash_session_id'));
+    if (sessionId == null) {
+      throw StateError('طلب إغلاق الصندوق لا يحمل رقم صندوق صالحاً.');
+    }
+    final counted = payload['counted_amount'] ?? payload['counted_cash'];
+    final body = <String, dynamic>{
+      'counted_amount': counted,
+      if (payload['notes'] != null) 'notes': payload['notes'],
+    };
+
+    final response = await _dio.post<dynamic>(
+      ApiEndpoints.closeCashSession(sessionId),
+      data: body,
+      options: Options(headers: <String, dynamic>{'Idempotency-Key': item.id}),
+    );
+    final responseMap = _asMap(response.data);
+    await _runRepositoryWrite(
+      () => _repository.markPaymentSynced(
+        id: item.id,
+        serverResponseJson: responseMap == null ? null : jsonEncode(responseMap),
+      ),
+    );
   }
 
   Future<void> _sendReading(SyncQueueItem item) async {
@@ -427,6 +579,56 @@ class SyncQueueManager extends ChangeNotifier {
     );
   }
 
+  /// يحوّل فشلاً إلى حالة صف عبر دالة نقية (`planSyncFailure`) قابلة للاختبار.
+  SyncQueueItem _applyFailure(SyncQueueItem item, Object error) {
+    final plan = planSyncFailure(
+      attempts: item.attempts,
+      statusCode: _statusCodeOf(error),
+      serverMessage: _serverMessageOf(error) ?? _errorMessage(error),
+    );
+    return applyFailurePlan(item, plan);
+  }
+
+  int? _statusCodeOf(Object error) {
+    if (error is DioException) return error.response?.statusCode;
+    return null;
+  }
+
+  String? _serverMessageOf(Object error) {
+    if (error is! DioException) return null;
+    final body = _asMap(error.response?.data);
+    final message = body?['message']?.toString();
+    return message != null && message.trim().isNotEmpty ? message.trim() : null;
+  }
+
+  Future<void> _refreshOnlineState() async {
+    try {
+      _isOnline = await _networkInfo.isConnected;
+    } catch (_) {
+      _isOnline = false;
+    }
+  }
+
+  /// يوقظ المزامنة عند أول موعد استحقاق قادم، مرة واحدة فقط.
+  void _scheduleRetryWakeUp(DateTime now) {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    DateTime? earliest;
+    for (final item in _items) {
+      final next = item.nextAttemptAt;
+      if (next == null || !next.isAfter(now)) continue;
+      if (earliest == null || next.isBefore(earliest)) earliest = next;
+    }
+    if (earliest == null) return;
+    final delay = earliest.difference(now);
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      if (_session.isReady && _session.isAuthenticated && _isOnline != false) {
+        unawaited(syncPending());
+      }
+    });
+  }
+
   Future<T> _runRepositoryWrite<T>(Future<T> Function() action) async {
     _suppressExternalReload = true;
     try {
@@ -493,6 +695,7 @@ class SyncQueueManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _session.removeListener(_handleSessionChanged);
     _connectivitySubscription?.cancel();
     _externalChangeSubscription?.cancel();

@@ -7,6 +7,7 @@ import '../../features/readings/data/repositories/readings_repository_impl.dart'
 import '../../features/readings/data/services/reading_invoice_actions_service.dart';
 import '../../features/readings/domain/readings_repository.dart';
 import '../database/app_database.dart';
+import '../database/database_encryption.dart';
 import '../database/offline_pack_downloader.dart';
 import '../database/sync_queue_manager.dart';
 import '../database/sync_queue_repository.dart';
@@ -31,8 +32,9 @@ class FieldOperationsModule {
     AppDatabase? database,
     bool autoStartSync = true,
     String? Function()? ownerUserIdProvider,
-  }) {
-    final appDatabase = database ?? AppDatabase.open();
+    DatabaseKeyProvider keyProvider = const NoopDatabaseKeyProvider(),
+  }) async {
+    final appDatabase = database ?? await AppDatabase.open(keyProvider: keyProvider);
     final metersRepository = MetersRepositoryImpl(
       dio: dio,
       database: appDatabase,
@@ -51,8 +53,7 @@ class FieldOperationsModule {
       syncManager.startListening();
     }
 
-    return Future<FieldOperationsModule>.value(
-      FieldOperationsModule._(
+    return FieldOperationsModule._(
         database: appDatabase,
         metersRepository: metersRepository,
         readingsRepository: readingsRepository,
@@ -68,7 +69,6 @@ class FieldOperationsModule {
           manager: syncManager,
         ),
         invoiceActions: ReadingInvoiceActionsService(dio),
-      ),
     );
   }
 

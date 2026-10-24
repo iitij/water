@@ -23,11 +23,25 @@ class Payment extends Model
         'notes',
         'reason',
         'sync_uuid',
+        'cash_session_id',
+        'voided_at',
+        'void_reason',
+        'voided_by',
+        'voided_via',
+        'void_requested_at',
+        'void_requested_by',
+        'void_request_reason',
+        'void_decision_notes',
+        'void_decided_by',
+        'void_decided_at',
     ];
 
     protected $casts = [
         'payment_date' => 'datetime',
         'amount' => 'decimal:2',
+        'voided_at' => 'datetime',
+        'void_requested_at' => 'datetime',
+        'void_decided_at' => 'datetime',
     ];
 
     // ─── Relationships ───
@@ -50,6 +64,50 @@ class Payment extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function cashSession(): BelongsTo
+    {
+        return $this->belongsTo(CashSession::class);
+    }
+
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    /** المحصّل الذي طلب الإلغاء (قبل الاعتماد). */
+    public function voidRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'void_requested_by');
+    }
+
+    /** المشرف الذي بتّ في طلب الإلغاء. */
+    public function voidDecider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'void_decided_by');
+    }
+
+    /** طلب إلغاء معلّق: طُلب ولم يُلغَ بعد ولم يُرفض. */
+    public function scopeVoidRequested(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNotNull('void_requested_at')->whereNull('voided_at');
+    }
+
+    public function hasPendingVoidRequest(): bool
+    {
+        return $this->void_requested_at !== null && $this->voided_at === null;
+    }
+
+    /** السندات الصالحة فقط — تُستخدم في كل حساب مالي. */
+    public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNull('voided_at');
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
     }
 
     protected static function booted()

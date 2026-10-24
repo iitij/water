@@ -9,6 +9,9 @@ class RouteNames {
   static const globalSearch = '/search';
   static const profile = '/profile';
   static const offlineSync = '/sync';
+  static const diagnostics = '/diagnostics';
+  static const routeMode = '/route-mode';
+  static const appLock = '/app-lock';
 
   // Shell destinations (five-tab navigation)
   static const fieldHub = '/field';
@@ -24,6 +27,7 @@ class RouteNames {
 
   // Dev 3: Finance, Invoices, Payments & Tariffs
   static const quickCollector = '/collector';
+  static const cashSession = '/cash-session';
   static const invoices = '/invoices';
   static const invoiceIssue = '/issue-invoice';
   static const invoiceCreate = '/invoices/create';

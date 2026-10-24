@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_sync_queue.dart';
 import '../../../../core/network/finance_endpoints.dart';
+import '../../../audit/services/audit_log_service.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../invoices/data/datasources/invoices_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -26,18 +29,23 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     required InvoicesRemoteDataSource invoices,
     required NetworkInfo networkInfo,
     FinanceSyncQueueRepository? syncQueue,
+    AuditLogService? audit,
     Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
   })  : _remote = remote,
         _invoices = invoices,
         _network = networkInfo,
         _syncQueue = syncQueue,
+        _audit = audit,
         _uuid = uuid;
 
   final PaymentsRemoteDataSource _remote;
   final InvoicesRemoteDataSource _invoices;
   final NetworkInfo _network;
   final FinanceSyncQueueRepository? _syncQueue;
+
+  /// سجل التدقيق المحلي (S4-05): يسجّل التحصيل والإلغاء حتى بلا شبكة.
+  final AuditLogService? _audit;
   final Uuid _uuid;
 
   /// تعطيل الطابور المحلي عند الحاجة في الاختبارات.
@@ -66,13 +74,25 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     }
 
     try {
-      if (request.invoiceId != null) {
-        return await _remote.payInvoice(
-          request.invoiceId!,
-          request.toPayPayload(syncUuid: syncUuid),
-        );
-      }
-      return await _remote.create(request.toCreatePayload(syncUuid: syncUuid));
+      final outcome = request.invoiceId != null
+          ? await _remote.payInvoice(
+              request.invoiceId!,
+              request.toPayPayload(syncUuid: syncUuid),
+            )
+          : await _remote.create(request.toCreatePayload(syncUuid: syncUuid));
+
+      _record(
+        'payment.collected',
+        entityId: request.subscriberId,
+        after: <String, dynamic>{
+          'amount': request.amount,
+          'method': request.method,
+          'invoice_id': request.invoiceId,
+          'meter_id': request.meterId,
+          'sync_uuid': syncUuid,
+        },
+      );
+      return outcome;
     } on AppFailure catch (failure) {
       // انقطاع أثناء الطلب → ندرجه في الطابور بنفس sync_uuid بدل إخبار المحصل بالفشل.
       if (_isNetworkLike(failure) && offlineEnabled) {
@@ -107,6 +127,17 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
       ),
     );
 
+    _record(
+      'payment.queued_offline',
+      entityId: request.subscriberId,
+      after: <String, dynamic>{
+        'amount': request.amount,
+        'method': request.method,
+        'invoice_id': request.invoiceId,
+        'sync_uuid': syncUuid,
+      },
+    );
+
     return CollectPaymentOutcome(
       payment: PaymentModel(
         id: 0,
@@ -127,12 +158,79 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     );
   }
 
+  /// تسجيل أفضل-جهد: فشل السجل لا يجوز أن يُفشل عملية مالية.
+  void _record(
+    String event, {
+    String? entityType,
+    Object? entityId,
+    Map<String, dynamic>? after,
+  }) {
+    final audit = _audit;
+    if (audit == null) return;
+    unawaited(() async {
+      await audit.record(event, entityType: entityType, entityId: entityId, after: after);
+      await audit.flush();
+    }());
+  }
+
   static bool _isNetworkLike(AppFailure failure) =>
       failure is NetworkFailure || failure is TimeoutFailure || failure.statusCode == 0;
 
   @override
   Future<PaymentModel> update(int id, Map<String, dynamic> payload) =>
       _remote.update(id, payload);
+
+  /// الإلغاء لا يُنفَّذ محلياً أبداً: الحكم النهائي للخادم (قد يطلبه اعتماد
+  /// مشرف). عند انقطاع الشبكة يُحفظ **طلب** الإلغاء في طابور المزامنة بسبب
+  /// مكتوب، ويُرسَل تلقائياً عند العودة؛ السند يبقى صالحاً حتى يقبل الخادم.
+  @override
+  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
+    final trimmed = reason.trim();
+    if (trimmed.length < 10) {
+      throw const ValidationFailure(
+        'اكتب سبب الإلغاء (10 أحرف على الأقل) ليُسجَّل في سجل التدقيق.',
+        <String, List<String>>{},
+      );
+    }
+
+    try {
+      final outcome = await _remote.voidPayment(id, reason: trimmed);
+      _record(
+        outcome.pendingApproval ? 'payment.void_pending_approval' : 'payment.voided',
+        entityType: 'Payment',
+        entityId: id,
+        after: <String, dynamic>{'reason': trimmed},
+      );
+      return outcome;
+    } on AppFailure catch (failure) {
+      final queue = _syncQueue;
+      if (!offlineEnabled || queue == null || !_isNetworkLike(failure)) {
+        rethrow;
+      }
+
+      await queue.enqueue(
+        SyncAction(
+          type: 'payment.void',
+          payload: <String, dynamic>{
+            'payment_id': id,
+            'reason': trimmed,
+          },
+          createdAt: DateTime.now(),
+          idempotencyKey: _uuid.v4(),
+          sourceModule: 'payments',
+        ),
+      );
+
+      _record(
+        'payment.void_queued_offline',
+        entityType: 'Payment',
+        entityId: id,
+        after: <String, dynamic>{'reason': trimmed},
+      );
+
+      return const VoidPaymentOutcome(queuedOffline: true);
+    }
+  }
 
   @override
   Future<void> delete(int id) => _remote.delete(id);

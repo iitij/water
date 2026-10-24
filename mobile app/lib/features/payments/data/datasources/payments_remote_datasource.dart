@@ -59,6 +59,29 @@ class PaymentsRemoteDataSource {
   /// #52 `DELETE /api/payments/{id}`
   Future<void> delete(int id) => _client.delete(FinanceEndpoints.payment(id));
 
+  /// `POST /api/payments/{id}/void` — الإلغاء بدل الحذف.
+  ///
+  /// الخادم يحذف حركات دفتر الأستاذ ويعيد احتساب الفواتير والأرصدة، ويحفظ
+  /// السبب والمُنفّذ في سجل التدقيق.
+  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
+    final trimmed = reason.trim();
+    if (trimmed.length < 10) {
+      throw const ValidationFailure(
+        'سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.',
+        <String, List<String>>{},
+      );
+    }
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoid(id),
+      body: <String, dynamic>{'reason': trimmed},
+    );
+    final map = JsonUtils.asMap(response);
+    final pending = map?['pending_approval'] == true;
+    final data = JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
+    final payment = data == null ? await byId(id) : PaymentModel.fromJson(data);
+    return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
+  }
+
   /// #52 `POST /api/payments/bulk-delete`
   Future<int> bulkDelete(List<int> ids) async {
     final response = await _client.post(

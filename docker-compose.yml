@@ -1,0 +1,44 @@
+# بيئة اختبار كاملة بأمر واحد: docker compose up --build
+# (خطة 2.0 — S1، بطاقة S1-06)
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: water
+      MYSQL_USER: water
+      MYSQL_PASSWORD: water
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - water_db:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: water
+      DB_USERNAME: water
+      DB_PASSWORD: water
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/var/www/html/storage
+
+volumes:
+  water_db:

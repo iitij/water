@@ -2,20 +2,42 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
+import '../../diagnostics/error_reporter.dart';
+
 class ErrorInterceptor extends Interceptor {
+  ErrorInterceptor({ErrorReporter? errorReporter}) : _reporter = errorReporter;
+
   Future<void> Function()? onUnauthorized;
+  final ErrorReporter? _reporter;
+
+  /// رمز الخادم للجهاز المُبطَل (خطة 2.0 — الفصل 9.7).
+  static const String deviceRevokedCode = 'DEVICE_REVOKED';
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
+    // 401 يعني إمّا انتهاء الجلسة أو إبطال الجهاز من لوحة الإدارة؛ في الحالتين
+    // لا مفر من الخروج وتسجيل الدخول من جديد.
     if (err.response?.statusCode == 401) {
       final callback = onUnauthorized;
       if (callback != null) unawaited(callback());
     }
     final message = _messageFor(err);
+    _reporter?.report(
+      err,
+      stackTrace: err.stackTrace,
+      context: 'http',
+      statusCode: err.response?.statusCode,
+      endpoint: err.requestOptions.path,
+    );
     handler.reject(err.copyWith(message: message));
   }
 
   String _messageFor(DioException error) {
     final response = error.response;
+    final body = response?.data;
+    if (body is Map && body['code']?.toString() == deviceRevokedCode) {
+      return 'تم إيقاف هذا الجهاز من لوحة الإدارة. سجّل الدخول من جهاز مصرّح.';
+    }
     final statusCode = response?.statusCode;
     final serverMessage = _firstServerMessage(response?.data);
 

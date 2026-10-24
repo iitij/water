@@ -69,11 +69,13 @@ class SharedPreferencesSyncQueueRepository implements SyncQueueRepository {
   Future<void> recordSyncFailure({
     required SyncQueueItem item,
     required String error,
+    DateTime? retryAt,
   }) async {
     await upsert(
       item.copyWith(
-        status: SyncQueueStatus.failed,
+        status: retryAt == null ? SyncQueueStatus.failed : SyncQueueStatus.queued,
         lastError: error,
+        nextAttemptAt: retryAt,
       ),
     );
   }

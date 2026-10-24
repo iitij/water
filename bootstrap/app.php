@@ -13,7 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // يرفض أي طلب من جهاز أُبطل (خطة 2.0 — الفصل 9.7).
+        $middleware->api(append: [
+            \App\Http\Middleware\EnsureDeviceIsActive::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

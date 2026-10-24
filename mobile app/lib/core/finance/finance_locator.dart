@@ -16,5 +16,11 @@ T sl<T extends Object>() {
   return GetIt.I<T>();
 }
 
+/// الاختصار الآمن: يعيد `null` إذا لم تُسجَّل التبعية بعد.
+///
+/// يُستخدم للتبعيات الاختيارية الجديدة (مثل صندوق المحصّل) حتى لا تتعطل
+/// الشاشات القديمة في الاختبارات التي لا تحمّل الوحدة كاملة.
+T? trySl<T extends Object>() => GetIt.I.isRegistered<T>() ? GetIt.I<T>() : null;
+
 /// الوحدة مسجّلة؟ (تُستعمل في الاختبارات و`FinanceModule.ensure`).
 bool get isFinanceModuleReady => GetIt.I.isRegistered<FinanceApiClient>();

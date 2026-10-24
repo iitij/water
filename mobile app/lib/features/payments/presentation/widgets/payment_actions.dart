@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/services/esc_pos/thermal_ticket.dart';
@@ -117,6 +118,109 @@ Future<void> sendPaymentWhatsapp(
   AppFeedback.error(context, result.error ?? 'فشل الإرسال.');
 }
 
+/// حوار سبب الإلغاء — لا يقبل أقل من 10 أحرف تطابق قاعدة الخادم.
+///
+/// يعيد السبب المُدخل أو `null` عند الإلغاء.
+Future<String?> askVoidReason(BuildContext context, PaymentModel payment) {
+  final controller = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('إلغاء سند القبض'),
+      content: Form(
+        key: formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'السند ${payment.receiptNumber} بقيمة ${payment.amount.toStringAsFixed(2)} '
+              'سيُعلَّم ملغىً، وتُعاد الفواتير والأرصدة إلى ما كانت عليه. '
+              'يبقى السند في السجل مع سبب الإلغاء.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 3,
+              maxLength: 500,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'سبب الإلغاء (إلزامي)',
+                hintText: 'مثال: سُجّل السند على مشترك خطأ أثناء التحصيل الميداني',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final text = value?.trim() ?? '';
+                if (text.length < 10) {
+                  return 'اكتب سبباً واضحاً لا يقل عن 10 أحرف.';
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('تراجع'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          onPressed: () {
+            if (formKey.currentState?.validate() != true) return;
+            Navigator.of(dialogContext).pop(controller.text.trim());
+          },
+          child: const Text('تأكيد الإلغاء'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// إلغاء سند قبض مع تسجيل السبب (خطة 2.0 — الفصل 5.3).
+///
+/// يعيد `true` عند النجاح حتى تحدّث الشاشة قائمتها.
+Future<bool> voidPaymentWithReason(
+  BuildContext context,
+  PaymentModel payment,
+) async {
+  final reason = await askVoidReason(context, payment);
+  if (reason == null || reason.trim().length < 10) return false;
+  if (!context.mounted) return false;
+
+  try {
+    final outcome = await sl<PaymentsRepository>().voidPayment(payment.id, reason: reason);
+    if (!context.mounted) return true;
+    if (outcome.queuedOffline) {
+      AppFeedback.info(
+        context,
+        'لا توجد شبكة الآن. حُفظ طلب الإلغاء في طابور المزامنة وسيُرسل '
+        'تلقائياً عند عودة الاتصال؛ السند ما زال صالحاً حتى ذلك الحين.',
+      );
+      return false;
+    }
+    if (outcome.pendingApproval) {
+      AppFeedback.info(
+        context,
+        'مبلغ السند يتجاوز حدّ الإلغاء المسموح. أُرسل طلب إلغاء للمشرف، '
+        'والسند ما زال صالحاً حتى القرار.',
+      );
+      return false;
+    }
+    AppFeedback.success(context, 'أُلغي السند وسُجّل السبب في سجل التدقيق.');
+    return true;
+  } on AppFailure catch (failure) {
+    if (!context.mounted) return false;
+    AppFeedback.error(context, failure.message);
+    return false;
+  }
+}
+
 /// قائمة إجراءات السند (ضغطة طويلة على بطاقته أو من شاشة التفاصيل).
 Future<void> showPaymentActionSheet(
   BuildContext context, {
@@ -143,6 +247,16 @@ Future<void> showPaymentActionSheet(
         icon: Icons.chat_outlined,
         label: 'إرسال واتساب',
         run: () => sendPaymentWhatsapp(context, payment, receiptData: receiptData),
+      ),
+    if (!payment.isVoided)
+      _PaymentSheetAction(
+        icon: Icons.block_outlined,
+        label: 'إلغاء السند بسبب مكتوب',
+        destructive: true,
+        run: () async {
+          final cancelled = await voidPaymentWithReason(context, payment);
+          if (cancelled) await onDeleted?.call();
+        },
       ),
     if (onDeleted != null)
       _PaymentSheetAction(

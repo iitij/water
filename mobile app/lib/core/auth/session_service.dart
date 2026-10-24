@@ -152,11 +152,28 @@ class SessionService extends ChangeNotifier {
     }
   }
 
+  /// مستمعون يُبلَّغون عند مسح الجلسة (تسجيل خروج/انتهاء) — تُستخدم لتصفير
+  /// حالة الصندوق وذاكرة التحديث بدل ترك بيانات حساب سابق ظاهرة.
+  final List<VoidCallback> _clearListeners = <VoidCallback>[];
+
+  void addSessionClearedListener(VoidCallback listener) =>
+      _clearListeners.add(listener);
+
+  void removeSessionClearedListener(VoidCallback listener) =>
+      _clearListeners.remove(listener);
+
   Future<void> _clearLocalSession() async {
     _token = null;
     _user = null;
     _offlineCache.clear();
     await _secureStorage.clearSession();
+    for (final listener in List<VoidCallback>.of(_clearListeners)) {
+      try {
+        listener();
+      } catch (_) {
+        // مستمع معطوب لا يجوز أن يمنع تسجيل الخروج.
+      }
+    }
   }
 
   Map<String, dynamic>? _extractUser(dynamic source) {

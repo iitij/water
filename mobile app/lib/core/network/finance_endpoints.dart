@@ -37,6 +37,9 @@ class FinanceEndpoints {
   static const String payments = '/payments';
   static const String paymentsBulkDelete = '/payments/bulk-delete';
   static String payment(int id) => '/payments/$id';
+
+  /// إلغاء سند بدل حذفه (خطة 2.0 — الفصل 5.3).
+  static String paymentVoid(int id) => '/payments/$id/void';
   static String paymentPdf(int id) => '/payments/$id/pdf';
   static String paymentWhatsappLink(int id) => '/payments/$id/whatsapp-link';
   static String paymentSendWhatsapp(int id) => '/payments/$id/send-whatsapp';
@@ -44,6 +47,9 @@ class FinanceEndpoints {
   /// `GET /api/subscribers/{id}/unpaid-invoices-summary` — للتحصيل التلقائي الأحدث.
   static String subscriberDueSummary(int subscriberId) =>
       '/subscribers/$subscriberId/unpaid-invoices-summary';
+
+  // ─── صندوق المحصّل (S4-06) ─────────────────────────────────────────────
+  static String cashSessionReportPdf(int id) => '/cash-sessions/$id/report/pdf';
 
   // ─── المجموعة 9: التعرفة ───────────────────────────────────────────────
   static const String tariffs = '/tariffs';

@@ -12,6 +12,8 @@ class SyncQueueItem extends Equatable {
     this.ownerUserId,
     this.attempts = 0,
     this.lastError,
+    this.nextAttemptAt,
+    this.lastStatusCode,
   });
 
   final String id;
@@ -23,20 +25,41 @@ class SyncQueueItem extends Equatable {
   final int attempts;
   final String? lastError;
 
+  /// متى يُسمح بمحاولة الإرسال التالية (فترة تهدئة). `null` يعني «فوراً».
+  final DateTime? nextAttemptAt;
+
+  /// رمز HTTP لآخر فشل، يُستخدم في شاشة المزامنة وفي تقرير الدعم.
+  final int? lastStatusCode;
+
+  bool isReadyAt(DateTime now) {
+    final next = nextAttemptAt;
+    return next == null || !next.isAfter(now);
+  }
+
   SyncQueueItem copyWith({
     SyncQueueStatus? status,
     int? attempts,
+    String? ownerUserId,
     String? lastError,
     bool clearError = false,
-  }) => SyncQueueItem(
+    DateTime? nextAttemptAt,
+    bool clearNextAttempt = false,
+    int? lastStatusCode,
+    bool clearStatusCode = false,
+  }) =>
+      SyncQueueItem(
         id: id,
         type: type,
         payload: payload,
         status: status ?? this.status,
         createdAt: createdAt,
-        ownerUserId: ownerUserId,
+        ownerUserId: ownerUserId ?? this.ownerUserId,
         attempts: attempts ?? this.attempts,
         lastError: clearError ? null : (lastError ?? this.lastError),
+        nextAttemptAt:
+            clearNextAttempt ? null : (nextAttemptAt ?? this.nextAttemptAt),
+        lastStatusCode:
+            clearStatusCode ? null : (lastStatusCode ?? this.lastStatusCode),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -48,6 +71,8 @@ class SyncQueueItem extends Equatable {
         'owner_user_id': ownerUserId,
         'attempts': attempts,
         'last_error': lastError,
+        'next_attempt_at': nextAttemptAt?.toIso8601String(),
+        'last_status_code': lastStatusCode,
       };
 
   factory SyncQueueItem.fromJson(Map<String, dynamic> json) => SyncQueueItem(
@@ -67,6 +92,8 @@ class SyncQueueItem extends Equatable {
         ownerUserId: json['owner_user_id']?.toString(),
         attempts: int.tryParse(json['attempts']?.toString() ?? '') ?? 0,
         lastError: json['last_error']?.toString(),
+        nextAttemptAt: DateTime.tryParse(json['next_attempt_at']?.toString() ?? ''),
+        lastStatusCode: int.tryParse(json['last_status_code']?.toString() ?? ''),
       );
 
   static String encodeList(List<SyncQueueItem> items) =>
@@ -89,8 +116,38 @@ class SyncQueueItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => <Object?>[id, type, payload, status, createdAt, ownerUserId, attempts, lastError];
+  List<Object?> get props => <Object?>[
+        id,
+        type,
+        payload,
+        status,
+        createdAt,
+        ownerUserId,
+        attempts,
+        lastError,
+        nextAttemptAt,
+        lastStatusCode,
+      ];
 }
 
-enum SyncQueueType { reading, payment }
-enum SyncQueueStatus { queued, syncing, failed }
+enum SyncQueueType {
+  reading,
+  payment,
+
+  /// إلغاء سند قبض بدل حذفه (خطة 2.0 — الفصل 5.3).
+  paymentVoid,
+
+  /// إغلاق صندوق المحصّل وإقفال العدّ (خطة 2.0 — الفصل 5.2).
+  cashSessionClose,
+}
+
+enum SyncQueueStatus {
+  queued,
+  syncing,
+
+  /// فشل دائم يحتاج تدخلاً بشرياً (بيانات أو صلاحية) — لا يُعاد تلقائياً.
+  needsAttention,
+
+  /// استُنفدت المحاولات التلقائية — يبقى ظاهراً حتى يعالجه المستخدم.
+  failed,
+}

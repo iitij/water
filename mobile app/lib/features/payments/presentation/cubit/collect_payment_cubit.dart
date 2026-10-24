@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
@@ -23,13 +24,19 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     required PaymentsRepository paymentsRepository,
     required ReferencesRemoteDataSource references,
     required int? meterId,
+    CashSessionService? cashSessionService,
   })  : _payments = paymentsRepository,
         _references = references,
         _meterId = meterId,
+        _cashSessions = cashSessionService,
         super(CollectPaymentState(paymentDate: DateTime.now()));
 
   final PaymentsRepository _payments;
   final ReferencesRemoteDataSource _references;
+
+  /// حاجز «لا تحصيل بلا صندوق» (خطة 2.0 — الفصل 5.2). اختياري حتى لا تتعطل
+  /// الشاشات القديمة، لكنه مربوط في كل مسارات الإنتاج عبر DI.
+  final CashSessionService? _cashSessions;
 
   /// إن فُتحت النافذة من سياق عداد محدد (يُحافظ على العزل في المعاينة).
   final int? _meterId;
@@ -179,6 +186,13 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     final error = request.validate();
     if (error != null) {
       emit(state.copyWith(validationMessage: error));
+      return false;
+    }
+
+    try {
+      _cashSessions?.ensureCanCollect();
+    } on CashSessionRequiredException catch (error) {
+      emit(state.copyWith(validationMessage: error.message));
       return false;
     }
 

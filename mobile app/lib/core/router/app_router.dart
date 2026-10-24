@@ -6,6 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/pages/edit_profile_screen.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/splash_screen.dart';
+import '../../features/cash_sessions/presentation/cash_session_screen.dart';
+import '../../features/diagnostics/presentation/diagnostics_screen.dart';
+import '../../features/field_route/presentation/route_mode_screen.dart';
+import '../../features/security/presentation/app_lock_settings_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
 import '../../features/global_search/data/global_search_remote_datasource.dart';
@@ -144,6 +148,38 @@ class AppRouter {
               title: 'مراقب المزامنة',
               subtitle: 'العمليات المحفوظة محلياً وحالة الاتصال',
               child: OfflineSyncMonitorScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.cashSession,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'صندوق المحصّل',
+              subtitle: 'فتح الصندوق، متابعة السندات، وإقفال العدّ',
+              child: CashSessionScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.appLock,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'قفل التطبيق',
+              subtitle: 'رقم حماية محلي ومهلة خمول',
+              child: AppLockSettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.routeMode,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'وضع المسار',
+              subtitle: 'ترتيب الجولة والتقدّم والمحطة التالية',
+              child: RouteModeScreen(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.diagnostics,
+            builder: (context, state) => const SubPageScaffold(
+              title: 'التشخيص والدعم',
+              subtitle: 'حالة المزامنة وسجل التدقيق وآخر الأخطاء',
+              child: DiagnosticsScreen(),
             ),
           ),
           GoRoute(

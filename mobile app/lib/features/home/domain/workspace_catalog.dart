@@ -66,6 +66,12 @@ abstract final class WorkspaceCatalog {
       keywords: 'قارئ ميداني باركود reading', shortcut: true,
     ),
     WorkspaceEntry(
+      title: 'صندوق المحصّل', description: 'افتح الصندوق وأقفل العدّ اليومي',
+      icon: Icons.account_balance_wallet_outlined, route: RouteNames.cashSession,
+      group: WorkspaceGroup.finance, permissions: ['Create:Payment'],
+      keywords: 'صندوق عهدة نقد محصل cash session', shortcut: true,
+    ),
+    WorkspaceEntry(
       title: 'تحصيل دفعة', description: 'اختر الفاتورة وسجّل المبلغ',
       icon: Icons.point_of_sale_rounded, route: RouteNames.quickCollector,
       group: WorkspaceGroup.finance, permissions: ['ViewAny:Invoice', 'Create:Payment'],

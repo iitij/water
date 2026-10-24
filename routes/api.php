@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AuditEventController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CashSessionController;
+use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController as ApiExportController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MeterController;
@@ -26,6 +29,8 @@ Route::post('/login', [AuthController::class, 'login'])->name('api.login');
 Route::middleware('auth:sanctum')->group(function () {
     // Authentication, current user and profile (legacy aliases remain available).
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
+    // تدوير التوكن عند أول 401 (خطة 2.0 — الفصل 9.1).
+    Route::post('/refresh', [AuthController::class, 'refresh'])->name('api.refresh');
     Route::get('/me', [AuthController::class, 'me'])->name('api.me');
     Route::get('/user', [AuthController::class, 'user'])->name('api.user');
     Route::put('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update');
@@ -99,6 +104,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('invoices', InvoiceController::class)->parameters(['invoices' => 'id']);
 
     // Payments / receipts.
+    // إلغاء السند بدل حذفه — يجب أن يسبق مسار /payments/{id}.
+    Route::post('/payments/{id}/void', [PaymentController::class, 'void'])->whereNumber('id');
+    // اعتماد الإلغاءات الكبيرة (2.0 — الفصل 5.3): القائمة ثم القرار.
+    Route::get('/payments/void-requests', [PaymentController::class, 'voidRequests']);
+    Route::post('/payments/{id}/void-decision', [PaymentController::class, 'voidDecision'])->whereNumber('id');
     Route::post('/payments/bulk-delete', [PaymentController::class, 'bulkDelete']);
     Route::get('/payments/{id}/pdf', [PaymentController::class, 'downloadPdf'])->name('api.payments.pdf');
     Route::get('/payments/{id}/whatsapp-link', [PaymentController::class, 'whatsappLink']);
@@ -118,6 +128,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Tariffs, including soft-delete recovery.
     Route::post('/tariffs/bulk-delete', [TariffController::class, 'bulkDelete']);
+    Route::post('/tariffs/bulk-restore', [TariffController::class, 'bulkRestore']);
+    Route::post('/tariffs/bulk-force-delete', [TariffController::class, 'bulkForceDelete']);
     Route::post('/tariffs/{id}/restore', [TariffController::class, 'restore']);
     Route::delete('/tariffs/{id}/force', [TariffController::class, 'forceDestroy']);
     Route::apiResource('tariffs', TariffController::class)->parameters(['tariffs' => 'id']);
@@ -166,6 +178,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('users', UserController::class)->parameters(['users' => 'id']);
     Route::post('/roles/bulk-delete', [RoleController::class, 'bulkDelete']);
     Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);
+
+    // صندوق المحصّل: فتح/إغلاق/اعتماد/تقرير (خطة 2.0 — الفصل 5.2).
+    Route::get('/cash-sessions/current', [CashSessionController::class, 'current']);
+    Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');
+    Route::get('/cash-sessions/{id}/report/pdf', [CashSessionController::class, 'downloadPdf'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/close', [CashSessionController::class, 'close'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
+    Route::apiResource('cash-sessions', CashSessionController::class)
+        ->only(['index', 'store', 'show'])
+        ->parameters(['cash-sessions' => 'id']);
+
+    // سجل التدقيق: قراءة للمشرف + رفع مجمّع من الأجهزة (خطة 2.0 — الفصل 9.6).
+    Route::get('/audit-events', [AuditEventController::class, 'index']);
+    Route::post('/audit-events', [AuditEventController::class, 'store']);
+
+    // أجهزة المستخدم وإبطالها (خطة 2.0 — الفصل 9.7).
+    Route::get('/devices', [DeviceController::class, 'index']);
+    Route::post('/devices', [DeviceController::class, 'store']);
+    Route::delete('/devices/{id}', [DeviceController::class, 'destroy'])->whereNumber('id');
 
     // Authenticated XLSX exports.
     Route::get('/exports/summary', [ApiExportController::class, 'summary']);

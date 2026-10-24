@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
+import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../domain/repositories/payments_repository.dart';
 import '../cubit/collect_payment_cubit.dart';
@@ -44,6 +45,7 @@ class CollectPaymentSheet extends StatelessWidget {
       paymentsRepository: sl<PaymentsRepository>(),
       references: sl<ReferencesRemoteDataSource>(),
       meterId: meterId ?? invoice?.meterId,
+      cashSessionService: trySl<CashSessionService>(),
     );
 
     if (invoice != null) {

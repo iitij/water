@@ -117,6 +117,15 @@ abstract final class ModuleCatalog {
       route: RouteNames.quickCollector,
     ),
     AppModule(
+      id: 'cash_session',
+      group: AppModuleGroup.billing,
+      title: 'صندوق المحصّل',
+      subtitle: 'افتح صندوقك، تابع السندات، وأقفل العدّ بنقد مطابق',
+      icon: Icons.account_balance_wallet_outlined,
+      color: AppColors.success,
+      route: RouteNames.cashSession,
+    ),
+    AppModule(
       id: 'invoices',
       group: AppModuleGroup.billing,
       title: 'الفواتير',

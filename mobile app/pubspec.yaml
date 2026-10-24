@@ -14,9 +14,9 @@ dependencies:
     sdk: flutter
   cached_network_image: ^3.4.1
   connectivity_plus: ^6.1.4
+  crypto: ^3.0.3
   dio: ^5.8.0+1
   drift: ^2.27.0
-  drift_flutter: ^0.2.0
   equatable: ^2.0.7
   fl_chart: ^0.69.2
   flutter_bloc: ^9.1.1
@@ -37,7 +37,10 @@ dependencies:
   share_plus: ^10.1.4
   shared_preferences: ^2.5.3
   shimmer: ^3.0.0
-  sqlite3_flutter_libs: ^0.5.34
+  # S5-02: SQLCipher بدل SQLite العادي — نفس الـABI، لكن الملف يُفتح بمفتاح.
+  # لا تُضِف sqlite3_flutter_libs معها: الحزمتان تُدخلان نفس الرموز.
+  sqlcipher_flutter_libs: ^0.6.8
+  sqlite3: ^2.4.0
   url_launcher: ^6.3.1
   uuid: ^4.5.1
 
@@ -45,6 +48,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # اختبار تكامل على جهاز/محاكي حقيقي (خطة 2.0 — S1، المهمة S1-07).
+  integration_test:
+    sdk: flutter
   build_runner: ^2.4.13
   drift_dev: ^2.21.0
   mocktail: ^1.0.4

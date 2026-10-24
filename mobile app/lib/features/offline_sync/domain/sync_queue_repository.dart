@@ -26,8 +26,13 @@ abstract interface class SyncQueueRepository {
     String? serverResponseJson,
   });
 
+  /// تُسجَّل نتيجة المحاولة الفاشلة.
+  ///
+  /// [retryAt] غير فارغ يعني أن العملية ستبقى في الطابور بانتظار المحاولة
+  /// التالية (الحالة `retrying`)، وإلا فتُعلَّم `failed` وتنتظر تدخل المستخدم.
   Future<void> recordSyncFailure({
     required SyncQueueItem item,
     required String error,
+    DateTime? retryAt,
   });
 }

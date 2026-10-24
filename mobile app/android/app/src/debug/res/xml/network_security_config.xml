@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نسخة التطوير فقط: تسمح بـ HTTP على شبكة الميدان المحلية (192.168.x.x …)
+  حتى يمكن تجربة الخادم على جهاز حقيقي، مع قبول شهادات التطوير الذاتية.
+  هذه الملفات لا تُضمَّن في APK الإنتاجي.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
+
+import 'database_encryption.dart';
 
 /// Drift-backed SQLite store for the field/offline features.
 ///
@@ -15,9 +19,26 @@ import 'package:path_provider/path_provider.dart';
 class AppDatabase extends GeneratedDatabase {
   AppDatabase(super.executor);
 
-  factory AppDatabase.open() => AppDatabase(_openConnection());
+  /// اسم ملف قاعدة الميدان في مجلد دعم التطبيق.
+  static const fileName = 'water_offline.sqlite';
+
+  /// يفتح قاعدة الميدان، ويشفّرها إن أعاد مزوّد المفتاح مفتاحاً (S5-02).
+  ///
+  /// الافتراضي بلا مفتاح حتى لا تتغيّر سلوكيات الاختبارات ودورات التطوير؛
+  /// التشفير الفعلي يُطلب بـ`--dart-define=ENCRYPT_LOCAL_DB=true` مع
+  /// `SecureStorageDatabaseKeyProvider`.
+  static Future<AppDatabase> open({
+    DatabaseKeyProvider keyProvider = const NoopDatabaseKeyProvider(),
+  }) async {
+    final key = await keyProvider.key();
+    return AppDatabase(_openConnection(key));
+  }
 
   factory AppDatabase.inMemory() => AppDatabase(NativeDatabase.memory());
+
+  /// فتح ملف محدد بمفتاح صريح — يُستخدم في اختبارات التشفير.
+  factory AppDatabase.openFile(File file, {String? key}) =>
+      AppDatabase(_executorForFile(file, key));
 
   final StreamController<void> _syncQueueChanges = StreamController<void>.broadcast();
 
@@ -32,7 +53,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -61,17 +82,63 @@ class AppDatabase extends GeneratedDatabase {
               );
             }
           }
+          if (from < 3 && to >= 3) {
+            // v3: مهلة إعادة المحاولة وآخر رمز HTTP — يستخدمهما مدير المزامنة
+            // لتفادي محاولات متلاحقة على خطأ مؤقت (خطة 2.0 — الفصل 8.2).
+            final columns = await _select('PRAGMA table_info(pending_sync_actions)');
+            final names = columns.map((col) => col['name']).toSet();
+            if (!names.contains('next_attempt_at')) {
+              await customStatement(
+                'ALTER TABLE pending_sync_actions ADD COLUMN next_attempt_at TEXT',
+              );
+            }
+            if (!names.contains('last_status_code')) {
+              await customStatement(
+                'ALTER TABLE pending_sync_actions ADD COLUMN last_status_code INTEGER',
+              );
+            }
+          }
         },
         beforeOpen: (_) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
 
-  static LazyDatabase _openConnection() {
+  static LazyDatabase _openConnection(String? key) {
     return LazyDatabase(() async {
       final directory = await getApplicationSupportDirectory();
-      final file = File('${directory.path}${Platform.pathSeparator}water_offline.sqlite');
+      final file = File('${directory.path}${Platform.pathSeparator}$fileName');
+      return _executorForFile(file, key);
+    });
+  }
+
+  /// ينشئ المنفّذ، ويشفّر ملفاً قديماً غير مشفّر قبل فتحه بمفتاح.
+  static Future<QueryExecutor> _executorForFile(File file, String? key) async {
+    if (key == null || key.trim().isEmpty) {
       return NativeDatabase.createInBackground(file);
+    }
+    if (await isPlaintextSqliteFile(file)) {
+      await _encryptLegacyFile(file, key);
+    }
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (database) {
+        // `PRAGMA key` يجب أن يسبق أي استعلام على الملف المشفّر.
+        database.execute(pragmaKeyStatement(key));
+      },
+    );
+  }
+
+  /// تشفير ملف SQLite قائم بلا فقدان صفوف (SQLCipher: `PRAGMA rekey`).
+  static Future<void> _encryptLegacyFile(File file, String key) async {
+    final path = file.path;
+    await Isolate.run(() {
+      final database = sqlite3.sqlite3.open(path);
+      try {
+        database.execute(pragmaRekeyStatement(key));
+      } finally {
+        database.dispose();
+      }
     });
   }
 
@@ -159,7 +226,9 @@ class AppDatabase extends GeneratedDatabase {
       updated_at TEXT NOT NULL,
       last_error TEXT,
       server_response_json TEXT,
-      owner_user_id TEXT
+      owner_user_id TEXT,
+      next_attempt_at TEXT,
+      last_status_code INTEGER
     )''',
     '''CREATE INDEX IF NOT EXISTS pending_sync_state_created_idx
       ON pending_sync_actions(state, created_at)''',
@@ -703,20 +772,32 @@ class AppDatabase extends GeneratedDatabase {
     String? createdAt,
     String? lastError,
     String? ownerUserId,
+    String? nextAttemptAt,
   }) async {
     final timestamp = createdAt ?? _now();
     await _execute(
       '''INSERT OR REPLACE INTO pending_sync_actions(
-        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-      [id, type, payloadJson, state, attemptCount, timestamp, _now(), lastError, ownerUserId],
+        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, next_attempt_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      [
+        id,
+        type,
+        payloadJson,
+        state,
+        attemptCount,
+        timestamp,
+        _now(),
+        lastError,
+        ownerUserId,
+        nextAttemptAt,
+      ],
     );
     _notifySyncQueueChanged();
   }
 
   Future<List<Map<String, Object?>>> getActiveSyncActions({int limit = 500}) => _select(
         '''SELECT * FROM pending_sync_actions
-           WHERE state IN ('pending', 'retrying', 'syncing', 'failed')
+           WHERE state IN ('pending', 'retrying', 'syncing', 'failed', 'needs_attention')
            ORDER BY created_at ASC, id ASC LIMIT ${limit.clamp(1, 1000)}''',
       );
 
@@ -761,6 +842,9 @@ class AppDatabase extends GeneratedDatabase {
     String? lastError,
     String? serverResponseJson,
     String? ownerUserId,
+    String? nextAttemptAt,
+    bool clearNextAttempt = false,
+    int? lastStatusCode,
   }) async {
     await _execute(
       '''UPDATE pending_sync_actions SET state = ?,
@@ -771,6 +855,25 @@ class AppDatabase extends GeneratedDatabase {
         WHERE id = ?''',
       [state, attemptCount, lastError, serverResponseJson, ownerUserId, _now(), id],
     );
+    // مهلة المحاولة التالية ورمز الخطأ يحتاجان إلى مسح صريح، ولهذا لا
+    // يستخدمان COALESCE مثل بقية الأعمدة.
+    if (clearNextAttempt) {
+      await _execute(
+        'UPDATE pending_sync_actions SET next_attempt_at = NULL WHERE id = ?',
+        [id],
+      );
+    } else if (nextAttemptAt != null) {
+      await _execute(
+        'UPDATE pending_sync_actions SET next_attempt_at = ? WHERE id = ?',
+        [nextAttemptAt, id],
+      );
+    }
+    if (lastStatusCode != null) {
+      await _execute(
+        'UPDATE pending_sync_actions SET last_status_code = ? WHERE id = ?',
+        [lastStatusCode, id],
+      );
+    }
     _notifySyncQueueChanged();
   }
 

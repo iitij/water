@@ -16,8 +16,14 @@ import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../data/models/reading.dart';
+import '../../data/reading_fault_log.dart';
 import '../../data/services/reading_invoice_actions_service.dart';
+import '../../domain/reading_fault.dart';
 import '../../domain/readings_repository.dart';
+
+part '../widgets/submit_reading_widgets.dart';
+
+part '../widgets/submit_reading_fault_sheet.dart';
 
 class SubmitReadingScreen extends StatefulWidget {
   const SubmitReadingScreen({
@@ -25,6 +31,7 @@ class SubmitReadingScreen extends StatefulWidget {
     required this.readingsRepository,
     this.invoiceActions,
     this.onNextPath,
+    this.faultLog,
     super.key,
   });
 
@@ -32,6 +39,9 @@ class SubmitReadingScreen extends StatefulWidget {
   final ReadingsRepository readingsRepository;
   final ReadingInvoiceActionsService? invoiceActions;
   final Future<Meter?> Function(Meter currentMeter)? onNextPath;
+
+  /// سجل «تعذّر القراءة». يُمرَّر في الاختبارات، ويُستخدم الافتراضي على الجهاز.
+  final ReadingFaultLog? faultLog;
 
   @override
   State<SubmitReadingScreen> createState() => _SubmitReadingScreenState();
@@ -45,6 +55,9 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   final _imagePicker = ImagePicker();
 
   late Meter _meter;
+  late final ReadingFaultLog _faultLog =
+      widget.faultLog ?? SharedPreferencesReadingFaultLog();
+  ReadingFault? _todayFault;
   MeterPeriodResponse? _period;
   ReadingSaveResult? _saveResult;
   DateTime _readingDate = DateTime.now();
@@ -55,6 +68,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   bool _includeSubscriptionFee = false;
   bool _includeTankerFee = false;
   bool _isRunningInvoiceAction = false;
+  bool _isRecordingFault = false;
 
   double get _currentReading => double.tryParse(
         CompoundSearchQuery.normalizeDigits(_currentReadingController.text)
@@ -68,6 +82,58 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     super.initState();
     _meter = widget.meter;
     _loadPeriod();
+    _loadTodaysFault();
+  }
+
+  /// هل سُجّل تعذّر قراءة لهذا العداد اليوم؟ يُعرض كتنبيه حتى لا يُنسى العداد.
+  Future<void> _loadTodaysFault() async {
+    final now = DateTime.now();
+    try {
+      final faults = await _faultLog.forDay(now);
+      if (!mounted) return;
+      final mine = faults.where((fault) => fault.meterId == _meter.id).toList();
+      setState(() => _todayFault = mine.isEmpty ? null : mine.first);
+    } catch (_) {
+      // السجل المحلي لا يجوز أن يمنع تسجيل قراءة.
+      if (mounted) setState(() => _todayFault = null);
+    }
+  }
+
+  /// تسجيل تعذّر القراءة: نطلب السبب، ونحفظ محلياً، ثم ننتقل للعداد التالي.
+  Future<void> _recordFault() async {
+    if (_isSaving || _isRecordingFault) return;
+    final draft = await showModalBottomSheet<_FaultDraft>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _FaultSheet(
+        meterCode: _meter.uniqueCode,
+        subscriberName: _meter.subscriberName,
+      ),
+    );
+    if (draft == null || !mounted) return;
+    setState(() => _isRecordingFault = true);
+    try {
+      final fault = ReadingFault(
+        meterId: _meter.id,
+        meterCode: _meter.uniqueCode,
+        subscriberName: _meter.subscriberName,
+        squareId: _meter.squareId,
+        reason: draft.reason,
+        note: draft.note,
+        recordedAt: DateTime.now(),
+      );
+      await _faultLog.record(fault);
+      if (!mounted) return;
+      setState(() {
+        _todayFault = fault;
+        _isRecordingFault = false;
+      });
+      _showMessage('سُجّل تعذّر القراءة محلياً — سيظهر العداد للمشرف كمتأخر.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isRecordingFault = false);
+      _showMessage('تعذر حفظ تعذّر القراءة على الجهاز: $error');
+    }
   }
 
   Future<void> _loadPeriod() async {
@@ -245,8 +311,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       setState(() {
         _meter = nextMeter;
         _readingDate = DateTime.now();
+        _todayFault = null;
       });
       await _loadPeriod();
+      await _loadTodaysFault();
     } catch (error) {
       if (mounted) _showMessage(_humanMessage(error));
     }
@@ -339,6 +407,15 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _meterHeader(),
+                  if (_todayFault != null) ...[
+                    const SizedBox(height: 10),
+                    _NoticeBanner(
+                      text: 'تعذّرت قراءة هذا العداد اليوم: ${_todayFault!.reason.label}.'
+                          '${_todayFault!.note == null ? '' : ' (${_todayFault!.note})'}',
+                      color: AppColors.warning,
+                      icon: Icons.report_gmailerrorred_outlined,
+                    ),
+                  ],
                   if (period.isOfflineEstimate) ...[
                     const SizedBox(height: 10),
                     const _NoticeBanner(
@@ -458,6 +535,23 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                           : const Icon(Icons.check_rounded, size: 20),
                       label: Text(_isSaving ? 'جارٍ حفظ القراءة…' : 'حفظ القراءة'),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: (_isSaving || _isRecordingFault) ? null : _recordFault,
+                    icon: const Icon(Icons.report_gmailerrorred_outlined, size: 20),
+                    label: Text(
+                      _isRecordingFault ? 'جارٍ حفظ التعذّر…' : 'تعذّر قراءة العداد (عطل/إغلاق)',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'تُسجَّل القراءة المتعذرة على الجهاز فقط ولا تُرسل كقراءة،'
+                    ' حتى لا يُحتسب استهلاك غير حقيقي.',
+                    textDirection: TextDirection.rtl,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ],
               ),
@@ -899,49 +993,3 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       value.toStringAsFixed(value % 1 == 0 ? 0 : 2);
 }
 
-class _NoticeBanner extends StatelessWidget {
-  const _NoticeBanner({
-    required this.text,
-    required this.color,
-    required this.icon,
-  });
-
-  final String text;
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) =>
-      InfoNotice(text: text, icon: icon, color: color);
-}
-
-class RecordReadingSheet {
-  const RecordReadingSheet._();
-
-  static Future<ReadingSaveResult?> show(
-    BuildContext context, {
-    required Meter meter,
-    required ReadingsRepository readingsRepository,
-    ReadingInvoiceActionsService? invoiceActions,
-    Future<Meter?> Function(Meter currentMeter)? onNextPath,
-  }) {
-    return showModalBottomSheet<ReadingSaveResult>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: .96,
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-          child: SubmitReadingScreen(
-            meter: meter,
-            readingsRepository: readingsRepository,
-            invoiceActions: invoiceActions,
-            onNextPath: onNextPath,
-          ),
-        ),
-      ),
-    );
-  }
-}

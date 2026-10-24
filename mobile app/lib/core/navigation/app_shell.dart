@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../auth/session_service.dart';
+import '../l10n/app_strings.dart';
 import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
@@ -32,39 +33,40 @@ class _ShellDestination {
   final IconData selectedIcon;
 }
 
-const List<_ShellDestination> _destinations = <_ShellDestination>[
+/// وجهات التنقل — تُبنى من `AppStrings` حتى لا تتكرر النصوص في الشاشات (S5-04).
+List<_ShellDestination> _buildDestinations(AppStrings strings) => <_ShellDestination>[
   _ShellDestination(
-    label: 'الرئيسية',
-    title: 'مساحة العمل',
-    subtitle: 'خلاصة اليوم وإجراءاتك السريعة',
+    label: strings.navHome,
+    title: strings.homeTitle,
+    subtitle: strings.homeSubtitle,
     icon: Icons.dashboard_outlined,
     selectedIcon: Icons.dashboard_rounded,
   ),
   _ShellDestination(
-    label: 'الميدان',
-    title: 'العمليات الميدانية',
-    subtitle: 'القراءات والعدادات',
+    label: strings.navField,
+    title: strings.fieldTitle,
+    subtitle: strings.fieldSubtitle,
     icon: Icons.sensors_outlined,
     selectedIcon: Icons.sensors_rounded,
   ),
   _ShellDestination(
-    label: 'المالية',
-    title: 'التحصيل والمالية',
-    subtitle: 'الفواتير والسندات والتعرفة',
+    label: strings.navFinance,
+    title: strings.financeTitle,
+    subtitle: strings.financeSubtitle,
     icon: Icons.account_balance_wallet_outlined,
     selectedIcon: Icons.account_balance_wallet_rounded,
   ),
   _ShellDestination(
-    label: 'المشتركون',
-    title: 'المشتركون والخدمات',
-    subtitle: 'الملفات والمربعات والطلبات',
+    label: strings.navSubscribers,
+    title: strings.subscribersTitle,
+    subtitle: strings.subscribersSubtitle,
     icon: Icons.groups_2_outlined,
     selectedIcon: Icons.groups_2_rounded,
   ),
   _ShellDestination(
-    label: 'المزيد',
-    title: 'المزيد',
-    subtitle: 'التقارير والإعدادات والحساب',
+    label: strings.navMore,
+    title: strings.moreTitle,
+    subtitle: strings.moreSubtitle,
     icon: Icons.grid_view_outlined,
     selectedIcon: Icons.grid_view_rounded,
   ),
@@ -81,7 +83,8 @@ class AppHomeShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= 1020;
-    final index = shell.currentIndex.clamp(0, _destinations.length - 1).toInt();
+    final destinations = _buildDestinations(AppStrings.of(context));
+    final index = shell.currentIndex.clamp(0, destinations.length - 1).toInt();
 
     void select(int next) => shell.goBranch(
           next,
@@ -102,7 +105,7 @@ class AppHomeShell extends StatelessWidget {
     return Scaffold(
       body: Column(
         children: <Widget>[
-          _TopBar(destination: _destinations[index], home: index == 0),
+          _TopBar(destination: destinations[index], home: index == 0),
           Expanded(child: shell),
         ],
       ),
@@ -284,6 +287,7 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final destinations = _buildDestinations(AppStrings.of(context));
     return SafeArea(
       top: false,
       child: Padding(
@@ -299,10 +303,10 @@ class _BottomNav extends StatelessWidget {
           ),
           child: Row(
             children: <Widget>[
-              for (var index = 0; index < _destinations.length; index++)
+              for (var index = 0; index < destinations.length; index++)
                 Expanded(
                   child: _NavItem(
-                    destination: _destinations[index],
+                    destination: destinations[index],
                     selected: index == currentIndex,
                     onTap: () => onSelect(index),
                   ),
@@ -380,6 +384,7 @@ class _SideRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final destinations = _buildDestinations(AppStrings.of(context));
     final session = GetIt.I<SessionService>();
     final permissions = GetIt.I<PermissionService>();
     final user = session.user ?? const <String, dynamic>{};
@@ -431,11 +436,11 @@ class _SideRail extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
                 ),
               ),
-              for (var index = 0; index < _destinations.length; index++)
+              for (var index = 0; index < destinations.length; index++)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: _RailItem(
-                    destination: _destinations[index],
+                    destination: destinations[index],
                     selected: index == currentIndex,
                     onTap: () => onSelect(index),
                   ),

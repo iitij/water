@@ -5,6 +5,19 @@ the repository root. See the app README for build commands, first-launch server
 setup and testing-release limitations. The master plan is a specification, not
 proof that production acceptance tests have passed.
 
+### Release 2.0 plan
+
+The full plan for the second release (Arabic, 65 pages: current-state audit,
+goals, UX, architecture, data/sync, security, backend contracts, testing,
+release, 12-week roadmap, budget, risks and acceptance gates) is in:
+
+- [`docs/V2_MOBILE_PLAN_AR.pdf`](docs/V2_MOBILE_PLAN_AR.pdf) — printable edition
+- [`docs/V2_MOBILE_PLAN_AR.docx`](docs/V2_MOBILE_PLAN_AR.docx) — editable edition
+- [`docs/V2_MOBILE_PLAN_AR.md`](docs/V2_MOBILE_PLAN_AR.md) — Markdown edition
+
+All three are generated from `docs/v2/content_*.py`; edit the content modules and
+rebuild (see `docs/v2/README.md`) instead of editing the outputs.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
