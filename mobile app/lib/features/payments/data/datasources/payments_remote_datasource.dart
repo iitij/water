@@ -59,6 +59,13 @@ class PaymentsRemoteDataSource {
   /// #52 `DELETE /api/payments/{id}`
   Future<void> delete(int id) => _client.delete(FinanceEndpoints.payment(id));
 
+  /// #new `POST /api/payments/{id}/whatsapp-result` — يسجّل أن السند أُرسل.
+  Future<void> recordWhatsappResult(int id, {required String via}) =>
+      _client.post(
+        FinanceEndpoints.paymentWhatsappResult(id),
+        body: <String, dynamic>{'via': via},
+      );
+
   /// `POST /api/payments/{id}/void` — الإلغاء بدل الحذف.
   ///
   /// الخادم يحذف حركات دفتر الأستاذ ويعيد احتساب الفواتير والأرصدة، ويحفظ

@@ -33,6 +33,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // مطلوب لـflutter_local_notifications (S7-09): يستخدم java.time الذي
+        // لا يوجد أصلاً في أندرويد أقدم من API 26.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -79,6 +82,10 @@ android {
             versionNameSuffix = "-debug"
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 kotlin {

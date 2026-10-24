@@ -32,6 +32,8 @@ class PaymentModel extends Equatable {
     this.voidedBy,
     this.voidedVia,
     this.cashSessionId,
+    this.whatsappSentAt,
+    this.whatsappSentVia,
   });
 
   final int id;
@@ -68,6 +70,14 @@ class PaymentModel extends Equatable {
 
   /// الصندوق الذي سُجّل فيه السند — أساس مطابقة نقد المحصّل.
   final int? cashSessionId;
+
+  /// آخر إرسال ناجح للسند عبر واتساب (خطة 2.0 — الفصل 6.2).
+  final DateTime? whatsappSentAt;
+
+  /// `click_to_chat` / `meta_api` / `local_api` / `manual`.
+  final String? whatsappSentVia;
+
+  bool get whatsappSent => whatsappSentAt != null;
 
   bool get isDeleted => deletedAt != null;
 
@@ -128,6 +138,8 @@ class PaymentModel extends Equatable {
       voidedBy: JsonUtils.asStringOrNull(json['voided_by']),
       voidedVia: JsonUtils.asStringOrNull(json['voided_via']),
       cashSessionId: JsonUtils.asIntOrNull(json['cash_session_id']),
+      whatsappSentAt: JsonUtils.asDate(json['whatsapp_sent_at']),
+      whatsappSentVia: JsonUtils.asStringOrNull(json['whatsapp_sent_via']),
     );
   }
 
@@ -146,6 +158,8 @@ class PaymentModel extends Equatable {
         'voided_at': DateFormat.dateTime(voidedAt),
         'void_reason': voidReason,
         'cash_session_id': cashSessionId,
+        'whatsapp_sent_at': DateFormat.dateTime(whatsappSentAt),
+        'whatsapp_sent_via': whatsappSentVia,
       };
 
   /// جسم `PUT /api/payments/{id}` — نفس حقول `PaymentResource::form`.
@@ -197,6 +211,8 @@ class PaymentModel extends Equatable {
         invoiceId,
         voidedAt,
         cashSessionId,
+        whatsappSentAt,
+        whatsappSentVia,
       ];
 }
 

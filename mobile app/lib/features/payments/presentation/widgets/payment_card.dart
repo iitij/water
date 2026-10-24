@@ -119,6 +119,12 @@ class PaymentCard extends StatelessWidget {
                       icon: Icons.badge_outlined,
                       label: payment.collectorName!,
                     ),
+                  if (payment.whatsappSent)
+                    _MetaChip(
+                      icon: Icons.chat_bubble_outline,
+                      label: 'أُرسل واتساب',
+                      tone: AppColors.success,
+                    ),
                   if (payment.isDeleted)
                     const _MetaChip(
                       icon: Icons.delete_outline,

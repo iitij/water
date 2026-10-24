@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/error/failures.dart';
@@ -100,10 +102,13 @@ Future<void> sendPaymentWhatsapp(
   if (!context.mounted) return;
 
   if (result.outcome == WhatsAppSendOutcome.launched) {
+    // أثر «ما وصل» (الفصل 6.2): فتح واتساب = تسليم يدوي، نسجّله فوراً.
+    unawaited(_reportWhatsapp(payment, via: 'click_to_chat'));
     AppFeedback.success(context, 'تم فتح واتساب بنص السند.');
     return;
   }
   if (result.outcome == WhatsAppSendOutcome.sentByApi) {
+    unawaited(_reportWhatsapp(payment, via: 'meta_api'));
     AppFeedback.success(context, 'أرسل الخادم السند PDF عبر واتساب.');
     return;
   }
@@ -116,6 +121,16 @@ Future<void> sendPaymentWhatsapp(
     return;
   }
   AppFeedback.error(context, result.error ?? 'فشل الإرسال.');
+}
+
+/// تسجيل نتيجة الإرسال بلا تعطيل واجهة المحصّل: لو فشل الاتصال يبقى الأثر في
+/// سجل التدقيق المحلي ويُرفع لاحقاً مع بقية الأحداث.
+Future<void> _reportWhatsapp(PaymentModel payment, {required String via}) async {
+  try {
+    await sl<PaymentsRepository>().recordWhatsappSend(payment.id, via: via);
+  } catch (_) {
+    // لا نُفشل الإرسال بعد نجاحه.
+  }
 }
 
 /// حوار سبب الإلغاء — لا يقبل أقل من 10 أحرف تطابق قاعدة الخادم.

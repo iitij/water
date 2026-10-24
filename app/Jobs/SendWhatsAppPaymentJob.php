@@ -71,13 +71,17 @@ class SendWhatsAppPaymentJob implements ShouldQueue
 
                 // 3. Send Message
                 if ($mediaId) {
-                    $service->sendTemplateMessage(
+                    $sent = $service->sendTemplateMessage(
                         $phone,
                         $template,
                         [$name, $this->payment->receipt_number, $amount],
                         $mediaId,
                         $filename
                     );
+                    // أثر «ما وصل فعلاً» (خطة 2.0 — الفصل 6.2): لا نسجّل إلا نجاحاً.
+                    if ($sent) {
+                        $this->markSent('meta_api');
+                    }
                 } else {
                     Log::error("WhatsApp Job: Failed to upload PDF media for payment {$this->payment->id}");
                 }
@@ -119,7 +123,9 @@ class SendWhatsAppPaymentJob implements ShouldQueue
                     $customMsg
                 );
 
-                $service->sendLocalApiMessage($phone, $messageText, $filePath, $filename);
+                if ($service->sendLocalApiMessage($phone, $messageText, $filePath, $filename)) {
+                    $this->markSent('local_api');
+                }
             }
 
         } catch (\Exception $e) {
@@ -129,6 +135,22 @@ class SendWhatsAppPaymentJob implements ShouldQueue
             if (file_exists($filePath)) {
                 @unlink($filePath);
             }
+        }
+    }
+
+    /** يسجّل وقت الإرسال وطريقته بلا تشغيل أحداث الموديل (لا نريد إعادة حساب الأرصدة). */
+    private function markSent(string $via): void
+    {
+        try {
+            $this->payment->forceFill([
+                'whatsapp_sent_at' => now(),
+                'whatsapp_sent_via' => $via,
+            ])->saveQuietly();
+        } catch (\Throwable $error) {
+            Log::warning('whatsapp.mark_sent_failed', [
+                'payment_id' => $this->payment->id,
+                'error' => $error->getMessage(),
+            ]);
         }
     }
 }

@@ -8,7 +8,16 @@ import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/splash_screen.dart';
 import '../../features/cash_sessions/presentation/cash_session_screen.dart';
 import '../../features/dashboard/dashboard.dart';
+import '../../features/data_quality/data/data_quality_remote_data_source.dart';
+import '../../features/data_quality/presentation/pages/data_quality_screen.dart';
+import '../../features/devices/devices.dart';
 import '../../features/diagnostics/presentation/diagnostics_screen.dart';
+import '../../features/field_route/presentation/route_mode_screen.dart';
+import '../../features/security/presentation/app_lock_settings_screen.dart';
+import '../backup/backup_screen.dart';
+import '../backup/local_backup.dart';
+import '../notifications/notification_service.dart';
+import '../notifications/notification_settings_screen.dart';
 import '../../features/exports/exports.dart';
 import '../../features/field_route/presentation/route_mode_screen.dart';
 import '../../features/global_search/data/global_search_remote_datasource.dart';
@@ -329,6 +338,31 @@ class AppRouter {
             rolesBuilder: () => RolesAndPermissionsScreen(
               repository: GetIt.I<RbacRepository>(),
               can: GetIt.I<PermissionService>().can,
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.reminders,
+            builder: (context, state) => NotificationSettingsScreen(
+              scheduler: GetIt.I<ReminderScheduler>(),
+              store: GetIt.I<ReminderPreferencesStore>(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.backup,
+            builder: (context, state) => BackupRestoreScreen(
+              service: GetIt.I<LocalBackupService>(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.dataQuality,
+            builder: (context, state) => DataQualityScreen(
+              remote: DataQualityRemoteDataSource(GetIt.I<AdminApiClient>()),
+              can: GetIt.I<PermissionService>().can,
+            ),
+          ),
+          ...DeviceRoutes.routes(
+            screenBuilder: () => DevicesScreen(
+              repository: GetIt.I<DevicesRepository>(),
             ),
           ),
           ...ExportRoutes.routes(
