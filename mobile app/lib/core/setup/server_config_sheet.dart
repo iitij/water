@@ -23,6 +23,11 @@ class ServerConnectionService {
 
   static String? validateInput(String? rawValue, {bool? isAndroid}) {
     final checkAndroid = isAndroid ?? Platform.isAndroid;
+    final raw = (rawValue ?? '').trim();
+    if (!AppConfig.isInsecureHttpAllowed &&
+        raw.toLowerCase().startsWith('http://')) {
+      return 'نسخة الإنتاج تتصل بخادم مشفّر فقط. استخدم https:// مع شهادة صالحة.';
+    }
     try {
       final normalized = AppConfig.normalizeApiBaseUrl(rawValue ?? '');
       final host = Uri.parse(normalized).host.toLowerCase();
@@ -33,7 +38,7 @@ class ServerConnectionService {
       }
       return null;
     } on FormatException {
-      return 'أدخل عنواناً صحيحاً يبدأ بـ http:// أو https://';
+      return 'أدخل عنواناً صحيحاً يبدأ بـ https:// (أو http:// في نسخة تطوير)';
     }
   }
 

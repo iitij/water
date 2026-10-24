@@ -10,8 +10,13 @@ class ErrorInterceptor extends Interceptor {
   Future<void> Function()? onUnauthorized;
   final ErrorReporter? _reporter;
 
+  /// رمز الخادم للجهاز المُبطَل (خطة 2.0 — الفصل 9.7).
+  static const String deviceRevokedCode = 'DEVICE_REVOKED';
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
+    // 401 يعني إمّا انتهاء الجلسة أو إبطال الجهاز من لوحة الإدارة؛ في الحالتين
+    // لا مفر من الخروج وتسجيل الدخول من جديد.
     if (err.response?.statusCode == 401) {
       final callback = onUnauthorized;
       if (callback != null) unawaited(callback());
@@ -29,6 +34,10 @@ class ErrorInterceptor extends Interceptor {
 
   String _messageFor(DioException error) {
     final response = error.response;
+    final body = response?.data;
+    if (body is Map && body['code']?.toString() == deviceRevokedCode) {
+      return 'تم إيقاف هذا الجهاز من لوحة الإدارة. سجّل الدخول من جهاز مصرّح.';
+    }
     final statusCode = response?.statusCode;
     final serverMessage = _firstServerMessage(response?.data);
 
