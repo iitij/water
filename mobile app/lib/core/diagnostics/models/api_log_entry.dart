@@ -98,7 +98,7 @@ class ApiLogEntry {
       ..writeln('الوقت: ${timestamp.toIso8601String()}')
       ..writeln('المسار: $method $endpoint')
       ..writeln('الرابط الكامل: $url')
-      ..writeln('الحالة: $displayStatus (${durationLabel}${isSlow ? ' - لاق/بطء' : ''})')
+      ..writeln('الحالة: $displayStatus ($durationLabel${isSlow ? ' - لاق/بطء' : ''})')
       ..writeln('معرف الطلب بالخادم: ${requestId ?? 'غير متوفر'}')
       ..writeln('زمن معالجة الخادم: ${serverDurationMs != null ? '${serverDurationMs}ms' : 'غير متوفر'}');
 

@@ -145,12 +145,11 @@ class ApiLogManager extends ChangeNotifier {
       ..writeln('========================================\n');
 
     for (final entry in _entries) {
-      buffer
-        ..writeln(
-          '[${entry.timestamp.toIso8601String()}] ${entry.method} ${entry.endpoint} '
-          '-> ${entry.displayStatus} (${entry.durationLabel})'
-          '${entry.isSlow ? ' [لاق/بطء]' : ''}',
-        );
+      buffer.writeln(
+        '[${entry.timestamp.toIso8601String()}] ${entry.method} ${entry.endpoint} '
+        '-> ${entry.displayStatus} (${entry.durationLabel})'
+        '${entry.isSlow ? ' [لاق/بطء]' : ''}',
+      );
       if (entry.errorMessage != null) {
         buffer.writeln('   الخطأ: ${entry.errorMessage}');
       }

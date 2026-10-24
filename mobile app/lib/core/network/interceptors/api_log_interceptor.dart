@@ -137,6 +137,8 @@ class ApiLogInterceptor extends Interceptor {
         return 'مهلة إرسال (Send Timeout)';
       case DioExceptionType.receiveTimeout:
         return 'مهلة استجابة (Receive Timeout)';
+      case DioExceptionType.transformTimeout:
+        return 'مهلة تحويل البيانات (Transform Timeout)';
       case DioExceptionType.badCertificate:
         return 'خطأ شهادة SSL/TLS';
       case DioExceptionType.badResponse:
