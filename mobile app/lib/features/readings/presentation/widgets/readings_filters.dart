@@ -52,6 +52,42 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
     return '${fmt(widget.state.fromDate)} ← ${fmt(widget.state.toDate)}';
   }
 
+  /// حفظ الفلاتر الحالية باسم يكتبه القارئ (أو الاسم المقترح).
+  Future<void> _savePreset(BuildContext context) async {
+    final controller = TextEditingController(text: widget.cubit.suggestPresetName());
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حفظ الفلاتر'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'اسم الفلتر'),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return;
+    final saved = await widget.cubit.savePreset(name);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saved ? 'حُفظ الفلتر «${name.trim()}».' : 'تعذّر حفظ الفلتر على الجهاز.'),
+      ),
+    );
+  }
+
   Future<void> _openSheet() async {
     await AppFilterSheet.show<void>(
       context: context,
@@ -98,6 +134,11 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
           activeCount: _sheetFacets,
           onOpenFilters: _openSheet,
           onChanged: cubit.setQuery,
+          trailing: IconButton(
+            tooltip: 'حفظ الفلاتر الحالية',
+            icon: const Icon(Icons.bookmark_add_outlined),
+            onPressed: () => _savePreset(context),
+          ),
         ),
         const SizedBox(height: 8),
         AppFilterChips(
@@ -119,6 +160,21 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
             ),
           ],
         ),
+        if (state.presets.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 2),
+          AppFilterChips(
+            children: <Widget>[
+              for (final preset in state.presets)
+                AppFilterChip(
+                  label: preset.name,
+                  icon: Icons.bookmark_outline_rounded,
+                  selected: false,
+                  onTap: () => cubit.applyPreset(preset),
+                  onRemove: () => cubit.deletePreset(preset.id),
+                ),
+            ],
+          ),
+        ],
         AppActiveFilters(filters: active, onClearAll: cubit.clearAllFilters),
         if (state.isMutating ||
             (state.status == ReadingsLoadStatus.loading && state.readings.isNotEmpty))

@@ -44,7 +44,9 @@ class ReadingsListScreen extends StatelessWidget {
         create: (_) => ReadingsCubit(
           readingsRepository: readingsRepository,
           metersRepository: metersRepository,
-        )..load(),
+        )
+          ..load()
+          ..loadPresets(),
         child: _ReadingsListView(
           readingsRepository: readingsRepository,
           metersRepository: metersRepository,
