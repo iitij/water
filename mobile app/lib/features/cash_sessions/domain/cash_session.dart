@@ -124,7 +124,7 @@ class CashSession extends Equatable {
   /// ملخّص عربي جاهز للعرض في شاشة الصندوق.
   String get arabicSummary {
     if (isOpen) {
-      return 'الصندوق مفتوح — ${receipts} سنداً بقيمة ${expectedAmount.toStringAsFixed(2)}';
+      return 'الصندوق مفتوح — $receipts سنداً بقيمة ${expectedAmount.toStringAsFixed(2)}';
     }
     final variance = varianceAmount ?? 0;
     final verdict = variance.abs() < 0.01

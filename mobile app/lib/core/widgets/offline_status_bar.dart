@@ -4,12 +4,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/offline_sync/domain/sync_queue_item.dart';
+import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../finance/finance_locator.dart';
 import '../network/network_info.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
-import '../../features/offline_sync/domain/sync_queue_item.dart';
-import '../../features/offline_sync/services/sync_queue_manager.dart';
 
 /// نص الشريط كما يُحسب من الحالة — دالة نقية كي تُختبر بلا ودجات.
 ///

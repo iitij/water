@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/database/app_database.dart';
@@ -15,7 +15,7 @@ import 'package:water_project/core/database/app_database.dart';
 /// 3. البيانات المخزّنة مسبقاً (المشتركون) بقيت كما هي.
 /// 4. إعادة الفتح لا تكرّر الأعمدة ولا تُفشل الترحيل.
 class _V1User extends QueryExecutorUser {
-  const _V1User();
+  _V1User();
 
   @override
   int get schemaVersion => 1;
@@ -39,7 +39,7 @@ void main() {
     final file = File('${temp.path}/water_offline.sqlite');
     final executor = NativeDatabase(file);
 
-    await executor.ensureOpen(const _V1User());
+    await executor.ensureOpen(_V1User());
 
     await executor.runCustom('''
       CREATE TABLE cached_squares (

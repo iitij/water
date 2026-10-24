@@ -14,7 +14,7 @@ void main() {
   group('generateDatabaseKey', () {
     test('يعيد 32 بايت بترميز base64Url بصيغة ثابتة', () {
       final key = generateDatabaseKey(Random(7));
-      final bytes = base64UrlDecode(key);
+      final bytes = base64Url.decode(key);
       expect(bytes.length, 32);
       expect(key, isNot(contains("'")));
     });
