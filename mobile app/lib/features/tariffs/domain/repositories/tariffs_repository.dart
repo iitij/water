@@ -22,4 +22,10 @@ abstract interface class TariffsRepository {
 
   /// حذف نهائي (`ForceDeleteBulkAction`).
   Future<void> forceDelete(int id);
+
+  /// استعادة جماعية — تعيد عدد ما استُعيد (فجوة v1 رقم 1).
+  Future<int> bulkRestore(List<int> ids);
+
+  /// حذف نهائي جماعي — تعيد عدد ما حُذف.
+  Future<int> bulkForceDelete(List<int> ids);
 }

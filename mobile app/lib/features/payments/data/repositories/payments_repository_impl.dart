@@ -250,6 +250,28 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     }
   }
 
+  /// تسجيل نتيجة واتساب: الخادم أولاً، ثم سجل التدقيق المحلي كشبكة أمان
+  /// (يعمل أوفلاين ويُرفع لاحقاً). لا يرمي أبداً — الإرسال وقع فعلاً.
+  @override
+  Future<bool> recordWhatsappSend(int paymentId, {required String via}) async {
+    var serverOk = false;
+    try {
+      await _remote.recordWhatsappResult(paymentId, via: via);
+      serverOk = true;
+    } on AppFailure {
+      serverOk = false;
+    } catch (_) {
+      serverOk = false;
+    }
+    _record(
+      'payment.whatsapp_shared',
+      entityType: 'Payment',
+      entityId: paymentId,
+      after: <String, dynamic>{'via': via, 'recorded_on_server': serverOk},
+    );
+    return serverOk;
+  }
+
   @override
   String pdfPath(int paymentId) => FinanceEndpoints.paymentPdf(paymentId);
 

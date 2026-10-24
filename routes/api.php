@@ -114,6 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/payments/{id}/whatsapp-link', [PaymentController::class, 'whatsappLink']);
     Route::post('/payments/{id}/send-whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
+    Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
     // Subscription fees and tanker/service requests.

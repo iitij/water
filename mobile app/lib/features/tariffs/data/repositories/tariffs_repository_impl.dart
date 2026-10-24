@@ -62,4 +62,20 @@ class TariffsRepositoryImpl implements TariffsRepository {
     await _remote.forceDelete(id);
     clearCache();
   }
+
+  @override
+  Future<int> bulkRestore(List<int> ids) async {
+    if (ids.isEmpty) return 0;
+    final count = await _remote.bulkRestore(ids);
+    clearCache();
+    return count;
+  }
+
+  @override
+  Future<int> bulkForceDelete(List<int> ids) async {
+    if (ids.isEmpty) return 0;
+    final count = await _remote.bulkForceDelete(ids);
+    clearCache();
+    return count;
+  }
 }

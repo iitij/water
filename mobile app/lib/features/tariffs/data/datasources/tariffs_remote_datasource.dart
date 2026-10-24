@@ -67,6 +67,34 @@ class TariffsRemoteDataSource {
   Future<void> forceDelete(int id) =>
       _client.delete(FinanceEndpoints.tariffForce(id));
 
+  /// استعادة جماعية — تعيد عدد ما استُعيد فعلاً كما يبلّغ الخادم.
+  Future<int> bulkRestore(List<int> ids) async {
+    final response = await _client.post(
+      FinanceEndpoints.tariffsBulkRestore,
+      body: <String, dynamic>{'ids': ids},
+    );
+    return _count(response, 'restored_count');
+  }
+
+  /// حذف نهائي جماعي — تعيد عدد ما حُذف فعلاً.
+  Future<int> bulkForceDelete(List<int> ids) async {
+    final response = await _client.post(
+      FinanceEndpoints.tariffsBulkForceDelete,
+      body: <String, dynamic>{'ids': ids},
+    );
+    return _count(response, 'force_deleted_count');
+  }
+
+  /// قراءة عدّاد التقرير مع تجاهل أي استجابة غير متوقعة (لا نُفشل العملية
+  /// بعد نجاحها على الخادم لمجرد أن العدّاد غاب من الاستجابة).
+  int _count(Object? response, String key) {
+    final map = JsonUtils.asMap(response);
+    final value = map?[key];
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
   TariffModel _parseSingle(Object? response, {int? fallbackId}) {
     final map = JsonUtils.asMap(response);
     if (map == null) {

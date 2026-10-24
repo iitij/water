@@ -52,6 +52,19 @@ class _TariffsBodyState extends State<_TariffsBody> {
       appBar: AppBar(
         title: const Text('التسعيرات'),
         actions: <Widget>[
+          BlocBuilder<TariffsCubit, TariffsState>(
+            builder: (context, state) => state.showsTrashed && state.visible.isNotEmpty
+                ? IconButton(
+                    tooltip: state.selectionMode ? 'إنهاء التحديد' : 'تحديد متعدد',
+                    onPressed: () => cubit.toggleSelectionMode(),
+                    icon: Icon(
+                      state.selectionMode
+                          ? Icons.close_rounded
+                          : Icons.checklist_rtl_rounded,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
           IconButton(
             tooltip: 'إعادة تحميل',
             onPressed: () => cubit.load(refresh: true),
@@ -94,6 +107,14 @@ class _TariffsBodyState extends State<_TariffsBody> {
                   ],
                 ),
                 _ActivePriceHeader(state: state),
+                if (state.selectionMode)
+                  _BulkBar(
+                    state: state,
+                    onSelectAll: cubit.selectAllVisible,
+                    onClear: cubit.clearSelection,
+                    onRestore: () => _bulkRestore(cubit),
+                    onForceDelete: () => _bulkForceDelete(cubit),
+                  ),
                 Expanded(
                   child: _buildList(context, cubit, state, tariffs),
                 ),
@@ -149,6 +170,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
             tariff: tariff,
             isActive: state.activeTariff?.id == tariff.id,
             busy: state.busyId == tariff.id,
+            selected: state.isSelected(tariff.id),
+            onSelectToggle: state.selectionMode
+                ? () => cubit.toggleSelected(tariff.id)
+                : null,
             onTap: () => TariffFormSheet.show(context, tariff: tariff),
             onSoftDelete: !tariff.isTrashed && context.canManageTariffs
                 ? () => _softDelete(cubit, tariff)
@@ -188,6 +213,47 @@ class _TariffsBodyState extends State<_TariffsBody> {
       AppFeedback.success(context, 'تمت استعادة «${tariff.name}».');
     } else {
       AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة.');
+    }
+  }
+
+  Future<void> _bulkRestore(TariffsCubit cubit) async {
+    final count = cubit.state.selectedIds.length;
+    if (count == 0) return;
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'استعادة $count تسعيرة',
+      message: 'ستعود التسعيرات المحدّدة إلى القائمة النشطة فوراً.',
+      confirmLabel: 'استعادة',
+    );
+    if (!confirmed || !mounted) return;
+
+    final restored = await cubit.bulkRestore();
+    if (!mounted) return;
+    if (restored > 0) {
+      AppFeedback.success(context, 'تمت استعادة $restored تسعيرة.');
+    } else {
+      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.');
+    }
+  }
+
+  Future<void> _bulkForceDelete(TariffsCubit cubit) async {
+    final count = cubit.state.selectedIds.length;
+    if (count == 0) return;
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'حذف نهائي لـ$count تسعيرة',
+      message: 'لا يمكن التراجع عن الحذف النهائي. الفواتير السابقة لا تتأثر.',
+      confirmLabel: 'حذف نهائي',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    final deleted = await cubit.bulkForceDelete();
+    if (!mounted) return;
+    if (deleted > 0) {
+      AppFeedback.success(context, 'تم حذف $deleted تسعيرة نهائياً.');
+    } else {
+      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف النهائي الجماعي.');
     }
   }
 
@@ -264,3 +330,71 @@ class _ActivePriceHeader extends StatelessWidget {
   }
 }
 
+
+/// شريط العمليات الجماعية: عدّاد + تحديد الكل + استعادة/حذف نهائي.
+///
+/// يظهر فقط في وضع التحديد داخل «المحذوفة»، لأن هذين الإجراءين لا معنى لهما
+/// على تسعيرة حيّة — وهذا ما يمنع حذف تسعيرة نشطة بالخطأ من شريط جماعي.
+class _BulkBar extends StatelessWidget {
+  const _BulkBar({
+    required this.state,
+    required this.onSelectAll,
+    required this.onClear,
+    required this.onRestore,
+    required this.onForceDelete,
+  });
+
+  final TariffsState state;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+  final VoidCallback onRestore;
+  final VoidCallback onForceDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final count = state.selectedIds.length;
+    final busy = state.saving;
+
+    return Container(
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.accentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              count == 0 ? 'حدّد تسعيرات للعمليات الجماعية' : 'المحدّد: $count',
+              style: theme.textTheme.labelMedium?.copyWith(color: AppColors.inkSoft),
+            ),
+          ),
+          TextButton(
+            onPressed: busy ? null : onSelectAll,
+            child: const Text('الكل'),
+          ),
+          if (count > 0)
+            TextButton(
+              onPressed: busy ? null : onClear,
+              child: const Text('مسح'),
+            ),
+          if (count > 0) ...<Widget>[
+            IconButton(
+              tooltip: 'استعادة المحدّد',
+              onPressed: busy ? null : onRestore,
+              icon: const Icon(Icons.restore_rounded, size: 20),
+            ),
+            IconButton(
+              tooltip: 'حذف نهائي للمحدّد',
+              onPressed: busy ? null : onForceDelete,
+              icon: const Icon(Icons.delete_forever_rounded, size: 20),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}

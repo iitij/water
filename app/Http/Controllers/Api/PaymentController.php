@@ -300,6 +300,38 @@ class PaymentController extends ApiController
         return response()->json(['message' => 'تمت إضافة إرسال سند القبض إلى قائمة المهام.', 'queued' => true], 202);
     }
 
+    /**
+     * تسجيل نتيجة إرسال واتساب على السند (خطة 2.0 — الفصل 6.2).
+     *
+     * التطبيق ينادي هذا المسار بعد نجاح الفتح/الإرسال، فيبقى أثر «ما وصل
+     * للمشترك» على الخادم لا على الجهاز وحده. لا نُفشل واجهة المحصّل إن فشل
+     * هذا التسجيل: الإرسال وقع فعلاً، والسجل المحلي (audit) يبقى شبكة أمان.
+     *
+     * الطرق المسموحة: `click_to_chat` (فتح واتساب بنص جاهز)، `meta_api`
+     * و`local_api` (إرسال من الخادم)، و`manual` (نسخ النص يدوياً).
+     */
+    public function recordWhatsAppResult(Request $request, int $id)
+    {
+        $this->authorizeApi(Payment::class, 'view');
+
+        $data = $request->validate([
+            'via' => ['required', 'string', 'in:click_to_chat,meta_api,local_api,manual'],
+        ]);
+
+        $payment = Payment::findOrFail($id);
+        $payment->forceFill([
+            'whatsapp_sent_at' => now(),
+            'whatsapp_sent_via' => $data['via'],
+            'whatsapp_sent_by' => $request->user()?->id,
+        ])->saveQuietly();
+
+        return response()->json([
+            'message' => 'تم تسجيل إرسال السند عبر واتساب.',
+            'whatsapp_sent_at' => optional($payment->whatsapp_sent_at)->toIso8601String(),
+            'whatsapp_sent_via' => $payment->whatsapp_sent_via,
+        ]);
+    }
+
     private function receiptData(Payment $payment): array
     {
         $payment->loadMissing(['subscriber.meters', 'meter', 'invoice', 'user']);
