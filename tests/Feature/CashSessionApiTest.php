@@ -13,6 +13,8 @@ use App\Models\Tariff;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Spatie\LaravelPdf\Facades\Pdf;
+use Spatie\LaravelPdf\PdfBuilder;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -35,6 +37,7 @@ class CashSessionApiTest extends TestCase
         parent::setUp();
 
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'collector', 'guard_name' => 'web']);
         $this->admin = User::factory()->create(['role' => 'admin']);
         $this->admin->assignRole('super_admin');
 
@@ -241,5 +244,84 @@ class CashSessionApiTest extends TestCase
 
         $this->assertDatabaseMissing('tariffs', ['id' => $b->id]);
         $this->assertDatabaseHas('tariffs', ['id' => $a->id, 'deleted_at' => null]);
+    }
+
+    public function test_daily_cash_session_pdf_report_is_rendered_from_server_data(): void
+    {
+        Pdf::fake();
+
+        $sessionId = $this->openSessionWithOnePayment();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/cash-sessions/{$sessionId}/close", [
+                'counted_amount' => 1000,
+                'notes' => 'العدّ مطابق للسندات.',
+            ])
+            ->assertOk();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->get("/api/cash-sessions/{$sessionId}/report/pdf")
+            ->assertOk();
+
+        Pdf::assertRespondedWithPdf(function (PdfBuilder $pdf) {
+            return $pdf->isDownload()
+                && $pdf->viewName === 'pdf.cash_session'
+                && str_ends_with($pdf->downloadName, '.pdf')
+                && $pdf->contains(['تقرير صندوق المحصّل', 'نقداً', 'الفرق']);
+        });
+    }
+
+    public function test_pdf_report_contains_receipts_and_counted_amount_in_words(): void
+    {
+        Pdf::fake();
+
+        $sessionId = $this->openSessionWithOnePayment();
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/cash-sessions/{$sessionId}/close", ['counted_amount' => 1000])
+            ->assertOk();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->get("/api/cash-sessions/{$sessionId}/report/pdf")
+            ->assertOk();
+
+        Pdf::assertRespondedWithPdf(
+            fn (PdfBuilder $pdf) => $pdf->contains([
+                'سندات الصندوق',
+                'النقد المعدود كتابةً',
+                '1000.00',
+            ]),
+        );
+    }
+
+    public function test_a_collector_cannot_read_another_collectors_pdf_report(): void
+    {
+        Pdf::fake();
+
+        $sessionId = $this->openSessionWithOnePayment();
+
+        $other = User::factory()->create(['role' => 'collector']);
+        $other->assignRole('collector');
+
+        $this->actingAs($other, 'sanctum')
+            ->get("/api/cash-sessions/{$sessionId}/report/pdf")
+            ->assertForbidden();
+    }
+
+    /** يفتح صندوقاً للمدير ويسجّل سنداً واحداً عليه، ويعيد رقم الصندوق. */
+    private function openSessionWithOnePayment(): int
+    {
+        $open = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/cash-sessions', ['opening_amount' => 0])
+            ->assertCreated();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/invoices/{$this->invoice->id}/pay", [
+                'amount' => 1000,
+                'payment_method' => 'cash',
+                'sync_uuid' => (string) Str::uuid(),
+            ])
+            ->assertCreated();
+
+        return (int) $open->json('cash_session.id');
     }
 }

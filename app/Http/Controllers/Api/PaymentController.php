@@ -304,9 +304,7 @@ class PaymentController extends ApiController
     {
         $payment->loadMissing(['subscriber.meters', 'meter', 'invoice', 'user']);
         $amount = (float) $payment->amount;
-        $amountInWords = class_exists(\NumberFormatter::class)
-            ? (new \NumberFormatter('ar', \NumberFormatter::SPELLOUT))->format($amount) . ' ريال يمني لا غير'
-            : null;
+        $amountInWords = \App\Support\ArabicNumber::spellout($amount);
         $invoiceRemaining = $payment->invoice ? $payment->invoice->getTrueRemainingAmount() : null;
         $subscriber = $payment->subscriber;
         $debit = $subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());

@@ -10,6 +10,7 @@ import '../../../core/ui/app_tokens.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../domain/cash_session.dart';
 import '../services/cash_session_service.dart';
+import 'widgets/cash_session_report.dart';
 
 /// شاشة صندوق المحصّل: فتح، متابعة السندات، ثم إغلاق بعدّ النقد.
 ///
@@ -317,6 +318,8 @@ class _OpenSessionCard extends StatelessWidget {
           ),
         ),
         const Gap(AppSpacing.md),
+        CashSessionReportButton(session: session),
+        const Gap(AppSpacing.md),
         AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -401,6 +404,8 @@ class _ClosedSummaryCard extends StatelessWidget {
             const Gap(AppSpacing.sm),
             Text('سبب الرفض: ${session.approvalNotes}'),
           ],
+          const Gap(AppSpacing.md),
+          CashSessionReportButton(session: session),
         ],
       ),
     );

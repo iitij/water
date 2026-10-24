@@ -48,6 +48,9 @@ class FinanceEndpoints {
   static String subscriberDueSummary(int subscriberId) =>
       '/subscribers/$subscriberId/unpaid-invoices-summary';
 
+  // ─── صندوق المحصّل (S4-06) ─────────────────────────────────────────────
+  static String cashSessionReportPdf(int id) => '/cash-sessions/$id/report/pdf';
+
   // ─── المجموعة 9: التعرفة ───────────────────────────────────────────────
   static const String tariffs = '/tariffs';
   static String tariff(int id) => '/tariffs/$id';

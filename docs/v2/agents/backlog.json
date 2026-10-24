@@ -307,10 +307,10 @@
       "agent": "A7",
       "subagent": "report-generator",
       "task": "تقرير الصندوق اليومي (PDF + مشاركة)",
-      "files": "lib/features/cash_sessions/**",
+      "files": "app/Http/Controllers/Api/CashSessionController.php, resources/views/pdf/cash_session.blade.php, app/Support/ArabicNumber.php, lib/features/cash_sessions/presentation/widgets/cash_session_report.dart",
       "definition_of_done": "PDF صحيح بالعربية والتفقيط",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "GET /cash-sessions/{id}/report/pdf (Spatie Pdf + تفقيط intl) + زر معاينة/مشاركة في شاشة الصندوق + 3 اختبارات Pdf::fake (لم تُشغَّل)"
     },
     {
       "id": "S5-01",

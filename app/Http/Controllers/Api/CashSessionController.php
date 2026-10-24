@@ -6,7 +6,9 @@ use App\Models\CashSession;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\CashSessionService;
+use App\Support\ArabicNumber;
 use Illuminate\Http\Request;
+use Spatie\LaravelPdf\Facades\Pdf;
 
 /**
  * صندوق المحصّل: فتح، إغلاق، اعتماد، وتقرير يومي.
@@ -20,6 +22,13 @@ use Illuminate\Http\Request;
  */
 class CashSessionController extends ApiController
 {
+    /** تسميات طرق الدفع كما تظهر في التقرير الورقي. */
+    private const METHOD_LABELS = [
+        'cash' => 'نقداً',
+        'bank_transfer' => 'حوالة بنكية',
+        'check' => 'شيك',
+    ];
+
     public function __construct(
         private readonly CashSessionService $sessions,
     ) {
@@ -144,12 +153,51 @@ class CashSessionController extends ApiController
         ]);
     }
 
-    /** تقرير يومي جاهز للطباعة/المشاركة (JSON؛ PDF يُبنى في التطبيق من نفس البيانات). */
+    /**
+     * تقرير يومي جاهز للطباعة/المشاركة (JSON).
+     *
+     * القيم المالية مصاغة نصّاً بنفس تنسيق الخادم حتى لا يختلف التطبيق عن
+     * نسخة الـ PDF (`pdf/cash_session.blade.php`).
+     */
     public function report(Request $request, int $id)
     {
         $session = CashSession::with(['user:id,name', 'square:id,name', 'approver:id,name'])->findOrFail($id);
         $this->authorizeSessionAccess($request->user(), $session);
 
+        return response()->json($this->reportData($session));
+    }
+
+    /**
+     * تقرير الصندوق اليومي PDF — نفس بيانات `report` لكن بتنسيق A4 عربي جاهز
+     * للطباعة/المشاركة (بطاقة S4-06). البناء على الخادم لأن الخطوط وتشكيل
+     * العربية وتفقيط المبلغ لا يمكن ضمانها على كل جهاز ميداني.
+     */
+    public function downloadPdf(Request $request, int $id)
+    {
+        $session = CashSession::with(['user:id,name', 'square:id,name', 'approver:id,name'])->findOrFail($id);
+        $this->authorizeSessionAccess($request->user(), $session);
+
+        $data = $this->reportData($session);
+
+        return Pdf::view('pdf.cash_session', [
+            'session' => $session,
+            'summary' => $data['cash_session'],
+            'payments' => $data['payments'],
+            'generatedAt' => optional($data['generated_at'])->format('Y-m-d H:i'),
+            'amountInWords' => $session->counted_amount === null
+                ? null
+                : ArabicNumber::spellout((float) $session->counted_amount),
+            'methodLabels' => self::METHOD_LABELS,
+        ])
+            ->withBrowsershot(fn ($browsershot) => $browsershot->noSandbox())
+            ->format('A4')
+            ->name('cash-session-' . $session->id . '-' . optional($session->session_date)->format('Y-m-d') . '.pdf')
+            ->download();
+    }
+
+    /** @return array{cash_session: array, payments: array, generated_at: \Illuminate\Support\Carbon} */
+    private function reportData(CashSession $session): array
+    {
         $payments = Payment::query()
             ->with(['subscriber:id,name', 'meter:id,unique_code'])
             ->where('cash_session_id', $session->id)
@@ -167,11 +215,11 @@ class CashSessionController extends ApiController
                 'time' => optional($payment->created_at)->format('H:i'),
             ])->values()->all();
 
-        return response()->json([
+        return [
             'cash_session' => $this->sessions->summary($session),
             'payments' => $payments,
-            'generated_at' => now()->toIso8601String(),
-        ]);
+            'generated_at' => now(),
+        ];
     }
 
     private function authorizeCollector(User $user): void

@@ -182,6 +182,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // صندوق المحصّل: فتح/إغلاق/اعتماد/تقرير (خطة 2.0 — الفصل 5.2).
     Route::get('/cash-sessions/current', [CashSessionController::class, 'current']);
     Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');
+    Route::get('/cash-sessions/{id}/report/pdf', [CashSessionController::class, 'downloadPdf'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/close', [CashSessionController::class, 'close'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
     Route::apiResource('cash-sessions', CashSessionController::class)
