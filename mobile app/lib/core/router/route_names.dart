@@ -9,6 +9,7 @@ class RouteNames {
   static const globalSearch = '/search';
   static const profile = '/profile';
   static const offlineSync = '/sync';
+  static const diagnostics = '/diagnostics';
 
   // Shell destinations (five-tab navigation)
   static const fieldHub = '/field';

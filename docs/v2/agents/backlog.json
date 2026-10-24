@@ -373,10 +373,10 @@
       "agent": "A9",
       "subagent": "diagnostics-screen",
       "task": "شاشة التشخيص والدعم",
-      "files": "lib/core/diagnostics/**",
+      "files": "lib/features/diagnostics/presentation/diagnostics_screen.dart, lib/core/router/**, lib/features/navigation/presentation/pages/more_screen.dart",
       "definition_of_done": "تقرير نسخ بضغطة واحدة",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "شاشة تشخيص: حالة الطابور (تهدئة/فشل/تدخل)، أحداث تدقيق معلّقة + رفع يدوي، آخر الأخطاء، و«نسخ تقرير الدعم»؛ لم تُشغَّل (لا Flutter هنا)"
     },
     {
       "id": "S6-01",

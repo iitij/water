@@ -107,6 +107,14 @@ class MoreScreen extends StatelessWidget {
                     ),
                     const SoftDivider(),
                     AppSettingRow(
+                      title: 'التشخيص والدعم',
+                      subtitle: 'حالة المزامنة وسجل التدقيق وآخر الأخطاء',
+                      icon: Icons.health_and_safety_outlined,
+                      color: AppColors.info,
+                      onTap: () => context.push(RouteNames.diagnostics),
+                    ),
+                    const SoftDivider(),
+                    AppSettingRow(
                       title: 'الملف الشخصي',
                       subtitle: 'تحديث الاسم والبريد وكلمة المرور',
                       icon: Icons.person_rounded,
