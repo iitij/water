@@ -11,6 +11,7 @@ import '../../features/dashboard/dashboard.dart';
 import '../../features/data_quality/data/data_quality_remote_data_source.dart';
 import '../../features/data_quality/presentation/pages/data_quality_screen.dart';
 import '../../features/devices/devices.dart';
+import '../../features/diagnostics/presentation/api_logs_screen.dart';
 import '../../features/diagnostics/presentation/diagnostics_screen.dart';
 import '../../features/exports/exports.dart';
 import '../../features/field_route/presentation/route_mode_screen.dart';
@@ -188,6 +189,10 @@ class AppRouter {
               subtitle: 'حالة المزامنة وسجل التدقيق وآخر الأخطاء',
               child: DiagnosticsScreen(),
             ),
+          ),
+          GoRoute(
+            path: RouteNames.apiLogs,
+            builder: (context, state) => const ApiLogsScreen(),
           ),
           GoRoute(
             path: RouteNames.profile,

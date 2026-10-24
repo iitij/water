@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/diagnostics/api_log_manager.dart';
 import '../../../core/diagnostics/error_reporter.dart';
 import '../../../core/finance/finance_feedback.dart';
 import '../../../core/finance/finance_locator.dart';
 import '../../../core/network/device_identity.dart';
 import '../../../core/network/network_info.dart';
+import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_surfaces.dart';
 import '../../../core/ui/app_tokens.dart';
@@ -38,6 +41,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   SyncQueueManager get _queue => sl<SyncQueueManager>();
   AuditLogService get _audit => sl<AuditLogService>();
   ErrorReporter get _errors => sl<ErrorReporter>();
+  ApiLogManager get _apiLogs => sl<ApiLogManager>();
   NetworkInfo get _network => sl<NetworkInfo>();
 
   @override
@@ -89,12 +93,26 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       ..writeln('الخادم: ${AppConfig.apiBaseUrl}')
       ..writeln('الوقت: ${DateTime.now().toIso8601String()}')
       ..writeln('الاتصال: ${_online == true ? 'متصل' : 'غير متصل'}')
+      ..writeln('طلبات API المسجلة: ${_apiLogs.totalCount}')
+      ..writeln('أخطاء API: ${_apiLogs.errorCount}')
+      ..writeln('عمليات بطيئة (لاق): ${_apiLogs.slowCount}')
+      ..writeln('متوسط زمن الاستجابة: ${_apiLogs.avgDurationMs}ms')
       ..writeln('عمليات في الطابور: ${_queue.pendingCount}')
       ..writeln('فشل دائم: ${_queue.failedCount}')
       ..writeln('بانتظار تهدئة: ${_waiting.length}')
       ..writeln('تحتاج تدخلاً: ${_attention.length}')
       ..writeln('أحداث تدقيق معلّقة: ${_audit.pendingCount}')
       ..writeln('آخر رفع تدقيق: ${_audit.lastFlushedAt ?? 'لا يوجد'}');
+
+    if (_apiLogs.errorLogs.isNotEmpty) {
+      buffer.writeln('أحدث أخطاء الـ API:');
+      for (final entry in _apiLogs.errorLogs.take(5)) {
+        buffer.writeln(
+          '- [${entry.timestamp.toIso8601String()}] ${entry.method} ${entry.endpoint} '
+          '-> ${entry.displayStatus} (${entry.durationLabel}): ${entry.errorMessage ?? 'بلا رسالة'}',
+        );
+      }
+    }
 
     for (final item in _attention.take(5)) {
       buffer.writeln(

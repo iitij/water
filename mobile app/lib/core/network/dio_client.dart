@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
+import '../diagnostics/api_log_manager.dart';
 import '../diagnostics/error_reporter.dart';
+import 'interceptors/api_log_interceptor.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'interceptors/client_headers_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
@@ -13,9 +15,11 @@ class DioClient {
   DioClient(
     SecureStorageService secureStorage, {
     ErrorReporter? errorReporter,
+    ApiLogManager? apiLogManager,
     String? appVersion,
   })  : offlineCache = OfflineCacheInterceptor(),
         errorInterceptor = ErrorInterceptor(errorReporter: errorReporter),
+        apiLogInterceptor = ApiLogInterceptor(logManager: apiLogManager),
         dio = Dio(
           BaseOptions(
             baseUrl: AppConfig.apiBaseUrl,
@@ -29,6 +33,7 @@ class DioClient {
         ) {
     tokenRefresh = TokenRefreshService(dio: dio, secureStorage: secureStorage);
     dio.interceptors.addAll(<Interceptor>[
+      apiLogInterceptor,
       ClientHeadersInterceptor(appVersion: appVersion),
       AuthInterceptor(
         secureStorage,
@@ -43,6 +48,7 @@ class DioClient {
   final Dio dio;
   final OfflineCacheInterceptor offlineCache;
   final ErrorInterceptor errorInterceptor;
+  final ApiLogInterceptor apiLogInterceptor;
   late final TokenRefreshService tokenRefresh;
 
   void updateBaseUrl(String url) {

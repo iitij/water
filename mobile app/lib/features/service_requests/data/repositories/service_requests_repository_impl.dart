@@ -1,3 +1,4 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../domain/entities/service_request.dart';
 import '../../domain/repositories/service_requests_repository.dart';
 import '../datasources/service_requests_remote_datasource.dart';
@@ -10,10 +11,8 @@ class ServiceRequestsRepositoryImpl implements ServiceRequestsRepository {
   Future<TankerPage> getRequests({TankerStatus? status, int? subscriberId, String? from, String? until}) async {
     final j = await _remote.getRequests(status: status?.apiValue, subscriberId: subscriberId, from: from, until: until);
     return TankerPage(
-      requests: ((j['data'] as List?) ?? [])
-          .map((e) => ServiceRequestsRemoteDatasource.parse(e as Map<String, dynamic>))
-          .toList(),
-      totalSum: (j['total_sum'] as num?)?.toDouble() ?? 0,
+      requests: jMapList(j).map(ServiceRequestsRemoteDatasource.parse).toList(),
+      totalSum: jDouble(j['total_sum']),
     );
   }
 

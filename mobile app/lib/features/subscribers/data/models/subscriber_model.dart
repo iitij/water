@@ -1,6 +1,7 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../domain/entities/subscriber.dart';
 
-double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
+double _d(Object? v) => jDouble(v);
 
 class SubscriberModel extends Subscriber {
   const SubscriberModel({
@@ -20,22 +21,22 @@ class SubscriberModel extends Subscriber {
   });
 
   factory SubscriberModel.fromJson(Map<String, dynamic> j) {
-    final square = j['square'] as Map<String, dynamic>?;
+    final square = jMapOrNull(j['square']);
     return SubscriberModel(
-      id: j['id'] as int,
-      name: j['name'] as String? ?? '',
-      phone: j['phone'] as String?,
-      address: j['address'] as String?,
-      squareId: (j['square_id'] as num?)?.toInt(),
-      squareName: square?['name'] as String?,
-      status: SubscriberStatusX.fromApi(j['status'] as String?),
-      subscriptionStartDate: j['subscription_start_date'] as String?,
-      metersCount: (j['meters_count'] as num?)?.toInt() ??
-          ((j['meters'] as List?)?.length ?? 0),
+      id: jInt(j['id']),
+      name: jStr(j['name']) ?? '',
+      phone: jStr(j['phone']),
+      address: jStr(j['address']),
+      squareId: jIntOrNull(j['square_id']),
+      squareName: jStr(square?['name'] ?? j['square_name']),
+      status: SubscriberStatusX.fromApi(jStr(j['status'])),
+      subscriptionStartDate: jStr(j['subscription_start_date']),
+      metersCount: jIntOrNull(j['meters_count']) ??
+          ((j['meters'] is List) ? (j['meters'] as List).length : 0),
       creditBalance: _d(j['credit_balance']),
       debitBalance: _d(j['debit_balance'] ?? j['balance']),
       generalBalance: _d(j['account_balance'] ?? j['balance']),
-      meterNumber: j['meter_number'] as String?,
+      meterNumber: jStr(j['meter_number']),
     );
   }
 
@@ -62,14 +63,14 @@ class MeterBalanceModel extends MeterBalance {
   });
 
   factory MeterBalanceModel.fromJson(Map<String, dynamic> j) => MeterBalanceModel(
-        meterId: j['id'] as int,
-        uniqueCode: j['unique_code'] as String? ?? '',
-        tenantName: j['tenant_name'] as String?,
+        meterId: jInt(j['id']),
+        uniqueCode: jStr(j['unique_code']) ?? '',
+        tenantName: jStr(j['tenant_name']),
         credit: _d(j['meter_credit']),
         debit: _d(j['meter_debit']),
-        readingsCount: (j['readings_count'] as num?)?.toInt() ?? 0,
-        status: j['status'] as String? ?? 'active',
-        pathNumber: (j['path_number'] as num?)?.toInt(),
+        readingsCount: jInt(j['readings_count']),
+        status: jStr(j['status']) ?? 'active',
+        pathNumber: jIntOrNull(j['path_number']),
       );
 }
 
@@ -86,13 +87,13 @@ class LedgerEntryModel extends LedgerEntry {
   });
 
   factory LedgerEntryModel.fromJson(Map<String, dynamic> j) => LedgerEntryModel(
-        id: j['id'] as int,
-        type: j['type'] as String? ?? '',
+        id: jInt(j['id']),
+        type: jStr(j['type']) ?? '',
         amount: _d(j['amount']),
-        meterId: (j['meter_id'] as num?)?.toInt(),
-        party: j['party'] as String? ?? 'الحساب العام للمشترك',
-        description: j['description'] as String?,
-        createdAt: j['created_at'] as String?,
+        meterId: jIntOrNull(j['meter_id']),
+        party: jStr(j['party']) ?? 'الحساب العام للمشترك',
+        description: jStr(j['description']),
+        createdAt: jStr(j['created_at']),
         runningBalance: _d(j['running_balance']),
       );
 }

@@ -1,3 +1,4 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../domain/entities/subscription_fee.dart';
 
 class SubscriptionFeeModel extends SubscriptionFee {
@@ -16,21 +17,21 @@ class SubscriptionFeeModel extends SubscriptionFee {
   });
 
   factory SubscriptionFeeModel.fromJson(Map<String, dynamic> j) {
-    final sub = j['subscriber'] as Map<String, dynamic>?;
-    final meter = j['meter'] as Map<String, dynamic>?;
-    final inv = j['invoice'] as Map<String, dynamic>?;
+    final sub = jMapOrNull(j['subscriber']);
+    final meter = jMapOrNull(j['meter']);
+    final inv = jMapOrNull(j['invoice']);
     return SubscriptionFeeModel(
-      id: j['id'] as int,
-      subscriberId: (j['subscriber_id'] as num).toInt(),
-      subscriberName: sub?['name'] as String?,
-      meterId: (j['meter_id'] as num?)?.toInt(),
-      meterCode: meter?['unique_code'] as String?,
-      amount: (j['amount'] as num?)?.toDouble() ?? 0,
-      status: FeeStatusX.fromApi(j['status'] as String?),
-      invoiceId: (j['invoice_id'] as num?)?.toInt(),
-      invoiceNumber: inv?['bill_number'] as String?,
-      notes: j['notes'] as String?,
-      createdAt: j['created_at'] as String?,
+      id: jInt(j['id']),
+      subscriberId: jInt(j['subscriber_id']),
+      subscriberName: jStr(sub?['name'] ?? j['subscriber_name']),
+      meterId: jIntOrNull(j['meter_id']),
+      meterCode: jStr(meter?['unique_code'] ?? j['meter_code']),
+      amount: jDouble(j['amount']),
+      status: FeeStatusX.fromApi(jStr(j['status'])),
+      invoiceId: jIntOrNull(j['invoice_id']),
+      invoiceNumber: jStr(inv?['bill_number']),
+      notes: jStr(j['notes']),
+      createdAt: jStr(j['created_at']),
     );
   }
 }

@@ -28,6 +28,7 @@ import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../database/database_encryption.dart';
 import '../database/offline_pack_downloader.dart';
+import '../diagnostics/api_log_manager.dart';
 import '../diagnostics/error_reporter.dart';
 import '../field_operations/field_operations_module.dart';
 import '../finance/finance_module.dart';
@@ -50,13 +51,16 @@ Future<void> configureDependencies({String? appVersion}) async {
 
   final secureStorage = SecureStorageService();
   final errorReporter = RecordingErrorReporter();
+  final apiLogManager = ApiLogManager.instance;
   final dioClient = DioClient(
     secureStorage,
     errorReporter: errorReporter,
+    apiLogManager: apiLogManager,
     appVersion: appVersion,
   );
   getIt.registerSingleton<SecureStorageService>(secureStorage);
   getIt.registerSingleton<ErrorReporter>(errorReporter);
+  getIt.registerSingleton<ApiLogManager>(apiLogManager);
 
   // قفل التطبيق (S5-01): رقم محلي + مهلة خمول. يُحمَّل قبل أول رسم للشاشة.
   final appLock = AppLockService();

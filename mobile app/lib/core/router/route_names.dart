@@ -10,6 +10,7 @@ class RouteNames {
   static const profile = '/profile';
   static const offlineSync = '/sync';
   static const diagnostics = '/diagnostics';
+  static const apiLogs = '/api-logs';
   static const routeMode = '/route-mode';
   static const appLock = '/app-lock';
 

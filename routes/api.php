@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SquareController;
 use App\Http\Controllers\Api\SubscriberController;
 use App\Http\Controllers\Api\SubscriptionFeeController;
+use App\Http\Controllers\Api\SystemLogController;
 use App\Http\Controllers\Api\TariffController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\UserController;
@@ -202,6 +203,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/devices', [DeviceController::class, 'index']);
     Route::post('/devices', [DeviceController::class, 'store']);
     Route::delete('/devices/{id}', [DeviceController::class, 'destroy'])->whereNumber('id');
+
+    // سجلات الـ API والخادم للتشخيص والدعم
+    Route::get('/system/api-logs', [SystemLogController::class, 'index']);
+    Route::delete('/system/api-logs', [SystemLogController::class, 'clear']);
 
     // Authenticated XLSX exports.
     Route::get('/exports/summary', [ApiExportController::class, 'summary']);

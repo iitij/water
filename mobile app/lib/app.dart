@@ -10,6 +10,7 @@ import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/cubit/auth_cubit.dart';
+import 'features/diagnostics/presentation/widgets/floating_api_log_overlay.dart';
 import 'features/security/presentation/lock_gate.dart';
 
 class WaterApp extends StatelessWidget {
@@ -42,9 +43,12 @@ class WaterApp extends StatelessWidget {
             darkTheme: AppTheme.dark,
             themeMode: themeController.mode,
             routerConfig: router,
-            // قفل التطبيق فوق كل المسارات — لا يمكن تجاوزه بالتنقل.
-            builder: (context, child) =>
-                LockGate(child: child ?? const SizedBox.shrink()),
+            // قفل التطبيق فوق كل المسارات مع زر مراقبة وسجلات API اللحظي
+            builder: (context, child) => LockGate(
+              child: FloatingApiLogOverlay(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
           ),
         ),
       ),

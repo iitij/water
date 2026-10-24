@@ -1,3 +1,4 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../domain/entities/ledger_transaction.dart';
 
 class LedgerTransactionModel extends LedgerTransaction {
@@ -15,18 +16,18 @@ class LedgerTransactionModel extends LedgerTransaction {
   });
 
   factory LedgerTransactionModel.fromJson(Map<String, dynamic> j) {
-    final sub = j['subscriber'] as Map<String, dynamic>?;
+    final sub = jMapOrNull(j['subscriber']);
     return LedgerTransactionModel(
-      id: j['id'] as int,
-      type: j['type'] as String? ?? '',
-      amount: (j['amount'] as num?)?.toDouble() ?? 0,
-      subscriberId: (j['subscriber_id'] as num?)?.toInt(),
-      subscriberName: sub?['name'] as String?,
-      meterId: (j['meter_id'] as num?)?.toInt(),
-      description: j['description'] as String?,
-      createdAt: j['created_at'] as String?,
-      referenceType: j['reference_type'] as String?,
-      referenceId: (j['reference_id'] as num?)?.toInt(),
+      id: jInt(j['id']),
+      type: jStr(j['type']) ?? '',
+      amount: jDouble(j['amount']),
+      subscriberId: jIntOrNull(j['subscriber_id']),
+      subscriberName: jStr(sub?['name'] ?? j['subscriber_name']),
+      meterId: jIntOrNull(j['meter_id']),
+      description: jStr(j['description']),
+      createdAt: jStr(j['created_at']),
+      referenceType: jStr(j['reference_type']),
+      referenceId: jIntOrNull(j['reference_id']),
     );
   }
 }

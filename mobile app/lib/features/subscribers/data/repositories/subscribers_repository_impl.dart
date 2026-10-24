@@ -1,10 +1,11 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../../squares/domain/entities/square.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 import '../datasources/subscribers_remote_datasource.dart';
 import '../models/subscriber_model.dart';
 
-double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
+double _d(Object? v) => jDouble(v);
 
 class SubscribersRepositoryImpl implements SubscribersRepository {
   SubscribersRepositoryImpl(this._remote, {this.tankerLookup});
@@ -20,8 +21,8 @@ class SubscribersRepositoryImpl implements SubscribersRepository {
   @override
   Future<Subscriber360> getSubscriber360(int id) async {
     final j = await _remote.get360(id);
-    final summaryJson = (j['financial_summary'] as Map<String, dynamic>?) ?? {};
-    final metersJson = ((j['meters'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final summaryJson = jMap(j['financial_summary']);
+    final metersJson = jMapList(j['meters']);
     final meters = metersJson.map(MeterBalanceModel.fromJson).toList();
     return Subscriber360(
       subscriber: SubscriberModel.fromJson(j),
@@ -30,12 +31,12 @@ class SubscribersRepositoryImpl implements SubscribersRepository {
         totalCredit: _d(summaryJson['total_credit_balance']),
         totalDebit: _d(summaryJson['total_debit_balance']),
         remainingSubscriptionFee: _d(summaryJson['remaining_subscription_fee']),
-        subscriptionFeeStatus: summaryJson['subscription_fee_status'] as String? ?? 'paid',
+        subscriptionFeeStatus: jStr(summaryJson['subscription_fee_status']) ?? 'paid',
         meterBalances: meters,
       ),
       metersRaw: metersJson,
-      invoices: ((j['invoices'] as List?) ?? []).cast<Map<String, dynamic>>(),
-      payments: ((j['payments'] as List?) ?? []).cast<Map<String, dynamic>>(),
+      invoices: jMapList(j['invoices']),
+      payments: jMapList(j['payments']),
     );
   }
 

@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // يسجل جميع طلبات الـ API وزمن الاستجابة وأي أخطاء بين التطبيق والخادم
+        $middleware->api(prepend: [
+            \App\Http\Middleware\LogApiRequests::class,
+        ]);
         // يرفض أي طلب من جهاز أُبطل (خطة 2.0 — الفصل 9.7).
         $middleware->api(append: [
             \App\Http\Middleware\EnsureDeviceIsActive::class,

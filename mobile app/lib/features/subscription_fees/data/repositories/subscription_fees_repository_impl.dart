@@ -1,3 +1,4 @@
+import '../../../../core/fouad/json_read.dart';
 import '../../domain/entities/subscription_fee.dart';
 import '../../domain/repositories/subscription_fees_repository.dart';
 import '../datasources/subscription_fees_remote_datasource.dart';
@@ -9,9 +10,7 @@ class SubscriptionFeesRepositoryImpl implements SubscriptionFeesRepository {
   @override
   Future<FeesPage> getFees({FeeStatus? status, int? subscriberId}) async {
     final j = await _remote.getFees(status: status?.apiValue, subscriberId: subscriberId);
-    final fees = ((j['data'] as List?) ?? [])
-        .map((e) => SubscriptionFeesRemoteDatasource.parse(e as Map<String, dynamic>))
-        .toList();
+    final fees = jMapList(j).map(SubscriptionFeesRemoteDatasource.parse).toList();
     return FeesPage(
       fees: fees,
       totalSum: SubscriptionFeesRemoteDatasource.d(j['total_sum']),
