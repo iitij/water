@@ -11,6 +11,14 @@ import '../../../core/ui/app_tokens.dart';
 import '../domain/sync_queue_item.dart';
 import '../services/sync_queue_manager.dart';
 
+/// وقت مختصر للعرض (ساعة:دقيقة) بالتوقيت المحلي.
+String _timeLabel(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
 class OfflineSyncMonitorScreen extends StatelessWidget {
   const OfflineSyncMonitorScreen({super.key});
 
@@ -53,6 +61,16 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
                                   : 'جارٍ فحص الشبكة',
                         ),
                         if (syncing) const HeroMetaChip(icon: Icons.sync_rounded, label: 'جارٍ الإرسال…'),
+                        if (manager.waitingCount > 0)
+                          HeroMetaChip(
+                            icon: Icons.schedule_rounded,
+                            label: '${manager.waitingCount} بانتظار المحاولة التالية',
+                          ),
+                        if (manager.nextRetryAt != null)
+                          HeroMetaChip(
+                            icon: Icons.timer_outlined,
+                            label: 'أقرب إعادة: ${_timeLabel(manager.nextRetryAt!)}',
+                          ),
                       ],
                     ),
                   ],

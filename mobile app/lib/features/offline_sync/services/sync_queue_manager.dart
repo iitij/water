@@ -262,8 +262,13 @@ class SyncQueueManager extends ChangeNotifier {
       }
 
       final now = DateTime.now();
+      // الصفوف التي تحتاج تدخلاً بشرياً (`failed`) لا تُعاد تلقائياً؛ يعيدها
+      // المستخدم بزر «إعادة المحاولة». أما الأخطاء المؤقتة فتبقى `queued`
+      // بمهلة تهدئة ويُعاد إرسالها تلقائياً عند انقضائها.
       final orderedIds = _items
-          .where((item) => item.status != SyncQueueStatus.syncing)
+          .where((item) =>
+              item.status != SyncQueueStatus.syncing &&
+              item.status != SyncQueueStatus.failed)
           .map((item) => item.id)
           .toList(growable: false);
       _scheduleRetryWakeUp(now);

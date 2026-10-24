@@ -97,6 +97,10 @@ void main() {
         'Bearer old-token',
       );
       expect(tokenWrites, <String>['new-token']);
+
+      // طلب آخر بالتوكن القديم يصل متأخراً: يُعطى التوكن الجديد بلا تدوير ثانٍ.
+      expect(await service.refresh(), 'new-token');
+      expect(adapter.requests, hasLength(1));
     });
 
     test('returns null and cools down after a failed refresh', () async {

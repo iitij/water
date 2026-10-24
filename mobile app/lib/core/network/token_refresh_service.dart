@@ -24,9 +24,18 @@ class TokenRefreshService {
   Future<String?>? _inFlight;
   DateTime? _lastFailureAt;
 
+  /// آخر توكن ناتج عن تدوير ناجح. الطلبات التي كانت في الطريق وقت التدوير
+  /// ترجع 401 بالتوكن القديم؛ نعطيها الجديد مباشرة بدل تدوير ثانٍ يُبطل
+  /// التوكن الصالح للتو.
+  String? _recentToken;
+  DateTime? _recentAt;
+
   /// لا نحاول أكثر من مرة كل 10 ثوانٍ بعد فشل، حتى لا نُغرق الخادم عند
   /// انقطاع كامل أو حساب معطّل.
   static const Duration failureCooldown = Duration(seconds: 10);
+
+  /// نافذة إعادة استخدام التوكن المُدوَّر حديثاً.
+  static const Duration rotationGrace = Duration(seconds: 15);
 
   bool get isRefreshing => _inFlight != null;
 
@@ -50,6 +59,15 @@ class TokenRefreshService {
     final current = await _storage.readAccessToken();
     if (current == null || current.isEmpty) return null;
 
+    final recent = _recentToken;
+    final recentAt = _recentAt;
+    if (recent != null &&
+        recentAt != null &&
+        recent == current &&
+        DateTime.now().difference(recentAt) < rotationGrace) {
+      return recent;
+    }
+
     try {
       final response = await _dio.post<dynamic>(
         ApiEndpoints.refresh,
@@ -70,6 +88,8 @@ class TokenRefreshService {
       }
 
       await _storage.writeAccessToken(token);
+      _recentToken = token;
+      _recentAt = DateTime.now();
       _lastFailureAt = null;
       return token;
     } on DioException {
@@ -82,5 +102,7 @@ class TokenRefreshService {
   void reset() {
     _inFlight = null;
     _lastFailureAt = null;
+    _recentToken = null;
+    _recentAt = null;
   }
 }
