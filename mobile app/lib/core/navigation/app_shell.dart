@@ -387,6 +387,7 @@ class _SideRail extends StatelessWidget {
     final destinations = _buildDestinations(AppStrings.of(context));
     final session = GetIt.I<SessionService>();
     final permissions = GetIt.I<PermissionService>();
+    final queue = GetIt.I<SyncQueueManager>();
     final user = session.user ?? const <String, dynamic>{};
     final name = user['name']?.toString() ?? 'موظف المشروع';
     final avatar = user['avatar']?.toString();
@@ -436,16 +437,59 @@ class _SideRail extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
                 ),
               ),
-              for (var index = 0; index < destinations.length; index++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: _RailItem(
-                    destination: destinations[index],
-                    selected: index == currentIndex,
-                    onTap: () => onSelect(index),
-                  ),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: <Widget>[
+                    for (var index = 0; index < destinations.length; index++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: _RailItem(
+                          destination: destinations[index],
+                          selected: index == currentIndex,
+                          onTap: () => onSelect(index),
+                        ),
+                      ),
+                    const SizedBox(height: 14),
+                    const AppDivider(),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
+                      child: Text(
+                        'النظام والحساب',
+                        style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
+                      ),
+                    ),
+                    _RailActionItem(
+                      icon: Icons.apps_rounded,
+                      label: 'كل الخدمات',
+                      onTap: () => context.push(RouteNames.services),
+                    ),
+                    _RailActionItem(
+                      icon: Icons.sync_rounded,
+                      label: 'مراقب المزامنة',
+                      badge: queue.pendingCount > 0 ? '${queue.pendingCount}' : null,
+                      badgeColor: queue.failedCount > 0 ? AppColors.danger : AppColors.warning,
+                      onTap: () => context.push(RouteNames.offlineSync),
+                    ),
+                    _RailActionItem(
+                      icon: Icons.lock_outline_rounded,
+                      label: 'قفل التطبيق',
+                      onTap: () => context.push(RouteNames.appLock),
+                    ),
+                    _RailActionItem(
+                      icon: Icons.route_rounded,
+                      label: 'وضع المسار',
+                      onTap: () => context.push(RouteNames.routeMode),
+                    ),
+                    _RailActionItem(
+                      icon: Icons.health_and_safety_outlined,
+                      label: 'التشخيص والدعم',
+                      onTap: () => context.push(RouteNames.diagnostics),
+                    ),
+                  ],
                 ),
-              const Spacer(),
+              ),
               const AppDivider(),
               const SizedBox(height: 12),
               Row(
@@ -573,4 +617,70 @@ String _roleLabel(PermissionService permissions) {
   if (permissions.isReader) return 'قارئ عدادات';
   final roles = permissions.currentRoles;
   return roles.isEmpty ? 'موظف' : roles.first;
+}
+
+class _RailActionItem extends StatelessWidget {
+  const _RailActionItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.badge,
+    this.badgeColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String? badge;
+  final Color? badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+              if (badge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: (badgeColor ?? scheme.primary).withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: badgeColor ?? scheme.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
