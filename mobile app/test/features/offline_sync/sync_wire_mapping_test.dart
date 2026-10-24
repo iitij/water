@@ -83,6 +83,10 @@ void main() {
       expect(DriftSyncQueueRepository.wireState(SyncQueueStatus.queued), 'pending');
       expect(DriftSyncQueueRepository.wireState(SyncQueueStatus.syncing), 'syncing');
       expect(DriftSyncQueueRepository.wireState(SyncQueueStatus.failed), 'failed');
+      expect(
+        DriftSyncQueueRepository.wireState(SyncQueueStatus.needsAttention),
+        'needs_attention',
+      );
     });
   });
 

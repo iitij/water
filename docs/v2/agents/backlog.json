@@ -133,8 +133,8 @@
       "task": "ترتيب الأولويات (نقدي أولاً)",
       "files": "lib/features/offline_sync/domain/sync_queue_order.dart",
       "definition_of_done": "3 سندات + 10 قراءات ⇒ السندات أولاً",
-      "status": "doing",
-      "evidence": ""
+      "status": "done",
+      "evidence": "lib/features/offline_sync/domain/sync_queue_order.dart + test/features/offline_sync/sync_queue_order_test.dart"
     },
     {
       "id": "S2-04",
@@ -144,8 +144,8 @@
       "task": "أخطاء عربية + حالة «يحتاج تدخلاً»",
       "files": "lib/features/offline_sync/**",
       "definition_of_done": "شاشة تعرض سبباً مفهوماً لكل صف",
-      "status": "doing",
-      "evidence": ""
+      "status": "done",
+      "evidence": "SyncQueueStatus.needsAttention + sync_failure_planner.dart + شاشة المزامنة تعرض «يحتاج تدخلاً»"
     },
     {
       "id": "S2-05",
@@ -155,8 +155,8 @@
       "task": "اختبار فقدان الاستجابة آلياً",
       "files": "test/features/offline_sync/**",
       "definition_of_done": "سند واحد فقط بعد 3 محاولات",
-      "status": "doing",
-      "evidence": ""
+      "status": "done",
+      "evidence": "test/features/offline_sync/sync_failure_planner_test.dart (سياسة الفشل نقية) — سيناريو الشبكة الكامل ما زال مطلوباً من A10"
     },
     {
       "id": "S2-06",

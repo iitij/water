@@ -285,6 +285,8 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         return SyncQueueStatus.syncing;
       case 'failed':
         return SyncQueueStatus.failed;
+      case 'needs_attention':
+        return SyncQueueStatus.needsAttention;
       // 'retrying' يعني أن العملية ما زالت في الطابور وتنتظر مهلة التهدئة.
       case 'retrying':
       default:
@@ -317,6 +319,8 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         return 'pending';
       case SyncQueueStatus.syncing:
         return 'syncing';
+      case SyncQueueStatus.needsAttention:
+        return 'needs_attention';
       case SyncQueueStatus.failed:
         return 'failed';
     }

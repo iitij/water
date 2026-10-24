@@ -120,11 +120,11 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
                       icon: Icons.list_alt_rounded,
                     ),
                   ),
-                  if (manager.failedCount > 0)
+                  if (manager.blockedCount > 0)
                     TextButton.icon(
                       onPressed: syncing ? null : manager.retryFailed,
                       icon: const Icon(Icons.replay_rounded, size: 17),
-                      label: const Text('إعادة الفاشلة'),
+                      label: Text('إعادة المتعثرة (${manager.blockedCount})'),
                     ),
                 ],
               ),
@@ -199,13 +199,26 @@ class _QueueItemCard extends StatelessWidget {
     final isReading = item.type == SyncQueueType.reading;
     final payload = item.payload;
     final amount = payload['amount']?.toString();
-    final title = isReading ? 'قراءة عداد' : 'دفعة تحصيل';
-    final detail = isReading
-        ? 'عداد ${payload['meter_id'] ?? '—'} • القراءة ${payload['current_reading'] ?? '—'}'
-        : 'فاتورة ${payload['invoice_id'] ?? '—'} • المبلغ ${amount ?? '—'} ريال';
+    final title = switch (item.type) {
+      SyncQueueType.reading => 'قراءة عداد',
+      SyncQueueType.payment => 'دفعة تحصيل',
+      SyncQueueType.paymentVoid => 'إلغاء سند قبض',
+      SyncQueueType.cashSessionClose => 'إغلاق صندوق المحصّل',
+    };
+    final detail = switch (item.type) {
+      SyncQueueType.reading =>
+        'عداد ${payload['meter_id'] ?? '—'} • القراءة ${payload['current_reading'] ?? '—'}',
+      SyncQueueType.payment =>
+        'فاتورة ${payload['invoice_id'] ?? '—'} • المبلغ ${amount ?? '—'} ريال',
+      SyncQueueType.paymentVoid =>
+        'سند ${payload['payment_id'] ?? '—'} • ${payload['reason'] ?? 'بلا سبب'}',
+      SyncQueueType.cashSessionClose =>
+        'صندوق ${payload['cash_session_id'] ?? '—'} • المعدود ${payload['counted_amount'] ?? '—'}',
+    };
     final status = switch (item.status) {
-      SyncQueueStatus.queued => 'queued',
+      SyncQueueStatus.queued => item.nextAttemptAt == null ? 'queued' : 'waiting',
       SyncQueueStatus.syncing => 'syncing',
+      SyncQueueStatus.needsAttention => 'attention',
       SyncQueueStatus.failed => 'failed',
     };
     final dateLabel = item.createdAt.toLocal().toString();
@@ -285,7 +298,17 @@ class _QueueItemCard extends StatelessWidget {
               ),
             ),
           ],
-          if (item.status == SyncQueueStatus.failed) ...<Widget>[
+          if (item.nextAttemptAt != null && item.status == SyncQueueStatus.queued) ...<Widget>[
+            const SizedBox(height: 6),
+            AppPill(
+              label: 'المحاولة التالية ${_timeLabel(item.nextAttemptAt!)}',
+              icon: Icons.schedule_rounded,
+              color: AppColors.warning,
+              dense: true,
+            ),
+          ],
+          if (item.status == SyncQueueStatus.failed ||
+              item.status == SyncQueueStatus.needsAttention) ...<Widget>[
             const SizedBox(height: 6),
             Align(
               alignment: AlignmentDirectional.centerEnd,
@@ -310,7 +333,9 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      'failed' => ('فشلت', AppColors.danger),
+      'failed' => ('استُنفدت المحاولات', AppColors.danger),
+      'attention' => ('يحتاج تدخلاً', AppColors.danger),
+      'waiting' => ('بانتظار المحاولة', AppColors.warning),
       'syncing' => ('جارٍ الإرسال', AppColors.info),
       _ => ('بالانتظار', AppColors.warning),
     };

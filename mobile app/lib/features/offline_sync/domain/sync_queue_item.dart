@@ -140,4 +140,13 @@ enum SyncQueueType {
   cashSessionClose,
 }
 
-enum SyncQueueStatus { queued, syncing, failed }
+enum SyncQueueStatus {
+  queued,
+  syncing,
+
+  /// فشل دائم يحتاج تدخلاً بشرياً (بيانات أو صلاحية) — لا يُعاد تلقائياً.
+  needsAttention,
+
+  /// استُنفدت المحاولات التلقائية — يبقى ظاهراً حتى يعالجه المستخدم.
+  failed,
+}

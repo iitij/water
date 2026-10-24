@@ -11,7 +11,9 @@ import '../../../core/auth/session_service.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/network_info.dart';
 import '../../../core/sync/sync_retry_policy.dart';
+import '../domain/sync_failure_planner.dart';
 import '../domain/sync_queue_item.dart';
+import '../domain/sync_queue_order.dart';
 import '../domain/sync_queue_repository.dart';
 
 class SyncQueueManager extends ChangeNotifier {
@@ -53,6 +55,14 @@ class SyncQueueManager extends ChangeNotifier {
   int get failedCount =>
       _items.where((item) => item.status == SyncQueueStatus.failed).length;
 
+  /// صفوف تحتاج تدخلاً بشرياً (بيانات مرفوضة أو صلاحية) — لا تُعاد تلقائياً.
+  int get attentionCount => _items
+      .where((item) => item.status == SyncQueueStatus.needsAttention)
+      .length;
+
+  /// كل ما يحتاج تدخلاً: مرفوض + مستنفد.
+  int get blockedCount => failedCount + attentionCount;
+
   /// عدد العمليات التي تنتظر مهلة إعادة المحاولة التلقائية.
   int get waitingCount => _items
       .where((item) =>
@@ -85,13 +95,13 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> initialize() async {
     if (_initialized) return;
     final loaded = await _repository.loadAll();
-    _items = loaded
-        .map(
-          (item) => item.status == SyncQueueStatus.syncing
-              ? item.copyWith(status: SyncQueueStatus.queued)
-              : item,
-        )
-        .toList(growable: true);
+    _items = SyncQueueOrder.sortForSync(
+      loaded.map(
+        (item) => item.status == SyncQueueStatus.syncing
+            ? item.copyWith(status: SyncQueueStatus.queued)
+            : item,
+      ),
+    ).toList(growable: true);
     await _runRepositoryWrite(() => _repository.saveAll(_items));
 
     _isOnline = await _networkInfo.isConnected;
@@ -121,7 +131,7 @@ class SyncQueueManager extends ChangeNotifier {
   /// another module (e.g. `ReadingsRepositoryImpl`) mutates `AppDatabase`.
   Future<void> reload() async {
     final fresh = await _repository.loadAll();
-    _items = fresh..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _items = SyncQueueOrder.sortForSync(fresh).toList(growable: true);
     notifyListeners();
     if (_isOnline == true &&
         !_isSyncing &&
@@ -220,7 +230,8 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> retryFailed() async {
     final updatedItems = <SyncQueueItem>[];
     for (var i = 0; i < _items.length; i++) {
-      if (_items[i].status == SyncQueueStatus.failed) {
+      if (_items[i].status == SyncQueueStatus.failed ||
+          _items[i].status == SyncQueueStatus.needsAttention) {
         final reset = _items[i].copyWith(
           status: SyncQueueStatus.queued,
           clearError: true,
@@ -247,9 +258,9 @@ class SyncQueueManager extends ChangeNotifier {
     _isSyncing = true;
     notifyListeners();
     try {
-      _items = (await _repository.loadAll())
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      // ملاحظة: مهلة التهدئة تُحترم داخل الحلقة أدناه عبر `isReadyAt`.
+      // الترتيب: النقد أولاً ثم الأقدم؛ ومهلة التهدئة تُحترم داخل الحلقة.
+      _items = SyncQueueOrder.sortForSync(await _repository.loadAll())
+          .toList(growable: true);
       if (_items.isEmpty) {
         notifyListeners();
         return;
@@ -268,7 +279,8 @@ class SyncQueueManager extends ChangeNotifier {
       final orderedIds = _items
           .where((item) =>
               item.status != SyncQueueStatus.syncing &&
-              item.status != SyncQueueStatus.failed)
+              item.status != SyncQueueStatus.failed &&
+              item.status != SyncQueueStatus.needsAttention)
           .map((item) => item.id)
           .toList(growable: false);
       _scheduleRetryWakeUp(now);
@@ -579,25 +591,14 @@ class SyncQueueManager extends ChangeNotifier {
     );
   }
 
-  /// يحوّل فشلاً إلى قرار سياسة: إما إبقاء العملية في الطابور بمهلة، أو
-  /// تعليمها `failed` لتظهر للمستخدم بسبب واضح.
+  /// يحوّل فشلاً إلى حالة صف عبر دالة نقية (`planSyncFailure`) قابلة للاختبار.
   SyncQueueItem _applyFailure(SyncQueueItem item, Object error) {
-    final statusCode = _statusCodeOf(error);
-    final decision = _retryPolicy.decide(
+    final plan = planSyncFailure(
       attempts: item.attempts,
-      statusCode: statusCode,
-      serverMessage: _serverMessageOf(error),
+      statusCode: _statusCodeOf(error),
+      serverMessage: _serverMessageOf(error) ?? _errorMessage(error),
     );
-    return item.copyWith(
-      status: decision.shouldRetry
-          ? SyncQueueStatus.queued
-          : SyncQueueStatus.failed,
-      lastError: decision.message ?? _errorMessage(error),
-      lastStatusCode: statusCode,
-      clearStatusCode: statusCode == null,
-      nextAttemptAt: decision.nextAttemptAt,
-      clearNextAttempt: decision.nextAttemptAt == null,
-    );
+    return applyFailurePlan(item, plan);
   }
 
   int? _statusCodeOf(Object error) {

@@ -746,7 +746,7 @@ class AppDatabase extends GeneratedDatabase {
 
   Future<List<Map<String, Object?>>> getActiveSyncActions({int limit = 500}) => _select(
         '''SELECT * FROM pending_sync_actions
-           WHERE state IN ('pending', 'retrying', 'syncing', 'failed')
+           WHERE state IN ('pending', 'retrying', 'syncing', 'failed', 'needs_attention')
            ORDER BY created_at ASC, id ASC LIMIT ${limit.clamp(1, 1000)}''',
       );
 
