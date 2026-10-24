@@ -11,6 +11,7 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/barcode_scanner_screen.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
@@ -342,6 +343,18 @@ class _SubscribersView extends StatelessWidget {
         activeCount: activeCount,
         onOpenFilters: () => _openFilters(context, state, cubit),
         onChanged: cubit.search,
+        trailing: IconButton(
+          tooltip: 'مسح باركود المشترك',
+          icon: const Icon(Icons.qr_code_scanner_rounded),
+          onPressed: () async {
+            final code = await BarcodeScannerScreen.scan(
+              context,
+              title: 'مسح باركود المشترك',
+              hint: 'وجّه الكاميرا إلى بطاقة المشترك أو باركود العداد.',
+            );
+            if (code != null && context.mounted) cubit.search(code);
+          },
+        ),
       ),
       AppFilterChips(
         children: <Widget>[
