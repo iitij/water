@@ -296,10 +296,10 @@
       "agent": "A4",
       "subagent": "conflict-resolver",
       "task": "سجل تدقيق محلي + رفع مجمّع",
-      "files": "lib/features/audit/**, POST /api/audit-events",
+      "files": "lib/features/audit/**, test/features/audit/audit_log_service_test.dart, app/Http/Controllers/Api/AuditEventController.php (جاهز)",
       "definition_of_done": "كل حدث حسّاس له صف في السجل",
-      "status": "todo",
-      "evidence": "الخادم جاهز؛ لا مجمّع في التطبيق"
+      "status": "partial",
+      "evidence": "AuditLogService + SharedPreferencesAuditStore + رفع مجمّع (دفعات ≤50) + 4 اختبارات؛ مربوط بفتح/إغلاق/اعتماد الصندوق فقط — أحداث السندات/الإلغاء تُسجَّل على الخادم ولم تُربط بعد، ولم تُشغَّل الاختبارات"
     },
     {
       "id": "S4-06",

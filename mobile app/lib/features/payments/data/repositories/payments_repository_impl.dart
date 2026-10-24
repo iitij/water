@@ -134,11 +134,11 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   Future<PaymentModel> update(int id, Map<String, dynamic> payload) =>
       _remote.update(id, payload);
 
-  /// الإلغاء يمرّ بالشبكة دائماً: لا يجوز إلغاء سند محلياً ثم اكتشاف أن
-  /// الخادم لم يُلغِه. عند الانقطاع تُرمى `NetworkFailure` ويُطلب من المحصّل
-  /// إعادة المحاولة (الإلغاء ليس عملية ميدانية حرجة كالتحصيل).
+  /// الإلغاء لا يُنفَّذ محلياً أبداً: الحكم النهائي للخادم (قد يطلبه اعتماد
+  /// مشرف). عند انقطاع الشبكة يُحفظ **طلب** الإلغاء في طابور المزامنة بسبب
+  /// مكتوب، ويُرسَل تلقائياً عند العودة؛ السند يبقى صالحاً حتى يقبل الخادم.
   @override
-  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) {
+  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(
@@ -146,7 +146,30 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
         <String, List<String>>{},
       );
     }
-    return _remote.voidPayment(id, reason: trimmed);
+
+    try {
+      return await _remote.voidPayment(id, reason: trimmed);
+    } on AppFailure catch (failure) {
+      final queue = _syncQueue;
+      if (!offlineEnabled || queue == null || !_isNetworkLike(failure)) {
+        rethrow;
+      }
+
+      await queue.enqueue(
+        SyncAction(
+          type: 'payment.void',
+          payload: <String, dynamic>{
+            'payment_id': id,
+            'reason': trimmed,
+          },
+          createdAt: DateTime.now(),
+          idempotencyKey: _uuid.v4(),
+          sourceModule: 'payments',
+        ),
+      );
+
+      return const VoidPaymentOutcome(queuedOffline: true);
+    }
   }
 
   @override

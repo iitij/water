@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../core/error/failures.dart';
+import '../../audit/services/audit_log_service.dart';
 import '../data/cash_session_api.dart';
 import '../domain/cash_session.dart';
 
@@ -25,12 +28,17 @@ class CashSessionRequiredException implements Exception {
 /// المحصّل من العمل؛ وعند غياب المعرفة (لم يُفتح صندوق قط) يُسمح بالتحصيل
 /// الأوفلاين لأن الخادم سيرفضه لاحقاً إن كان غير صحيح، مع تنبيه واضح.
 class CashSessionService extends ChangeNotifier {
-  CashSessionService({required CashSessionApi api}) : _api = api;
+  CashSessionService({required CashSessionApi api, AuditLogService? audit})
+      : _api = api,
+        _audit = audit;
 
   static const String noSessionMessage =
       'افتح صندوق المحصّل أولاً قبل تسجيل أي تحصيل.';
 
   final CashSessionApi _api;
+
+  /// سجل التدقيق المحلي (S4-05): يُسجّل فتح/إغلاق/اعتماد الصندوق حتى بلا شبكة.
+  final AuditLogService? _audit;
 
   CashSession? _current;
   bool _loaded = false;
@@ -91,6 +99,13 @@ class CashSessionService extends ChangeNotifier {
     _current = session;
     _loaded = true;
     _lastError = null;
+    _recordAudit(
+      'cash_session.opened',
+      session,
+      after: <String, dynamic>{
+        'opening_amount': session.openingAmount,
+      },
+    );
     notifyListeners();
     return session;
   }
@@ -109,12 +124,47 @@ class CashSessionService extends ChangeNotifier {
       notes: notes,
     );
     _current = closed.isOpen ? closed : null;
+    _recordAudit(
+      'cash_session.closed',
+      closed,
+      after: <String, dynamic>{
+        'counted_amount': countedAmount,
+        'expected_amount': closed.expectedAmount,
+        'variance_amount': closed.varianceAmount,
+      },
+    );
     notifyListeners();
     return closed;
   }
 
-  Future<CashSession> approve(int id, {required bool approve, String? notes}) =>
-      _api.approve(id, approve: approve, notes: notes);
+  Future<CashSession> approve(int id, {required bool approve, String? notes}) async {
+    final session = await _api.approve(id, approve: approve, notes: notes);
+    if (_current?.id == session.id) _current = session;
+    _recordAudit(
+      approve ? 'cash_session.approved' : 'cash_session.rejected',
+      session,
+      after: <String, dynamic>{
+        'notes': notes,
+        'variance_amount': session.varianceAmount,
+      },
+    );
+    notifyListeners();
+    return session;
+  }
+
+  /// يسجّل الحدث محلياً ثم يحاول رفعه — بلا انتظار ولا تعطيل للعملية الأساسية.
+  void _recordAudit(
+    String event,
+    CashSession session, {
+    Map<String, dynamic>? after,
+  }) {
+    final audit = _audit;
+    if (audit == null) return;
+    unawaited(() async {
+      await audit.record(event, entityType: 'CashSession', entityId: session.id, after: after);
+      await audit.flush();
+    }());
+  }
 
   /// يُستدعى عند تسجيل الخروج حتى لا يرى مستخدمٌ صندوق مستخدم آخر.
   void reset() {

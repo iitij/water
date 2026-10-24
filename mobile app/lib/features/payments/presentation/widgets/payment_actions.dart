@@ -196,6 +196,14 @@ Future<bool> voidPaymentWithReason(
   try {
     final outcome = await sl<PaymentsRepository>().voidPayment(payment.id, reason: reason);
     if (!context.mounted) return true;
+    if (outcome.queuedOffline) {
+      AppFeedback.info(
+        context,
+        'لا توجد شبكة الآن. حُفظ طلب الإلغاء في طابور المزامنة وسيُرسل '
+        'تلقائياً عند عودة الاتصال؛ السند ما زال صالحاً حتى ذلك الحين.',
+      );
+      return false;
+    }
     if (outcome.pendingApproval) {
       AppFeedback.info(
         context,

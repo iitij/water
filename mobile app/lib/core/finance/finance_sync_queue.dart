@@ -63,11 +63,29 @@ class UnifiedFinanceSyncQueueAdapter implements FinanceSyncQueueRepository {
 
   @override
   Future<void> enqueue(SyncAction action) async {
-    await _manager.enqueuePayment(
-      action.payload,
-      idempotencyKey: action.idempotencyKey,
-    );
+    // أنواع الطابور تُوجَّه لواجهاتها الخاصة؛ أي نوع مجهول يُعامل كسند قبض
+    // للحفاظ على سلوك v1.
+    if (action.type == 'payment.void') {
+      await _manager.enqueuePaymentVoid(
+        paymentId: _intValue(action.payload['payment_id']),
+        reason: action.payload['reason']?.toString() ?? '',
+      );
+    } else if (action.type == 'cash_session.close') {
+      await _manager.enqueueCashSessionClose(
+        cashSessionId: _intValue(action.payload['cash_session_id']),
+        countedCash: action.payload['counted_amount'] as num? ?? 0,
+        notes: action.payload['notes']?.toString(),
+      );
+    } else {
+      await _manager.enqueuePayment(
+        action.payload,
+        idempotencyKey: action.idempotencyKey,
+      );
+    }
   }
+
+  static int _intValue(Object? raw) =>
+      int.tryParse(raw?.toString() ?? '') ?? 0;
 
   @override
   Future<List<SyncAction>> pending({String? module}) async {
@@ -108,6 +126,7 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
     if (GetIt.I.isRegistered<SyncQueueManager>() &&
         (action.sourceModule == 'payments' ||
             action.type == 'payment.create' ||
+            action.type == 'payment.void' ||
             action.type == 'invoice.pay')) {
       try {
         final payload = Map<String, dynamic>.from(action.payload);
@@ -116,7 +135,15 @@ class LocalSyncQueueRepository implements FinanceSyncQueueRepository {
         if (action.idempotencyKey != null) {
           payload['local_receipt_number'] = action.idempotencyKey;
         }
-        await GetIt.I<SyncQueueManager>().enqueuePayment(payload);
+        final manager = GetIt.I<SyncQueueManager>();
+        if (action.type == 'payment.void') {
+          await manager.enqueuePaymentVoid(
+            paymentId: int.tryParse(payload['payment_id']?.toString() ?? '') ?? 0,
+            reason: payload['reason']?.toString() ?? '',
+          );
+          return;
+        }
+        await manager.enqueuePayment(payload);
         return;
       } catch (_) {
         // في حال عدم اكتمال الجلسة في الاختبارات، نحفظ في المخزن المحلي الاحتياطي.

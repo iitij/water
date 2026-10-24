@@ -349,15 +349,20 @@ class PaymentQuery extends Equatable {
 /// المالي المحدد في إعدادات الخادم (خطة 2.0 — الفصل 5.3).
 class VoidPaymentOutcome extends Equatable {
   const VoidPaymentOutcome({
-    required this.payment,
-    required this.pendingApproval,
+    this.payment,
+    this.pendingApproval = false,
+    this.queuedOffline = false,
   });
 
-  final PaymentModel payment;
+  /// السند بعد التنفيذ؛ `null` عندما حُفظ الطلب محلياً بلا شبكة.
+  final PaymentModel? payment;
 
   /// `true` يعني: السند ما زال صالحاً وطلب الإلغاء بانتظار المشرف.
   final bool pendingApproval;
 
+  /// `true` يعني: انقطعت الشبكة فحُفظ طلب الإلغاء في طابور المزامنة.
+  final bool queuedOffline;
+
   @override
-  List<Object?> get props => <Object?>[payment, pendingApproval];
+  List<Object?> get props => <Object?>[payment, pendingApproval, queuedOffline];
 }
