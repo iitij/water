@@ -102,14 +102,6 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<SyncQueueManager>(syncManager);
 
-  // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
-  FinanceModule.ensure();
-
-  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger.
-  FouadModule.ensure(dio: dioClient.dio);
-
-  // صندوق المحصّل (2.0 — الفصل 5.2): حالة واحدة مشتركة بين شاشة التحصيل
-  // وشاشة الصندوق، وتُصفَّر تلقائياً عند انتهاء الجلسة.
   // سجل التدقيق المحلي (S4-05): يُسجّل أحداث الميدان الحسّاسة محلياً ثم
   // يرفعها مجمّعة إلى `POST /audit-events` — الفاعل يحدده الخادم من التوكن.
   final auditLog = AuditLogService(
@@ -121,6 +113,14 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<AuditLogService>(auditLog);
 
+  // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
+  FinanceModule.ensure();
+
+  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger.
+  FouadModule.ensure(dio: dioClient.dio);
+
+  // صندوق المحصّل (2.0 — الفصل 5.2): حالة واحدة مشتركة بين شاشة التحصيل
+  // وشاشة الصندوق، وتُصفَّر تلقائياً عند انتهاء الجلسة.
   final cashSessions = CashSessionService(
     api: CashSessionApi(dioClient.dio),
     audit: auditLog,

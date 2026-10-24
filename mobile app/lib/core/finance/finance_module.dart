@@ -26,6 +26,7 @@ import '../../features/invoices/data/repositories/invoices_repository_impl.dart'
 import '../../features/invoices/domain/repositories/invoices_repository.dart';
 import '../../features/offline_sync/services/sync_queue_manager.dart';
 import '../../features/payments/data/datasources/payments_remote_datasource.dart';
+import '../../features/audit/services/audit_log_service.dart';
 import '../../features/payments/data/repositories/payments_repository_impl.dart';
 import '../../features/payments/domain/repositories/payments_repository.dart';
 import '../../features/tariffs/data/datasources/tariffs_remote_datasource.dart';
@@ -103,6 +104,7 @@ class FinanceModule {
           invoices: getIt<InvoicesRemoteDataSource>(),
           networkInfo: getIt<NetworkInfo>(),
           syncQueue: getIt<FinanceSyncQueueRepository>(),
+          audit: getIt.isRegistered<AuditLogService>() ? getIt<AuditLogService>() : null,
         ),
       )
       ..registerLazySingleton<TariffsRepository>(

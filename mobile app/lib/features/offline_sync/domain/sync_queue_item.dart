@@ -39,6 +39,7 @@ class SyncQueueItem extends Equatable {
   SyncQueueItem copyWith({
     SyncQueueStatus? status,
     int? attempts,
+    String? ownerUserId,
     String? lastError,
     bool clearError = false,
     DateTime? nextAttemptAt,
@@ -52,7 +53,7 @@ class SyncQueueItem extends Equatable {
         payload: payload,
         status: status ?? this.status,
         createdAt: createdAt,
-        ownerUserId: ownerUserId,
+        ownerUserId: ownerUserId ?? this.ownerUserId,
         attempts: attempts ?? this.attempts,
         lastError: clearError ? null : (lastError ?? this.lastError),
         nextAttemptAt:

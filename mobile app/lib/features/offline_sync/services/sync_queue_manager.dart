@@ -11,6 +11,7 @@ import '../../../core/auth/session_service.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/network_info.dart';
 import '../../../core/sync/sync_retry_policy.dart';
+import '../domain/sync_batch.dart';
 import '../domain/sync_failure_planner.dart';
 import '../domain/sync_queue_item.dart';
 import '../domain/sync_queue_order.dart';
@@ -276,11 +277,7 @@ class SyncQueueManager extends ChangeNotifier {
       // الصفوف التي تحتاج تدخلاً بشرياً (`failed`) لا تُعاد تلقائياً؛ يعيدها
       // المستخدم بزر «إعادة المحاولة». أما الأخطاء المؤقتة فتبقى `queued`
       // بمهلة تهدئة ويُعاد إرسالها تلقائياً عند انقضائها.
-      final orderedIds = _items
-          .where((item) =>
-              item.status != SyncQueueStatus.syncing &&
-              item.status != SyncQueueStatus.failed &&
-              item.status != SyncQueueStatus.needsAttention)
+      final orderedIds = eligibleForSync(_items, now)
           .map((item) => item.id)
           .toList(growable: false);
       _scheduleRetryWakeUp(now);
@@ -302,16 +299,7 @@ class SyncQueueManager extends ChangeNotifier {
         if ((item.ownerUserId == null || item.ownerUserId!.isEmpty) &&
             currentUserId != null &&
             currentUserId.isNotEmpty) {
-          item = SyncQueueItem(
-            id: item.id,
-            type: item.type,
-            payload: item.payload,
-            status: item.status,
-            createdAt: item.createdAt,
-            ownerUserId: currentUserId,
-            attempts: item.attempts,
-            lastError: item.lastError,
-          );
+          item = item.copyWith(ownerUserId: currentUserId);
         }
 
         final syncingItem = item.copyWith(

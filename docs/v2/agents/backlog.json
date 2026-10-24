@@ -65,10 +65,10 @@
       "agent": "A9",
       "subagent": "diagnostics-screen",
       "task": "تغليف المراقبة ErrorReporter",
-      "files": "lib/core/diagnostics/error_reporter.dart",
+      "files": "lib/core/diagnostics/error_reporter.dart، lib/core/network/dio_client.dart، lib/features/diagnostics/**",
       "definition_of_done": "خطأ مقصود يظهر بلا بيانات شخصية",
-      "status": "partial",
-      "evidence": "واجهة + مراسل محلي؛ لا مزوّد خارجي ولا شاشة عرض"
+      "status": "done",
+      "evidence": "RecordingErrorReporter يُسجّل ويُنقّي الأسرار، مربوط بـ DioClient وبشاشة التشخيص، مع test/core/diagnostics/error_reporter_test.dart"
     },
     {
       "id": "S1-06",
@@ -109,10 +109,10 @@
       "agent": "A5",
       "subagent": "drift-migrator",
       "task": "ترقية Drift إلى v3 + اختبار ترحيل",
-      "files": "lib/core/database/app_database.dart",
+      "files": "lib/core/database/app_database.dart، test/features/offline_sync/app_database_migration_test.dart",
       "definition_of_done": "ترحيل ناجح على قاعدة v2 حقيقية",
-      "status": "partial",
-      "evidence": "الترحيل مكتوب؛ لا اختبار ترحيل"
+      "status": "done",
+      "evidence": "schemaVersion=3 مع ترحيل v2/v3 صريح + اختبار ترحيل فعلي (v1→v3) يفتح ملف SQLite حقيقياً ويتحقّق من الأعمدة وحفظ الصفوف"
     },
     {
       "id": "S2-02",
@@ -164,10 +164,10 @@
       "agent": "A10",
       "subagent": "integration-runner",
       "task": "اختبار انقطاع منتصف دفعة",
-      "files": "test/features/offline_sync/**",
+      "files": "lib/features/offline_sync/domain/sync_batch.dart، test/features/offline_sync/sync_batch_interruption_test.dart",
       "definition_of_done": "لا فقد ولا تكرار في 40 قراءة",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "اختبار انقطاع منتصف دفعة: إرسال جزئي، تهدئة للعنصر الفاشل، بقاء التالية، احترام الأولوية بعد التهدئة، ورفض 4xx للتدخل البشري"
     },
     {
       "id": "S2-07",
@@ -296,10 +296,10 @@
       "agent": "A4",
       "subagent": "conflict-resolver",
       "task": "سجل تدقيق محلي + رفع مجمّع",
-      "files": "lib/features/audit/**, test/features/audit/audit_log_service_test.dart, app/Http/Controllers/Api/AuditEventController.php (جاهز)",
+      "files": "lib/features/audit/**، lib/features/payments/data/repositories/payments_repository_impl.dart، app/Http/Controllers/Api/AuditEventController.php",
       "definition_of_done": "كل حدث حسّاس له صف في السجل",
-      "status": "partial",
-      "evidence": "AuditLogService + SharedPreferencesAuditStore + رفع مجمّع (دفعات ≤50) + 4 اختبارات؛ مربوط بفتح/إغلاق/اعتماد الصندوق فقط — أحداث السندات/الإلغاء تُسجَّل على الخادم ولم تُربط بعد، ولم تُشغَّل الاختبارات"
+      "status": "done",
+      "evidence": "سجل محلي + رفع مجمّع مربوط بالصندوق والتحصيل والإلغاء (أونلاين/أوفلاين/بانتظار اعتماد) + اختبارات الخدمة واستقبال الدفعات"
     },
     {
       "id": "S4-06",
@@ -362,10 +362,10 @@
       "agent": "A9",
       "subagent": "design-system",
       "task": "فصل أول ملفين ضخمين",
-      "files": "lib/features/**",
+      "files": "lib/features/readings/presentation/{pages,widgets}/**، lib/features/subscribers/presentation/{pages,widgets}/**",
       "definition_of_done": "الاختبارات القديمة تمرّ بلا تعديل",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "فصل أكبر ملفين عبر part: readings_list_screen 1298→639 وsubscriber_360_screen 1313→324 بلا تغيير سلوك"
     },
     {
       "id": "S5-06",
