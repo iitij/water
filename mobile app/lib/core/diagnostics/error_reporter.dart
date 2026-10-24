@@ -56,11 +56,19 @@ abstract interface class ErrorReporter {
 
 /// تقرير يعمل بلا شبكة ولا خدمة خارجية: حلقة محدودة تُعرض في شاشة التشخيص.
 /// هذا هو الافتراضي في 2.0؛ ربط مزوّد خارجي يصبح قراراً منفصلاً (الفصل 12.5).
+///
+/// عند تمرير [uploader] يصبح `flush()` حقيقياً: يرفع التقارير غير المُرسلة
+/// إلى الخادم (`POST /system/error-reports`) ويصفّرها عند النجاح — كانت
+/// no-op سابقاً فلا يصل أي تقرير عطل للفريق أبداً.
 class RecordingErrorReporter implements ErrorReporter {
-  RecordingErrorReporter({this.maxEntries = 50});
+  RecordingErrorReporter({this.maxEntries = 50, this.uploader});
+
+  /// رفع دفعة تقارير إلى الخادم. يعيد عدد المقبوض أو يرمي عند الفشل.
+  final Future<void> Function(List<ErrorReport> reports)? uploader;
 
   final int maxEntries;
   final Queue<ErrorReport> _entries = Queue<ErrorReport>();
+  final List<ErrorReport> _pendingUpload = <ErrorReport>[];
   final StreamController<ErrorReport> _stream =
       StreamController<ErrorReport>.broadcast();
 
@@ -90,11 +98,27 @@ class RecordingErrorReporter implements ErrorReporter {
     while (_entries.length > maxEntries) {
       _entries.removeFirst();
     }
+    if (uploader != null) {
+      _pendingUpload.add(report);
+      while (_pendingUpload.length > maxEntries) {
+        _pendingUpload.removeAt(0);
+      }
+    }
     if (!_stream.isClosed) _stream.add(report);
   }
 
   @override
-  Future<void> flush() async {}
+  Future<void> flush() async {
+    final upload = uploader;
+    if (upload == null || _pendingUpload.isEmpty) return;
+    final batch = List<ErrorReport>.of(_pendingUpload);
+    try {
+      await upload(batch);
+      _pendingUpload.clear();
+    } catch (_) {
+      // تعذّر الرفع (أوفلاين غالباً) — تبقى التقارير للمحاولة التالية.
+    }
+  }
 
   Future<void> dispose() => _stream.close();
 }

@@ -3,13 +3,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/di/injection_container.dart';
 import '../../../core/diagnostics/api_log_manager.dart';
 import '../../../core/diagnostics/models/api_log_entry.dart';
-import '../../../core/di/injection_container.dart';
 import '../../../core/finance/finance_feedback.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/ui/app_surfaces.dart';
-import '../../../core/ui/app_tokens.dart';
 
 /// شاشة فحص ومراقبة سجلات الـ API والشبكة بين التطبيق والخادم.
 ///
@@ -78,14 +76,16 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
       };
 
       final response = await dio.get<Map<String, dynamic>>(
-        '/system/api-logs',
+        // بلا شرطة بادئة حتى يحافظ Dio على /api/ في baseUrl (انظر api_endpoints.dart).
+        'system/api-logs',
         queryParameters: query,
       );
 
       final data = response.data;
       final rawList = data?['logs'];
+      final parsed = <ApiLogEntry>[];
       if (rawList is List) {
-        final parsed = rawList.map((item) {
+        parsed.addAll(rawList.map((item) {
           if (item is Map) {
             return ApiLogEntry(
               id: item['id']?.toString() ?? '',
@@ -103,27 +103,56 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
               durationMs: item['duration_ms'] is int ? item['duration_ms'] as int : 0,
               isSlow: item['is_slow'] == true,
               isError: item['is_error'] == true,
-              errorMessage: item['error'] != null ? item['error'].toString() : null,
+              errorMessage: item['error']?.toString(),
               requestId: item['id']?.toString(),
               context: 'backend',
             );
           }
           return null;
-        }).whereType<ApiLogEntry>().toList();
+        }).whereType<ApiLogEntry>().toList());
+      }
 
-        if (mounted) {
-          setState(() {
-            _backendLogs = parsed;
-            _loadingBackend = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _backendLogs = <ApiLogEntry>[];
-            _loadingBackend = false;
-          });
-        }
+      // تقارير أعطال التطبيق المرفوعة إلى الخادم (system/error-reports) — تظهر
+      // في نفس القائمة بوسم واضح ليتمكن الدعم من رؤية أعطال الأجهزة.
+      final rawReports = data?['client_reports'];
+      if (rawReports is List) {
+        parsed.addAll(rawReports.map((item) {
+          if (item is Map) {
+            return ApiLogEntry(
+              id: item['id']?.toString() ?? '',
+              timestamp: item['occurred_at'] != null
+                  ? DateTime.tryParse(item['occurred_at'].toString()) ?? DateTime.now()
+                  : DateTime.now(),
+              method: 'APP-CRASH',
+              url: item['message']?.toString() ?? '',
+              endpoint: 'تقرير عطل من الجهاز',
+              requestBody: <String, dynamic>{
+                if (item['stack'] != null) 'stack': item['stack'],
+                if (item['context'] is Map) 'context': item['context'],
+                if (item['app_version'] != null) 'app_version': item['app_version'],
+                if (item['device_id'] != null) 'device_id': item['device_id'],
+              },
+              statusCode: 500,
+              responseBody: null,
+              durationMs: 0,
+              isSlow: false,
+              isError: true,
+              errorMessage: item['message']?.toString(),
+              requestId: item['id']?.toString(),
+              context: 'client-report',
+            );
+          }
+          return null;
+        }).whereType<ApiLogEntry>().toList());
+      }
+
+      parsed.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      if (mounted) {
+        setState(() {
+          _backendLogs = parsed;
+          _loadingBackend = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -166,7 +195,7 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
     } else {
       try {
         final dio = getIt<Dio>();
-        await dio.delete('/system/api-logs');
+        await dio.delete<void>('system/api-logs');
         await _fetchBackendLogs();
         if (mounted) AppFeedback.success(context, 'تم مسح سجلات الخادم بنجاح.');
       } catch (e) {

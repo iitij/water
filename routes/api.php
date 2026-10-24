@@ -11,7 +11,9 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MeterController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReadingController;
+use App\Http\Controllers\Api\ReadingFaultController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\RouteVisitController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ServiceRequestController;
 use App\Http\Controllers\Api\SettingController;
@@ -82,6 +84,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/readings/{id}', [ReadingController::class, 'update']);
     Route::patch('/readings/{id}', [ReadingController::class, 'update']);
     Route::delete('/readings/{id}', [ReadingController::class, 'destroy']);
+
+    // أعطال القراءة الميدانية (خطة 2.0): كانت محلية على الجهاز فقط — الآن تُرفع للخادم.
+    Route::get('/readings/faults', [ReadingFaultController::class, 'index']);
+    Route::post('/readings/faults', [ReadingFaultController::class, 'store']);
+    Route::post('/readings/faults/sync-batch', [ReadingFaultController::class, 'syncBatch']);
+
+    // زيارات جولة المسار (Route Mode) — ربط تقدّم الجولة بالخادم.
+    Route::get('/route-visits', [RouteVisitController::class, 'index']);
+    Route::post('/route-visits', [RouteVisitController::class, 'store']);
+    Route::post('/route-visits/sync-batch', [RouteVisitController::class, 'syncBatch']);
 
     // Invoices. Keep static routes ahead of /invoices/{id}.
     Route::get('/invoices/unpaid', [InvoiceController::class, 'unpaid']);
@@ -172,6 +184,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/whatsapp/local-status', [WhatsAppServerController::class, 'status']);
     Route::post('/whatsapp/local-start', [WhatsAppServerController::class, 'start']);
     Route::post('/whatsapp/local-stop', [WhatsAppServerController::class, 'stop']);
+    // مسارات احتياطية كان يرسلها تطبيق الهاتف في سقوط المسارات الأساسية.
+    Route::post('/whatsapp/local-logout', [WhatsAppServerController::class, 'logout']);
+    Route::post('/whatsapp/local-send-test', [WhatsAppServerController::class, 'sendTest']);
 
     // Users and role/permission matrix.
     Route::get('/roles/permissions-matrix', [RoleController::class, 'permissionsMatrix']);
@@ -207,6 +222,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // سجلات الـ API والخادم للتشخيص والدعم
     Route::get('/system/api-logs', [SystemLogController::class, 'index']);
     Route::delete('/system/api-logs', [SystemLogController::class, 'clear']);
+    // تقارير أعطال تطبيق الهاتف (ErrorReporter → الخادم).
+    Route::post('/system/error-reports', [SystemLogController::class, 'storeErrorReports']);
 
     // Authenticated XLSX exports.
     Route::get('/exports/summary', [ApiExportController::class, 'summary']);

@@ -247,11 +247,28 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
               controller: _controllers['accessToken']!,
               label: 'Access Token',
               forceLtr: true,
-              helperText: 'اتركه فارغاً للاحتفاظ بالرمز المحفوظ في الخادم',
+              helperText: settings.tokenConfigured
+                  ? 'الرمز محفوظ في الخادم — اتركه فارغاً للاحتفاظ به أو أدخل رمزاً جديداً لاستبداله'
+                  : 'اتركه فارغاً للاحتفاظ بالرمز المحفوظ في الخادم',
               obscureText: !_showToken,
-              suffixIcon: IconButton(
-                onPressed: () => setState(() => _showToken = !_showToken),
-                icon: Icon(_showToken ? Icons.visibility_off : Icons.visibility),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (settings.tokenConfigured &&
+                      _controllers['accessToken']!.text.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Tooltip(
+                        message: 'يوجد رمز محفوظ في الخادم',
+                        child: Icon(Icons.verified_outlined,
+                            size: 20, color: Color(0xFF2E7D32)),
+                      ),
+                    ),
+                  IconButton(
+                    onPressed: () => setState(() => _showToken = !_showToken),
+                    icon: Icon(_showToken ? Icons.visibility_off : Icons.visibility),
+                  ),
+                ],
               ),
               onChanged: (value) => cubit.update(settings.copyWith(accessToken: value)),
             ),

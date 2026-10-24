@@ -21,7 +21,7 @@ class TariffsRemoteDataSource {
       FinanceEndpoints.tariffs,
       query: <String, dynamic>{
         'trashed': trash.wire,
-        if (search != null && search.trim().isNotEmpty) 'query': search.trim(),
+        if (search != null && search.trim().isNotEmpty) 'q': search.trim(),
       },
     );
 

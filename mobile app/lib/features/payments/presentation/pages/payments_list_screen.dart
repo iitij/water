@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -14,6 +17,7 @@ import '../../data/models/payment_model.dart';
 import '../../data/services/daily_receipts_exporter.dart';
 import '../../domain/repositories/payments_repository.dart';
 import '../cubit/payments_cubit.dart';
+import '../sheets/void_requests_sheet.dart';
 import '../widgets/payment_actions.dart';
 import '../widgets/payment_card.dart';
 import 'payment_form_screen.dart';
@@ -127,6 +131,21 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               onPressed: () => setState(() => _selecting = true),
               icon: const Icon(Icons.checklist_rtl),
             ),
+            // اعتماد طلبات الإلغاء المعلّقة — للمشرف فقط (خطة 2.0 — الفصل 5.3).
+            if (trySl<PermissionService>()?.can('payments.void.approve') ?? false)
+              IconButton(
+                tooltip: 'طلبات الإلغاء المعلّقة',
+                onPressed: () async {
+                  final remaining = await VoidRequestsSheet.show(
+                    context,
+                    sl<PaymentsRepository>(),
+                  );
+                  if (remaining != null && context.mounted) {
+                    unawaited(cubit.load(refresh: true));
+                  }
+                },
+                icon: const Icon(Icons.gavel_outlined),
+              ),
             IconButton(
               tooltip: 'تصدير سندات اليوم (CSV)',
               onPressed: () => _exportToday(context, cubit),

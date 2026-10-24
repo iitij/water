@@ -382,3 +382,51 @@ class VoidPaymentOutcome extends Equatable {
   @override
   List<Object?> get props => <Object?>[payment, pendingApproval, queuedOffline];
 }
+
+/// طلب إلغاء سند معلّق بانتظار قرار المشرف (`GET /payments/void-requests` —
+/// خطة 2.0 — الفصل 5.3). كان هذا المسار غير قابل للوصول من التطبيق نهائياً.
+class PaymentVoidRequest extends Equatable {
+  const PaymentVoidRequest({
+    required this.id,
+    required this.receiptNumber,
+    required this.amount,
+    this.subscriber,
+    this.reason,
+    this.requestedBy,
+    this.requestedAt,
+    this.paymentDate,
+  });
+
+  final int id;
+  final String receiptNumber;
+  final double amount;
+  final String? subscriber;
+  final String? reason;
+  final String? requestedBy;
+  final DateTime? requestedAt;
+  final DateTime? paymentDate;
+
+  factory PaymentVoidRequest.fromJson(Map<String, dynamic> json) =>
+      PaymentVoidRequest(
+        id: JsonUtils.asInt(json['id']),
+        receiptNumber: JsonUtils.asString(json['receipt_number']),
+        amount: JsonUtils.asDouble(json['amount']),
+        subscriber: JsonUtils.asStringOrNull(json['subscriber']),
+        reason: JsonUtils.asStringOrNull(json['reason']),
+        requestedBy: JsonUtils.asStringOrNull(json['requested_by']),
+        requestedAt: JsonUtils.asDate(json['requested_at']),
+        paymentDate: JsonUtils.asDate(json['payment_date']),
+      );
+
+  @override
+  List<Object?> get props => <Object?>[
+        id,
+        receiptNumber,
+        amount,
+        subscriber,
+        reason,
+        requestedBy,
+        requestedAt,
+        paymentDate,
+      ];
+}

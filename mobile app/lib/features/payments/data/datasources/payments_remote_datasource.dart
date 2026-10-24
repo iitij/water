@@ -89,6 +89,34 @@ class PaymentsRemoteDataSource {
     return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
   }
 
+  /// `GET /api/payments/void-requests` — طلبات الإلغاء بانتظار اعتماد المشرف.
+  Future<List<PaymentVoidRequest>> voidRequests({int page = 1, int perPage = 25}) async {
+    final response = await _client.getRaw(
+      FinanceEndpoints.paymentsVoidRequests,
+      query: <String, dynamic>{'page': page, 'per_page': perPage},
+    );
+    return JsonUtils.unwrapList(response).map(PaymentVoidRequest.fromJson).toList();
+  }
+
+  /// `POST /api/payments/{id}/void-decision` — قرار المشرف في طلب الإلغاء.
+  Future<bool> decideVoidRequest(
+    int id, {
+    required bool approve,
+    String? notes,
+  }) async {
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoidDecision(id),
+      body: <String, dynamic>{
+        'approve': approve,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    final map = JsonUtils.asMap(response);
+    // الخادم يعيد {message, payment, receipt_data} بعد تنفيذ القرار.
+    return map != null &&
+        (map['payment'] != null || map['message'] != null);
+  }
+
   /// #52 `POST /api/payments/bulk-delete`
   Future<int> bulkDelete(List<int> ids) async {
     final response = await _client.post(

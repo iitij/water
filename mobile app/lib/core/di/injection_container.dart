@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:water_project/core/notifications/notification_service.dart';
@@ -13,10 +14,13 @@ import '../../features/cash_sessions/services/cash_session_service.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/devices/devices.dart';
 import '../../features/exports/exports.dart';
+import '../../features/field_route/data/route_visit_store.dart';
 import '../../features/meters/domain/meters_repository.dart';
 import '../../features/offline_sync/data/drift_sync_queue_repository.dart';
 import '../../features/offline_sync/domain/sync_queue_repository.dart';
+import '../../features/offline_sync/services/field_data_sync_service.dart';
 import '../../features/offline_sync/services/sync_queue_manager.dart';
+import '../../features/readings/data/reading_fault_log.dart';
 import '../../features/readings/data/services/reading_invoice_actions_service.dart';
 import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
@@ -50,7 +54,28 @@ Future<void> configureDependencies({String? appVersion}) async {
   if (getIt.isRegistered<SessionService>()) return;
 
   final secureStorage = SecureStorageService();
-  final errorReporter = RecordingErrorReporter();
+  final errorReporter = RecordingErrorReporter(
+    // رفع تقارير الأعطال إلى الخادم عند أول اتصال ناجح — كانت no-op سابقاً.
+    // يُجلب Dio من الحاوية داخل الإغلاق لأنه يُسجّل بعد هذه النقطة.
+    uploader: (reports) => getIt<Dio>().post<dynamic>(
+      'system/error-reports',
+      data: <String, dynamic>{
+        'reports': reports
+            .map((report) => <String, dynamic>{
+                  'message': report.message,
+                  'context': <String, dynamic>{
+                    if (report.context != null) 'name': report.context,
+                    if (report.statusCode != null) 'status_code': report.statusCode,
+                    if (report.endpoint != null) 'endpoint': report.endpoint,
+                    'fatal': report.fatal,
+                  },
+                  'occurred_at': report.occurredAt.toIso8601String(),
+                  'app_version': appVersion ?? AppConfig.appVersion,
+                })
+            .toList(growable: false),
+      },
+    ),
+  );
   final apiLogManager = ApiLogManager.instance;
   final dioClient = DioClient(
     secureStorage,
@@ -139,6 +164,18 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<AuditLogService>(auditLog);
 
+  // مزامنة بيانات الميدان المحلية (أعطال القراءة + زيارات الجولة) — كانت
+  // محلية فقط وتموت بفقدان الجهاز؛ الآن تُرفع فور التسجيل وعند عودة الاتصال.
+  final fieldDataSync = FieldDataSyncService(
+    dio: dioClient.dio,
+    faultLog: SharedPreferencesReadingFaultLog(),
+    visitStore: SharedPreferencesRouteVisitStore(),
+  );
+  getIt.registerSingleton<FieldDataSyncService>(fieldDataSync);
+  getIt.registerSingleton<RouteVisitStore>(
+    SharedPreferencesRouteVisitStore(),
+  );
+
   // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
   FinanceModule.ensure();
 
@@ -195,6 +232,17 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<ExcelExportService>(excelService);
 
   getIt.registerSingleton<AppRouter>(AppRouter(session: session));
+
+  // عند عودة الاتصال: ارفع كل ما تعذّر رفعه سابقاً — الأحداث المدققة،
+  // تقارير الأعطال، أعطال القراءة، وزيارات الجولة. (قائمة القراءات/المدفوعات
+  // لدى SyncQueueManager مستقلّة ويعيد المحاولة بنفسه عند الاتصال.)
+  NetworkInfo().onConnectivityChanged.listen((results) {
+    final online = results.any((result) => result != ConnectivityResult.none);
+    if (!online) return;
+    unawaited(auditLog.flush());
+    unawaited(errorReporter.flush());
+    unawaited(fieldDataSync.syncAll());
+  });
 
   await syncManager.initialize();
 }

@@ -27,6 +27,14 @@ abstract interface class PaymentsRepository {
   /// الإدارية فقط، والميدان لا يستخدمها.
   Future<VoidPaymentOutcome> voidPayment(int id, {required String reason});
 
+  /// طلبات الإلغاء المعلّقة بانتظار اعتماد المشرف (`GET /payments/void-requests`).
+  /// ترمي `ForbiddenFailure` إذا لم يكن للمستخدم صلاحية الاعتماد.
+  Future<List<PaymentVoidRequest>> voidRequests({int page, int perPage});
+
+  /// قرار المشرف في طلب إلغاء (`POST /payments/{id}/void-decision`).
+  /// `approve = false` يرفض الطلب ويبقي السند صالحاً.
+  Future<bool> decideVoidRequest(int id, {required bool approve, String? notes});
+
   Future<void> delete(int id);
   Future<int> bulkDelete(List<int> ids);
 

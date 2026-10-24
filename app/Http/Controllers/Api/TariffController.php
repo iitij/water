@@ -21,14 +21,20 @@ class TariffController extends ApiController
         if ($request->filled('is_active')) {
             $query->where('is_active', filter_var($request->query('is_active'), FILTER_VALIDATE_BOOLEAN));
         }
-        if ($request->filled('q')) {
-            $search = (string) $request->query('q');
+        // يقبل البحث `q` أو `query` (يرسلها تطبيق الهاتف).
+        $search = (string) ($request->query('q', $request->query('query', '')));
+        if ($search !== '') {
             $query->where('name', 'like', "%{$search}%");
         }
-        return response()->json([
-            'data' => $query->orderByDesc('start_date')->orderByDesc('id')->paginate($this->perPage($request))->appends($request->query()),
-            'active_price' => Tariff::getActivePrice(),
-        ]);
+        // الهيكل الجديد: المُصفّح في المستوى الأعلى (data/meta/links) ليقرأه
+        // تطبيق الهاتف مباشرة عبر unwrapList، مع إبقاء active_price متاحاً.
+        $paginator = $query->orderByDesc('start_date')->orderByDesc('id')
+            ->paginate($this->perPage($request))->appends($request->query());
+
+        return response()->json(array_merge(
+            $paginator->toArray(),
+            ['active_price' => Tariff::getActivePrice()],
+        ));
     }
 
     public function store(Request $request)
@@ -45,14 +51,17 @@ class TariffController extends ApiController
             if (! empty($data['is_active'])) {
                 Tariff::where('is_active', true)->update(['is_active' => false]);
             }
+
             return Tariff::create($data + ['is_active' => false]);
         });
+
         return response()->json(['message' => 'تم إنشاء شريحة التعرفة.', 'tariff' => $tariff], 201);
     }
 
     public function show(int $id)
     {
         $this->authorizeApi(Tariff::class, 'view');
+
         return response()->json(['tariff' => Tariff::withTrashed()->findOrFail($id), 'active_price' => Tariff::getActivePrice()]);
     }
 
@@ -73,6 +82,7 @@ class TariffController extends ApiController
             }
             $tariff->update($data);
         });
+
         return response()->json(['message' => 'تم تحديث التعرفة.', 'tariff' => $tariff->fresh(), 'active_price' => Tariff::getActivePrice()]);
     }
 
@@ -81,6 +91,7 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'delete');
         $tariff = Tariff::findOrFail($id);
         $tariff->delete();
+
         return response()->json(['message' => 'تم نقل التعرفة إلى المحذوفات.']);
     }
 
@@ -89,6 +100,7 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'restore');
         $tariff = Tariff::onlyTrashed()->findOrFail($id);
         $tariff->restore();
+
         return response()->json(['message' => 'تمت استعادة التعرفة.', 'tariff' => $tariff]);
     }
 
@@ -96,6 +108,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'forceDelete');
         Tariff::withTrashed()->findOrFail($id)->forceDelete();
+
         return response()->json(['message' => 'تم حذف التعرفة نهائياً.']);
     }
 
@@ -111,6 +124,7 @@ class TariffController extends ApiController
                 $restored++;
             }
         });
+
         return response()->json(['restored_count' => $restored]);
     }
 
@@ -126,6 +140,7 @@ class TariffController extends ApiController
                 $deleted++;
             }
         });
+
         return response()->json(['force_deleted_count' => $deleted]);
     }
 
@@ -134,6 +149,7 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:tariffs,id']]);
         $count = Tariff::whereIn('id', $data['ids'])->delete();
+
         return response()->json(['deleted_count' => $count]);
     }
 }

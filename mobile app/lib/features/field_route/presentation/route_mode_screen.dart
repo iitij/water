@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/error/failures.dart';
@@ -12,6 +13,7 @@ import '../../../core/ui/app_surfaces.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../../meters/data/models/meter.dart';
 import '../../meters/domain/meters_repository.dart';
+import '../../offline_sync/services/field_data_sync_service.dart';
 import '../../readings/domain/readings_repository.dart';
 import '../data/route_visit_store.dart';
 import '../domain/route_plan.dart';
@@ -164,6 +166,17 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
       meterIds: updated.visitedMeterIds,
     );
 
+    // رفع تقدّم الجولة إلى الخادم — يرى المشرف اكتمال المسار من أي جهاز،
+    // والفشل (أوفلاين) غير مطروق: تُعاد المزامنة عند عودة الاتصال.
+    try {
+      final sync = GetIt.I.isRegistered<FieldDataSyncService>()
+          ? GetIt.I<FieldDataSyncService>()
+          : null;
+      unawaited(sync?.syncRouteVisits());
+    } catch (_) {
+      // المزامنة غير حرجة للواجهة.
+    }
+
     if (!mounted) return;
     if (updated.isComplete) {
       AppFeedback.success(context, 'أكملت مسار ${square.name}. عمل ممتاز.');
@@ -171,12 +184,13 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
   }
 
   void _openReader(RouteStop stop) {
-    AppFeedback.info(
-      context,
-      'ابحث في شاشة القراءة عن ${stop.pathNumber == null ? 'العداد ${stop.meterCode}' : 'المسار ${stop.pathNumber}'}'
-      ' — ${stop.subscriberName ?? ''}',
-    );
-    context.push(RouteNames.fieldReader);
+    // افتح شاشة القراءة معبّأة بمحطة الجولة (المسار أولاً ثم كود العداد).
+    final query = stop.pathNumber?.toString() ?? stop.meterCode;
+    if (query.isEmpty) {
+      context.push(RouteNames.fieldReader);
+      return;
+    }
+    context.push('${RouteNames.fieldReader}?meter=${Uri.encodeQueryComponent(query)}');
   }
 
   @override

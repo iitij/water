@@ -7,7 +7,6 @@ use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Subscriber;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -17,6 +16,7 @@ class AdminController extends ApiController
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
         $overview = $this->overview();
+
         return response()->json([
             'subscribers_count' => $overview['total_subscribers_count'],
             'readings_this_month' => $overview['readings_this_month'],
@@ -44,18 +44,21 @@ class AdminController extends ApiController
     public function monthlyRevenue()
     {
         $this->authorizeApi(Payment::class, 'viewAny');
+
         return response()->json($this->monthlyRevenueData());
     }
 
     public function latestInvoices()
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
+
         return response()->json(['data' => $this->latestInvoiceData()]);
     }
 
     public function overdueInvoices()
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
+
         return response()->json(['data' => $this->overdueInvoiceData()]);
     }
 
@@ -72,7 +75,12 @@ class AdminController extends ApiController
         $to = $filters['to_date'] ?? now()->toDateString();
         $squareId = $filters['square_id'] ?? null;
 
-        $paymentQuery = Payment::query()->whereBetween('payment_date', [$from, $to]);
+        // payment_date عمود datetime (منذ 2026-10-23)، لذا يجب تحديد اليوم كاملاً
+        // وإلا تُستبعد مدفوعات اليوم نفسه بعد منتصف الليل من التقرير.
+        $paymentQuery = Payment::query()->whereBetween('payment_date', [
+            $from.' 00:00:00',
+            $to.' 23:59:59',
+        ]);
         $invoiceQuery = Invoice::query()->whereBetween('bill_date', [$from, $to]);
         $readingQuery = Reading::query()->whereBetween('reading_date', [$from, $to]);
         if ($squareId) {
@@ -157,6 +165,7 @@ class AdminController extends ApiController
         $data = $invoice->toArray();
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
+
         return $data;
     }
 }

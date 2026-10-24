@@ -20,6 +20,7 @@ class FieldReaderScreen extends StatelessWidget {
     required this.readingsRepository,
     this.invoiceActions,
     this.offlinePackDownloader,
+    this.initialMeterQuery,
     super.key,
   });
 
@@ -28,9 +29,13 @@ class FieldReaderScreen extends StatelessWidget {
   final ReadingInvoiceActionsService? invoiceActions;
   final OfflinePackDownloader? offlinePackDownloader;
 
+  /// استعلام ابتدائي يُعبّئ حقل البحث (يأتي من Route Mode لتفتح المحطة المختارة).
+  final String? initialMeterQuery;
+
   @override
   Widget build(BuildContext context) => BlocProvider(
-        create: (_) => MetersCubit(metersRepository)..load(),
+        create: (_) => MetersCubit(metersRepository)
+          ..setQuery(initialMeterQuery ?? ''),
         child: _FieldReaderView(
           readingsRepository: readingsRepository,
           invoiceActions: invoiceActions,
