@@ -30,6 +30,10 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
   List<Square> _squares = [];
   bool _saving = false;
 
+  /// «حفظ وإضافة آخر» — يبقى النموذج مفتوحاً بمعبّأ مسبقاً بنفس المربع والحالة،
+  /// لأن مُدخل البيانات يسجّل عشرات المشتركين في المربع نفسه الواحد تلو الآخر.
+  bool _keepOpen = false;
+
   SubscribersRepository _resolveRepository() {
     if (widget.repository != null) return widget.repository!;
     try {
@@ -125,13 +129,44 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
             onPressed: _saving ? null : _save,
             child: Text(_saving ? 'جارٍ الحفظ...' : 'حفظ المشترك'),
           ),
+          if (widget.existing == null) ...<Widget>[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _saveAndAddAnother,
+              icon: const Icon(Icons.playlist_add_rounded, size: 20),
+              label: const Text('حفظ وإضافة آخر'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'يحفظ المشترك الحالي ويفتح نموذجاً جديداً بنفس المربع والحالة.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ]),
       ),
     );
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+  /// يحفظ ثم يُفرّغ الحقول ويُبقي المربع/الحالة/التاريخ كما هي.
+  Future<void> _saveAndAddAnother() async {
+    _keepOpen = true;
+    final saved = await _save();
+    if (saved && mounted) {
+      setState(() {
+        _name.clear();
+        _phone.text = '+967';
+        _address.clear();
+      });
+      _formKey.currentState?.reset();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم الحفظ — النموذج جاهز للمشترك التالي.')),
+      );
+    }
+  }
+
+  /// يعيد `true` عند نجاح الحفظ (يُستخدم من «حفظ وإضافة آخر»).
+  Future<bool> _save() async {
+    if (!_formKey.currentState!.validate()) return false;
     setState(() => _saving = true);
     final repo = _resolveRepository();
     final draft = Subscriber(
@@ -150,17 +185,26 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
         await repo.updateSubscriber(draft);
       }
       if (!mounted) return;
-      final router = GoRouter.maybeOf(context);
-      if (router != null && router.canPop()) {
-        context.pop(true);
-      } else {
-        Navigator.of(context).pop(true);
+      if (!_keepOpen) {
+        // الخروج يُدمّر الشاشة، فلا setState بعده — وإلا انفجر «setState after dispose».
+        final router = GoRouter.maybeOf(context);
+        if (router != null && router.canPop()) {
+          context.pop(true);
+        } else {
+          Navigator.of(context).pop(true);
+        }
+        return true;
       }
+      setState(() => _saving = false);
+      return true;
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
+      return false;
+    } finally {
+      _keepOpen = false;
     }
   }
 }
