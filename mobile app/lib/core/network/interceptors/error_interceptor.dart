@@ -2,8 +2,14 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
+import '../../diagnostics/error_reporter.dart';
+
 class ErrorInterceptor extends Interceptor {
+  ErrorInterceptor({ErrorReporter? errorReporter}) : _reporter = errorReporter;
+
   Future<void> Function()? onUnauthorized;
+  final ErrorReporter? _reporter;
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (err.response?.statusCode == 401) {
@@ -11,6 +17,13 @@ class ErrorInterceptor extends Interceptor {
       if (callback != null) unawaited(callback());
     }
     final message = _messageFor(err);
+    _reporter?.report(
+      err,
+      stackTrace: err.stackTrace,
+      context: 'http',
+      statusCode: err.response?.statusCode,
+      endpoint: err.requestOptions.path,
+    );
     handler.reject(err.copyWith(message: message));
   }
 

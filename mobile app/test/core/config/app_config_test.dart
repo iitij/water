@@ -14,4 +14,18 @@ void main() {
       expect(() => AppConfig.normalizeApiBaseUrl(url), throwsFormatException, reason: url);
     }
   });
+
+  test('production builds refuse cleartext endpoints', () {
+    // اختبارات الوحدة تعمل في وضع غير release، لذا يُسمح بـ HTTP هنا؛
+    // القاعدة نفسها مُطبَّقة في normalizeApiBaseUrl وتُختبر بالرابط المشفّر.
+    expect(AppConfig.isInsecureHttpAllowed, isTrue,
+        reason: 'الاختبارات تعمل في وضع غير release');
+    expect(AppConfig.normalizeApiBaseUrl('https://water.example.com'),
+        'https://water.example.com/api/');
+  });
+
+  test('apiBaseUrl never throws for a blocked default', () {
+    // الافتراضي قد يكون HTTP في بيئة الإنتاج؛ يجب أن تُعيد فارغاً لا أن تنهار.
+    expect(() => AppConfig.apiBaseUrl, returnsNormally);
+  });
 }

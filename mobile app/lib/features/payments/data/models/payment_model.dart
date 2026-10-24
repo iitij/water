@@ -27,6 +27,11 @@ class PaymentModel extends Equatable {
     this.meterLabel,
     this.invoiceBillNumber,
     this.collectorName,
+    this.voidedAt,
+    this.voidReason,
+    this.voidedBy,
+    this.voidedVia,
+    this.cashSessionId,
   });
 
   final int id;
@@ -55,7 +60,22 @@ class PaymentModel extends Equatable {
   final String? invoiceBillNumber;
   final String? collectorName;
 
+  /// تاريخ الإلغاء (2.0): السند الملغى يبقى في السجل ولا يُحذف.
+  final DateTime? voidedAt;
+  final String? voidReason;
+  final String? voidedBy;
+  final String? voidedVia;
+
+  /// الصندوق الذي سُجّل فيه السند — أساس مطابقة نقد المحصّل.
+  final int? cashSessionId;
+
   bool get isDeleted => deletedAt != null;
+
+  /// هل أُلغي هذا السند؟ (يبقى ظاهراً في السجل مع السبب)
+  bool get isVoided => voidedAt != null;
+
+  /// السند صالح للاعتماد في حسابات الجرد؟
+  bool get isActive => !isVoided && !isDeleted;
 
   /// الاسم المستلم للرسالة: المستأجر أولاً ثم المشترك.
   String get displayName => (beneficiaryName?.trim().isNotEmpty ?? false)
@@ -103,6 +123,11 @@ class PaymentModel extends Equatable {
           : (meterPath == null ? meterCode : '$meterCode / مسار $meterPath'),
       invoiceBillNumber: JsonUtils.asStringOrNull(invoice?['bill_number']),
       collectorName: JsonUtils.asStringOrNull(user?['name']),
+      voidedAt: JsonUtils.asDate(json['voided_at']),
+      voidReason: JsonUtils.asStringOrNull(json['void_reason']),
+      voidedBy: JsonUtils.asStringOrNull(json['voided_by']),
+      voidedVia: JsonUtils.asStringOrNull(json['voided_via']),
+      cashSessionId: JsonUtils.asIntOrNull(json['cash_session_id']),
     );
   }
 
@@ -118,6 +143,9 @@ class PaymentModel extends Equatable {
         'reference_number': referenceNumber,
         'reason': reason,
         'notes': notes,
+        'voided_at': DateFormat.dateTime(voidedAt),
+        'void_reason': voidReason,
+        'cash_session_id': cashSessionId,
       };
 
   /// جسم `PUT /api/payments/{id}` — نفس حقول `PaymentResource::form`.
@@ -167,6 +195,8 @@ class PaymentModel extends Equatable {
         referenceNumber,
         reason,
         invoiceId,
+        voidedAt,
+        cashSessionId,
       ];
 }
 

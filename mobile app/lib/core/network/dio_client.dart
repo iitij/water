@@ -1,15 +1,21 @@
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
+import '../diagnostics/error_reporter.dart';
 import 'interceptors/auth_interceptor.dart';
+import 'interceptors/client_headers_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/offline_cache_interceptor.dart';
 import 'secure_storage_service.dart';
+import 'token_refresh_service.dart';
 
 class DioClient {
-  DioClient(SecureStorageService secureStorage)
-      : offlineCache = OfflineCacheInterceptor(),
-        errorInterceptor = ErrorInterceptor(),
+  DioClient(
+    SecureStorageService secureStorage, {
+    ErrorReporter? errorReporter,
+    String? appVersion,
+  })  : offlineCache = OfflineCacheInterceptor(),
+        errorInterceptor = ErrorInterceptor(errorReporter: errorReporter),
         dio = Dio(
           BaseOptions(
             baseUrl: AppConfig.apiBaseUrl,
@@ -21,8 +27,14 @@ class DioClient {
             headers: const <String, dynamic>{'Accept': 'application/json'},
           ),
         ) {
+    tokenRefresh = TokenRefreshService(dio: dio, secureStorage: secureStorage);
     dio.interceptors.addAll(<Interceptor>[
-      AuthInterceptor(secureStorage),
+      ClientHeadersInterceptor(appVersion: appVersion),
+      AuthInterceptor(
+        secureStorage,
+        refreshService: tokenRefresh,
+        retryClient: dio,
+      ),
       offlineCache,
       errorInterceptor,
     ]);
@@ -31,11 +43,13 @@ class DioClient {
   final Dio dio;
   final OfflineCacheInterceptor offlineCache;
   final ErrorInterceptor errorInterceptor;
+  late final TokenRefreshService tokenRefresh;
 
   void updateBaseUrl(String url) {
     final normalized = AppConfig.normalizeApiBaseUrl(url);
     AppConfig.configureServer(normalized);
     dio.options.baseUrl = normalized;
+    tokenRefresh.reset();
     offlineCache.clear();
   }
 

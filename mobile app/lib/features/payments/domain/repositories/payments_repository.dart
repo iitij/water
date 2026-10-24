@@ -17,6 +17,13 @@ abstract interface class PaymentsRepository {
   Future<CollectPaymentOutcome> collect(CollectPaymentRequest request);
 
   Future<PaymentModel> update(int id, Map<String, dynamic> payload);
+
+  /// إلغاء سند قبض مع تسجيل السبب (الحد الأدنى 10 أحرف).
+  ///
+  /// هذا هو المسار المعتمد لتصحيح التحصيل؛ `delete` باقية للتوافق مع الواجهة
+  /// الإدارية فقط، والميدان لا يستخدمها.
+  Future<PaymentModel> voidPayment(int id, {required String reason});
+
   Future<void> delete(int id);
   Future<int> bulkDelete(List<int> ids);
 

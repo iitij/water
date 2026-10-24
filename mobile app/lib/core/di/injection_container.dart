@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/admin_shared/data/admin_api_client.dart';
+import '../../features/cash_sessions/data/cash_session_api.dart';
+import '../../features/cash_sessions/services/cash_session_service.dart';
 import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
@@ -14,6 +18,7 @@ import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
+import '../diagnostics/error_reporter.dart';
 import '../database/app_database.dart';
 import '../database/offline_pack_downloader.dart';
 import '../field_operations/field_operations_module.dart';
@@ -28,12 +33,20 @@ import '../theme/app_theme.dart';
 
 final GetIt getIt = GetIt.instance;
 
-Future<void> configureDependencies() async {
+/// نسخة التطبيق تُمرَّر من `main.dart` (موجودة في pubspec) وتُرسل مع كل طلب
+/// كترويسة `X-Client-Version` لتسهيل تتبّع الأخطاء في الميدان.
+Future<void> configureDependencies({String? appVersion}) async {
   if (getIt.isRegistered<SessionService>()) return;
 
   final secureStorage = SecureStorageService();
-  final dioClient = DioClient(secureStorage);
+  final errorReporter = RecordingErrorReporter();
+  final dioClient = DioClient(
+    secureStorage,
+    errorReporter: errorReporter,
+    appVersion: appVersion,
+  );
   getIt.registerSingleton<SecureStorageService>(secureStorage);
+  getIt.registerSingleton<ErrorReporter>(errorReporter);
   getIt.registerSingleton<DioClient>(dioClient);
   getIt.registerSingleton<Dio>(dioClient.dio);
   getIt.registerSingleton(dioClient.offlineCache);
@@ -85,6 +98,26 @@ Future<void> configureDependencies() async {
 
   // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger.
   FouadModule.ensure(dio: dioClient.dio);
+
+  // صندوق المحصّل (2.0 — الفصل 5.2): حالة واحدة مشتركة بين شاشة التحصيل
+  // وشاشة الصندوق، وتُصفَّر تلقائياً عند انتهاء الجلسة.
+  final cashSessions = CashSessionService(api: CashSessionApi(dioClient.dio));
+  getIt.registerSingleton<CashSessionService>(cashSessions);
+  session.addSessionClearedListener(cashSessions.reset);
+  session.addSessionClearedListener(dioClient.tokenRefresh.reset);
+  String? lastCashUser;
+  session.addListener(() {
+    final userId = session.user?['id']?.toString();
+    if (!session.isReady || !session.isAuthenticated) {
+      lastCashUser = null;
+      return;
+    }
+    // نجلب الصندوق مرة واحدة لكل مستخدم، لا مع كل تحديث للجلسة.
+    if (userId != null && userId != lastCashUser) {
+      lastCashUser = userId;
+      unawaited(cashSessions.refresh());
+    }
+  });
 
   // Dev 5: Dashboard, Reports, Settings Studio, WhatsApp Local Server, RBAC & Exports.
   final adminApi = DioAdminApiClient(dioClient.dio);

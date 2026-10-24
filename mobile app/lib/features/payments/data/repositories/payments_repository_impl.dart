@@ -134,6 +134,21 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   Future<PaymentModel> update(int id, Map<String, dynamic> payload) =>
       _remote.update(id, payload);
 
+  /// الإلغاء يمرّ بالشبكة دائماً: لا يجوز إلغاء سند محلياً ثم اكتشاف أن
+  /// الخادم لم يُلغِه. عند الانقطاع تُرمى `NetworkFailure` ويُطلب من المحصّل
+  /// إعادة المحاولة (الإلغاء ليس عملية ميدانية حرجة كالتحصيل).
+  @override
+  Future<PaymentModel> voidPayment(int id, {required String reason}) {
+    final trimmed = reason.trim();
+    if (trimmed.length < 10) {
+      throw const ValidationFailure(
+        'اكتب سبب الإلغاء (10 أحرف على الأقل) ليُسجَّل في سجل التدقيق.',
+        <String, List<String>>{},
+      );
+    }
+    return _remote.voidPayment(id, reason: trimmed);
+  }
+
   @override
   Future<void> delete(int id) => _remote.delete(id);
 

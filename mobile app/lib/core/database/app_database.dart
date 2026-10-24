@@ -32,7 +32,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -58,6 +58,22 @@ class AppDatabase extends GeneratedDatabase {
             if (!hasOwner) {
               await customStatement(
                 'ALTER TABLE pending_sync_actions ADD COLUMN owner_user_id TEXT',
+              );
+            }
+          }
+          if (from < 3 && to >= 3) {
+            // v3: مهلة إعادة المحاولة وآخر رمز HTTP — يستخدمهما مدير المزامنة
+            // لتفادي محاولات متلاحقة على خطأ مؤقت (خطة 2.0 — الفصل 8.2).
+            final columns = await _select('PRAGMA table_info(pending_sync_actions)');
+            final names = columns.map((col) => col['name']).toSet();
+            if (!names.contains('next_attempt_at')) {
+              await customStatement(
+                'ALTER TABLE pending_sync_actions ADD COLUMN next_attempt_at TEXT',
+              );
+            }
+            if (!names.contains('last_status_code')) {
+              await customStatement(
+                'ALTER TABLE pending_sync_actions ADD COLUMN last_status_code INTEGER',
               );
             }
           }
@@ -159,7 +175,9 @@ class AppDatabase extends GeneratedDatabase {
       updated_at TEXT NOT NULL,
       last_error TEXT,
       server_response_json TEXT,
-      owner_user_id TEXT
+      owner_user_id TEXT,
+      next_attempt_at TEXT,
+      last_status_code INTEGER
     )''',
     '''CREATE INDEX IF NOT EXISTS pending_sync_state_created_idx
       ON pending_sync_actions(state, created_at)''',
@@ -703,13 +721,25 @@ class AppDatabase extends GeneratedDatabase {
     String? createdAt,
     String? lastError,
     String? ownerUserId,
+    String? nextAttemptAt,
   }) async {
     final timestamp = createdAt ?? _now();
     await _execute(
       '''INSERT OR REPLACE INTO pending_sync_actions(
-        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-      [id, type, payloadJson, state, attemptCount, timestamp, _now(), lastError, ownerUserId],
+        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, next_attempt_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      [
+        id,
+        type,
+        payloadJson,
+        state,
+        attemptCount,
+        timestamp,
+        _now(),
+        lastError,
+        ownerUserId,
+        nextAttemptAt,
+      ],
     );
     _notifySyncQueueChanged();
   }
@@ -761,6 +791,9 @@ class AppDatabase extends GeneratedDatabase {
     String? lastError,
     String? serverResponseJson,
     String? ownerUserId,
+    String? nextAttemptAt,
+    bool clearNextAttempt = false,
+    int? lastStatusCode,
   }) async {
     await _execute(
       '''UPDATE pending_sync_actions SET state = ?,
@@ -771,6 +804,25 @@ class AppDatabase extends GeneratedDatabase {
         WHERE id = ?''',
       [state, attemptCount, lastError, serverResponseJson, ownerUserId, _now(), id],
     );
+    // مهلة المحاولة التالية ورمز الخطأ يحتاجان إلى مسح صريح، ولهذا لا
+    // يستخدمان COALESCE مثل بقية الأعمدة.
+    if (clearNextAttempt) {
+      await _execute(
+        'UPDATE pending_sync_actions SET next_attempt_at = NULL WHERE id = ?',
+        [id],
+      );
+    } else if (nextAttemptAt != null) {
+      await _execute(
+        'UPDATE pending_sync_actions SET next_attempt_at = ? WHERE id = ?',
+        [nextAttemptAt, id],
+      );
+    }
+    if (lastStatusCode != null) {
+      await _execute(
+        'UPDATE pending_sync_actions SET last_status_code = ? WHERE id = ?',
+        [lastStatusCode, id],
+      );
+    }
     _notifySyncQueueChanged();
   }
 

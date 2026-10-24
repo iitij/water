@@ -1,0 +1,8 @@
+# انسخ هذا الملف إلى android/key.properties (خارج Git) واملأ القيم.
+# أنشئ المفتاح مرة واحدة:
+#   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA \
+#           -keysize 2048 -validity 10000 -alias upload
+storeFile=/absolute/path/to/upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME

@@ -4,6 +4,7 @@ class ApiEndpoints {
 
   // Authentication and current user.
   static const login = 'login';
+  static const refresh = 'refresh';
   static const logout = 'logout';
   static const me = 'me';
   static const legacyUser = 'user';
@@ -79,6 +80,20 @@ class ApiEndpoints {
   static String paymentPdf(int id) => 'payments/$id/pdf';
   static String paymentWhatsAppLink(int id) => 'payments/$id/whatsapp-link';
   static String sendPaymentWhatsApp(int id) => 'payments/$id/send-whatsapp';
+  static String voidPayment(int id) => 'payments/$id/void';
+
+  // Collector cash sessions (صندوق المحصّل) and the audit trail.
+  static const cashSessions = 'cash-sessions';
+  static const currentCashSession = 'cash-sessions/current';
+  static String cashSession(int id) => 'cash-sessions/$id';
+  static String cashSessionReport(int id) => 'cash-sessions/$id/report';
+  static String closeCashSession(int id) => 'cash-sessions/$id/close';
+  static String approveCashSession(int id) => 'cash-sessions/$id/approve';
+  static const auditEvents = 'audit-events';
+
+  // Registered devices; deleting a device revokes its access.
+  static const devices = 'devices';
+  static String device(int id) => 'devices/$id';
 
   static const subscriptionFees = 'subscription-fees';
   static const bulkDeleteSubscriptionFees = 'subscription-fees/bulk-delete';
@@ -97,6 +112,8 @@ class ApiEndpoints {
   static String tariff(int id) => 'tariffs/$id';
   static String restoreTariff(int id) => 'tariffs/$id/restore';
   static String forceDeleteTariff(int id) => 'tariffs/$id/force';
+  static const bulkRestoreTariffs = 'tariffs/bulk-restore';
+  static const bulkForceDeleteTariffs = 'tariffs/bulk-force-delete';
   static const transactions = 'transactions';
   static String transaction(int id) => 'transactions/$id';
 

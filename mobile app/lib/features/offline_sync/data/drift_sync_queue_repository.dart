@@ -146,6 +146,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         createdAt: item.createdAt.toUtc().toIso8601String(),
         lastError: item.lastError,
         ownerUserId: item.ownerUserId,
+        nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
       );
       return;
     }
@@ -160,6 +161,8 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
       attemptCount: item.attempts,
       lastError: item.lastError,
       ownerUserId: item.ownerUserId,
+      nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
+      clearNextAttempt: item.nextAttemptAt == null,
     );
   }
 
@@ -199,13 +202,16 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
   Future<void> recordSyncFailure({
     required SyncQueueItem item,
     required String error,
+    DateTime? retryAt,
   }) async {
     await _database.updateSyncAction(
       id: item.id,
-      state: 'failed',
+      state: retryAt == null ? 'failed' : 'retrying',
       attemptCount: item.attempts,
       lastError: error,
       ownerUserId: item.ownerUserId,
+      nextAttemptAt: retryAt?.toUtc().toIso8601String(),
+      clearNextAttempt: retryAt == null,
     );
     if (item.type == SyncQueueType.reading) {
       await _database.setReadingSyncError(item.id, error);
@@ -244,15 +250,34 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
       ownerUserId: (ownerUserId != null && ownerUserId.isEmpty) ? null : ownerUserId,
       attempts: attempts,
       lastError: (lastError != null && lastError.isEmpty) ? null : lastError,
+      nextAttemptAt: DateTime.tryParse(row['next_attempt_at']?.toString() ?? ''),
+      lastStatusCode: int.tryParse(row['last_status_code']?.toString() ?? ''),
     );
   }
 
-  SyncQueueType _parseActionType(String actionType) {
+  /// تحويل نوع الإجراء في قاعدة البيانات إلى نوع الطابور.
+  ///
+  /// الترتيب مهم: أنواع الإلغاء والإغلاق تُفحص قبل مطابقة `payment` العامة.
+  static SyncQueueType parseActionType(String actionType) {
+    const closeTypes = <String>{
+      'cash_session.close',
+      'cash-session.close',
+      'cashsession.close',
+    };
+    const voidTypes = <String>{
+      'payment.void',
+      'payment.void.create',
+      'payments.void',
+    };
+    if (closeTypes.contains(actionType)) return SyncQueueType.cashSessionClose;
+    if (voidTypes.contains(actionType)) return SyncQueueType.paymentVoid;
     if (actionType.startsWith('payment') || actionType == 'invoice.pay') {
       return SyncQueueType.payment;
     }
     return SyncQueueType.reading;
   }
+
+  SyncQueueType _parseActionType(String actionType) => parseActionType(actionType);
 
   SyncQueueStatus _parseStatus(String? state) {
     switch (state) {
@@ -260,21 +285,33 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         return SyncQueueStatus.syncing;
       case 'failed':
         return SyncQueueStatus.failed;
+      // 'retrying' يعني أن العملية ما زالت في الطابور وتنتظر مهلة التهدئة.
+      case 'retrying':
       default:
         return SyncQueueStatus.queued;
     }
   }
 
-  String _wireActionType(SyncQueueType type, Map<String, dynamic> payload) {
+  /// النوع المكتوب في `pending_sync_actions.action_type`.
+  static String wireActionType(SyncQueueType type, Map<String, dynamic> payload) {
     switch (type) {
       case SyncQueueType.reading:
         return 'reading.create';
       case SyncQueueType.payment:
         return payload['invoice_id'] != null ? 'invoice.pay' : 'payment.create';
+      case SyncQueueType.paymentVoid:
+        return 'payment.void';
+      case SyncQueueType.cashSessionClose:
+        return 'cash_session.close';
     }
   }
 
-  String _wireState(SyncQueueStatus status) {
+  String _wireActionType(SyncQueueType type, Map<String, dynamic> payload) =>
+      wireActionType(type, payload);
+
+  /// الحالة المكتوبة في `pending_sync_actions.state`. الحالة `retrying` محفوظة
+  /// للعمليات التي تنتظر مهلة إعادة المحاولة.
+  static String wireState(SyncQueueStatus status) {
     switch (status) {
       case SyncQueueStatus.queued:
         return 'pending';
@@ -284,6 +321,9 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         return 'failed';
     }
   }
+
+  String _wireState(SyncQueueStatus status) => wireState(status);
+
 
   Map<String, dynamic> _normalizePayload(
     SyncQueueType type,
