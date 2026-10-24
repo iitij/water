@@ -23,11 +23,17 @@ class Payment extends Model
         'notes',
         'reason',
         'sync_uuid',
+        'cash_session_id',
+        'voided_at',
+        'void_reason',
+        'voided_by',
+        'voided_via',
     ];
 
     protected $casts = [
         'payment_date' => 'datetime',
         'amount' => 'decimal:2',
+        'voided_at' => 'datetime',
     ];
 
     // ─── Relationships ───
@@ -50,6 +56,27 @@ class Payment extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function cashSession(): BelongsTo
+    {
+        return $this->belongsTo(CashSession::class);
+    }
+
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    /** السندات الصالحة فقط — تُستخدم في كل حساب مالي. */
+    public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNull('voided_at');
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
     }
 
     protected static function booted()

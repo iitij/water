@@ -25,6 +25,14 @@ class PaymentController extends ApiController
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
         ])->latest('payment_date')->latest('id');
 
+        if ($request->filled('cash_session_id')) {
+            $query->where('cash_session_id', $request->integer('cash_session_id'));
+        }
+        if ($request->query('voided') === 'only') {
+            $query->whereNotNull('voided_at');
+        } elseif ($request->query('voided') !== 'all') {
+            $query->whereNull('voided_at');
+        }
         if ($request->filled('payment_method')) {
             $query->where('payment_method', $request->query('payment_method'));
         }
@@ -139,6 +147,35 @@ class PaymentController extends ApiController
         return response()->json(['message' => 'تم تحديث سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
 
+    /**
+     * إلغاء سند قبض (لا حذف). يتطلب سبباً وصلاحية `void:Payment`.
+     * مرجع: خطة الإصدار 2.0 — الفصل 5.3.
+     */
+    public function void(Request $request, int $id, PaymentService $paymentService)
+    {
+        $this->authorizeApi(Payment::class, 'void');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+        ]);
+
+        $payment = Payment::findOrFail($id);
+        $payment = $paymentService->voidPayment(
+            $payment,
+            (string) $data['reason'],
+            $request->user()->id,
+            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+        );
+
+        $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
+
+        return response()->json([
+            'message' => 'تم إلغاء سند القبض وإعادة احتساب الأرصدة.',
+            'payment' => $payment,
+            'receipt_data' => $this->receiptData($payment),
+        ]);
+    }
+
     public function destroy(int $id)
     {
         $this->authorizeApi(Payment::class, 'delete');
@@ -219,6 +256,9 @@ class PaymentController extends ApiController
             'outstanding_balance' => number_format((float) $debit, 2, '.', ''),
             'credit_balance' => number_format((float) $credit, 2, '.', ''),
             'collector' => $payment->user?->name,
+            'voided' => $payment->voided_at !== null,
+            'void_reason' => $payment->void_reason,
+            'cash_session_id' => $payment->cash_session_id,
             'pdf_url' => url('/api/payments/' . $payment->id . '/pdf'),
         ];
     }

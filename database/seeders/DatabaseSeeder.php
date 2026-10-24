@@ -48,6 +48,11 @@ class DatabaseSeeder extends Seeder
             ArchivedDataSeeder::class,
         ]);
 
+        // ─── 6. صلاحيات الإصدار 2.0 (الصندوق وسجل التدقيق) ───
+        $this->call([
+            CashSessionPermissionsSeeder::class,
+        ]);
+
         $this->command->info('✅ تم إنشاء البيانات التجريبية بنجاح!');
         $this->command->info('📧 البريد: admin@water.test');
         $this->command->info('🔑 كلمة المرور: password');

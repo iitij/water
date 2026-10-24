@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\DB;
 
 class PaymentService
 {
+    /**
+     * إعادة توزيع كل السندات الصالحة (غير الملغاة) على الفواتير.
+     * السند الملغى يبقى في قاعدة البيانات للأثر، لكنه لا يخصم شيئاً.
+     */
     public function recalculateInvoices(Subscriber $subscriber, ?int $meterId = null): void
     {
         // 1. Get all invoices
@@ -27,7 +31,10 @@ class PaymentService
         }
 
         // 3. Get all payments
-        $pQuery = Payment::where('subscriber_id', $subscriber->id)->orderBy('payment_date')->orderBy('id');
+        $pQuery = Payment::where('subscriber_id', $subscriber->id)
+            ->whereNull('voided_at')
+            ->orderBy('payment_date')
+            ->orderBy('id');
         if ($meterId) {
             $pQuery->where('meter_id', $meterId);
         } else {
@@ -153,6 +160,80 @@ class PaymentService
     }
 
     /**
+     * إلغاء سند قبض. لا يُحذف السند أبداً: يُوسم بالسبب والمستخدم، ثم تُعاد
+     * الفواتير والأرصدة كما لو لم يكن، ويُسجَّل الحدث في سجل التدقيق.
+     *
+     * مرجع: خطة الإصدار 2.0 — الفصل 5.3.
+     */
+    public function voidPayment(
+        Payment $payment,
+        string $reason,
+        ?int $userId = null,
+        string $source = 'api',
+    ): Payment {
+        $reason = trim($reason);
+        if (\Illuminate\Support\Str::length($reason) < 10) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'reason' => ['سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+            $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+
+            if ($payment->voided_at !== null) {
+                return $payment;
+            }
+
+            $before = [
+                'receipt_number' => $payment->receipt_number,
+                'amount' => (float) $payment->amount,
+                'invoice_id' => $payment->invoice_id,
+                'meter_id' => $payment->meter_id,
+                'cash_session_id' => $payment->cash_session_id,
+            ];
+
+            $payment->forceFill([
+                'voided_at' => now(),
+                'void_reason' => $reason,
+                'voided_by' => $userId,
+                'voided_via' => $source,
+            ])->save();
+
+            // إزالة أثر السند من دفتر الأستاذ ثم إعادة احتساب الأرصدة.
+            \App\Models\Transaction::where('reference_type', Payment::class)
+                ->where('reference_id', $payment->id)
+                ->delete();
+
+            $transactionService = new TransactionService();
+            if ($payment->meter_id) {
+                if ($meter = \App\Models\Meter::find($payment->meter_id)) {
+                    $transactionService->updateMeterBalance($meter);
+                }
+            }
+            if ($payment->subscriber) {
+                $transactionService->updateSubscriberBalance($payment->subscriber);
+                $this->recalculateInvoices($payment->subscriber, $payment->meter_id);
+            }
+
+            app(\App\Services\AuditLogger::class)->record('payment.voided', [
+                'entity_type' => Payment::class,
+                'entity_id' => $payment->id,
+                'before' => $before,
+                'after' => [
+                    'voided_at' => optional($payment->voided_at)->toIso8601String(),
+                    'void_reason' => $reason,
+                    'voided_by' => $userId,
+                ],
+                'actor_user_id' => $userId,
+                'source' => $source,
+            ]);
+
+            return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
+        });
+    }
+
+    /**
      * تحصيل دفعة من مشترك
      */
     public function collectPayment(
@@ -196,12 +277,24 @@ class PaymentService
                 $meter = $invoice->meter;
             }
 
+            // ربط السند بالصندوق المفتوح للمحصّل نفسه، إن وُجد.
+            // السند بلا صندوق يبقى صالحاً (توافق خلفي) لكنه لا يدخل تسوية يومية.
+            $cashSessionId = null;
+            if ($userId) {
+                $cashSessionId = \App\Models\CashSession::query()
+                    ->where('user_id', $userId)
+                    ->where('state', \App\Models\CashSession::STATE_OPEN)
+                    ->latest('id')
+                    ->value('id');
+            }
+
             // 1. إنشاء سجل الدفع
             $payment = Payment::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meterId,
                 'invoice_id' => $invoiceId,
                 'user_id' => $userId,
+                'cash_session_id' => $cashSessionId,
                 'receipt_number' => Payment::generateReceiptNumber(),
                 'amount' => $amount,
                 'payment_date' => $paymentDate ?? now()->toDateString(),

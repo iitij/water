@@ -99,6 +99,36 @@ class TariffController extends ApiController
         return response()->json(['message' => 'تم حذف التعرفة نهائياً.']);
     }
 
+    /** استعادة جماعية لتعرفات محذوفة (فجوة v1 رقم 1). */
+    public function bulkRestore(Request $request)
+    {
+        $this->authorizeApi(Tariff::class, 'restoreAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
+        $restored = 0;
+        DB::transaction(function () use ($data, &$restored) {
+            foreach (Tariff::onlyTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
+                $tariff->restore();
+                $restored++;
+            }
+        });
+        return response()->json(['restored_count' => $restored]);
+    }
+
+    /** حذف نهائي جماعي لتعرفات (فجوة v1 رقم 1). */
+    public function bulkForceDelete(Request $request)
+    {
+        $this->authorizeApi(Tariff::class, 'forceDeleteAny');
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
+        $deleted = 0;
+        DB::transaction(function () use ($data, &$deleted) {
+            foreach (Tariff::withTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
+                $tariff->forceDelete();
+                $deleted++;
+            }
+        });
+        return response()->json(['force_deleted_count' => $deleted]);
+    }
+
     public function bulkDelete(Request $request)
     {
         $this->authorizeApi(Tariff::class, 'deleteAny');
