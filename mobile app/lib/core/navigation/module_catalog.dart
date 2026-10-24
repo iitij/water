@@ -271,6 +271,16 @@ abstract final class ModuleCatalog {
       requiredPermissions: <String>['ViewAny:User'],
     ),
     AppModule(
+      id: 'data-quality',
+      group: AppModuleGroup.admin,
+      title: 'جودة البيانات',
+      subtitle: 'هواتف ناقصة، عدادات بلا قراءة، وتعرفة غير سارية',
+      icon: Icons.fact_check_outlined,
+      color: AppColors.warning,
+      route: RouteNames.dataQuality,
+      requiredPermissions: <String>['ViewAny:User'],
+    ),
+    AppModule(
       id: 'devices',
       group: AppModuleGroup.admin,
       title: 'الأجهزة المسجّلة',

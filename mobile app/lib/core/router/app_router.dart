@@ -15,6 +15,8 @@ import '../backup/local_backup.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notification_settings_screen.dart';
 import '../../features/dashboard/dashboard.dart';
+import '../../features/data_quality/data/data_quality_remote_data_source.dart';
+import '../../features/data_quality/presentation/pages/data_quality_screen.dart';
 import '../../features/devices/devices.dart';
 import '../../features/exports/exports.dart';
 import '../../features/global_search/data/global_search_remote_datasource.dart';
@@ -347,6 +349,13 @@ class AppRouter {
             path: RouteNames.backup,
             builder: (context, state) => BackupRestoreScreen(
               service: GetIt.I<LocalBackupService>(),
+            ),
+          ),
+          GoRoute(
+            path: RouteNames.dataQuality,
+            builder: (context, state) => DataQualityScreen(
+              remote: DataQualityRemoteDataSource(GetIt.I<AdminApiClient>()),
+              can: GetIt.I<PermissionService>().can,
             ),
           ),
           ...DeviceRoutes.routes(
