@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../ui/app_controls.dart';
 import '../ui/app_tokens.dart';
+import '../widgets/offline_status_bar.dart';
 
 /// Frame for pushed (non-tab) pages: a compact branded header with a back
 /// button, optional subtitle and trailing actions.
@@ -80,6 +81,7 @@ class SubPageScaffold extends StatelessWidget {
               ),
             ),
           ),
+          const OfflineStatusBar(),
           Expanded(child: child),
         ],
       ),

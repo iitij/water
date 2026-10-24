@@ -197,10 +197,10 @@
       "agent": "A8",
       "subagent": "pack-builder",
       "task": "حزمة الأوفلاين: مسار الخادم",
-      "files": "app/Http/Controllers/Api/**",
+      "files": "app/Http/Controllers/Api/SquareController.php (offlinePack), routes/api.php",
       "definition_of_done": "حزمة منطقة تُبنى في أقل من 5 ثوانٍ",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "GET /squares/{id}/offline-pack يعيد المربع+المشتركين+العدادات مع آخر قراءة وفترة العمل؛ لم يُشغَّل"
     },
     {
       "id": "S3-03",
@@ -208,10 +208,10 @@
       "agent": "A5",
       "subagent": "drift-migrator",
       "task": "حزمة الأوفلاين: تثبيت محلي",
-      "files": "lib/core/database/**",
+      "files": "lib/core/database/offline_pack_downloader.dart, lib/core/database/app_database.dart",
       "definition_of_done": "عمل كامل بلا شبكة بعد التثبيت",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "تنزيل الحزمة وحفظها محلياً عبر المستودعات (مربعات/مشتركين/عدادات/قراءات/فترات) مع تقدم مرحلي؛ لم يُشغَّل"
     },
     {
       "id": "S3-04",
@@ -230,10 +230,10 @@
       "agent": "A9",
       "subagent": "design-system",
       "task": "شارة الحالة والشريط الأوفلاين",
-      "files": "lib/core/ui/**",
+      "files": "lib/core/widgets/offline_status_bar.dart, lib/core/navigation/sub_page.dart, test/core/widgets/offline_status_label_test.dart",
       "definition_of_done": "المستخدم يفرّق بين «محفوظ» و«مرسل»",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "شريط أوفلاين موحّد في كل صفحة فرعية (انقطاع/انتظار/يحتاج تدخلاً) + 5 اختبارات لدالة النص؛ لم تُشغَّل"
     },
     {
       "id": "S3-06",
