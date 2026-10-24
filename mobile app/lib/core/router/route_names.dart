@@ -50,5 +50,6 @@ class RouteNames {
   static const users = '/users';
   static const roles = '/roles';
   static const devices = '/devices';
+  static const backup = '/backup';
   static const exports = '/exports';
 }

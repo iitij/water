@@ -303,6 +303,15 @@ abstract final class ModuleCatalog {
       route: RouteNames.offlineSync,
     ),
     AppModule(
+      id: 'backup',
+      group: AppModuleGroup.system,
+      title: 'نسخة احتياطية محلية',
+      subtitle: 'احفظ عمل الميدان واستعده إن تعطّل الجهاز',
+      icon: Icons.inventory_2_outlined,
+      color: AppColors.success,
+      route: RouteNames.backup,
+    ),
+    AppModule(
       id: 'profile',
       group: AppModuleGroup.system,
       title: 'الملف الشخصي',

@@ -4,6 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/admin_shared/data/admin_api_client.dart';
+import '../backup/database_field_data_store.dart';
+import '../backup/local_backup.dart';
+import '../config/app_config.dart';
 import '../../features/audit/data/audit_event_store.dart';
 import '../../features/audit/services/audit_log_service.dart';
 import '../../features/auth/presentation/cubit/auth_cubit.dart';
@@ -88,6 +91,14 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<FieldOperationsModule>(fieldModule);
   getIt.registerSingleton<AppDatabase>(fieldModule.database);
+  // S7-08: نسخة احتياطية محلية لبيانات الميدان (تكتب داخل مستندات التطبيق).
+  getIt.registerSingleton<LocalBackupService>(
+    LocalBackupService(
+      store: DatabaseFieldDataStore(fieldModule.database),
+      storage: DeviceBackupStorage(),
+      appVersion: AppConfig.appVersion,
+    ),
+  );
   getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
   getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
   getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
