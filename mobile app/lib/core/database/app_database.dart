@@ -38,7 +38,7 @@ class AppDatabase extends GeneratedDatabase {
 
   /// فتح ملف محدد بمفتاح صريح — يُستخدم في اختبارات التشفير.
   factory AppDatabase.openFile(File file, {String? key}) =>
-      AppDatabase(_executorForFile(file, key));
+      AppDatabase(LazyDatabase(() => _executorForFile(file, key)));
 
   final StreamController<void> _syncQueueChanges = StreamController<void>.broadcast();
 
