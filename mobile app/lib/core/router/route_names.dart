@@ -11,6 +11,7 @@ class RouteNames {
   static const offlineSync = '/sync';
   static const diagnostics = '/diagnostics';
   static const routeMode = '/route-mode';
+  static const appLock = '/app-lock';
 
   // Shell destinations (five-tab navigation)
   static const fieldHub = '/field';

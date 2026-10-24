@@ -31,6 +31,7 @@ import '../network/dio_client.dart';
 import '../network/network_info.dart';
 import '../network/secure_storage_service.dart';
 import '../permissions/permission_service.dart';
+import '../security/app_lock_service.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 
@@ -50,6 +51,11 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<SecureStorageService>(secureStorage);
   getIt.registerSingleton<ErrorReporter>(errorReporter);
+
+  // قفل التطبيق (S5-01): رقم محلي + مهلة خمول. يُحمَّل قبل أول رسم للشاشة.
+  final appLock = AppLockService();
+  getIt.registerSingleton<AppLockService>(appLock);
+  unawaited(appLock.load());
   getIt.registerSingleton<DioClient>(dioClient);
   getIt.registerSingleton<Dio>(dioClient.dio);
   getIt.registerSingleton(dioClient.offlineCache);

@@ -107,6 +107,14 @@ class MoreScreen extends StatelessWidget {
                     ),
                     const SoftDivider(),
                     AppSettingRow(
+                      title: 'قفل التطبيق',
+                      subtitle: 'رقم حماية محلي يُغلق الشاشة بعد الخمول',
+                      icon: Icons.lock_outline_rounded,
+                      color: AppColors.primary,
+                      onTap: () => context.push(RouteNames.appLock),
+                    ),
+                    const SoftDivider(),
+                    AppSettingRow(
                       title: 'وضع المسار',
                       subtitle: 'ترتيب جولة القراءة والتقدّم والمحطة التالية',
                       icon: Icons.route_rounded,

@@ -10,6 +10,7 @@ import 'core/di/injection_container.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/cubit/auth_cubit.dart';
+import 'features/security/presentation/lock_gate.dart';
 
 class WaterApp extends StatelessWidget {
   const WaterApp({super.key});
@@ -41,6 +42,9 @@ class WaterApp extends StatelessWidget {
             darkTheme: AppTheme.dark,
             themeMode: themeController.mode,
             routerConfig: router,
+            // قفل التطبيق فوق كل المسارات — لا يمكن تجاوزه بالتنقل.
+            builder: (context, child) =>
+                LockGate(child: child ?? const SizedBox.shrink()),
           ),
         ),
       ),

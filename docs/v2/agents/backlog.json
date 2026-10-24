@@ -318,10 +318,10 @@
       "agent": "A2",
       "subagent": "app-lock-engineer",
       "task": "قفل حيوي + PIN + مهلة خمول",
-      "files": "lib/core/security/**",
+      "files": "lib/core/security/**، lib/features/security/**، lib/app.dart، test/core/security/**",
       "definition_of_done": "قفل تلقائي بعد 5 دقائق",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "PIN محلي (SHA-256 مملّح ×12000) + منع تخمين (5 محاولات/30 ثانية) + قفل بالخمول (5 دقائق) وبوابة فوق كل المسارات + شاشة إعداد؛ القفل الحيوي (بصمة) غير مربوط لعدم وجود local_auth"
     },
     {
       "id": "S5-02",
