@@ -78,8 +78,8 @@
       "task": "بيئة اختبار Docker + بيانات مزروعة",
       "files": "docker/**, Makefile",
       "definition_of_done": "أمر واحد يشغّل خادماً كاملاً ببيانات",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "docker-compose.yml + docker/Dockerfile + .env.docker.example (لم يُبنَ بعد لعدم توفر Docker)"
     },
     {
       "id": "S1-07",
@@ -89,8 +89,8 @@
       "task": "أول اختبار تكامل (دخول + قائمة مشتركين)",
       "files": "integration_test/app_test.dart",
       "definition_of_done": "يعمل في CI",
-      "status": "todo",
-      "evidence": ""
+      "status": "partial",
+      "evidence": "mobile app/integration_test/app_test.dart + وظيفة integration في ci.yml؛ يحتاج محاكي + خادم"
     },
     {
       "id": "S1-08",
@@ -100,8 +100,8 @@
       "task": "خط أساس تحذيرات التحليل",
       "files": "tool/ci/analyze_baseline.txt",
       "definition_of_done": "لا تحذيرات جديدة",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": ".github/workflows/ci.yml + tool/ci/check_secrets.sh (نجح محلياً) + check_analyze_baseline.sh (بانتظار أول قياس)"
     },
     {
       "id": "S2-01",

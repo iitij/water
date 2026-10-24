@@ -45,6 +45,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # اختبار تكامل على جهاز/محاكي حقيقي (خطة 2.0 — S1، المهمة S1-07).
+  integration_test:
+    sdk: flutter
   build_runner: ^2.4.13
   drift_dev: ^2.21.0
   mocktail: ^1.0.4

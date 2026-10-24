@@ -1,0 +1,117 @@
+name: CI
+
+# سلسلة البناء (خطة 2.0 — الفصل 12.4، بطاقة S1-08).
+# ثلاث وظائف: الخادم، التطبيق، وحارس الأسرار. أي فشل يمنع الدمج.
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: حارس الأسرار
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: فحص المفاتيح والتوكنات
+        run: bash tool/ci/check_secrets.sh
+
+  laravel:
+    name: الخادم (Laravel)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: water_test
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: تهيئة PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_mysql, bcmath, zip, gd, intl
+          coverage: none
+
+      - name: تثبيت التبعيات
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: إعداد البيئة
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env
+          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=water_test/' .env
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=root/' .env
+
+      - name: الترحيل والبذور
+        run: |
+          php artisan migrate --force
+          php artisan db:seed --class=CashSessionPermissionsSeeder --force
+
+      - name: اختبارات الخادم
+        run: php artisan test
+
+  flutter:
+    name: التطبيق (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: التبعيات
+        run: flutter pub get
+
+      - name: التوليد (Drift)
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            dart run build_runner build --delete-conflicting-outputs || true
+          fi
+
+      - name: التحليل (بوابة خط الأساس)
+        run: bash ../tool/ci/check_analyze_baseline.sh
+
+      - name: الاختبارات
+        run: flutter test
+
+  integration:
+    name: اختبار تكامل (يُفعَّل بمتغير RUN_INTEGRATION)
+    runs-on: ubuntu-latest
+    if: ${{ vars.RUN_INTEGRATION == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: التبعيات
+        working-directory: mobile app
+        run: flutter pub get
+      - name: تشغيل على محاكي أندرويد
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          working-directory: mobile app
+          script: |
+            flutter test integration_test/app_test.dart \
+              --dart-define=API_BASE_URL=${{ vars.TEST_API_BASE_URL }}
