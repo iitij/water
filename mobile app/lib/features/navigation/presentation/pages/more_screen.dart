@@ -107,6 +107,14 @@ class MoreScreen extends StatelessWidget {
                     ),
                     const SoftDivider(),
                     AppSettingRow(
+                      title: 'وضع المسار',
+                      subtitle: 'ترتيب جولة القراءة والتقدّم والمحطة التالية',
+                      icon: Icons.route_rounded,
+                      color: AppColors.primary,
+                      onTap: () => context.push(RouteNames.routeMode),
+                    ),
+                    const SoftDivider(),
+                    AppSettingRow(
                       title: 'التشخيص والدعم',
                       subtitle: 'حالة المزامنة وسجل التدقيق وآخر الأخطاء',
                       icon: Icons.health_and_safety_outlined,

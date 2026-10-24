@@ -186,10 +186,10 @@
       "agent": "A8",
       "subagent": "path-mode-dev",
       "task": "وضع المسار (شاشة + تنقل + تقدم)",
-      "files": "lib/features/readings/**",
+      "files": "lib/features/field_route/**، lib/core/router/**",
       "definition_of_done": "50 قراءة متتالية بلا لمسة زائدة",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "شاشة وضع المسار: اختيار المربع، ترتيب برقم المسار، تقدّم ومحطة تالية، تعليم محلي محفوظ في SharedPreferences + 10 اختبارات للمنطق (لم تُشغَّل)"
     },
     {
       "id": "S3-02",
@@ -219,10 +219,10 @@
       "agent": "A8",
       "subagent": "reading-validator",
       "task": "تحقق القراءة الفوري + القراءة المتعذرة",
-      "files": "lib/features/readings/**",
+      "files": "lib/features/readings/presentation/pages/submit_reading_screen.dart",
       "definition_of_done": "رفض القراءة المنخفضة برسالة واضحة",
-      "status": "todo",
-      "evidence": ""
+      "status": "partial",
+      "evidence": "تحقق فوري موجود: القراءة الحالية ≥ السابقة مع رسالة عربية؛ لا يوجد بعد تسجيل «قراءة متعذرة» بسبب عطل العداد"
     },
     {
       "id": "S3-05",
@@ -241,10 +241,10 @@
       "agent": "A8",
       "subagent": "field-ux",
       "task": "قياس زمن القراءة داخل التطبيق",
-      "files": "lib/features/readings/**, diagnostics",
+      "files": "lib/features/field_route/presentation/route_mode_screen.dart (Stopwatch), lib/features/field_route/domain/route_plan.dart",
       "definition_of_done": "رقم يظهر في شاشة التشخيص",
-      "status": "todo",
-      "evidence": ""
+      "status": "done",
+      "evidence": "قياس مدة الجولة ومتوسط الثواني لكل محطة داخل الشاشة (S3-06)"
     },
     {
       "id": "S4-01",

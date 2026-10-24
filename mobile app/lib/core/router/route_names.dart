@@ -10,6 +10,7 @@ class RouteNames {
   static const profile = '/profile';
   static const offlineSync = '/sync';
   static const diagnostics = '/diagnostics';
+  static const routeMode = '/route-mode';
 
   // Shell destinations (five-tab navigation)
   static const fieldHub = '/field';
