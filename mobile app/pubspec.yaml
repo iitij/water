@@ -37,9 +37,7 @@ dependencies:
   share_plus: ^10.1.4
   shared_preferences: ^2.5.3
   shimmer: ^3.0.0
-  # S5-02: SQLCipher بدل SQLite العادي — نفس الـABI، لكن الملف يُفتح بمفتاح.
-  # لا تُضِف sqlite3_flutter_libs معها: الحزمتان تُدخلان نفس الرموز.
-  sqlcipher_flutter_libs: ^0.6.8
+  sqlite3_flutter_libs: ^0.5.34
   sqlite3: ^2.4.0
   url_launcher: ^6.3.1
   uuid: ^4.5.1
