@@ -219,10 +219,10 @@
       "agent": "A8",
       "subagent": "reading-validator",
       "task": "تحقق القراءة الفوري + القراءة المتعذرة",
-      "files": "lib/features/readings/presentation/pages/submit_reading_screen.dart",
+      "files": "lib/features/readings/presentation/pages/submit_reading_screen.dart، lib/features/readings/presentation/widgets/submit_reading_fault_sheet.dart، lib/features/readings/domain/reading_fault.dart، lib/features/readings/data/reading_fault_log.dart، test/features/readings/reading_fault_log_test.dart",
       "definition_of_done": "رفض القراءة المنخفضة برسالة واضحة",
-      "status": "partial",
-      "evidence": "تحقق فوري موجود: القراءة الحالية ≥ السابقة مع رسالة عربية؛ لا يوجد بعد تسجيل «قراءة متعذرة» بسبب عطل العداد"
+      "status": "done",
+      "evidence": "رفض فوري للقراءة الأقل من السابقة (حقل + رسالة) + مسار «تعذّر قراءة العداد»: ورقة أسباب (عطل/إغلاق/غياب المشترك/سبب آخر مع ملاحظة إلزامية)، سجل محلي لكل يوم ولكل عداد، بانر تنبيه على الشاشة، واختبار 13 حالة للسجل والأسباب. لا يُرسل التعذّر كقراءة للخادم (لا مسار خادمي له في 2.0) — مذكور صراحة في الكود"
     },
     {
       "id": "S3-05",
@@ -329,10 +329,10 @@
       "agent": "A5",
       "subagent": "sqlcipher-evaluator",
       "task": "تشفير قاعدة البيانات (SQLCipher)",
-      "files": "lib/core/database/**",
+      "files": "lib/core/database/database_encryption.dart، lib/core/database/app_database.dart، lib/core/field_operations/field_operations_module.dart، pubspec.yaml، test/core/database/database_encryption_test.dart",
       "definition_of_done": "قراءة/كتابة تعمل بأثر أداء مقيس",
-      "status": "todo",
-      "evidence": ""
+      "status": "partial",
+      "evidence": "كود التشفير جاهز: مفتاح 256-بت في flutter_secure_storage، PRAGMA key عبر setup، rekey لترقية ملف قديم غير مشفّر بعد فحص سحر SQLite، وتهيئة في DI خلف ENCRYPT_LOCAL_DB. المتبقي: flutter pub get (استبدال sqlite3_flutter_libs بـsqlcipher_flutter_libs) وقياس أثر الأداء على جهاز — لم يُنفَّذ أي بناء هنا"
     },
     {
       "id": "S5-03",
@@ -351,10 +351,10 @@
       "agent": "A9",
       "subagent": "l10n-engineer",
       "task": "توطين الأسطح الأساسية",
-      "files": "lib/core/l10n/**",
+      "files": "lib/core/l10n/app_strings.dart، lib/core/navigation/app_shell.dart، lib/core/error/failures.dart، test/core/l10n/app_strings_test.dart",
       "definition_of_done": "لا نصوص مكتوبة داخل شاشات التنقل والأخطاء",
-      "status": "todo",
-      "evidence": ""
+      "status": "partial",
+      "evidence": "طبقة AppStrings مركزية (ar/en) تُستخدم في وجهات التنقل الخمس وأخطاء الشبكة العامة (failures + FailureMapper) مع اختبارات؛ نصوص بقية الشاشات ما زالت داخل الشاشات، والمشروع لا يستخدم gen-l10n/.arb"
     },
     {
       "id": "S5-05",
@@ -362,10 +362,10 @@
       "agent": "A9",
       "subagent": "design-system",
       "task": "فصل أول ملفين ضخمين",
-      "files": "lib/features/readings/presentation/{pages,widgets}/**، lib/features/subscribers/presentation/{pages,widgets}/**",
+      "files": "lib/features/readings/presentation/{pages,widgets}/**، lib/features/subscribers/presentation/{pages,widgets}/**، lib/features/home/presentation/{home_screen.dart,widgets}/**، lib/features/invoices/presentation/sheets/**، lib/core/ui/{app_filters.dart,parts}/**",
       "definition_of_done": "الاختبارات القديمة تمرّ بلا تعديل",
       "status": "done",
-      "evidence": "فصل أكبر ملفين عبر part: readings_list_screen 1298→639 وsubscriber_360_screen 1313→324 بلا تغيير سلوك"
+      "evidence": "فصل بـpart بلا تغيير سلوك: readings_list 1298→639، subscriber_360 1313→324، home_screen 1120→488 (+home_panels 368، home_metrics 273)، app_filters 1108→444 (+app_filter_inputs 676)، submit_reading 1037→995 (+widgets 48 و135)، generate_invoice_sheets 924→658 (+272)، subscribers_screen 815→446 (+282 و95). تحقُّق: كل ملفات Dart (406) تُحلَّل نحوياً وروابط part متسقة"
     },
     {
       "id": "S5-06",

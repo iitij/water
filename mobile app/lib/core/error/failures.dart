@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 
+import '../l10n/app_strings.dart';
+
 /// فشل طبقة البيانات موحّد لكافة الوحدات — يعالج رسائل التحقق العربية للـ Laravel (422).
 /// المرجع: `FLUTTER_MOBILE_MASTER_PLAN.md` §3.1 (`core/error/failures.dart`).
 sealed class AppFailure extends Equatable {
@@ -15,18 +17,17 @@ sealed class AppFailure extends Equatable {
 }
 
 class NetworkFailure extends AppFailure {
-  const NetworkFailure([
-    super.message = 'تعذر الاتصال بالخادم — تحقق من الشبكة أو جرّب الوضع أوفلاين.',
-  ]) : super(statusCode: 0);
+  const NetworkFailure([super.message = AppStringsDefaults.networkError])
+      : super(statusCode: 0);
 }
 
 class TimeoutFailure extends AppFailure {
-  const TimeoutFailure([super.message = 'انتهت مهلة الاتصال بالخادم.'])
+  const TimeoutFailure([super.message = AppStringsDefaults.timeoutError])
       : super(statusCode: 408);
 }
 
 class UnauthorizedFailure extends AppFailure {
-  const UnauthorizedFailure([super.message = 'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.'])
+  const UnauthorizedFailure([super.message = AppStringsDefaults.unauthorizedError])
       : super(statusCode: 401);
 }
 
@@ -37,8 +38,8 @@ class ForbiddenFailure extends AppFailure {
   ]) : super(
           message ??
               (permission != null
-                  ? 'لا تملك صلاحية $permission للتنفيذ.'
-                  : 'ممنوع الوصول.'),
+                  ? '${AppStringsDefaults.forbiddenError} ($permission)'
+                  : AppStringsDefaults.forbiddenError),
           statusCode: 403,
         );
 
@@ -50,7 +51,7 @@ class ForbiddenFailure extends AppFailure {
 }
 
 class NotFoundFailure extends AppFailure {
-  const NotFoundFailure([super.message = 'السجل غير موجود أو تم حذفه.'])
+  const NotFoundFailure([super.message = AppStringsDefaults.notFoundError])
       : super(statusCode: 404);
 }
 
@@ -76,7 +77,7 @@ class ServerFailure extends AppFailure {
 }
 
 class UnexpectedFailure extends AppFailure {
-  const UnexpectedFailure([super.message = 'حدث خطأ غير متوقع.']);
+  const UnexpectedFailure([super.message = AppStringsDefaults.unknownError]);
 }
 
 /// يحوّل `DioException` إلى `AppFailure` بالعربية.
@@ -134,7 +135,7 @@ class FailureMapper {
       case 403:
         final permission = data is Map ? data['required_permission'] : null;
         return ForbiddenFailure(
-          serverMessage ?? 'ممنوع الوصول',
+          serverMessage ?? AppStringsDefaults.forbiddenError,
           permission?.toString(),
         );
       case 404:

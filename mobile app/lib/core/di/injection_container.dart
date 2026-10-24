@@ -6,9 +6,9 @@ import 'package:get_it/get_it.dart';
 import '../../features/admin_shared/data/admin_api_client.dart';
 import '../../features/audit/data/audit_event_store.dart';
 import '../../features/audit/services/audit_log_service.dart';
+import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/cash_sessions/data/cash_session_api.dart';
 import '../../features/cash_sessions/services/cash_session_service.dart';
-import '../../features/auth/presentation/cubit/auth_cubit.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/exports/exports.dart';
 import '../../features/meters/domain/meters_repository.dart';
@@ -20,9 +20,10 @@ import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
 import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
-import '../diagnostics/error_reporter.dart';
 import '../database/app_database.dart';
+import '../database/database_encryption.dart';
 import '../database/offline_pack_downloader.dart';
+import '../diagnostics/error_reporter.dart';
 import '../field_operations/field_operations_module.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
@@ -31,8 +32,8 @@ import '../network/dio_client.dart';
 import '../network/network_info.dart';
 import '../network/secure_storage_service.dart';
 import '../permissions/permission_service.dart';
-import '../security/app_lock_service.dart';
 import '../router/app_router.dart';
+import '../security/app_lock_service.dart';
 import '../theme/app_theme.dart';
 
 final GetIt getIt = GetIt.instance;
@@ -79,6 +80,11 @@ Future<void> configureDependencies({String? appVersion}) async {
     dio: dioClient.dio,
     autoStartSync: false,
     ownerUserIdProvider: () => session.user?['id']?.toString(),
+    // S5-02: مفتاح SQLCipher من المخزن الآمن للنظام. يعيد `null` تلقائياً
+    // عندما لا يكون البناء بـ`--dart-define=ENCRYPT_LOCAL_DB=true`.
+    keyProvider: getIt.isRegistered<DatabaseKeyProvider>()
+        ? getIt<DatabaseKeyProvider>()
+        : SecureStorageDatabaseKeyProvider(),
   );
   getIt.registerSingleton<FieldOperationsModule>(fieldModule);
   getIt.registerSingleton<AppDatabase>(fieldModule.database);

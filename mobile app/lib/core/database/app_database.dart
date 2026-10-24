@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
+
+import 'database_encryption.dart';
 
 /// Drift-backed SQLite store for the field/offline features.
 ///
@@ -15,9 +19,26 @@ import 'package:path_provider/path_provider.dart';
 class AppDatabase extends GeneratedDatabase {
   AppDatabase(super.executor);
 
-  factory AppDatabase.open() => AppDatabase(_openConnection());
+  /// اسم ملف قاعدة الميدان في مجلد دعم التطبيق.
+  static const fileName = 'water_offline.sqlite';
+
+  /// يفتح قاعدة الميدان، ويشفّرها إن أعاد مزوّد المفتاح مفتاحاً (S5-02).
+  ///
+  /// الافتراضي بلا مفتاح حتى لا تتغيّر سلوكيات الاختبارات ودورات التطوير؛
+  /// التشفير الفعلي يُطلب بـ`--dart-define=ENCRYPT_LOCAL_DB=true` مع
+  /// `SecureStorageDatabaseKeyProvider`.
+  static Future<AppDatabase> open({
+    DatabaseKeyProvider keyProvider = const NoopDatabaseKeyProvider(),
+  }) async {
+    final key = await keyProvider.key();
+    return AppDatabase(_openConnection(key));
+  }
 
   factory AppDatabase.inMemory() => AppDatabase(NativeDatabase.memory());
+
+  /// فتح ملف محدد بمفتاح صريح — يُستخدم في اختبارات التشفير.
+  factory AppDatabase.openFile(File file, {String? key}) =>
+      AppDatabase(_executorForFile(file, key));
 
   final StreamController<void> _syncQueueChanges = StreamController<void>.broadcast();
 
@@ -83,11 +104,41 @@ class AppDatabase extends GeneratedDatabase {
         },
       );
 
-  static LazyDatabase _openConnection() {
+  static LazyDatabase _openConnection(String? key) {
     return LazyDatabase(() async {
       final directory = await getApplicationSupportDirectory();
-      final file = File('${directory.path}${Platform.pathSeparator}water_offline.sqlite');
+      final file = File('${directory.path}${Platform.pathSeparator}$fileName');
+      return _executorForFile(file, key);
+    });
+  }
+
+  /// ينشئ المنفّذ، ويشفّر ملفاً قديماً غير مشفّر قبل فتحه بمفتاح.
+  static Future<QueryExecutor> _executorForFile(File file, String? key) async {
+    if (key == null || key.trim().isEmpty) {
       return NativeDatabase.createInBackground(file);
+    }
+    if (await isPlaintextSqliteFile(file)) {
+      await _encryptLegacyFile(file, key);
+    }
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (database) {
+        // `PRAGMA key` يجب أن يسبق أي استعلام على الملف المشفّر.
+        database.execute(pragmaKeyStatement(key));
+      },
+    );
+  }
+
+  /// تشفير ملف SQLite قائم بلا فقدان صفوف (SQLCipher: `PRAGMA rekey`).
+  static Future<void> _encryptLegacyFile(File file, String key) async {
+    final path = file.path;
+    await Isolate.run(() {
+      final database = sqlite3.sqlite3.open(path);
+      try {
+        database.execute(pragmaRekeyStatement(key));
+      } finally {
+        database.dispose();
+      }
     });
   }
 

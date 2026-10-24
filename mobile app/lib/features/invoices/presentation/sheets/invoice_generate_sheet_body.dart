@@ -1,0 +1,272 @@
+part of 'generate_invoice_sheets.dart';
+
+class _PickerTile extends StatelessWidget {
+  const _PickerTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: AppGlyph(icon: icon, tone: color, size: 40),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+    );
+  }
+}
+
+// ─── الواجهات العامة الثلاث (تسليم Dev 4 / Dev 5) ──────────────────────────
+
+/// فاتورة عداد — `GenerateMeterInvoice`.
+/// يبني الـ Cubit ويهيّئه — يُستخدم من الدراج ومن مسار `/invoices/generate/:engine`.
+class _GenerateSheetHost extends StatelessWidget {
+  const _GenerateSheetHost({
+    required this.mode,
+    required this.parentContext,
+    this.preselectedSubscriberId,
+  });
+
+  final GenerateInvoiceMode mode;
+  final BuildContext parentContext;
+  final String? preselectedSubscriberId;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider<InvoiceGenerationCubit>(
+      create: (_) => InvoiceGenerationCubit(
+            invoicesRepository: sl<InvoicesRepository>(),
+            invoicesSource: sl<InvoicesRemoteDataSource>(),
+            references: sl<ReferencesRemoteDataSource>(),
+            tariffsRepository: sl<TariffsRepository>(),
+          )
+          ..bootstrap(preselectedSubscriberId: preselectedSubscriberId),
+      child: _GenerateSheetBody(mode: mode, parentContext: parentContext),
+    );
+  }
+}
+
+class _GenerateSheetBody extends StatelessWidget {
+  const _GenerateSheetBody({required this.mode, required this.parentContext});
+
+  final GenerateInvoiceMode mode;
+  final BuildContext parentContext;
+
+  _SheetChrome _chrome() {
+    if (mode == GenerateInvoiceMode.subscription) {
+      return const _SheetChrome(
+        title: 'إصدار فاتورة اشتراك',
+        icon: Icons.assignment_outlined,
+        color: FinanceColors.subscription,
+        submitLabel: 'إصدار فاتورة الاشتراك',
+      );
+    }
+    if (mode == GenerateInvoiceMode.tanker) {
+      return const _SheetChrome(
+        title: 'إصدار فاتورة وايت',
+        icon: Icons.local_shipping_outlined,
+        color: FinanceColors.tanker,
+        submitLabel: 'إصدار فاتورة الوايت',
+      );
+    }
+    return const _SheetChrome(
+      title: 'إصدار فاتورة عداد',
+      icon: Icons.calculate_outlined,
+      color: FinanceColors.meter,
+      submitLabel: 'إصدار الفاتورة',
+    );
+  }
+
+  Future<void> _submit(BuildContext sheetContext, InvoiceGenerationCubit cubit) async {
+    final InvoiceModel? invoice;
+    if (mode == GenerateInvoiceMode.subscription) {
+      invoice = await cubit.submitSubscriptionInvoice();
+    } else if (mode == GenerateInvoiceMode.tanker) {
+      invoice = await cubit.submitTankerInvoice();
+    } else {
+      invoice = await cubit.submitMeterInvoice();
+    }
+
+    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    if (invoice == null || !parentContext.mounted) return;
+
+    await _afterGenerated(parentContext, invoice);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<InvoiceGenerationCubit>();
+    final chrome = _chrome();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.92,
+      builder: (sheetContext, controller) => ColoredBox(
+        color: Theme.of(sheetContext).scaffoldBackgroundColor,
+        child: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+              child: Row(
+                children: <Widget>[
+                  Icon(chrome.icon, color: chrome.color),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      chrome.title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: <Widget>[
+                  const SubscriberSearchField(),
+                  const SizedBox(height: 12),
+                  if (mode == GenerateInvoiceMode.meter) ...<Widget>[
+                    const MeterPickerField(),
+                    const SizedBox(height: 4),
+                    const IncludeReadingsToggle(),
+                    const SizedBox(height: 4),
+                    const FeeTogglesField(),
+                    const SizedBox(height: 12),
+                  ] else ...<Widget>[
+                    AmountFromStateField(
+                      label: mode == GenerateInvoiceMode.subscription
+                          ? 'قسط الاشتراك'
+                          : 'رسوم الوايت',
+                      helperText: mode == GenerateInvoiceMode.subscription
+                          ? 'مجموع رسوم الاشتراك غير المفوترة — قابل للتعديل'
+                          : 'إجمالي طلبات الوايت المكتملة — قابل للتعديل',
+                      read: mode == GenerateInvoiceMode.subscription
+                          ? _readSubscription
+                          : _readTanker,
+                      write: mode == GenerateInvoiceMode.subscription
+                          ? _writeSubscription
+                          : _writeTanker,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const GenerationNotesField(),
+                  const SizedBox(height: 16),
+                  const LiveSummaryCard(),
+                  const SizedBox(height: 16),
+                  BlocBuilder<InvoiceGenerationCubit, InvoiceGenerationState>(
+                    builder: (context, state) => _GenerateSubmitBar(
+                      state: state,
+                      chrome: chrome,
+                      onSubmit: () => _submit(sheetContext, cubit),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+double _readSubscription(InvoiceGenerationState state) => state.subscriptionInstallment;
+double _readTanker(InvoiceGenerationState state) => state.tankerInstallment;
+void _writeSubscription(InvoiceGenerationCubit cubit, double value) =>
+    cubit.setSubscriptionInstallment(value);
+void _writeTanker(InvoiceGenerationCubit cubit, double value) =>
+    cubit.setTankerInstallment(value);
+
+/// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).
+/// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).
+class _SheetChrome {
+  const _SheetChrome({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.submitLabel,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color color;
+  final String submitLabel;
+}
+
+/// صف الإرسال مع رسائل المنع (يطابق `ValidationException` في Laravel).
+/// صف الإرسال مع رسائل المنع (يطابق `ValidationException` في Laravel).
+class _GenerateSubmitBar extends StatelessWidget {
+  const _GenerateSubmitBar({
+    required this.state,
+    required this.chrome,
+    required this.onSubmit,
+  });
+
+  final InvoiceGenerationState state;
+  final _SheetChrome chrome;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocking = state.blockingReason;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (state.errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              state.errorMessage!,
+              style: const TextStyle(color: AppColors.danger, fontSize: 12),
+            ),
+          ),
+        if (blocking != null && state.selectedSubscriber != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InfoNotice(
+              icon: Icons.block,
+              color: AppColors.warning,
+              text: blocking,
+            ),
+          ),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: chrome.color,
+            minimumSize: const Size(0, 46),
+          ),
+          onPressed: (state.canSubmit && blocking == null && !state.submitting)
+              ? onSubmit
+              : null,
+          icon: state.submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.bolt),
+          label: Text(chrome.submitLabel),
+        ),
+      ],
+    );
+  }
+}
+
+/// بطاقة الحساب الحي — تتحدث مع كل ضغطة رقم (قاعدة §3.4-2).
