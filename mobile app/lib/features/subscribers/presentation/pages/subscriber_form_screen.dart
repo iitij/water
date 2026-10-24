@@ -7,6 +7,7 @@ import '../../../../core/fouad/fouad_module.dart';
 import '../../../squares/domain/entities/square.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
+import '../../../../core/l10n/app_strings.dart';
 
 /// SCR-06 — نموذج إضافة/تعديل مشترك (هاتف يمني +967، تاريخ بدء الاشتراك، مربع، حالة).
 class SubscriberFormScreen extends StatefulWidget {
@@ -134,7 +135,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
             OutlinedButton.icon(
               onPressed: _saving ? null : _saveAndAddAnother,
               icon: const Icon(Icons.playlist_add_rounded, size: 20),
-              label: const Text('حفظ وإضافة آخر'),
+              label: Text(AppStrings.of(context).saveAndAddAnother),
             ),
             const SizedBox(height: 4),
             Text(

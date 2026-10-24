@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -68,7 +69,7 @@ class _DevicesView extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('الأجهزة المسجّلة'),
+            title: Text(AppStrings.of(context).devicesTitle),
             actions: <Widget>[
               IconButton(
                 tooltip: 'تحديث',

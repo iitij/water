@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../finance/finance_feedback.dart';
+import '../l10n/app_strings.dart';
 import '../ui/app_controls.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_tokens.dart';
@@ -58,7 +59,7 @@ class _RemindersView extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('تذكيرات الجهاز'),
+            title: Text(AppStrings.of(context).remindersTitle),
             actions: <Widget>[
               IconButton(
                 tooltip: 'إشعار تجريبي',

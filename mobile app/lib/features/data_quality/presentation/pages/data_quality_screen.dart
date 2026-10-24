@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -49,7 +50,7 @@ class _DataQualityView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('جودة البيانات'),
+        title: Text(AppStrings.of(context).dataQualityTitle),
         actions: <Widget>[
           BlocBuilder<DataQualityCubit, DataQualityState>(
             builder: (context, state) => PopupMenuButton<int>(

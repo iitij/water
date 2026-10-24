@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../finance/finance_feedback.dart';
+import '../l10n/app_strings.dart';
 import '../ui/app_controls.dart';
 import '../ui/app_surfaces.dart';
 import '../ui/app_tokens.dart';
@@ -46,7 +47,7 @@ class _BackupView extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('نسخة احتياطية محلية'),
+            title: Text(AppStrings.of(context).backupTitle),
             actions: <Widget>[
               IconButton(
                 tooltip: 'تحديث القائمة',
@@ -233,17 +234,20 @@ class _BackupCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: disabled || !file.isCompatible ? null : () => _restore(context),
                 icon: const Icon(Icons.settings_backup_restore_rounded),
-                label: const Text('استعادة'),
+                label: Text(AppStrings.of(context).actionRestore),
               ),
               TextButton.icon(
                 onPressed: disabled ? null : () => context.read<BackupCubit>().share(file.name),
                 icon: const Icon(Icons.ios_share_rounded),
-                label: const Text('مشاركة'),
+                label: Text(AppStrings.of(context).actionShare),
               ),
               TextButton.icon(
                 onPressed: disabled ? null : () => _delete(context),
                 icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
-                label: Text('حذف', style: TextStyle(color: scheme.error)),
+                label: Text(
+                  AppStrings.of(context).actionDelete,
+                  style: TextStyle(color: scheme.error),
+                ),
               ),
             ],
           ),

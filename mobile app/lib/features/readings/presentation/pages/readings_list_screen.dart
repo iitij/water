@@ -20,6 +20,7 @@ import '../../domain/readings_repository.dart';
 import '../cubit/readings_cubit.dart';
 import '../widgets/offline_pack_dialog.dart';
 import '../widgets/record_reading_sheet.dart';
+import '../../../../core/l10n/app_strings.dart';
 
 part '../widgets/readings_filters.dart';
 

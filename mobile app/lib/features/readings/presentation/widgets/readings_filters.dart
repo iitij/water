@@ -58,7 +58,7 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('حفظ الفلاتر'),
+        title: Text(AppStrings.of(context).savedFiltersTitle),
         content: TextField(
           controller: controller,
           autofocus: true,

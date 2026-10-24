@@ -66,6 +66,20 @@ class AppStrings {
     required this.pendingSync,
     required this.syncedQueue,
     required this.cannotReadMeter,
+    required this.devicesTitle,
+    required this.devicesSubtitle,
+    required this.backupTitle,
+    required this.backupSubtitle,
+    required this.remindersTitle,
+    required this.remindersSubtitle,
+    required this.dataQualityTitle,
+    required this.dataQualitySubtitle,
+    required this.saveAndAddAnother,
+    required this.savedFiltersTitle,
+    required this.savedFiltersHint,
+    required this.actionRestore,
+    required this.actionShare,
+    required this.actionDelete,
   });
 
   final AppLanguage language;
@@ -109,6 +123,22 @@ class AppStrings {
   final String syncedQueue;
   final String cannotReadMeter;
 
+  // ── إضافات 2.0 (S8-01) ──────────────────────────────────────────────
+  final String devicesTitle;
+  final String devicesSubtitle;
+  final String backupTitle;
+  final String backupSubtitle;
+  final String remindersTitle;
+  final String remindersSubtitle;
+  final String dataQualityTitle;
+  final String dataQualitySubtitle;
+  final String saveAndAddAnother;
+  final String savedFiltersTitle;
+  final String savedFiltersHint;
+  final String actionRestore;
+  final String actionShare;
+  final String actionDelete;
+
   static const AppStrings ar = AppStrings._(
     language: AppLanguage.ar,
     appTitle: 'مشروع المياه',
@@ -143,6 +173,20 @@ class AppStrings {
     pendingSync: 'بانتظار المزامنة',
     syncedQueue: 'تمت مزامنة كل العمليات',
     cannotReadMeter: 'تعذّر قراءة العداد',
+    devicesTitle: 'الأجهزة المسجّلة',
+    devicesSubtitle: 'أبطل جهازاً مفقوداً أو مسروقاً',
+    backupTitle: 'نسخة احتياطية محلية',
+    backupSubtitle: 'احفظ بيانات الميدان واستعدها',
+    remindersTitle: 'تذكيرات الجهاز',
+    remindersSubtitle: 'قراءات وفواتير وإقفال صندوق',
+    dataQualityTitle: 'جودة البيانات',
+    dataQualitySubtitle: 'مشكلات قابلة للإصلاح',
+    saveAndAddAnother: 'حفظ وإضافة آخر',
+    savedFiltersTitle: 'فلاتر محفوظة',
+    savedFiltersHint: 'احفظ الفلاتر الحالية باسم',
+    actionRestore: 'استعادة',
+    actionShare: 'مشاركة',
+    actionDelete: 'حذف',
   );
 
   /// الإنجليزية للتنقل والأخطاء العامة فقط — بقية الشاشات عربية حتى تُرحَّل.
@@ -180,6 +224,20 @@ class AppStrings {
     pendingSync: 'Waiting to sync',
     syncedQueue: 'Everything is synced',
     cannotReadMeter: 'Could not read the meter',
+    devicesTitle: 'Registered devices',
+    devicesSubtitle: 'Revoke a lost or stolen device',
+    backupTitle: 'Local backup',
+    backupSubtitle: 'Save and restore field data',
+    remindersTitle: 'Device reminders',
+    remindersSubtitle: 'Readings, invoices and cash close',
+    dataQualityTitle: 'Data quality',
+    dataQualitySubtitle: 'Fixable data issues',
+    saveAndAddAnother: 'Save and add another',
+    savedFiltersTitle: 'Saved filters',
+    savedFiltersHint: 'Save the current filters as',
+    actionRestore: 'Restore',
+    actionShare: 'Share',
+    actionDelete: 'Delete',
   );
 
   static AppStrings of(BuildContext context) {
