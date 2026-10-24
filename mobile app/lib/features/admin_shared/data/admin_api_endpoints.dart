@@ -27,6 +27,9 @@ abstract final class AdminApiEndpoints {
   static const whatsappServerLogout = '/whatsapp-server/logout';
   static const whatsappServerSendTest = '/whatsapp-server/send-test';
 
+  static const devices = '/devices';
+  static String device(int id) => '/devices/$id';
+
   static const users = '/users';
   static const usersBulkDelete = '/users/bulk-delete';
   static const roles = '/roles';

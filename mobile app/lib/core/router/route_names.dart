@@ -49,5 +49,6 @@ class RouteNames {
   static const settings = '/settings';
   static const users = '/users';
   static const roles = '/roles';
+  static const devices = '/devices';
   static const exports = '/exports';
 }

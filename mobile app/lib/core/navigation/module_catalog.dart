@@ -271,6 +271,17 @@ abstract final class ModuleCatalog {
       requiredPermissions: <String>['ViewAny:User'],
     ),
     AppModule(
+      id: 'devices',
+      group: AppModuleGroup.admin,
+      title: 'الأجهزة المسجّلة',
+      subtitle: 'إبطال جهاز مفقود أو مسروق فوراً',
+      icon: Icons.devices_rounded,
+      color: AppColors.danger,
+      route: RouteNames.devices,
+      // بلا شرط صلاحية: كل موظف يحتاج إبطال جهازه المفقود، والخادم يقيّد
+      // الإبطال بمالك الجهاز أو مشرف.
+    ),
+    AppModule(
       id: 'roles',
       group: AppModuleGroup.admin,
       title: 'الأدوار والصلاحيات',

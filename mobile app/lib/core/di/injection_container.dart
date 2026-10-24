@@ -162,6 +162,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   final rbacRepository = RbacRepositoryImpl(RbacRemoteDataSource(adminApi));
   final exportRepository = ExportRepositoryImpl(ExportRemoteDataSource(adminApi));
+  final devicesRepository = DevicesRepositoryImpl(DevicesRemoteDataSource(adminApi));
   final excelService = ExcelExportService.platform(exportRepository);
 
   getIt.registerSingleton<AdminApiClient>(adminApi);
@@ -170,6 +171,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<DashboardRepository>(dashboardRepository);
   getIt.registerSingleton<RbacRepository>(rbacRepository);
   getIt.registerSingleton<ExportRepository>(exportRepository);
+  getIt.registerSingleton<DevicesRepository>(devicesRepository);
   getIt.registerSingleton<ExcelExportService>(excelService);
 
   getIt.registerSingleton<AppRouter>(AppRouter(session: session));

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/auth/session_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/router/route_names.dart';
 import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/setup/server_config_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -241,6 +243,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   ),
                                 )
                                 .toList(growable: false),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    AppCard(
+                      onTap: () => context.push(RouteNames.devices),
+                      child: Row(
+                        children: <Widget>[
+                          const AppIconBubble(
+                            icon: Icons.devices_rounded,
+                            color: AppColors.danger,
+                            size: 42,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  'الأجهزة المسجّلة',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'راجع الأجهزة المرتبطة بحسابك وأبطل المفقود منها',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_left_rounded, size: 20),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 18),
