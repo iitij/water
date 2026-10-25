@@ -38,68 +38,132 @@ class _SubscriberCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Checkbox(
-                value: selected,
-                onChanged: (_) => onToggleSelect(),
-                visualDensity: VisualDensity.compact,
-              ),
-              Expanded(
-                child: Text(
-                  '#${s.id} · ${s.name}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: scheme.onSurface,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Checkbox(
+                  value: selected,
+                  onChanged: (_) => onToggleSelect(),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.5,
+                          height: 1.3,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${s.squareName ?? 'بدون مربع'} · ${s.metersCount} عداد',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ),
+                          if (s.phone != null) ...[
+                            const SizedBox(width: 8),
+                            Icon(Icons.call_outlined, size: 12, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 3),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(
+                                s.phone!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              StatusBadge(
-                label: s.status.label,
-                color: switch (s.status) {
-                  SubscriberStatus.active => AppColors.success,
-                  SubscriberStatus.suspended => AppColors.warning,
-                  SubscriberStatus.inactive => AppColors.danger,
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                tooltip: 'تعديل المشترك',
-                onPressed: () => onEdit(s),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
-                tooltip: 'حذف المشترك',
-                onPressed: () => onDelete(s),
-              ),
-            ]),
-            const SizedBox(height: 4),
-            Text(
-              '${s.squareName ?? ''} · ${s.metersCount} عداد · بدء ${s.subscriptionStartDate ?? '-'}',
-              style: Theme.of(context).textTheme.labelSmall,
+                const SizedBox(width: 6),
+                StatusBadge(
+                  label: s.status.label,
+                  color: switch (s.status) {
+                    SubscriberStatus.active => AppColors.success,
+                    SubscriberStatus.suspended => AppColors.warning,
+                    SubscriberStatus.inactive => AppColors.danger,
+                  },
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'خيارات المشترك',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit(s);
+                    if (value == 'delete') onDelete(s);
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 10),
+                          Text('تعديل المشترك'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                          SizedBox(width: 10),
+                          Text('حذف المشترك', style: TextStyle(color: AppColors.danger)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    size: 20,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-            if (s.phone != null)
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(s.phone!, style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
-            const SizedBox(height: 6),
-            Row(children: [
-              Text('الرصيد الصافي', style: Theme.of(context).textTheme.labelSmall),
-              const SizedBox(width: 6),
-              BalanceText(s.netBalance),
-              const Spacer(),
-              if (s.debitBalance > 0)
-                Text(
-                  'مدين ${CurrencyFormatter.format(s.debitBalance)}',
-                  style: TextStyle(
-                    color: AppSemantic.resolve(context, AppColors.danger),
-                    fontSize: 11,
-                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              child: Row(children: [
+                Text('الرصيد الصافي', style: Theme.of(context).textTheme.labelSmall),
+                const SizedBox(width: 6),
+                BalanceText(s.netBalance),
+                const Spacer(),
+                if (s.debitBalance > 0)
+                  Text(
+                    'مدين ${CurrencyFormatter.format(s.debitBalance)}',
+                    style: TextStyle(
+                      color: AppSemantic.resolve(context, AppColors.danger),
+                      fontSize: 11,
+                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
-            ]),
-            Divider(height: 16, color: scheme.outlineVariant),
+              ]),
+            ),
+            const SizedBox(height: 6),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               TextButton.icon(
                 icon: Icon(Icons.payments_rounded, size: 17, color: AppSemantic.resolve(context, AppColors.success)),
@@ -160,11 +224,11 @@ class _SubscriberCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('تاريخ الخدمة'),
-              subtitle: Text(serviceDate.toIso8601String().substring(0, 10)),
-              trailing: const Icon(Icons.calendar_today),
+            AppSettingRow(
+              icon: Icons.calendar_month_rounded,
+              color: Theme.of(ctx).colorScheme.primary,
+              title: 'تاريخ الخدمة',
+              subtitle: serviceDate.toIso8601String().substring(0, 10),
               onTap: () async {
                 final picked = await showDatePicker(
                   context: ctx,
@@ -225,39 +289,87 @@ class _SubscriberPeek extends StatelessWidget {
   final void Function(Subscriber) onDelete;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(subscriber.name, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text('المربع: ${subscriber.squareName ?? '-'}'),
-          Text('الهاتف: ${subscriber.phone ?? '-'}'),
-          Text('العنوان: ${subscriber.address ?? '-'}'),
-          const SizedBox(height: 8),
-          Row(children: [
-            const Text('الرصيد الصافي: '),
-            BalanceText(subscriber.netBalance, fontSize: 18),
-          ]),
-          const SizedBox(height: 16),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            FilledButton.icon(
-              onPressed: () => onOpen360(subscriber),
-              icon: const Icon(Icons.folder_open),
-              label: const Text('فتح الملف المالي الشامل 360°'),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(subscriber.name, style: theme.textTheme.headlineSmall),
+            const Gap(4),
+            Text(
+              'ملخص سريع لملف المشترك',
+              style: theme.textTheme.bodySmall,
             ),
-            OutlinedButton.icon(
-              onPressed: () => onEdit(subscriber),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('تعديل المشترك'),
+            const Gap(14),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppField(
+                    label: 'المربع',
+                    value: subscriber.squareName ?? '-',
+                    icon: Icons.grid_view_rounded,
+                  ),
+                  const Gap(10),
+                  AppField(
+                    label: 'الهاتف',
+                    value: subscriber.phone ?? '-',
+                    icon: Icons.call_outlined,
+                    ltr: subscriber.phone != null,
+                  ),
+                  const Gap(10),
+                  AppField(
+                    label: 'العنوان',
+                    value: subscriber.address ?? '-',
+                    icon: Icons.location_on_outlined,
+                  ),
+                ],
+              ),
             ),
-            OutlinedButton.icon(
-              onPressed: () => onDelete(subscriber),
-              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-              label: const Text('حذف المشترك', style: TextStyle(color: AppColors.danger)),
+            const Gap(12),
+            AppCard(
+              child: Row(
+                children: [
+                  Text('الرصيد الصافي', style: theme.textTheme.labelSmall),
+                  const Spacer(),
+                  BalanceText(subscriber.netBalance, fontSize: 18),
+                ],
+              ),
             ),
-          ]),
-        ]),
-      );
+            const Gap(16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                AppPrimaryButton(
+                  label: 'فتح الملف المالي الشامل 360°',
+                  icon: Icons.folder_open_rounded,
+                  expand: false,
+                  onPressed: () => onOpen360(subscriber),
+                ),
+                AppSecondaryButton(
+                  label: 'تعديل المشترك',
+                  icon: Icons.edit_outlined,
+                  expand: false,
+                  onPressed: () => onEdit(subscriber),
+                ),
+                AppIconButton(
+                  icon: Icons.delete_outline,
+                  tooltip: 'حذف المشترك',
+                  size: 38,
+                  onPressed: () => onDelete(subscriber),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 String? _squareName(SubscribersState state) {

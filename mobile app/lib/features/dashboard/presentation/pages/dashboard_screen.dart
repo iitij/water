@@ -285,7 +285,7 @@ class _DashboardView extends StatelessWidget {
                     title: '${data.overdueInvoices.length} فاتورة تحتاج متابعة',
                     message: 'يمكنك التحصيل الفوري أو إرسال تذكير واتساب من القائمة أعلاه.',
                     icon: Icons.bolt_rounded,
-                    color: AppColors.brandAmber,
+                    color: AppColors.warning,
                     actionLabel: onOpenReports == null ? null : 'التقارير',
                     onAction: onOpenReports,
                   ),

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -67,22 +69,21 @@ class _DevicesView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(AppStrings.of(context).devicesTitle),
-            actions: <Widget>[
-              IconButton(
-                tooltip: 'تحديث',
-                onPressed: state.status == DevicesStatus.loading
-                    ? null
-                    : () => context.read<DevicesCubit>().load(),
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: switch (state.status) {
+        return SubPageScaffold(
+          title: AppStrings.of(context).devicesTitle,
+          subtitle: 'الأجهزة المسجّلة على حسابك وكيفية إبطالها',
+          actions: <Widget>[
+            AppIconButton(
+              tooltip: 'تحديث',
+              onPressed: state.status == DevicesStatus.loading
+                  ? null
+                  : () => context.read<DevicesCubit>().load(),
+              icon: Icons.refresh_rounded,
+            ),
+          ],
+          child: switch (state.status) {
             DevicesStatus.initial || DevicesStatus.loading when state.devices.isEmpty =>
-              const Center(child: CircularProgressIndicator()),
+              const AppLoader(),
             DevicesStatus.failure when state.devices.isEmpty => AdminErrorView(
                 message: state.errorMessage ?? 'تعذّر تحميل الأجهزة.',
                 onRetry: () => context.read<DevicesCubit>().load(),
@@ -181,9 +182,10 @@ class _DeviceCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(
-            _iconFor(device.platform),
-            color: revoked ? scheme.outline : scheme.primary,
+          AppGlyph(
+            icon: _iconFor(device.platform),
+            tone: revoked ? AppColors.neutral : scheme.primary,
+            size: 40,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
@@ -211,11 +213,12 @@ class _DeviceCard extends StatelessWidget {
             ),
           ),
           if (!revoked && !device.isCurrent)
-            IconButton(
+            AppIconButton(
               tooltip: 'إبطال الجهاز',
               onPressed: () => _confirmRevoke(context),
-              icon: const Icon(Icons.link_off_rounded),
+              icon: Icons.link_off_rounded,
               color: scheme.error,
+              size: 38,
             ),
         ],
       ),

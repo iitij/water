@@ -38,15 +38,19 @@ class InvoiceIssueScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 for (final option in options)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: AppCard(
                     padding: EdgeInsets.zero,
                     child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Icon(option.icon, color: Theme.of(context).colorScheme.primary, size: 28),
-                    title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(option.description),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                    contentPadding: const EdgeInsetsDirectional.fromSTEB(14, 14, 14, 14),
+                    leading: AppGlyph(icon: option.icon, size: 44),
+                    title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                    subtitle: Text(option.description, style: const TextStyle(fontSize: 12.5)),
+                    trailing: Icon(
+                      Icons.chevron_left_rounded,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     onTap: () => context.push(option.route),
                     ),
                   ),

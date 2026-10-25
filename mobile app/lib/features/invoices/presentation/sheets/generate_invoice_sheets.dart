@@ -7,10 +7,12 @@ import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/finance_badges.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../tariffs/domain/repositories/tariffs_repository.dart';
@@ -286,61 +288,87 @@ Future<void> _afterGenerated(BuildContext context, InvoiceModel invoice) async {
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+    ),
     builder: (sheetContext) => SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Icon(Icons.check_circle, color: AppColors.success, size: 40),
+            const Center(
+              child: AppGlyph(
+                icon: Icons.check_circle_rounded,
+                tone: AppColors.success,
+                size: 58,
+              ),
+            ),
             const SizedBox(height: 10),
             Text(
               'تم إصدار الفاتورة ${invoice.billNumber}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: LtrNumberText(
+                CurrencyFormatter.withLabel(invoice.netPayable),
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                  letterSpacing: -.4,
+                  fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                ),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
-              'الصافي ${CurrencyFormatter.withLabel(invoice.netPayable)} — '
               'لصالح ${invoice.beneficiaryName}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: AppColors.neutral),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 18),
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppSecondaryButton(
+                    label: 'PDF',
+                    icon: Icons.picture_as_pdf_outlined,
+                    height: 44,
                     onPressed: () {
                       Navigator.of(sheetContext).pop();
                       openInvoicePdfPreview(context, invoice);
                     },
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('PDF'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppSecondaryButton(
+                    label: 'حراري',
+                    icon: Icons.print_outlined,
+                    height: 44,
                     onPressed: () {
                       Navigator.of(sheetContext).pop();
                       printInvoiceThermal(context, invoice);
                     },
-                    icon: const Icon(Icons.print_outlined),
-                    label: const Text('حراري'),
                   ),
                 ),
                 if (config.whatsappEnabled) ...<Widget>[
                   const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: AppSecondaryButton(
+                      label: 'واتساب',
+                      icon: Icons.chat_outlined,
+                      height: 44,
                       onPressed: () {
                         Navigator.of(sheetContext).pop();
                         sendInvoiceWhatsapp(context, invoice);
                       },
-                      icon: const Icon(Icons.chat_outlined),
-                      label: const Text('واتساب'),
                     ),
                   ),
                 ],
@@ -405,13 +433,15 @@ class _SubscriberSearchFieldState extends State<SubscriberSearchField> {
             if (selected != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Chip(
-                  avatar: const Icon(Icons.person_outline, size: 18),
-                  label: Text(
-                    '${selected.name}'
-                    '${selected.squareName == null ? '' : ' • ${selected.squareName}'}',
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: AppFilterChip(
+                    label: '${selected.name}'
+                        '${selected.squareName == null ? '' : ' • ${selected.squareName}'}',
+                    selected: true,
+                    icon: Icons.person_outline_rounded,
+                    onRemove: cubit.clearSubscriber,
                   ),
-                  onDeleted: cubit.clearSubscriber,
                 ),
               )
             else if (state.loadingReferences)

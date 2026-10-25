@@ -26,4 +26,5 @@ abstract class RbacRepository {
   Future<Role> createRole(Role role);
   Future<Role> updateRole(Role role);
   Future<void> deleteRole(int id);
+  Future<void> bulkDeleteRoles(List<int> ids);
 }

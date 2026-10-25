@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 
 /// Unified show/hide + alternate-label editor matching Filament's
@@ -35,6 +36,7 @@ class FieldConfigTile extends StatelessWidget {
         padding: EdgeInsets.zero,
         child: ExpansionTile(
         key: ValueKey('field-config-$showKey'),
+        leading: const AppGlyph(icon: Icons.tune_rounded, size: 34, neutral: true),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           visible ? 'ظاهر في $documentLabel' : 'مخفي من $documentLabel',
@@ -42,12 +44,14 @@ class FieldConfigTile extends StatelessWidget {
         ),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
         children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text('عرض الحقل في $documentLabel'),
-            value: visible,
-            onChanged: onVisibilityChanged,
+          AppSettingRow(
+            icon: Icons.visibility_outlined,
+            color: Theme.of(context).colorScheme.primary,
+            showChevron: false,
+            title: 'عرض الحقل في $documentLabel',
+            trailing: Switch(value: visible, onChanged: onVisibilityChanged),
           ),
+          const SizedBox(height: 8),
           TextFormField(
             key: ValueKey('field-label-$labelKey'),
             controller: labelController,

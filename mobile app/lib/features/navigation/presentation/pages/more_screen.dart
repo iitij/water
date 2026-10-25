@@ -190,7 +190,7 @@ class MoreScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: AppColors.danger),
+                const Icon(Icons.chevron_left_rounded, size: 15, color: AppColors.danger),
               ],
             ),
           ),
@@ -260,13 +260,8 @@ class _IdentityCard extends StatelessWidget {
             ? 'موظف'
             : roles.first;
 
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[

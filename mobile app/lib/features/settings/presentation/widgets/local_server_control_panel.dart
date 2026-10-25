@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/data/admin_json.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
@@ -90,22 +92,26 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                 runSpacing: 10,
                 children: [
                   if (isOffline)
-                    FilledButton.icon(
+                    AppPrimaryButton(
                       key: const ValueKey('start-local-server'),
                       onPressed: state.isServerBusy
                           ? null
                           : () => context.read<WhatsAppSettingsCubit>().startLocalServer(),
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('تشغيل الخادم من هنا'),
+                      icon: Icons.play_arrow_rounded,
+                      label: 'تشغيل الخادم من هنا',
+                      height: 42,
+                      expand: false,
                     )
                   else ...[
-                    FilledButton.tonalIcon(
+                    AppSecondaryButton(
                       key: const ValueKey('send-whatsapp-test'),
                       onPressed: state.isServerBusy
                           ? null
                           : () => _openSendTestDialog(context),
-                      icon: const Icon(Icons.send_rounded),
-                      label: const Text('إرسال رسالة تجريبية'),
+                      icon: Icons.send_rounded,
+                      label: 'إرسال رسالة تجريبية',
+                      height: 42,
+                      expand: false,
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('logout-local-server'),
@@ -126,12 +132,14 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
                       label: const Text('إيقاف الخادم نهائياً'),
                     ),
                   ],
-                  OutlinedButton.icon(
+                  AppSecondaryButton(
                     onPressed: state.isServerBusy
                         ? null
                         : () => context.read<WhatsAppSettingsCubit>().refreshLocalServerStatus(),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('فحص الآن'),
+                    icon: Icons.refresh_rounded,
+                    label: 'فحص الآن',
+                    height: 42,
+                    expand: false,
                   ),
                 ],
               ),
@@ -173,45 +181,26 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
 
   Future<void> _confirmStop(BuildContext context) async {
     final cubit = context.read<WhatsAppSettingsCubit>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إيقاف خادم الواتساب'),
-        content: const Text('سيتوقف إرسال الفواتير والسندات عبر الخادم المحلي. هل تريد المتابعة؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('إيقاف الخادم'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'إيقاف خادم الواتساب',
+      message: 'سيتوقف إرسال الفواتير والسندات عبر الخادم المحلي. هل تريد المتابعة؟',
+      confirmLabel: 'إيقاف الخادم',
+      destructive: true,
     );
-    if (confirmed ?? false) await cubit.stopLocalServer();
+    if (confirmed) await cubit.stopLocalServer();
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
     final cubit = context.read<WhatsAppSettingsCubit>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('فصل رقم الواتساب المرتبط'),
-        content: const Text(
-          'سيتم تسجيل الخروج من جلسة الواتساب الحالية وإصدار كود QR جديد لربط رقم آخر. هل تريد المتابعة؟',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('تسجيل الخروج'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'فصل رقم الواتساب المرتبط',
+      message: 'سيتم تسجيل الخروج من جلسة الواتساب الحالية وإصدار كود QR جديد لربط رقم آخر. هل تريد المتابعة؟',
+      confirmLabel: 'تسجيل الخروج',
+      destructive: true,
     );
-    if (confirmed ?? false) await cubit.logoutLocalServer();
+    if (confirmed) await cubit.logoutLocalServer();
   }
 
   Future<void> _openSendTestDialog(BuildContext context) async {

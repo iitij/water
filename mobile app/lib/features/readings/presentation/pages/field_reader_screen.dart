@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/barcode_scanner_screen.dart';
-import '../../../../core/widgets/search_text_field.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../../meters/presentation/cubit/meters_cubit.dart';
@@ -55,37 +59,37 @@ class _FieldReaderView extends StatelessWidget {
     final cubit = context.read<MetersCubit>();
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('القارئ الميداني'),
-          actions: [
-            BlocBuilder<MetersCubit, MetersState>(
-              buildWhen: (prev, curr) =>
-                  prev.squares != curr.squares || prev.squareFilter != curr.squareFilter,
-              builder: (context, state) => IconButton(
-                tooltip: 'تنزيل حزمة العمل أوفلاين',
-                onPressed: () async {
-                  final res = await OfflinePackDialog.show(
-                    context,
-                    downloader: offlinePackDownloader,
-                    squares: state.squares,
-                    initialSquareId: state.squareFilter,
-                  );
-                  if (res != null && context.mounted) {
-                    await cubit.load();
-                  }
-                },
-                icon: const Icon(Icons.cloud_download_outlined),
-              ),
+      child: SubPageScaffold(
+        title: 'القارئ الميداني',
+        actions: [
+          BlocBuilder<MetersCubit, MetersState>(
+            buildWhen: (prev, curr) =>
+                prev.squares != curr.squares || prev.squareFilter != curr.squareFilter,
+            builder: (context, state) => AppIconButton(
+              icon: Icons.cloud_download_outlined,
+              tooltip: 'تنزيل حزمة العمل أوفلاين',
+              size: 38,
+              onPressed: () async {
+                final res = await OfflinePackDialog.show(
+                  context,
+                  downloader: offlinePackDownloader,
+                  squares: state.squares,
+                  initialSquareId: state.squareFilter,
+                );
+                if (res != null && context.mounted) {
+                  await cubit.load();
+                }
+              },
             ),
-            IconButton(
-              tooltip: 'مسح باركود العداد',
-              onPressed: () => _scan(context, cubit),
-              icon: const Icon(Icons.qr_code_scanner),
-            ),
-          ],
-        ),
-        body: BlocConsumer<MetersCubit, MetersState>(
+          ),
+          AppIconButton(
+            icon: Icons.qr_code_scanner_rounded,
+            tooltip: 'مسح باركود العداد',
+            size: 38,
+            onPressed: () => _scan(context, cubit),
+          ),
+        ],
+        child: BlocConsumer<MetersCubit, MetersState>(
           listenWhen: (previous, current) =>
               previous.errorMessage != current.errorMessage && current.errorMessage != null,
           listener: (context, state) => ScaffoldMessenger.of(context).showSnackBar(
@@ -98,58 +102,54 @@ class _FieldReaderView extends StatelessWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                      child: Column(
-                        children: [
-                          SearchTextField(
-                            query: state.query,
-                            hintText: 'المربع/المسار 4/1 أو رقم العداد أو الاسم',
-                            onChanged: cubit.setQuery,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AppFilterBar(
+                          query: state.query,
+                          hint: 'المربع/المسار 4/1 أو رقم العداد أو الاسم',
+                          onChanged: cubit.setQuery,
+                          activeCount: state.squareFilter == null ? 0 : 1,
+                          onOpenFilters: () => _openSquareSheet(context, state),
+                        ),
+                        if (state.status == MetersLoadStatus.loading && state.meters.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsetsDirectional.fromSTEB(16, 4, 16, 4),
+                            child: LinearProgressIndicator(minHeight: 2),
                           ),
-                          const SizedBox(height: 10),
-                          DropdownButtonFormField<int?>(
-                            key: ValueKey<String>('square-${state.squareFilter}'),
-                            initialValue: state.squareFilter,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'فلترة بالمربع السكني',
-                              prefixIcon: Icon(Icons.location_city_outlined),
-                              isDense: true,
-                            ),
-                            items: [
-                              const DropdownMenuItem<int?>(
-                                value: null,
-                                child: Text('كل المربعات'),
-                              ),
-                              ...state.squares.map((square) => DropdownMenuItem<int?>(
-                                    value: square.id,
-                                    child: Text(square.name),
-                                  )),
-                            ],
-                            onChanged: cubit.setSquareFilter,
-                          ),
-                          if (state.status == MetersLoadStatus.loading && state.meters.isNotEmpty)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: LinearProgressIndicator(minHeight: 2),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                   if (state.status == MetersLoadStatus.loading && state.meters.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(child: AppLoader(label: 'جارٍ تحميل العدادات…')),
                     )
                   else if (state.meters.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _FieldEmptyState(
-                        title: state.errorMessage == null ? 'لا توجد عدادات' : 'تعذر تحميل العدادات',
-                        subtitle: state.errorMessage ?? 'حمّل بيانات المربع قبل بدء الجولة الميدانية.',
-                        onRetry: cubit.load,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            AdminEmptyView(
+                              icon: state.errorMessage == null
+                                  ? Icons.water_drop_outlined
+                                  : Icons.cloud_off_outlined,
+                              title: state.errorMessage == null
+                                  ? 'لا توجد عدادات'
+                                  : 'تعذر تحميل العدادات',
+                              message: state.errorMessage ??
+                                  'حمّل بيانات المربع قبل بدء الجولة الميدانية.',
+                            ),
+                            AppSecondaryButton(
+                              label: 'إعادة التحميل',
+                              icon: Icons.refresh_rounded,
+                              onPressed: cubit.load,
+                              expand: false,
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   else
@@ -164,13 +164,20 @@ class _FieldReaderView extends StatelessWidget {
                         );
                       },
                     ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
               ),
             );
           },
         ),
       ),
+    );
+  }
+
+  Future<void> _openSquareSheet(BuildContext context, MetersState state) async {
+    await AppFilterSheet.show<void>(
+      context: context,
+      builder: (_) => _SquareFilterSheet(state: state, cubit: context.read<MetersCubit>()),
     );
   }
 
@@ -201,37 +208,72 @@ class _FieldReaderView extends StatelessWidget {
   }
 }
 
-class _FieldEmptyState extends StatelessWidget {
-  const _FieldEmptyState({
-    required this.title,
-    required this.subtitle,
-    required this.onRetry,
-  });
+/// ورقة اختيار المربع السكني — مسودة داخلية تُطبَّق مرة واحدة عند «عرض النتائج».
+class _SquareFilterSheet extends StatefulWidget {
+  const _SquareFilterSheet({required this.state, required this.cubit});
 
-  final String title;
-  final String subtitle;
-  final VoidCallback onRetry;
+  final MetersState state;
+  final MetersCubit cubit;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.water_drop_outlined, size: 50),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(subtitle, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton.tonalIcon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('إعادة التحميل'),
-              ),
-            ],
+  State<_SquareFilterSheet> createState() => _SquareFilterSheetState();
+}
+
+class _SquareFilterSheetState extends State<_SquareFilterSheet> {
+  late int? _square = widget.state.squareFilter;
+
+  void _apply() {
+    if (_square != widget.state.squareFilter) {
+      widget.cubit.setSquareFilter(_square);
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppFilterSheet(
+      title: 'فلترة بالمربع السكني',
+      resultCountLabel: '${widget.state.meters.length} عداد مطابق',
+      onApply: _apply,
+      onReset: () => setState(() => _square = null),
+      resetEnabled: _square != null,
+      sections: <Widget>[
+        AppFilterSection(
+          title: 'المربع السكني',
+          subtitle: 'اختر مربعاً واحداً أو ابحث في كل المربعات',
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 216),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: ListView(
+              padding: const EdgeInsets.all(6),
+              shrinkWrap: true,
+              children: <Widget>[
+                AppFilterOptionTile(
+                  label: 'كل المربعات',
+                  icon: Icons.apps_rounded,
+                  selected: _square == null,
+                  onTap: () => setState(() => _square = null),
+                ),
+                const SizedBox(height: 6),
+                for (final square in widget.state.squares) ...<Widget>[
+                  AppFilterOptionTile(
+                    label: square.name,
+                    icon: Icons.location_city_outlined,
+                    selected: _square == square.id,
+                    onTap: () => setState(() => _square = square.id),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              ],
+            ),
           ),
         ),
-      );
+        const SizedBox(height: 20),
+      ],
+    );
+  }
 }

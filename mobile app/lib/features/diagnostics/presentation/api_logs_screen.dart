@@ -1,15 +1,14 @@
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/di/injection_container.dart';
 import '../../../core/diagnostics/api_log_manager.dart';
 import '../../../core/diagnostics/models/api_log_entry.dart';
-import '../../../core/di/injection_container.dart';
 import '../../../core/finance/finance_feedback.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/ui/app_surfaces.dart';
-import '../../../core/ui/app_tokens.dart';
 
 /// شاشة فحص ومراقبة سجلات الـ API والشبكة بين التطبيق والخادم.
 ///
@@ -103,7 +102,7 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
               durationMs: item['duration_ms'] is int ? item['duration_ms'] as int : 0,
               isSlow: item['is_slow'] == true,
               isError: item['is_error'] == true,
-              errorMessage: item['error'] != null ? item['error'].toString() : null,
+              errorMessage: item['error']?.toString(),
               requestId: item['id']?.toString(),
               context: 'backend',
             );
@@ -166,7 +165,7 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
     } else {
       try {
         final dio = getIt<Dio>();
-        await dio.delete('/system/api-logs');
+        await dio.delete<dynamic>('/system/api-logs');
         await _fetchBackendLogs();
         if (mounted) AppFeedback.success(context, 'تم مسح سجلات الخادم بنجاح.');
       } catch (e) {
@@ -394,7 +393,7 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(Icons.checklist_rtl_rounded, size: 54, color: AppColors.muted.withOpacity(0.5)),
+          Icon(Icons.checklist_rtl_rounded, size: 54, color: AppColors.muted.withValues(alpha: 0.5)),
           const SizedBox(height: 12),
           Text(
             _searchController.text.isNotEmpty || _selectedFilter != 'all'
@@ -541,8 +540,8 @@ class _ApiLogCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: entry.isError
-                ? AppColors.danger.withOpacity(0.5)
-                : (entry.isSlow ? AppColors.warning.withOpacity(0.5) : AppColors.border),
+                ? AppColors.danger.withValues(alpha: 0.5)
+                : (entry.isSlow ? AppColors.warning.withValues(alpha: 0.5) : AppColors.border),
           ),
         ),
         child: Column(
@@ -554,9 +553,9 @@ class _ApiLogCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _methodColor(entry.method).withOpacity(0.12),
+                    color: _methodColor(entry.method).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: _methodColor(entry.method).withOpacity(0.4)),
+                    border: Border.all(color: _methodColor(entry.method).withValues(alpha: 0.4)),
                   ),
                   child: Text(
                     entry.method,
@@ -573,7 +572,7 @@ class _ApiLogCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
+                    color: statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -592,8 +591,8 @@ class _ApiLogCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
                     color: entry.isSlow
-                        ? AppColors.warning.withOpacity(0.15)
-                        : Colors.grey.withOpacity(0.1),
+                        ? AppColors.warning.withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
@@ -639,7 +638,7 @@ class _ApiLogCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withOpacity(0.08),
+                  color: AppColors.danger.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -689,7 +688,7 @@ class _ApiLogDetailSheet extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.muted.withOpacity(0.3),
+                    color: AppColors.muted.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -772,7 +771,7 @@ class _ApiLogDetailSheet extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.05),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: SelectableText(
@@ -922,7 +921,7 @@ class _ApiLogDetailSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.04),
+        color: Colors.black.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(8),
       ),
       child: SelectableText(

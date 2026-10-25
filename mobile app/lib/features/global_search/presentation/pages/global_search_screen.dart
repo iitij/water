@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
-import '../../../../core/widgets/search_text_field.dart';
 import '../../data/models/global_search_models.dart';
 import '../cubit/global_search_cubit.dart';
 
@@ -23,23 +24,25 @@ class GlobalSearchScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<GlobalSearchCubit, GlobalSearchState>(
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('البحث الشامل')),
-          body: SafeArea(
+        return SubPageScaffold(
+          title: 'البحث الشامل',
+          subtitle: 'اسم، هاتف، رقم فاتورة، سند أو عداد',
+          child: SafeArea(
             top: false,
             child: Column(
               children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
+                AppFilterBar(
+                  query: state.query,
+                  hint: 'اسم، هاتف، رقم فاتورة، سند أو عداد…',
+                  onChanged: context.read<GlobalSearchCubit>().search,
+                  onClear: state.query.isEmpty
+                      ? null
+                      : () => context.read<GlobalSearchCubit>().search(''),
+                  padding: const EdgeInsetsDirectional.fromSTEB(
                     AppSpacing.md,
                     AppSpacing.sm,
                     AppSpacing.md,
                     AppSpacing.xs,
-                  ),
-                  child: SearchTextField(
-                    query: state.query,
-                    hintText: 'اسم، هاتف، رقم فاتورة، سند أو عداد…',
-                    onChanged: context.read<GlobalSearchCubit>().search,
                   ),
                 ),
                 if (state.loading) const LinearProgressIndicator(minHeight: 2),
@@ -164,31 +167,48 @@ class _ResultTile extends StatelessWidget {
     final caption = item.caption;
 
     return AppCard(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.sm, 10, AppSpacing.sm, 10),
       onTap: () => _open(context),
-      child: ListTile(
-        contentPadding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.sm, 2, AppSpacing.sm, 2),
-        leading: AppGlyph(icon: visual.icon, tone: visual.tone, size: 38),
-        title: Text(
-          item.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleSmall,
-        ),
-        subtitle: caption == null
-            ? null
-            : Text(
-                caption,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
-        trailing: item.amount == null
-            ? const Icon(Icons.chevron_left_rounded, size: 18)
-            : Text(
-                CurrencyFormatter.withLabel(item.amount),
-                style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
+      child: Row(
+        children: <Widget>[
+          AppGlyph(icon: visual.icon, tone: visual.tone, size: 38),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall,
+                ),
+                if (caption != null) ...<Widget>[
+                  const SizedBox(height: 2),
+                  Text(
+                    caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          if (item.amount == null)
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: scheme.onSurfaceVariant.withValues(alpha: .7),
+            )
+          else
+            Text(
+              CurrencyFormatter.withLabel(item.amount),
+              style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+        ],
       ),
     );
   }

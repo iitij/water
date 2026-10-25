@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/settings_entities.dart';
@@ -25,13 +26,9 @@ class _PreviewPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
+      radius: AppRadius.lg,
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Column(
@@ -73,7 +70,10 @@ class _InvoicePreview extends StatelessWidget {
         Text(
           settings.text('invoice_address_ar'),
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.black54, fontSize: 11),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 11,
+          ),
         ),
         const SizedBox(height: 18),
         _previewSection(
@@ -115,7 +115,10 @@ class _InvoicePreview extends StatelessWidget {
           Text(
             settings.text('inv_lbl_thank_you'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, color: Colors.black54),
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ],

@@ -3,16 +3,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/barcode_scanner_screen.dart';
-import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
@@ -279,40 +282,44 @@ class _SubscribersView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('المشتركون'),
-            actions: [
-              if (state.selectedIds.isNotEmpty) ...[
-                IconButton(
-                  tooltip: 'تحديد الكل',
-                  icon: const Icon(Icons.select_all),
-                  onPressed: context.read<SubscribersCubit>().selectAllVisible,
-                ),
-                IconButton(
-                  tooltip: 'إلغاء التحديد',
-                  icon: const Icon(Icons.clear),
-                  onPressed: context.read<SubscribersCubit>().clearSelection,
-                ),
-                IconButton(
-                  tooltip: 'حذف المحدد (${state.selectedIds.length})',
-                  icon: const Icon(Icons.delete_sweep),
-                  onPressed: () => _handleBulkDelete(context, state.selectedIds),
-                ),
-              ],
-              IconButton(
-                tooltip: 'تحديث',
-                icon: const Icon(Icons.refresh),
-                onPressed: context.read<SubscribersCubit>().load,
+        return SubPageScaffold(
+          title: 'المشتركون',
+          subtitle: 'سجل المشتركين والأرصدة',
+          actions: [
+            if (state.selectedIds.isNotEmpty) ...[
+              AppIconButton(
+                tooltip: 'تحديد الكل',
+                icon: Icons.select_all,
+                size: 38,
+                onPressed: context.read<SubscribersCubit>().selectAllVisible,
+              ),
+              AppIconButton(
+                tooltip: 'إلغاء التحديد',
+                icon: Icons.clear_rounded,
+                size: 38,
+                onPressed: context.read<SubscribersCubit>().clearSelection,
+              ),
+              AppIconButton(
+                tooltip: 'حذف المحدد (${state.selectedIds.length})',
+                icon: Icons.delete_sweep_outlined,
+                size: 38,
+                onPressed: () => _handleBulkDelete(context, state.selectedIds),
               ),
             ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _handleOpenForm(context),
-            icon: const Icon(Icons.person_add),
-            label: const Text('مشترك جديد'),
-          ),
-          body: MasterDetailLayout(
+            AppIconButton(
+              tooltip: 'مشترك جديد',
+              icon: Icons.person_add_alt_1_rounded,
+              size: 38,
+              onPressed: () => _handleOpenForm(context),
+            ),
+            AppIconButton(
+              tooltip: 'تحديث',
+              icon: Icons.refresh_rounded,
+              size: 38,
+              onPressed: context.read<SubscribersCubit>().load,
+            ),
+          ],
+          child: MasterDetailLayout(
             hasSelection: state.selected != null,
             master: _list(context, state),
             detail: state.selected == null
@@ -331,9 +338,14 @@ class _SubscribersView extends StatelessWidget {
 
   Widget _list(BuildContext context, SubscribersState state) {
     final cubit = context.read<SubscribersCubit>();
+    final theme = Theme.of(context);
     final activeCount =
         (state.squareId == null ? 0 : 1) + (state.status == null ? 0 : 1);
     final squareName = _squareName(state);
+    final netBalanceTotal = state.subscribers.fold<double>(
+      0,
+      (sum, s) => sum + s.netBalance,
+    );
 
     return Column(children: [
       const SizedBox(height: AppSpacing.xs),
@@ -397,44 +409,89 @@ class _SubscribersView extends StatelessWidget {
                 cubit.filterStatus(null);
               },
       ),
-      if (state.selectedIds.isNotEmpty)
-        MaterialBanner(
-          content: Text('تم تحديد ${state.selectedIds.length} مشترك'),
-          leading: const Icon(Icons.checklist),
-          actions: [
-            TextButton(
-              onPressed: context.read<SubscribersCubit>().clearSelection,
-              child: const Text('إلغاء'),
+      Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+        child: AppStatStrip(
+          items: [
+            AppStatItem(
+              label: 'عدد المشتركين',
+              value: '${state.subscribers.length}',
+              icon: Icons.people_outline_rounded,
+              color: theme.colorScheme.primary,
             ),
-            FilledButton.tonalIcon(
-              onPressed: () => _handleBulkDelete(context, state.selectedIds),
-              icon: const Icon(Icons.delete_sweep, color: AppColors.danger),
-              label: const Text('حذف المحدد'),
+            AppStatItem(
+              label: 'نشط',
+              value: '${state.subscribers.where((s) => s.status == SubscriberStatus.active).length}',
+              icon: Icons.check_circle_outline_rounded,
+              color: AppColors.success,
+            ),
+            AppStatItem(
+              label: 'الرصيد الصافي الإجمالي',
+              value: CurrencyFormatter.format(netBalanceTotal),
+              icon: Icons.account_balance_wallet_outlined,
+              color: netBalanceTotal < 0 ? AppColors.danger : AppColors.success,
             ),
           ],
+        ),
+      ),
+      if (state.selectedIds.isNotEmpty)
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+          child: Container(
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+            decoration: BoxDecoration(
+              color: AppColors.accentSoft,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.checklist, size: 18, color: theme.colorScheme.primary),
+                const Gap(8),
+                Expanded(
+                  child: Text(
+                    'تم تحديد ${state.selectedIds.length} مشترك',
+                    style: theme.textTheme.labelMedium,
+                  ),
+                ),
+                TextButton(
+                  onPressed: context.read<SubscribersCubit>().clearSelection,
+                  child: const Text('إلغاء'),
+                ),
+                TextButton(
+                  onPressed: () => _handleBulkDelete(context, state.selectedIds),
+                  child: const Text('حذف المحدد'),
+                ),
+              ],
+            ),
+          ),
         ),
       if (state.loading) const LinearProgressIndicator(),
       Expanded(
         child: state.subscribers.isEmpty && !state.loading
-            ? EmptyStateWidget(
-                title: 'لا يوجد مشتركون مطابقون',
-                message: activeCount == 0
-                    ? 'أضف مشتركاً جديداً لتبدأ.'
-                    : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
-                icon: activeCount == 0
-                    ? Icons.people_outline_rounded
-                    : Icons.filter_alt_off_rounded,
-                action: activeCount == 0
-                    ? null
-                    : TextButton.icon(
-                        onPressed: () {
-                          cubit.filterSquare(null);
-                          cubit.filterStatus(null);
-                          cubit.search('');
-                        },
-                        icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                        label: const Text('مسح الفلاتر'),
-                      ),
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AdminEmptyView(
+                    title: 'لا يوجد مشتركون مطابقون',
+                    message: activeCount == 0
+                        ? 'أضف مشتركاً جديداً لتبدأ.'
+                        : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
+                    icon: activeCount == 0
+                        ? Icons.people_outline_rounded
+                        : Icons.filter_alt_off_rounded,
+                  ),
+                  if (activeCount != 0)
+                    TextButton.icon(
+                      onPressed: () {
+                        cubit.filterSquare(null);
+                        cubit.filterStatus(null);
+                        cubit.search('');
+                      },
+                      icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                      label: const Text('مسح الفلاتر'),
+                    ),
+                ],
               )
             : ListView.builder(
                 itemCount: state.subscribers.length,

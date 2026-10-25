@@ -252,6 +252,24 @@ class SyncQueueManager extends ChangeNotifier {
     await syncPending();
   }
 
+  /// تجاهل عملية متعثرة وحذفها من الطابور نهائياً (خطة 2.0 — الفصل 26.2:
+  /// عند تعارض الفترة يطلب التطبيق من القارئ التأكيد أو التجاهل، ولا يُكتب
+  /// فوق الخادم تلقائياً أبداً).
+  ///
+  /// يستبعد العنصر من المخزن الدائم عبر `loadAll` + `saveAll` فيعمل مع كل
+  /// تنفيذات `SyncQueueRepository` (Drift وSharedPreferences على السواء).
+  Future<void> discard(String id) async {
+    if (_isSyncing) return;
+    final stillThere = _items.any((item) => item.id == id);
+    if (!stillThere) return;
+    final remaining = (await _repository.loadAll())
+        .where((item) => item.id != id)
+        .toList(growable: false);
+    await _runRepositoryWrite(() => _repository.saveAll(remaining));
+    _items.removeWhere((candidate) => candidate.id == id);
+    notifyListeners();
+  }
+
   Future<void> syncPending() async {
     if (_isSyncing || !_session.isReady || !_session.isAuthenticated) return;
     // Lock before the first await so manual, automatic, and enqueue-triggered syncs

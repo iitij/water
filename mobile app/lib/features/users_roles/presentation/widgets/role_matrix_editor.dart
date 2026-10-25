@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../domain/entities/rbac_entities.dart';
 
@@ -54,10 +57,10 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
           title: Text(widget.role.id == 0 ? 'إنشاء دور ومصفوفة صلاحيات' : 'مصفوفة: ${widget.role.name}'),
           automaticallyImplyLeading: false,
           actions: [
-            IconButton(
+            AppIconButton(
               tooltip: 'إغلاق',
               onPressed: _saving ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.close_rounded),
+              icon: Icons.close_rounded,
             ),
           ],
           bottom: TabBar(
@@ -98,16 +101,21 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                         labelText: 'Guard',
                       ),
                     );
-                    final selectAll = SwitchListTile(
-                      key: const ValueKey('select-all-permissions'),
-                      value: allSelected,
-                      onChanged: _readOnly
-                          ? null
-                          : (value) => setState(() {
-                                _selected = value ? {...allNames} : {};
-                              }),
-                      title: const Text('تحديد الكل (Select All)'),
-                      subtitle: Text('${_selected.length} من ${allNames.length} صلاحية محددة'),
+                    final selectAll = AppSettingRow(
+                      title: 'تحديد الكل (Select All)',
+                      subtitle: '${_selected.length} من ${allNames.length} صلاحية محددة',
+                      icon: Icons.select_all_rounded,
+                      color: AdminPalette.primary,
+                      showChevron: false,
+                      trailing: Switch(
+                        key: const ValueKey('select-all-permissions'),
+                        value: allSelected,
+                        onChanged: _readOnly
+                            ? null
+                            : (value) => setState(() {
+                                  _selected = value ? {...allNames} : {};
+                                }),
+                      ),
                     );
                     if (constraints.maxWidth < 800) {
                       return Column(
@@ -129,10 +137,11 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                 ),
               ),
               if (_readOnly)
-                const MaterialBanner(
-                  content: Text('super_admin يملك وصولاً ضمنياً كاملاً؛ المصفوفة للعرض فقط.'),
-                  leading: Icon(Icons.lock_outline_rounded),
-                  actions: [SizedBox.shrink()],
+                const AppNotice(
+                  title: 'دور محمي',
+                  message: 'super_admin يملك وصولاً ضمنياً كاملاً؛ المصفوفة للعرض فقط.',
+                  icon: Icons.lock_outline_rounded,
+                  color: AppColors.warning,
                 ),
               Expanded(
                 child: TabBarView(
@@ -165,18 +174,12 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
         ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.all(16),
-          child: FilledButton.icon(
+          child: AppPrimaryButton(
             key: const ValueKey('save-role-matrix'),
-            onPressed: _readOnly || _saving ? null : _save,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            icon: _saving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: Text(_readOnly ? 'دور محمي — للعرض فقط' : 'حفظ الدور ومزامنة الصلاحيات'),
+            onPressed: _readOnly ? null : _save,
+            icon: Icons.save_outlined,
+            loading: _saving,
+            label: _readOnly ? 'دور محمي — للعرض فقط' : 'حفظ الدور ومزامنة الصلاحيات',
           ),
         ),
       ),
@@ -252,7 +255,7 @@ class _PermissionGroupsList extends StatelessWidget {
             subtitle: LtrDirectionalText(group.key),
             childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             children: [
-              const Divider(),
+              const AppDivider(),
               ...group.permissions.map(
                 (permission) => CheckboxListTile(
                   key: ValueKey('permission-${permission.name}'),

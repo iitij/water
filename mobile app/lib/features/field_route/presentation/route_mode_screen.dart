@@ -8,6 +8,7 @@ import '../../../core/finance/finance_feedback.dart';
 import '../../../core/finance/finance_locator.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/ui/app_controls.dart';
 import '../../../core/ui/app_surfaces.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../../meters/data/models/meter.dart';
@@ -98,11 +99,18 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
     }
 
     final meters = await _meters.getMeters(squareId: square.id);
-    final visited = await _visits.visited(squareId: square.id, day: DateTime.now());
+    final visited = await _visits.visited(
+      squareId: square.id,
+      day: DateTime.now(),
+    );
     final readToday = await _readMetersReadToday(square.id);
     final merged = <int>{...visited, ...readToday};
     if (merged.length != visited.length) {
-      await _visits.save(squareId: square.id, day: DateTime.now(), meterIds: merged);
+      await _visits.save(
+        squareId: square.id,
+        day: DateTime.now(),
+        meterIds: merged,
+      );
     }
 
     final stops = meters
@@ -226,7 +234,9 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
   }
 
   String _emptyMessage() {
-    if (_squares.isEmpty) return 'لا مربعات مسندة إليك. راجع المشرف قبل بدء الجولة.';
+    if (_squares.isEmpty) {
+      return 'لا مربعات مسندة إليك. راجع المشرف قبل بدء الجولة.';
+    }
     return 'لا عدادات مسجّلة في مربع ${_selectedSquare?.name ?? ''}.';
   }
 
@@ -265,9 +275,9 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
             _plan.isComplete && _plan.total > 0
                 ? 'اكتمل المسار بنسبة $percent% — لا محطات متبقية.'
                 : next == null
-                    ? 'لا توجد محطة تالية.'
-                    : 'المحطة التالية: ${next.displayNumber} — ${next.subscriberName ?? next.meterCode}'
-                        '${_plan.remaining > 0 ? ' (متبقٍ ${_plan.remaining})' : ''}',
+                ? 'لا توجد محطة تالية.'
+                : 'المحطة التالية: ${next.displayNumber} — ${next.subscriberName ?? next.meterCode}'
+                      '${_plan.remaining > 0 ? ' (متبقٍ ${_plan.remaining})' : ''}',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           if (_plan.blockedCount > 0) ...<Widget>[
@@ -311,57 +321,73 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
   Widget _stopTile(BuildContext context, RouteStop stop) {
     final visited = _plan.isVisited(stop);
     final isNext = _plan.nextStop?.meterId == stop.meterId;
+    final scheme = Theme.of(context).colorScheme;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
-        borderColor: isNext ? AppColors.primary : null,
+        borderColor: isNext ? scheme.primary : null,
+        onTap: stop.isBlocked ? null : () => _openReader(stop),
         child: Row(
           children: <Widget>[
-            SizedBox(
-              width: 34,
-              child: Text(
-                stop.displayNumber,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: stop.isBlocked ? AppColors.danger : null,
-                    ),
-              ),
+            AppGlyph(
+              icon: stop.isBlocked
+                  ? Icons.block_rounded
+                  : visited
+                  ? Icons.check_rounded
+                  : Icons.water_drop_outlined,
+              size: 38,
+              tone: stop.isBlocked
+                  ? AppColors.danger
+                  : visited
+                  ? AppColors.success
+                  : null,
+              neutral: !stop.isBlocked && !visited,
             ),
-            const Gap(8),
+            const Gap(10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    stop.subscriberName ?? 'بدون اسم',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          decoration: visited ? TextDecoration.lineThrough : null,
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          stop.subscriberName ?? 'بدون اسم',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
+                      ),
+                      if (isNext)
+                        const AppPill(label: 'المحطة التالية', dense: true),
+                    ],
                   ),
                   Text(
-                    'العداد ${stop.meterCode}'
-                    '${stop.lastReading == null ? '' : ' — آخر قراءة ${stop.lastReading!.toStringAsFixed(0)}'}',
+                    'محطة ${stop.displayNumber} · العداد ${stop.meterCode}'
+                    '${stop.lastReading == null ? '' : ' · آخر قراءة ${stop.lastReading!.toStringAsFixed(0)}'}',
                     style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            IconButton(
+            AppIconButton(
+              size: 34,
+              icon: Icons.speed_rounded,
               tooltip: 'فتح شاشة القراءة',
               onPressed: stop.isBlocked ? null : () => _openReader(stop),
-              icon: const Icon(Icons.speed_rounded),
             ),
-            IconButton(
+            const Gap(6),
+            AppIconButton(
+              size: 34,
               tooltip: visited ? 'إلغاء التعليم' : 'تعليم كمُنجز',
               onPressed: stop.isBlocked ? null : () => _toggle(stop),
-              icon: Icon(
-                visited ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
-                color: visited ? AppColors.success : null,
-              ),
+              icon: visited
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked,
+              color: visited ? AppColors.success : scheme.onSurfaceVariant,
             ),
           ],
         ),

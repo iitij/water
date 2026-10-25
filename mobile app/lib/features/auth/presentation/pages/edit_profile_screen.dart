@@ -352,8 +352,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                           ),
                           const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            size: 13,
+                            Icons.chevron_left_rounded,
+                            size: 20,
                             color: AppColors.danger,
                           ),
                         ],

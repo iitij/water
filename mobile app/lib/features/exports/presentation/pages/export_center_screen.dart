@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
@@ -65,76 +69,64 @@ class _ExportCenterView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('مركز تصدير Excel'),
-            actions: [
-              IconButton(
-                tooltip: 'تحديث الإحصائيات',
-                onPressed: () => context.read<ExportCubit>().loadCatalog(),
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: RefreshIndicator(
+        return SubPageScaffold(
+          title: 'مركز تصدير Excel',
+          subtitle: 'تصدير المشتركين والفواتير والقراءات',
+          actions: [
+            AppIconButton(
+              tooltip: 'تحديث الإحصائيات',
+              onPressed: () => context.read<ExportCubit>().loadCatalog(),
+              icon: Icons.refresh_rounded,
+            ),
+          ],
+          child: AppPageBody(
+            maxWidth: 1500,
             onRefresh: () => context.read<ExportCubit>().loadCatalog(),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1500),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const AdminSectionHeader(
-                        title: 'تصدير بيانات المشروع',
-                        subtitle: 'تُنشأ الملفات على الخادم باستخدام DataExportService ثم تُحفظ وتُشارك من الجهاز.',
-                        icon: Icons.file_download_outlined,
-                      ),
-                      const SizedBox(height: 16),
-                      _ExportStats(state: state),
-                      if (state.catalog == null && state.errorMessage != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: TextButton.icon(
-                            onPressed: () => context.read<ExportCubit>().loadCatalog(),
-                            icon: const Icon(Icons.cloud_off_outlined),
-                            label: const Text('تعذر تحميل الإحصائيات — إعادة المحاولة'),
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final cards = [
-                            for (final kind in ExportKind.values)
-                              _ExportCard(kind: kind, state: state),
-                          ];
-                          if (constraints.maxWidth < 1100) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final card in cards) ...[card, const SizedBox(height: 16)],
-                              ],
-                            );
-                          }
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final card in cards) ...[
-                                Expanded(child: card),
-                                if (card != cards.last) const SizedBox(width: 16),
-                              ],
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                    ],
+            children: [
+              const AdminSectionHeader(
+                title: 'تصدير بيانات المشروع',
+                subtitle: 'تُنشأ الملفات على الخادم باستخدام DataExportService ثم تُحفظ وتُشارك من الجهاز.',
+                icon: Icons.file_download_outlined,
+              ),
+              const SizedBox(height: 16),
+              _ExportStats(state: state),
+              if (state.catalog == null && state.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: TextButton.icon(
+                    onPressed: () => context.read<ExportCubit>().loadCatalog(),
+                    icon: const Icon(Icons.cloud_off_outlined),
+                    label: const Text('تعذر تحميل الإحصائيات — إعادة المحاولة'),
                   ),
                 ),
+              const SizedBox(height: 20),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cards = [
+                    for (final kind in ExportKind.values)
+                      _ExportCard(kind: kind, state: state),
+                  ];
+                  if (constraints.maxWidth < 1100) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final card in cards) ...[card, const SizedBox(height: 16)],
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final card in cards) ...[
+                        Expanded(child: card),
+                        if (card != cards.last) const SizedBox(width: 16),
+                      ],
+                    ],
+                  );
+                },
               ),
-            ),
+              const SizedBox(height: 32),
+            ],
           ),
         );
       },
@@ -164,33 +156,11 @@ class _ExportStats extends StatelessWidget {
       childAspectRatio: 1.85,
       children: [
         for (final card in cards)
-          AdminCard(
-            child: Row(
-              children: [
-                Icon(card.$3, color: card.$4, size: 30),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(card.$1, maxLines: 2),
-                      const SizedBox(height: 6),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          card.$2 == null ? '—' : AdminFormat.number(card.$2!),
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          AppMetricCard(
+            title: card.$1,
+            value: card.$2 == null ? '—' : AdminFormat.number(card.$2!),
+            icon: card.$3,
+            color: card.$4,
           ),
       ],
     );
@@ -230,34 +200,34 @@ class _ExportCard extends StatelessWidget {
     final cubit = context.read<ExportCubit>();
     return AdminCard(
       padding: EdgeInsets.zero,
-      borderColor: _color.withAlpha(80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            color: _color,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
             child: Row(
               children: [
-                Icon(_icon, color: Colors.white, size: 30),
+                AppGlyph(icon: _icon, tone: _color, size: 42),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     _title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                   ),
                 ),
-                if (state.catalog != null)
+                if (state.catalog != null) ...[
+                  const SizedBox(width: 8),
                   AdminStatusBadge(
                     label: '${AdminFormat.number(state.catalog!.summary.forKind(kind))} سجل',
-                    color: Colors.white,
+                    color: _color,
                   ),
+                ],
               ],
             ),
           ),
+          const AppDivider(indent: 18, endIndent: 18),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -327,66 +297,88 @@ class _ExportCard extends StatelessWidget {
                   _DateFilters(kind: kind, filters: filters),
                 ],
                 const SizedBox(height: 16),
-                FilledButton.icon(
+                AppPrimaryButton(
                   key: ValueKey('export-$kind'),
+                  label: isBusy ? 'جارٍ إنشاء الملف...' : 'تصدير وتحميل Excel (.xlsx)',
+                  icon: Icons.download_rounded,
+                  loading: isBusy,
                   onPressed: isBusy ? null : () => cubit.export(kind),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _color,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  icon: isBusy
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.download_rounded),
-                  label: Text(isBusy ? 'جارٍ إنشاء الملف...' : 'تصدير وتحميل Excel (.xlsx)'),
                 ),
                 if (file != null) ...[
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _color.withAlpha(12),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        LtrText(file.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text('${_fileSize(file.sizeInBytes)} • محفوظ على الجهاز'),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              key: ValueKey('open-$kind'),
-                              onPressed: () => cubit.open(kind),
-                              icon: const Icon(Icons.open_in_new_rounded),
-                              label: const Text('فتح'),
-                            ),
-                            FilledButton.tonalIcon(
-                              key: ValueKey('share-$kind'),
-                              onPressed: isSharing ? null : () => cubit.share(kind),
-                              icon: isSharing
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.share_outlined),
-                              label: const Text('مشاركة'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  _FileResultPanel(
+                    kind: kind,
+                    fileName: file.fileName,
+                    sizeInBytes: file.sizeInBytes,
+                    isSharing: isSharing,
+                    onOpen: () => cubit.open(kind),
+                    onShare: isSharing ? null : () => cubit.share(kind),
                   ),
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FileResultPanel extends StatelessWidget {
+  const _FileResultPanel({
+    required this.kind,
+    required this.fileName,
+    required this.sizeInBytes,
+    required this.isSharing,
+    required this.onOpen,
+    required this.onShare,
+  });
+
+  final ExportKind kind;
+  final String fileName;
+  final int sizeInBytes;
+  final bool isSharing;
+  final VoidCallback onOpen;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LtrText(fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            '${_fileSize(sizeInBytes)} • محفوظ على الجهاز',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              AppSecondaryButton(
+                key: ValueKey('open-$kind'),
+                label: 'فتح',
+                icon: Icons.open_in_new_rounded,
+                expand: false,
+                onPressed: onOpen,
+              ),
+              AppSecondaryButton(
+                key: ValueKey('share-$kind'),
+                label: isSharing ? 'جارٍ المشاركة…' : 'مشاركة',
+                icon: Icons.share_outlined,
+                expand: false,
+                onPressed: onShare,
+              ),
+            ],
           ),
         ],
       ),

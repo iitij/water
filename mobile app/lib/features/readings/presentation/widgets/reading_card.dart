@@ -138,14 +138,16 @@ class _ReadingCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                  spacing: 12,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
-                    _ReadingTag(
+                    _QuietMeta(
                       icon: Icons.event_rounded,
                       label: _date(actualDate ?? reading.readingDate),
+                      ltr: true,
                     ),
-                    _ReadingTag(
+                    _QuietMeta(
                       icon: Icons.date_range_rounded,
                       label: '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
                       ltr: true,
@@ -280,14 +282,12 @@ class _ReadingTag extends StatelessWidget {
     required this.icon,
     required this.label,
     this.onTap,
-    this.ltr = false,
     this.tinted = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  final bool ltr;
   final bool tinted;
 
   @override
@@ -300,19 +300,10 @@ class _ReadingTag extends StatelessWidget {
       children: <Widget>[
         Icon(icon, size: 12, color: color),
         const SizedBox(width: 4),
-        if (ltr)
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
-            ),
-          )
-        else
-          Text(
-            label,
-            style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
-          ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
+        ),
       ],
     );
     final chip = Container(
@@ -360,6 +351,45 @@ class _CardAction extends StatelessWidget {
       ),
       icon: Icon(icon, size: 16),
       label: Text(label),
+    );
+  }
+}
+
+/// عنصر معلومات صامت — أيقونة + نص بلا إطار (بديل الحبّات المُحيّطة).
+class _QuietMeta extends StatelessWidget {
+  const _QuietMeta({
+    required this.icon,
+    required this.label,
+    this.ltr = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool ltr;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: scheme.onSurfaceVariant,
+      height: 1.3,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, size: 13, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        if (ltr)
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(label, style: style),
+          )
+        else
+          Text(label, style: style),
+      ],
     );
   }
 }

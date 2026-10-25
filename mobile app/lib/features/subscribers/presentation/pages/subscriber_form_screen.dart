@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../squares/domain/entities/square.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
@@ -61,89 +65,134 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
     });
   }
 
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDate: _startDate ?? DateTime.now(),
+    );
+    if (picked != null) setState(() => _startDate = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
-    return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'تعديل مشترك' : 'مشترك جديد')),
-      body: Form(
+    final scheme = Theme.of(context).colorScheme;
+    return SubPageScaffold(
+      title: isEdit ? 'تعديل مشترك' : 'مشترك جديد',
+      subtitle: isEdit ? null : 'بيانات المشترك وربطه بالمربع السكني',
+      child: Form(
         key: _formKey,
-        child: ListView(padding: const EdgeInsets.all(16), children: [
-          TextFormField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'اسم المشترك الرباعي *'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'الاسم مطلوب' : null,
-          ),
-          const SizedBox(height: 12),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: TextFormField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'رقم الهاتف (+967)'),
-              onChanged: (v) => _phone.value = TextEditingValue(
-                text: normalizeDigits(v),
-                selection: TextSelection.collapsed(offset: normalizeDigits(v).length),
+        child: AppPageBody(
+          bottomPadding: 44,
+          children: [
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SectionHeading(
+                    icon: Icons.person_outline_rounded,
+                    title: 'بيانات المشترك',
+                  ),
+                  const Gap(14),
+                  TextFormField(
+                    controller: _name,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المشترك الرباعي *',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'الاسم مطلوب' : null,
+                  ),
+                  const Gap(12),
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: TextFormField(
+                      controller: _phone,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'رقم الهاتف (+967)',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                      onChanged: (v) => _phone.value = TextEditingValue(
+                        text: normalizeDigits(v),
+                        selection: TextSelection.collapsed(offset: normalizeDigits(v).length),
+                      ),
+                    ),
+                  ),
+                  const Gap(12),
+                  TextFormField(
+                    controller: _address,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'العنوان التفصيلي',
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            key: ValueKey<int?>(_squareId),
-            initialValue: _squareId,
-            decoration: const InputDecoration(labelText: 'المربع السكني *'),
-            items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
-            onChanged: (v) => setState(() => _squareId = v),
-            validator: (v) => v == null ? 'اختر المربع السكني' : null,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<SubscriberStatus>(
-            key: ValueKey<SubscriberStatus>(_status),
-            initialValue: _status,
-            decoration: const InputDecoration(labelText: 'حالة المشترك'),
-            items: [for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
-            onChanged: (v) => setState(() => _status = v ?? _status),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('تاريخ بدء الاشتراك'),
-            subtitle: Text(_startDate == null ? 'غير محدد' : _startDate!.toIso8601String().substring(0, 10)),
-            trailing: const Icon(Icons.calendar_month),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2100),
-                initialDate: _startDate ?? DateTime.now(),
-              );
-              if (picked != null) setState(() => _startDate = picked);
-            },
-          ),
-          TextFormField(
-            controller: _address,
-            maxLines: 2,
-            decoration: const InputDecoration(labelText: 'العنوان التفصيلي'),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'جارٍ الحفظ...' : 'حفظ المشترك'),
-          ),
-          if (widget.existing == null) ...<Widget>[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _saving ? null : _saveAndAddAnother,
-              icon: const Icon(Icons.playlist_add_rounded, size: 20),
-              label: Text(AppStrings.of(context).saveAndAddAnother),
+            const Gap(12),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SectionHeading(
+                    icon: Icons.grid_view_rounded,
+                    title: 'الربط والحالة',
+                  ),
+                  const Gap(14),
+                  DropdownButtonFormField<int>(
+                    key: ValueKey<int?>(_squareId),
+                    initialValue: _squareId,
+                    decoration: const InputDecoration(labelText: 'المربع السكني *'),
+                    items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
+                    onChanged: (v) => setState(() => _squareId = v),
+                    validator: (v) => v == null ? 'اختر المربع السكني' : null,
+                  ),
+                  const Gap(12),
+                  DropdownButtonFormField<SubscriberStatus>(
+                    key: ValueKey<SubscriberStatus>(_status),
+                    initialValue: _status,
+                    decoration: const InputDecoration(labelText: 'حالة المشترك'),
+                    items: [for (final s in SubscriberStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
+                    onChanged: (v) => setState(() => _status = v ?? _status),
+                  ),
+                  const Gap(4),
+                  AppSettingRow(
+                    icon: Icons.calendar_month_rounded,
+                    color: scheme.primary,
+                    title: 'تاريخ بدء الاشتراك',
+                    subtitle: _startDate == null
+                        ? 'غير محدد'
+                        : _startDate!.toIso8601String().substring(0, 10),
+                    onTap: _pickStartDate,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'يحفظ المشترك الحالي ويفتح نموذجاً جديداً بنفس المربع والحالة.',
-              style: Theme.of(context).textTheme.bodySmall,
+            const Gap(20),
+            AppPrimaryButton(
+              label: _saving ? 'جارٍ الحفظ...' : 'حفظ المشترك',
+              icon: Icons.save_outlined,
+              loading: _saving,
+              onPressed: _saving ? null : _save,
             ),
+            if (widget.existing == null) ...<Widget>[
+              const Gap(8),
+              AppSecondaryButton(
+                label: AppStrings.of(context).saveAndAddAnother,
+                icon: Icons.playlist_add_rounded,
+                onPressed: _saving ? null : _saveAndAddAnother,
+              ),
+              const Gap(4),
+              Text(
+                'يحفظ المشترك الحالي ويفتح نموذجاً جديداً بنفس المربع والحالة.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }

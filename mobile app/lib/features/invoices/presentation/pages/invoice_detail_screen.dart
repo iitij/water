@@ -4,12 +4,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/services/pdf_print_service.dart';
 import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -53,18 +55,17 @@ class InvoiceDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('فاتورة ${preset?.billNumber ?? '#$invoiceId'}'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'تحديث',
-            onPressed: () => context.read<InvoiceDetailCubit>().load(),
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: BlocConsumer<InvoiceDetailCubit, InvoiceDetailState>(
+    return SubPageScaffold(
+      title: 'فاتورة ${preset?.billNumber ?? '#$invoiceId'}',
+      actions: <Widget>[
+        AppIconButton(
+          tooltip: 'تحديث',
+          size: 38,
+          onPressed: () => context.read<InvoiceDetailCubit>().load(),
+          icon: Icons.refresh_rounded,
+        ),
+      ],
+      child: BlocConsumer<InvoiceDetailCubit, InvoiceDetailState>(
         listenWhen: (previous, next) =>
             next.lastActionLabel != null &&
             previous.lastActionLabel != next.lastActionLabel,
@@ -101,37 +102,103 @@ class _InvoiceDetailView extends StatelessWidget {
     final invoice = state.invoice!;
     final config = sl<FinanceConfigRepository>().cached;
 
-    return ListView(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 120),
-      children: <Widget>[
-        _HeaderCard(invoice: invoice),
-        const SizedBox(height: 10),
-        _AmountsCard(invoice: invoice),
-        if (invoice.items.isNotEmpty) ...<Widget>[
+    return AppReveal(
+      child: ListView(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 120),
+        children: <Widget>[
+          _HeroPanel(invoice: invoice),
           const SizedBox(height: 10),
-          _ItemsCard(invoice: invoice),
+          _HeaderCard(invoice: invoice),
+          const SizedBox(height: 16),
+          const SectionHeading(
+            title: 'تفاصيل المبالغ',
+            icon: Icons.calculate_outlined,
+          ),
+          const SizedBox(height: 8),
+          _AmountsCard(invoice: invoice),
+          if (invoice.items.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            const SectionHeading(title: 'بنود الفاتورة', icon: Icons.list_alt_rounded),
+            const SizedBox(height: 8),
+            _ItemsCard(invoice: invoice),
+          ],
+          if (invoice.readings.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            const SectionHeading(title: 'القراءات', icon: Icons.speed_rounded),
+            const SizedBox(height: 8),
+            _ReadingsCard(invoice: invoice),
+          ],
+          if (invoice.payments.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            const SectionHeading(title: 'المدفوعات المرتبطة', icon: Icons.payments_rounded),
+            const SizedBox(height: 8),
+            _PaymentsCard(invoice: invoice),
+          ],
+          if (invoice.notes != null && invoice.notes!.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            const SectionHeading(title: 'ملاحظات', icon: Icons.notes_rounded),
+            const SizedBox(height: 8),
+            _NotesCard(notes: invoice.notes!),
+          ],
+          const SizedBox(height: 16),
+          _ActionGrid(
+            invoice: invoice,
+            cubit: cubit,
+            state: state,
+            whatsappEnabled: config.whatsappEnabled,
+            whatsappIsApi: config.isApiSend,
+          ),
         ],
-        if (invoice.readings.isNotEmpty) ...<Widget>[
+      ),
+    );
+  }
+}
+
+/// لوحة الحبر: المتبقي الفعلي (تراكمي) هو الرقم الرئيسي للشاشة.
+class _HeroPanel extends StatelessWidget {
+  const _HeroPanel({required this.invoice});
+
+  final InvoiceModel invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final trueRemaining = invoice.serverTrueRemaining ?? invoice.ownRemaining;
+    return AppHeroPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'المتبقي الفعلي (تراكمي)',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.onPanelMuted,
+                ),
+          ),
+          const SizedBox(height: 4),
+          LtrNumberText(
+            CurrencyFormatter.debt(trueRemaining),
+            style: const TextStyle(
+              fontSize: 24,
+              height: 1.15,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -.5,
+              color: AppColors.onPanel,
+              fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
           const SizedBox(height: 10),
-          _ReadingsCard(invoice: invoice),
+          Text(
+            '${invoice.beneficiaryName} • قيمة الفاتورة '
+            '${CurrencyFormatter.withLabel(invoice.totalAmount)} • المسدد '
+            '${CurrencyFormatter.withLabel(invoice.amountPaid)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.onPanelSoft,
+                  height: 1.5,
+                ),
+          ),
         ],
-        if (invoice.payments.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 10),
-          _PaymentsCard(invoice: invoice),
-        ],
-        if (invoice.notes != null && invoice.notes!.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 10),
-          _NotesCard(notes: invoice.notes!),
-        ],
-        const SizedBox(height: 14),
-        _ActionGrid(
-          invoice: invoice,
-          cubit: cubit,
-          state: state,
-          whatsappEnabled: config.whatsappEnabled,
-          whatsappIsApi: config.isApiSend,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -198,20 +265,32 @@ class _HeaderCard extends StatelessWidget {
             runSpacing: 12,
             children: <Widget>[
               AppField(
+                icon: Icons.event_outlined,
                 label: 'تاريخ الفاتورة',
                 value: DateFormat.day(invoice.billDate),
                 ltr: true,
               ),
               AppField(
+                icon: Icons.date_range_rounded,
                 label: 'فترة الفوترة',
                 value:
                     '${DateFormat.day(invoice.periodStart)} ← ${DateFormat.day(invoice.periodEnd)}',
                 ltr: true,
               ),
-              AppField(label: 'المربع', value: invoice.subscriber?.squareName ?? '-'),
-              AppField(label: 'العداد', value: invoice.meter?.label ?? 'بدون عداد', ltr: true),
+              AppField(
+                icon: Icons.grid_view_rounded,
+                label: 'المربع',
+                value: invoice.subscriber?.squareName ?? '-',
+              ),
+              AppField(
+                icon: Icons.speed_rounded,
+                label: 'العداد',
+                value: invoice.meter?.label ?? 'بدون عداد',
+                ltr: true,
+              ),
               if (invoice.meter?.tenantPhone != null)
                 AppField(
+                  icon: Icons.phone_outlined,
                   label: 'هاتف المستأجر',
                   value: invoice.meter!.tenantPhone!,
                   ltr: true,
@@ -234,7 +313,6 @@ class _AmountsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final trueRemaining = invoice.serverTrueRemaining ?? invoice.ownRemaining;
     final rows = <(String, String, Color?)>[
       ('قيمة الاستهلاك', CurrencyFormatter.withLabel(invoice.consumptionFee), null),
       ('قسط الاشتراك', CurrencyFormatter.withLabel(invoice.subscriptionInstallment), null),
@@ -274,44 +352,6 @@ class _AmountsCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              color: AppTint.soft(trueRemaining > 0 ? AppColors.danger : AppColors.success, context),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(
-                color: (trueRemaining > 0 ? AppColors.danger : AppColors.success)
-                    .withValues(alpha: .18),
-              ),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'المتبقي الفعلي (تراكمي)',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ),
-                LtrNumberText(
-                  CurrencyFormatter.debt(trueRemaining),
-                  style: TextStyle(
-                    fontSize: 16,
-                    height: 1.2,
-                    fontWeight: FontWeight.w600,
-                    color: AppSemantic.resolve(
-                      context,
-                      trueRemaining > 0 ? AppColors.danger : AppColors.success,
-                    ),
-                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
@@ -321,33 +361,6 @@ class _AmountsCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.icon});
-
-  final String title;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: <Widget>[
-        Icon(icon, size: 15, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            title,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -365,8 +378,6 @@ class _ItemsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _SectionTitle(title: 'بنود الفاتورة', icon: Icons.list_alt_rounded),
-          const SizedBox(height: 8),
           for (final item in invoice.items)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -409,8 +420,6 @@ class _ReadingsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _SectionTitle(title: 'القراءات', icon: Icons.speed_rounded),
-          const SizedBox(height: 8),
           for (final reading in invoice.readings)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -461,8 +470,6 @@ class _PaymentsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _SectionTitle(title: 'المدفوعات المرتبطة', icon: Icons.payments_rounded),
-          const SizedBox(height: 8),
           for (final payment in invoice.payments)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -514,8 +521,6 @@ class _NotesCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const _SectionTitle(title: 'ملاحظات', icon: Icons.notes_rounded),
-          const SizedBox(height: 6),
           Text(notes, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.7)),
         ],
       ),
@@ -540,47 +545,44 @@ class _ActionGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final busy = state.actionRunning;
 
     return AppCard(
       padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (state.canCollect)
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: FilledButton.icon(
-                onPressed: busy
-                    ? null
-                    : () async {
-                        final saved = await CollectPaymentSheet.show(
-                          context,
-                          invoice: invoice,
-                        );
-                        if (!saved || !context.mounted) return;
-                        await cubit.load();
-                      },
-                icon: const Icon(Icons.payments_rounded, size: 18),
-                label: const Text('تحصيل دفعة'),
-              ),
+          if (state.canCollect) ...<Widget>[
+            AppPrimaryButton(
+              label: 'تحصيل دفعة',
+              icon: Icons.payments_rounded,
+              height: 48,
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final saved = await CollectPaymentSheet.show(
+                        context,
+                        invoice: invoice,
+                      );
+                      if (!saved || !context.mounted) return;
+                      await cubit.load();
+                    },
             ),
-          if (state.canCollect) const SizedBox(height: 10),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Text('إجراءات الفاتورة', style: theme.textTheme.labelSmall),
-          ),
+            const SizedBox(height: 12),
+          ],
+          Text('إجراءات الفاتورة', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 7),
           Wrap(
             spacing: 7,
             runSpacing: 7,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              _chip(
-                icon: Icons.picture_as_pdf_outlined,
-                label: 'PDF',
-                busy: state.printingBusy,
-                onTap: () async {
+              AppIconButton(
+                tooltip: 'PDF',
+                size: 38,
+                onPressed: state.printingBusy
+                    ? null
+                    : () async {
                   final bytes = await cubit.loadPdfBytes();
                   if (bytes == null || !context.mounted) return;
                   await showModalBottomSheet<void>(
@@ -594,59 +596,63 @@ class _ActionGrid extends StatelessWidget {
                     ),
                   );
                 },
+                icon: Icons.picture_as_pdf_outlined,
               ),
-              _chip(
+              AppIconButton(
+                tooltip: 'طباعة حرارية',
+                size: 38,
+                onPressed: state.printingBusy ? null : () => printInvoiceThermal(context, invoice),
                 icon: Icons.print_outlined,
-                label: 'طباعة حرارية',
-                busy: state.printingBusy,
-                onTap: () => printInvoiceThermal(context, invoice),
               ),
               if (whatsappEnabled)
-                _chip(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: whatsappIsApi ? 'واتساب (PDF)' : 'واتساب',
+                AppIconButton(
+                  tooltip: whatsappIsApi ? 'واتساب (PDF)' : 'واتساب',
+                  size: 38,
                   color: AppColors.whatsapp,
-                  busy: state.whatsappBusy,
-                  onTap: () => cubit.sendWhatsapp().then((result) {
-                    if (!context.mounted) return;
-                    if (result.isSuccess) {
-                      AppFeedback.success(context, 'تم الإرسال.');
-                    } else {
-                      AppFeedback.error(
-                        context,
-                        result.error ?? 'تعذّر الإرسال — تحقق من إعدادات واتساب.',
-                      );
-                    }
-                  }),
+                  onPressed: state.whatsappBusy
+                      ? null
+                      : () => cubit.sendWhatsapp().then((result) {
+                          if (!context.mounted) return;
+                          if (result.isSuccess) {
+                            AppFeedback.success(context, 'تم الإرسال.');
+                          } else {
+                            AppFeedback.error(
+                              context,
+                              result.error ?? 'تعذّر الإرسال — تحقق من إعدادات واتساب.',
+                            );
+                          }
+                        }),
+                  icon: Icons.chat_bubble_outline_rounded,
                 ),
               if (invoice.isDeleted)
-                _chip(
+                AppIconButton(
+                  tooltip: 'استعادة',
+                  size: 38,
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          final ok = await ConfirmDialog.show(
+                            context,
+                            title: 'استعادة الفاتورة ${invoice.billNumber}',
+                            message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب.',
+                            confirmLabel: 'استعادة',
+                          );
+                          if (!ok) return;
+                          await cubit.restore();
+                        },
                   icon: Icons.restore_rounded,
-                  label: 'استعادة',
-                  color: AppColors.success,
-                  busy: busy,
-                  onTap: () async {
-                    final ok = await ConfirmDialog.show(
-                      context,
-                      title: 'استعادة الفاتورة ${invoice.billNumber}',
-                      message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب.',
-                      confirmLabel: 'استعادة',
-                    );
-                    if (!ok) return;
-                    await cubit.restore();
-                  },
                 )
               else ...<Widget>[
-                _chip(
+                AppIconButton(
+                  tooltip: 'إعادة احتساب',
+                  size: 38,
+                  onPressed: busy ? null : () => cubit.recalculate(),
                   icon: Icons.refresh_rounded,
-                  label: 'إعادة احتساب',
-                  busy: busy,
-                  onTap: () => cubit.recalculate(),
                 ),
-                _chip(
-                  icon: Icons.edit_outlined,
-                  label: 'تعديل',
-                  onTap: () async {
+                AppIconButton(
+                  tooltip: 'تعديل',
+                  size: 38,
+                  onPressed: () async {
                     final saved = await Navigator.of(context).push<bool>(
                       MaterialPageRoute<bool>(
                         builder: (_) => InvoiceCreateEditScreen(invoice: invoice),
@@ -654,50 +660,30 @@ class _ActionGrid extends StatelessWidget {
                     );
                     if (saved == true) await cubit.load();
                   },
-                ),
-                _chip(
-                  icon: Icons.delete_outline_rounded,
-                  label: 'حذف ناعم',
-                  color: AppColors.danger,
-                  busy: busy,
-                  onTap: () async {
-                    final ok = await ConfirmDialog.show(
-                      context,
-                      title: 'حذف الفاتورة ${invoice.billNumber}',
-                      message: 'سيُفكّ ارتباط القراءات والأقساط والوايت وتُعاد '
-                          'توزيع الدفعات على هذا الحساب.',
-                      confirmLabel: 'حذف',
-                      destructive: true,
-                    );
-                    if (!ok) return;
-                    final deleted = await cubit.delete();
-                    if (!context.mounted) return;
-                    if (deleted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
+                  icon: Icons.edit_outlined,
                 ),
               ],
-              _chip(
-                icon: Icons.delete_forever_outlined,
-                label: 'حذف نهائي',
-                color: AppColors.danger,
-                busy: busy,
-                onTap: () async {
-                  final ok = await ConfirmDialog.show(
-                    context,
-                    title: 'حذف نهائي للفاتورة ${invoice.billNumber}',
-                    message: 'تحذير: سيُحذف سجل الفاتورة نهائياً من قاعدة البيانات ولا يمكن استعادته!',
-                    confirmLabel: 'حذف نهائي',
-                    destructive: true,
-                  );
-                  if (!ok) return;
-                  final deleted = await cubit.forceDelete();
-                  if (!context.mounted) return;
-                  if (deleted) {
-                    Navigator.of(context).pop();
-                  }
-                },
+              PopupMenuButton<String>(
+                tooltip: 'خيارات الحذف',
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+                icon: Icon(
+                  Icons.more_horiz_rounded,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
+                onSelected: (value) => _runDestructive(context, value),
+                itemBuilder: (context) => <PopupMenuEntry<String>>[
+                  if (!invoice.isDeleted)
+                    const PopupMenuItem<String>(
+                      value: 'soft',
+                      child: Text('حذف ناعم'),
+                    ),
+                  const PopupMenuItem<String>(
+                    value: 'force',
+                    child: Text('حذف نهائي'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -706,19 +692,42 @@ class _ActionGrid extends StatelessWidget {
     );
   }
 
-  Widget _chip({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool busy = false,
-    Color? color,
-  }) {
-    return AppFilterChip(
-      label: label,
-      icon: icon,
-      selected: color != null,
-      onTap: busy ? null : onTap,
-    );
+  /// الحذف (الناعم/النهائي) يمر دائماً عبر `ConfirmDialog` — يبقى المنطق كما هو.
+  Future<void> _runDestructive(BuildContext context, String value) async {
+    final busy = state.actionRunning;
+    if (busy) return;
+    if (value == 'soft') {
+      final ok = await ConfirmDialog.show(
+        context,
+        title: 'حذف الفاتورة ${invoice.billNumber}',
+        message: 'سيُفكّ ارتباط القراءات والأقساط والوايت وتُعاد '
+            'توزيع الدفعات على هذا الحساب.',
+        confirmLabel: 'حذف',
+        destructive: true,
+      );
+      if (!ok) return;
+      final deleted = await cubit.delete();
+      if (!context.mounted) return;
+      if (deleted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    if (value == 'force') {
+      final ok = await ConfirmDialog.show(
+        context,
+        title: 'حذف نهائي للفاتورة ${invoice.billNumber}',
+        message: 'تحذير: سيُحذف سجل الفاتورة نهائياً من قاعدة البيانات ولا يمكن استعادته!',
+        confirmLabel: 'حذف نهائي',
+        destructive: true,
+      );
+      if (!ok) return;
+      final deleted = await cubit.forceDelete();
+      if (!context.mounted) return;
+      if (deleted) {
+        Navigator.of(context).pop();
+      }
+    }
   }
 }
 
@@ -744,30 +753,30 @@ class InvoiceDetailPanel extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(
-              child: OutlinedButton.icon(
+              child: AppSecondaryButton(
+                label: 'PDF',
+                icon: Icons.picture_as_pdf_outlined,
+                height: 44,
                 onPressed: () => openInvoicePdfPreview(context, invoice),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                label: const Text('PDF'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
+              child: AppSecondaryButton(
+                label: 'حراري',
+                icon: Icons.print_outlined,
+                height: 44,
                 onPressed: () => printInvoiceThermal(context, invoice),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
-                icon: const Icon(Icons.print_outlined, size: 18),
-                label: const Text('حراري'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
+              child: AppSecondaryButton(
+                label: 'المزيد',
+                icon: Icons.more_horiz_rounded,
+                height: 44,
                 onPressed: () =>
                     showInvoiceActionSheet(context, invoice: invoice, cubit: cubit),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
-                icon: const Icon(Icons.more_horiz_rounded, size: 18),
-                label: const Text('المزيد'),
               ),
             ),
           ],

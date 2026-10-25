@@ -90,10 +90,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         width: 132,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(AppRadius.pill),
-                          child: const LinearProgressIndicator(
+                          child: LinearProgressIndicator(
                             minHeight: 4,
-                            backgroundColor: Color(0x33FFFFFF),
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            backgroundColor: Colors.white.withValues(alpha: .2),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
                       ),

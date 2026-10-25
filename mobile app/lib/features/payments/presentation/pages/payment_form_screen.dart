@@ -7,8 +7,12 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
@@ -95,9 +99,11 @@ class _PaymentCreateScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<CollectPaymentCubit>();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('دفعة جديدة')),
-      body: SafeArea(
+    return SubPageScaffold(
+      title: 'دفعة جديدة',
+      subtitle: 'سند قبض جديد وتوزيعه على الفواتير',
+      child: SafeArea(
+        top: false,
         child: Column(
           children: <Widget>[
             if (invoice == null)
@@ -233,14 +239,33 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
               itemCount: _results.length,
               itemBuilder: (context, index) {
                 final option = _results[index];
-                return ListTile(
-                  dense: true,
-                  title: Text(option.name),
-                  subtitle: Text(option.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                return InkWell(
                   onTap: () {
                     widget.onPick(option);
                     setState(() => _results = const <SubscriberOption>[]);
                   },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          option.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          option.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
@@ -327,35 +352,36 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('تعديل سند ${widget.payment.receiptNumber}'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'حذف',
-            onPressed: () async {
-              final confirmed = await ConfirmDialog.show(
-                context,
-                title: 'حذف سند قبض',
-                message: 'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة.',
-                confirmLabel: 'حذف',
-                destructive: true,
-              );
-              if (!confirmed) return;
-              try {
-                await sl<PaymentsRepository>().delete(widget.payment.id);
-                if (!context.mounted) return;
-                Navigator.of(context).pop(true);
-              } on AppFailure catch (failure) {
-                if (!context.mounted) return;
-                AppFeedback.error(context, failure.message);
-              }
-            },
-            icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-          ),
-        ],
-      ),
-      body: SafeArea(
+    return SubPageScaffold(
+      title: 'تعديل سند ${widget.payment.receiptNumber}',
+      actions: <Widget>[
+        AppIconButton(
+          tooltip: 'حذف',
+          size: 38,
+          color: AppColors.danger,
+          icon: Icons.delete_outline_rounded,
+          onPressed: () async {
+            final confirmed = await ConfirmDialog.show(
+              context,
+              title: 'حذف سند قبض',
+              message: 'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة.',
+              confirmLabel: 'حذف',
+              destructive: true,
+            );
+            if (!confirmed) return;
+            try {
+              await sl<PaymentsRepository>().delete(widget.payment.id);
+              if (!context.mounted) return;
+              Navigator.of(context).pop(true);
+            } on AppFailure catch (failure) {
+              if (!context.mounted) return;
+              AppFeedback.error(context, failure.message);
+            }
+          },
+        ),
+      ],
+      child: SafeArea(
+        top: false,
         child: Form(
           key: _formKey,
           child: ListView(
@@ -367,129 +393,146 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                     'الفاتورة (PaymentService::recalculateInvoices).',
               ),
               const SizedBox(height: 14),
-              _ReadOnlyRow(label: 'المستفيد', value: widget.payment.displayName),
-              _ReadOnlyRow(
-                label: 'الحساب المتأثر',
-                value: widget.payment.affectsMeterAccount
-                    ? 'رصيد العداد (${widget.payment.meterId})'
-                    : 'رصيد المشترك (${widget.payment.subscriberId})',
-              ),
-              if (widget.payment.invoiceBillNumber != null)
-                _ReadOnlyRow(label: 'الفاتورة', value: widget.payment.invoiceBillNumber!),
-              _ReadOnlyRow(
-                label: 'المبلغ المسجل حالياً',
-                value: CurrencyFormatter.withLabel(widget.payment.amount),
-              ),
-              const SizedBox(height: 12),
-              AppNumericField(
-                controller: _amount,
-                label: 'مبلغ الدفعة',
-                prefixText: 'ريال',
-                required: true,
-              ),
-              const SizedBox(height: 12),
-              const Text('طريقة الدفع', style: TextStyle(fontSize: 12, color: AppColors.neutral)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: PaymentMethod.values
-                    .map(
-                      (method) => AppFilterChip(
-                        label: method.label,
-                        selected: _method == method,
-                        onTap: () => setState(() => _method = method),
-                      ),
-                    )
-                    .toList(),
-              ),
-              if (_method.requiresReference) ...<Widget>[
-                const SizedBox(height: 12),
-                AppTextField(
-                  controller: _reference,
-                  label: 'رقم الحوالة / رقم الشيك',
-                  required: true,
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const SectionHeading(
+                      title: 'بيانات السند',
+                      icon: Icons.receipt_long_rounded,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 22,
+                      runSpacing: 12,
+                      children: <Widget>[
+                        AppField(
+                          label: 'المستفيد',
+                          value: widget.payment.displayName,
+                          icon: Icons.person_outline_rounded,
+                        ),
+                        AppField(
+                          label: 'الحساب المتأثر',
+                          value: widget.payment.affectsMeterAccount
+                              ? 'رصيد العداد (${widget.payment.meterId})'
+                              : 'رصيد المشترك (${widget.payment.subscriberId})',
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                        if (widget.payment.invoiceBillNumber != null)
+                          AppField(
+                            label: 'الفاتورة',
+                            value: widget.payment.invoiceBillNumber!,
+                            icon: Icons.confirmation_number_outlined,
+                            ltr: true,
+                          ),
+                        AppField(
+                          label: 'المبلغ المسجل حالياً',
+                          value: CurrencyFormatter.withLabel(widget.payment.amount),
+                          icon: Icons.payments_outlined,
+                          ltr: true,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
               const SizedBox(height: 12),
-              AppTextField(controller: _reason, label: 'البيان (وذلك مقابل)'),
-              const SizedBox(height: 12),
-              AppTextField(controller: _notes, label: 'ملاحظات', maxLines: 2),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
-                  final pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: _date,
-                    firstDate: DateTime(_date.year - 2),
-                    lastDate: DateTime.now().add(const Duration(days: 1)),
-                  );
-                  if (pickedDate == null || !context.mounted) return;
-                  final pickedTime = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(_date),
-                  );
-                  if (!mounted) return;
-                  setState(() {
-                    _date = DateTime(
-                      pickedDate.year,
-                      pickedDate.month,
-                      pickedDate.day,
-                      pickedTime?.hour ?? _date.hour,
-                      pickedTime?.minute ?? _date.minute,
-                    );
-                  });
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'تاريخ ووقت الدفعة',
-                    prefixIcon: Icon(Icons.schedule_outlined),
-                  ),
-                  child: Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(DateFormat.dateTime(_date)),
-                  ),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const SectionHeading(
+                      title: 'تفاصيل الدفعة',
+                      icon: Icons.payments_rounded,
+                    ),
+                    const SizedBox(height: 10),
+                    AppNumericField(
+                      controller: _amount,
+                      label: 'مبلغ الدفعة',
+                      prefixText: 'ريال',
+                      required: true,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('طريقة الدفع', style: TextStyle(fontSize: 12, color: AppColors.neutral)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: PaymentMethod.values
+                          .map(
+                            (method) => AppFilterChip(
+                              label: method.label,
+                              selected: _method == method,
+                              onTap: () => setState(() => _method = method),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    if (_method.requiresReference) ...<Widget>[
+                      const SizedBox(height: 12),
+                      AppTextField(
+                        controller: _reference,
+                        label: 'رقم الحوالة / رقم الشيك',
+                        required: true,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    AppTextField(controller: _reason, label: 'البيان (وذلك مقابل)'),
+                    const SizedBox(height: 12),
+                    AppTextField(controller: _notes, label: 'ملاحظات', maxLines: 2),
+                    const SizedBox(height: 12),
+                    AppSettingRow(
+                      icon: Icons.schedule_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                      title: 'تاريخ ووقت الدفعة',
+                      showChevron: false,
+                      trailing: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          DateFormat.dateTime(_date),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _date,
+                          firstDate: DateTime(_date.year - 2),
+                          lastDate: DateTime.now().add(const Duration(days: 1)),
+                        );
+                        if (pickedDate == null || !context.mounted) return;
+                        final pickedTime = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(_date),
+                        );
+                        if (!mounted) return;
+                        setState(() {
+                          _date = DateTime(
+                            pickedDate.year,
+                            pickedDate.month,
+                            pickedDate.day,
+                            pickedTime?.hour ?? _date.hour,
+                            pickedTime?.minute ?? _date.minute,
+                          );
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
-              FilledButton.icon(
+              AppPrimaryButton(
+                label: 'حفظ التعديلات',
+                icon: Icons.save_outlined,
+                loading: _saving,
                 onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: const Text('حفظ التعديلات'),
               ),
               const SizedBox(height: 20),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ReadOnlyRow extends StatelessWidget {
-  const _ReadOnlyRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: <Widget>[
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
       ),
     );
   }

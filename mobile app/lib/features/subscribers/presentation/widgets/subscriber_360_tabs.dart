@@ -142,58 +142,129 @@ class _MetersTab extends StatelessWidget {
         GetIt.I.isRegistered<ReadingsRepository>() ||
         GoRouter.maybeOf(context) != null;
     return Column(children: [
-      Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: FilledButton.icon(
+      Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 8),
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: AppPrimaryButton(
+            label: 'إضافة عداد للمشترك',
+            icon: Icons.add_rounded,
+            expand: false,
             onPressed: canAddMeter ? () => _defaultAddMeter(context, detail.subscriber) : null,
-            icon: const Icon(Icons.add),
-            label: const Text('إضافة عداد للمشترك'),
           ),
         ),
       ),
       Expanded(
         child: meters.isEmpty
-            ? const EmptyState(message: 'لا توجد عدادات لهذا المشترك', icon: Icons.speed)
+            ? const Center(child: AdminEmptyView(title: 'لا توجد عدادات لهذا المشترك', icon: Icons.speed))
             : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 24),
                 itemCount: meters.length,
                 itemBuilder: (_, i) {
                   final m = meters[i];
+                  final isActive = m.status == 'active';
                   return Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
                     child: AppCard(
-                      padding: EdgeInsets.zero,
-                      child: ListTile(
-                      contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
-                      leading: const AppGlyph(icon: Icons.speed_rounded, size: 38),
-                      title: Text(m.title),
-                      subtitle: Text('مسار: ${m.pathNumber ?? '-'} • قراءات: ${m.readingsCount} • ${m.status == 'active' ? 'نشط' : 'غير نشط'}'),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Text('دائن ${m.credit.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.success, fontSize: 12)),
-                          Text('مدين ${m.debit.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
-                        ]),
-                        if (canRecordReading)
-                          IconButton(
-                            icon: const Icon(Icons.edit_note, color: AppColors.info),
-                            tooltip: 'تسجيل قراءة سريعة',
-                            onPressed: () => _defaultRecordReading(context, m),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const AppGlyph(icon: Icons.speed_rounded, size: 38),
+                              const Gap(10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      m.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14.5,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                    const Gap(2),
+                                    Text(
+                                      'مسار: ${m.pathNumber ?? '-'} • قراءات: ${m.readingsCount}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.labelSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              StatusBadge(
+                                label: isActive ? 'نشط' : 'غير نشط',
+                                color: isActive ? AppColors.success : AppColors.warning,
+                              ),
+                              if (hasMetersRepo)
+                                PopupMenuButton<String>(
+                                  tooltip: 'إجراءات العداد',
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                                  ),
+                                  onSelected: (value) {
+                                    if (value == 'edit') _editMeter(context, m);
+                                    if (value == 'delete') _deleteMeter(context, m);
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(children: [
+                                        Icon(Icons.edit_outlined, size: 18),
+                                        SizedBox(width: 10),
+                                        Text('تعديل العداد'),
+                                      ]),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(children: [
+                                        Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                        SizedBox(width: 10),
+                                        Text('حذف العداد', style: TextStyle(color: AppColors.danger)),
+                                      ]),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
-                        if (hasMetersRepo) ...[
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            tooltip: 'تعديل العداد',
-                            onPressed: () => _editMeter(context, m),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
-                            tooltip: 'حذف العداد',
-                            onPressed: () => _deleteMeter(context, m),
+                          const Gap(10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _TabMoneyStat(
+                                  label: 'دائن',
+                                  value: m.credit,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                              const Gap(8),
+                              Expanded(
+                                child: _TabMoneyStat(
+                                  label: 'مدين',
+                                  value: m.debit,
+                                  color: AppColors.danger,
+                                ),
+                              ),
+                              if (canRecordReading) ...[
+                                const Gap(8),
+                                AppIconButton(
+                                  icon: Icons.edit_note_rounded,
+                                  tooltip: 'تسجيل قراءة سريعة',
+                                  size: 38,
+                                  onPressed: () => _defaultRecordReading(context, m),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
-                      ]),
-                    ),
+                      ),
                     ),
                   );
                 },
@@ -282,10 +353,11 @@ class _InvoicesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (invoices.isEmpty) {
-      return const EmptyState(message: 'لا توجد فواتير', icon: Icons.receipt_long);
+      return const Center(child: AdminEmptyView(title: 'لا توجد فواتير', icon: Icons.receipt_long));
     }
     final hasFinanceServices = GetIt.I.isRegistered<InvoicesRepository>();
     return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       itemCount: invoices.length,
       itemBuilder: (_, i) {
         final inv = invoices[i];
@@ -296,67 +368,107 @@ class _InvoicesTab extends StatelessWidget {
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
           child: AppCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-            contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
+            padding: const EdgeInsets.all(12),
             onTap: model.id > 0 ? () => _openDetails(context, model) : null,
-            title: Text('${model.billNumber} • ${inv['bill_date'] ?? ''}'),
-            subtitle: Text(
-              'الإجمالي: ${CurrencyFormatter.format(total)} • المسدد: ${CurrencyFormatter.format(paid)}',
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                StatusBadge(
-                  label: model.status.label,
-                  color: isPaid ? AppColors.success : AppColors.warning,
+                Row(
+                  children: [
+                    const AppGlyph(icon: Icons.receipt_long_rounded, size: 38),
+                    const Gap(10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            model.billNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                          ),
+                          const Gap(2),
+                          Text(
+                            '${inv['bill_date'] ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    StatusBadge(
+                      label: model.status.label,
+                      color: isPaid ? AppColors.success : AppColors.warning,
+                    ),
+                    if (hasFinanceServices && model.id > 0)
+                      PopupMenuButton<String>(
+                        tooltip: 'إجراءات الفاتورة',
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                        ),
+                        onSelected: (action) async {
+                          switch (action) {
+                            case 'open':
+                              await _openDetails(context, model);
+                            case 'pdf':
+                              await openInvoicePdfPreview(context, model);
+                            case 'thermal':
+                              await printInvoiceThermal(context, model);
+                            case 'whatsapp':
+                              await sendInvoiceWhatsapp(context, model);
+                            case 'edit':
+                              await _editInvoice(context, model);
+                            case 'delete':
+                              await _deleteInvoice(context, model);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'open', child: Row(children: [Icon(Icons.open_in_new, size: 18), SizedBox(width: 10), Text('عرض التفاصيل')])),
+                          PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_outlined, size: 18), SizedBox(width: 10), Text('طباعة / معاينة PDF')])),
+                          PopupMenuItem(value: 'thermal', child: Row(children: [Icon(Icons.print_outlined, size: 18), SizedBox(width: 10), Text('طباعة حرارية')])),
+                          PopupMenuItem(value: 'whatsapp', child: Row(children: [Icon(Icons.chat_outlined, size: 18, color: AppColors.whatsapp), SizedBox(width: 10), Text('إرسال واتساب')])),
+                          PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 10), Text('تعديل الفاتورة')])),
+                          PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: AppColors.danger), SizedBox(width: 10), Text('حذف الفاتورة', style: TextStyle(color: AppColors.danger))])),
+                        ],
+                      ),
+                  ],
                 ),
-                if (!isPaid)
-                  IconButton(
-                    icon: const Icon(Icons.payments_outlined, color: AppColors.success),
-                    tooltip: 'تحصيل الفاتورة',
-                    onPressed: () async {
-                      if (hasFinanceServices && model.id > 0) {
-                        final saved = await collectInvoicePayment(context, model);
-                        if (saved && context.mounted) {
-                          await context.read<Subscriber360Cubit>().load(subscriber.id);
-                        }
-                      } else if (onCollect != null) {
-                        onCollect!();
-                      }
-                    },
+                const Gap(10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .45),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                   ),
-                if (hasFinanceServices && model.id > 0)
-                  PopupMenuButton<String>(
-                    tooltip: 'إجراءات الفاتورة',
-                    onSelected: (action) async {
-                      switch (action) {
-                        case 'open':
-                          await _openDetails(context, model);
-                        case 'pdf':
-                          await openInvoicePdfPreview(context, model);
-                        case 'thermal':
-                          await printInvoiceThermal(context, model);
-                        case 'whatsapp':
-                          await sendInvoiceWhatsapp(context, model);
-                        case 'edit':
-                          await _editInvoice(context, model);
-                        case 'delete':
-                          await _deleteInvoice(context, model);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'open', child: ListTile(dense: true, leading: Icon(Icons.open_in_new), title: Text('عرض التفاصيل'))),
-                      PopupMenuItem(value: 'pdf', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('طباعة / معاينة PDF'))),
-                      PopupMenuItem(value: 'thermal', child: ListTile(dense: true, leading: Icon(Icons.print_outlined), title: Text('طباعة حرارية'))),
-                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: AppColors.whatsapp), title: Text('إرسال واتساب'))),
-                      PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('تعديل الفاتورة'))),
-                      PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline, color: AppColors.danger), title: Text('حذف الفاتورة'))),
+                  child: Row(
+                    children: [
+                      _TabMoneyStat(label: 'الإجمالي', value: total, color: Theme.of(context).colorScheme.onSurface),
+                      const Gap(16),
+                      _TabMoneyStat(label: 'المسدد', value: paid, color: AppColors.success),
+                      const Spacer(),
+                      if (!isPaid)
+                        AppIconButton(
+                          icon: Icons.payments_outlined,
+                          tooltip: 'تحصيل الفاتورة',
+                          size: 38,
+                          onPressed: () async {
+                            if (hasFinanceServices && model.id > 0) {
+                              final saved = await collectInvoicePayment(context, model);
+                              if (saved && context.mounted) {
+                                await context.read<Subscriber360Cubit>().load(subscriber.id);
+                              }
+                            } else if (onCollect != null) {
+                              onCollect!();
+                            }
+                          },
+                        ),
                     ],
                   ),
+                ),
               ],
             ),
-          ),
           ),
         );
       },
@@ -430,10 +542,11 @@ class _PaymentsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (payments.isEmpty) {
-      return const EmptyState(message: 'لا توجد مدفوعات', icon: Icons.payments);
+      return const Center(child: AdminEmptyView(title: 'لا توجد مدفوعات', icon: Icons.payments));
     }
     final hasPaymentsRepo = GetIt.I.isRegistered<PaymentsRepository>();
     return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       itemCount: payments.length,
       itemBuilder: (_, i) {
         final p = payments[i];
@@ -441,9 +554,7 @@ class _PaymentsTab extends StatelessWidget {
         return Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
           child: AppCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-            contentPadding: const EdgeInsetsDirectional.fromSTEB(12, 4, 8, 4),
+            padding: const EdgeInsets.all(12),
             onTap: hasPaymentsRepo && model.id > 0
                 ? () => showPaymentActionSheet(
                       context,
@@ -451,53 +562,96 @@ class _PaymentsTab extends StatelessWidget {
                       onDeleted: () => _deletePayment(context, model),
                     )
                 : null,
-            leading: const AppGlyph(
-              icon: Icons.receipt_rounded,
-              tone: AppColors.success,
-              size: 38,
-            ),
-            title: Text('${model.receiptNumber} • ${p['payment_date'] ?? ''}'),
-            subtitle: Text(model.method.label),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  CurrencyFormatter.format(model.amount),
-                  style: TextStyle(
-                    color: AppSemantic.resolve(context, AppColors.success),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-                  ),
+                Row(
+                  children: [
+                    const AppGlyph(
+                      icon: Icons.receipt_rounded,
+                      tone: AppColors.success,
+                      size: 38,
+                    ),
+                    const Gap(10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            model.receiptNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                          ),
+                          const Gap(2),
+                          Text(
+                            '${p['payment_date'] ?? ''} • ${model.method.label}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasPaymentsRepo && model.id > 0)
+                      PopupMenuButton<String>(
+                        tooltip: 'إجراءات السند',
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                        ),
+                        onSelected: (action) async {
+                          switch (action) {
+                            case 'pdf':
+                              await openPaymentPdfPreview(context, model);
+                            case 'thermal':
+                              await printPaymentThermal(context, model);
+                            case 'whatsapp':
+                              await sendPaymentWhatsapp(context, model);
+                            case 'edit':
+                              await _editPayment(context, model);
+                            case 'delete':
+                              await _deletePayment(context, model);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_outlined, size: 18), SizedBox(width: 10), Text('طباعة / معاينة PDF')])),
+                          PopupMenuItem(value: 'thermal', child: Row(children: [Icon(Icons.print_outlined, size: 18), SizedBox(width: 10), Text('طباعة حرارية')])),
+                          PopupMenuItem(value: 'whatsapp', child: Row(children: [Icon(Icons.chat_outlined, size: 18, color: AppColors.whatsapp), SizedBox(width: 10), Text('إرسال واتساب')])),
+                          PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 10), Text('تعديل السند')])),
+                          PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: AppColors.danger), SizedBox(width: 10), Text('حذف السند', style: TextStyle(color: AppColors.danger))])),
+                        ],
+                      ),
+                  ],
                 ),
-                if (hasPaymentsRepo && model.id > 0)
-                  PopupMenuButton<String>(
-                    tooltip: 'إجراءات السند',
-                    onSelected: (action) async {
-                      switch (action) {
-                        case 'pdf':
-                          await openPaymentPdfPreview(context, model);
-                        case 'thermal':
-                          await printPaymentThermal(context, model);
-                        case 'whatsapp':
-                          await sendPaymentWhatsapp(context, model);
-                        case 'edit':
-                          await _editPayment(context, model);
-                        case 'delete':
-                          await _deletePayment(context, model);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'pdf', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('طباعة / معاينة PDF'))),
-                      PopupMenuItem(value: 'thermal', child: ListTile(dense: true, leading: Icon(Icons.print_outlined), title: Text('طباعة حرارية'))),
-                      PopupMenuItem(value: 'whatsapp', child: ListTile(dense: true, leading: Icon(Icons.chat_outlined, color: AppColors.whatsapp), title: Text('إرسال واتساب'))),
-                      PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('تعديل السند'))),
-                      PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline, color: AppColors.danger), title: Text('حذف السند'))),
+                const Gap(10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .45),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('مبلغ السند', style: Theme.of(context).textTheme.labelSmall),
+                      const Gap(8),
+                      Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          CurrencyFormatter.format(model.amount),
+                          style: TextStyle(
+                            color: AppSemantic.resolve(context, AppColors.success),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
+                ),
               ],
             ),
-          ),
           ),
         );
       },
@@ -600,6 +754,37 @@ class _FeesTab extends StatelessWidget {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            if (existing == null)
+              TextButton(
+                onPressed: () async {
+                  final amount = double.tryParse(normalizeDigits(amountCtrl.text));
+                  if (amount == null || amount <= 0) return;
+                  final notes = notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim();
+                  await cubit.create(
+                    subscriberId: subscriberId,
+                    meterId: selectedMeterId,
+                    amount: amount,
+                    status: selectedStatus,
+                    notes: notes,
+                  );
+                  if (!ctx.mounted) return;
+                  // «حفظ وإضافة أخرى» — سلسلة Filament (Create & create another):
+                  // يُحفظ السجل ثم يُفرَّغ النموذج ويبقى الحوار مفتوحاً للمشترك نفسه.
+                  setDialogState(() {
+                    amountCtrl.clear();
+                    notesCtrl.clear();
+                    selectedMeterId = null;
+                    selectedStatus = FeeStatus.uninvoiced;
+                  });
+                  await sub360Cubit.load(subscriberId);
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('تم حفظ الرسوم — أضف الرسوم التالية للمشترك نفسه.')),
+                    );
+                  }
+                },
+                child: const Text('حفظ وإضافة أخرى'),
+              ),
             FilledButton(
               onPressed: () async {
                 final amount = double.tryParse(normalizeDigits(amountCtrl.text));
@@ -637,67 +822,187 @@ class _FeesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return BlocBuilder<SubscriptionFeesCubit, SubscriptionFeesState>(
       builder: (context, state) {
         return Column(children: [
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('إضافة رسوم اشتراك'),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppPrimaryButton(
+                label: 'إضافة رسوم اشتراك',
+                icon: Icons.add_rounded,
+                expand: false,
                 onPressed: () => _openFeeEditor(context),
               ),
             ),
           ),
-          SumBar(items: [
-            (label: 'الإجمالي', value: state.totalSum, color: Colors.white),
-            (label: 'المفوتر', value: state.invoicedSum, color: AppColors.success),
-            (label: 'المتبقي', value: state.remainingSum, color: AppColors.brandAmber),
-          ]),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+            child: AppStatStrip(
+              items: [
+                AppStatItem(
+                  label: 'الإجمالي',
+                  value: CurrencyFormatter.format(state.totalSum),
+                  icon: Icons.payments_outlined,
+                  color: scheme.primary,
+                ),
+                AppStatItem(
+                  label: 'المفوتر',
+                  value: CurrencyFormatter.format(state.invoicedSum),
+                  icon: Icons.receipt_long_rounded,
+                  color: AppColors.success,
+                ),
+                AppStatItem(
+                  label: 'المتبقي',
+                  value: CurrencyFormatter.format(state.remainingSum),
+                  icon: Icons.hourglass_bottom_rounded,
+                  color: AppColors.warning,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: state.fees.isEmpty
-                ? const EmptyState(message: 'لا توجد رسوم اشتراك')
+                ? const Center(child: AdminEmptyView(title: 'لا توجد رسوم اشتراك'))
                 : ListView.builder(
+                    padding: const EdgeInsets.only(top: 10, bottom: 24),
                     itemCount: state.fees.length,
                     itemBuilder: (_, i) {
                       final f = state.fees[i];
-                      return ListTile(
-                        title: Text('${f.meterCode ?? 'بدون عداد'} • ${CurrencyFormatter.format(f.amount)}'),
-                        subtitle: Text(f.invoiceNumber ?? (f.notes ?? '')),
-                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                          StatusBadge(
-                            label: f.status.label,
-                            color: f.status == FeeStatus.paid ? AppColors.success : AppColors.warning,
+                      return Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                        child: AppCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  AppGlyph(
+                                    icon: Icons.card_membership_rounded,
+                                    tone: f.status == FeeStatus.paid ? AppColors.success : AppColors.warning,
+                                    size: 38,
+                                  ),
+                                  const Gap(10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          f.meterCode ?? 'بدون عداد',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                                        ),
+                                        const Gap(2),
+                                        Text(
+                                          f.invoiceNumber ?? (f.notes ?? ''),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context).textTheme.labelSmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  StatusBadge(
+                                    label: f.status.label,
+                                    color: f.status == FeeStatus.paid ? AppColors.success : AppColors.warning,
+                                  ),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'إجراءات الرسوم',
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                                    ),
+                                    onSelected: (value) async {
+                                      if (value == 'invoice') {
+                                        await _invoiceFee(context, f);
+                                        return;
+                                      }
+                                      if (value == 'edit') {
+                                        await _openFeeEditor(context, existing: f);
+                                        return;
+                                      }
+                                      if (value == 'delete') {
+                                        if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
+                                          if (context.mounted) {
+                                            await context.read<SubscriptionFeesCubit>().delete(f.id);
+                                            if (context.mounted) {
+                                              await context.read<Subscriber360Cubit>().load(f.subscriberId);
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      if (f.canInvoice)
+                                        const PopupMenuItem(
+                                          value: 'invoice',
+                                          child: Row(children: [
+                                            Icon(Icons.receipt_long, size: 18),
+                                            SizedBox(width: 10),
+                                            Text('إصدار فاتورة اشتراك'),
+                                          ]),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 10),
+                                          Text('تعديل الرسوم'),
+                                        ]),
+                                      ),
+                                      if (f.invoiceId == null)
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(children: [
+                                            Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                            SizedBox(width: 10),
+                                            Text('حذف الرسوم', style: TextStyle(color: AppColors.danger)),
+                                          ]),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const Gap(10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text('المبلغ', style: Theme.of(context).textTheme.labelSmall),
+                                    const Gap(8),
+                                    Directionality(
+                                      textDirection: TextDirection.ltr,
+                                      child: Text(
+                                        CurrencyFormatter.format(f.amount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                          fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (f.canInvoice)
+                                      AppIconButton(
+                                        icon: Icons.receipt_long_rounded,
+                                        tooltip: 'إصدار فاتورة اشتراك',
+                                        size: 38,
+                                        onPressed: () => _invoiceFee(context, f),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          if (f.canInvoice)
-                            IconButton(
-                              icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-                              tooltip: 'إصدار فاتورة اشتراك',
-                              onPressed: () => _invoiceFee(context, f),
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            tooltip: 'تعديل الرسوم',
-                            onPressed: () => _openFeeEditor(context, existing: f),
-                          ),
-                          if (f.invoiceId == null)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
-                              tooltip: 'حذف الرسوم',
-                              onPressed: () async {
-                                if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
-                                  if (context.mounted) {
-                                    await context.read<SubscriptionFeesCubit>().delete(f.id);
-                                    if (context.mounted) {
-                                      await context.read<Subscriber360Cubit>().load(f.subscriberId);
-                                    }
-                                  }
-                                }
-                              },
-                            ),
-                        ]),
+                        ),
                       );
                     },
                   ),
@@ -762,12 +1067,12 @@ class _RequestsTab extends StatelessWidget {
                     labelText: 'سعر الوايت (ريال)',
                   ),
                 ),
-                const SizedBox(height: 10),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('تاريخ الخدمة'),
-                  subtitle: Text(selectedDate.toIso8601String().substring(0, 10)),
-                  trailing: const Icon(Icons.calendar_today),
+                const Gap(10),
+                AppSettingRow(
+                  icon: Icons.calendar_month_rounded,
+                  color: Theme.of(ctx).colorScheme.primary,
+                  title: 'تاريخ الخدمة',
+                  subtitle: selectedDate.toIso8601String().substring(0, 10),
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: ctx,
@@ -838,66 +1143,173 @@ class _RequestsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return BlocBuilder<ServiceRequestsCubit, ServiceRequestsState>(
       builder: (context, state) {
         return Column(children: [
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('إضافة طلب وايت'),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppPrimaryButton(
+                label: 'إضافة طلب وايت',
+                icon: Icons.add_rounded,
+                expand: false,
                 onPressed: () => _openRequestEditor(context),
               ),
             ),
           ),
-          SumBar(items: [(label: 'إجمالي طلبات هذا المشترك', value: state.totalSum, color: Colors.white)]),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+            child: AppStatStrip(
+              items: [
+                AppStatItem(
+                  label: 'إجمالي طلبات هذا المشترك',
+                  value: CurrencyFormatter.format(state.totalSum),
+                  icon: Icons.local_shipping_outlined,
+                  color: scheme.primary,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: state.requests.isEmpty
-                ? const EmptyState(message: 'لا توجد طلبات وايت', icon: Icons.local_shipping)
+                ? const Center(child: AdminEmptyView(title: 'لا توجد طلبات وايت', icon: Icons.local_shipping))
                 : ListView.builder(
+                    padding: const EdgeInsets.only(top: 10, bottom: 24),
                     itemCount: state.requests.length,
                     itemBuilder: (_, i) {
                       final r = state.requests[i];
-                      return ListTile(
-                        title: Text('${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}'),
-                        subtitle: Text(r.invoiceNumber ?? (r.notes ?? '')),
-                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                          StatusBadge(
-                            label: r.status.label,
-                            color: r.status == TankerStatus.paid ? AppColors.success : AppColors.warning,
+                      return Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                        child: AppCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const AppGlyph(icon: Icons.local_shipping_rounded, size: 38),
+                                  const Gap(10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '${r.serviceDate}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                                        ),
+                                        const Gap(2),
+                                        Text(
+                                          r.invoiceNumber ?? (r.notes ?? ''),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context).textTheme.labelSmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  StatusBadge(
+                                    label: r.status.label,
+                                    color: r.status == TankerStatus.paid ? AppColors.success : AppColors.warning,
+                                  ),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'إجراءات الطلب',
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                                    ),
+                                    onSelected: (value) async {
+                                      if (value == 'complete') {
+                                        await context.read<ServiceRequestsCubit>().markCompleted(r.id);
+                                        return;
+                                      }
+                                      if (value == 'invoice') {
+                                        await _invoiceRequest(context, r);
+                                        return;
+                                      }
+                                      if (value == 'edit') {
+                                        await _openRequestEditor(context, existing: r);
+                                        return;
+                                      }
+                                      if (value == 'delete') {
+                                        if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟')) {
+                                          if (context.mounted) {
+                                            await context.read<ServiceRequestsCubit>().delete(r.id);
+                                          }
+                                        }
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      if (r.canComplete)
+                                        const PopupMenuItem(
+                                          value: 'complete',
+                                          child: Row(children: [
+                                            Icon(Icons.check_circle, size: 18, color: AppColors.success),
+                                            SizedBox(width: 10),
+                                            Text('إنجاز'),
+                                          ]),
+                                        ),
+                                      if (r.canInvoice)
+                                        const PopupMenuItem(
+                                          value: 'invoice',
+                                          child: Row(children: [
+                                            Icon(Icons.receipt_long, size: 18),
+                                            SizedBox(width: 10),
+                                            Text('إصدار فاتورة وايت'),
+                                          ]),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 10),
+                                          Text('تعديل الطلب'),
+                                        ]),
+                                      ),
+                                      if (r.invoiceId == null)
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(children: [
+                                            Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                            SizedBox(width: 10),
+                                            Text('حذف الطلب', style: TextStyle(color: AppColors.danger)),
+                                          ]),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const Gap(10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text('المبلغ', style: Theme.of(context).textTheme.labelSmall),
+                                    const Gap(8),
+                                    Directionality(
+                                      textDirection: TextDirection.ltr,
+                                      child: Text(
+                                        CurrencyFormatter.format(r.amount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                          fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          if (r.canComplete)
-                            IconButton(
-                              icon: const Icon(Icons.check_circle, color: AppColors.success),
-                              tooltip: 'إنجاز',
-                              onPressed: () => context.read<ServiceRequestsCubit>().markCompleted(r.id),
-                            ),
-                          if (r.canInvoice)
-                            IconButton(
-                              icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-                              tooltip: 'إصدار فاتورة وايت',
-                              onPressed: () => _invoiceRequest(context, r),
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            tooltip: 'تعديل الطلب',
-                            onPressed: () => _openRequestEditor(context, existing: r),
-                          ),
-                          if (r.invoiceId == null)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
-                              tooltip: 'حذف الطلب',
-                              onPressed: () async {
-                                if (await confirmAction(context, 'حذف طلب', 'حذف طلب الوايت هذا؟')) {
-                                  if (context.mounted) {
-                                    await context.read<ServiceRequestsCubit>().delete(r.id);
-                                  }
-                                }
-                              },
-                            ),
-                        ]),
+                        ),
                       );
                     },
                   ),
@@ -943,19 +1355,15 @@ class _StatementTab extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsetsDirectional.only(start: 4, end: 16),
-                child: IconButton(
+                child: AppIconButton(
+                  icon: Icons.picture_as_pdf_outlined,
                   tooltip: 'تصدير كشف الحساب PDF',
+                  size: 38,
                   onPressed: () => StatementPdfService.shareStatement(
                     subscriberName: subscriberName,
                     summary: detail.summary,
                     entries: state.statement,
                   ),
-                  style: IconButton.styleFrom(
-                    backgroundColor:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
-                    minimumSize: const Size(38, 38),
-                  ),
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
                 ),
               ),
             ],
@@ -963,25 +1371,101 @@ class _StatementTab extends StatelessWidget {
           if (state.statementLoading) const LinearProgressIndicator(),
           Expanded(
             child: state.statement.isEmpty
-                ? const EmptyState(message: 'لا توجد حركات مالية ضمن هذا الفلتر', icon: Icons.account_balance)
+                ? const Center(
+                    child: AdminEmptyView(
+                      title: 'لا توجد حركات مالية ضمن هذا الفلتر',
+                      icon: Icons.account_balance,
+                    ),
+                  )
                 : ListView.builder(
+                    padding: const EdgeInsets.only(top: 10, bottom: 24),
                     itemCount: state.statement.length,
                     itemBuilder: (_, i) {
                       final e = state.statement[i];
-                      return ListTile(
-                        leading: Icon(
-                          e.isCredit ? Icons.arrow_downward : Icons.arrow_upward,
-                          color: e.isCredit ? AppColors.success : AppColors.danger,
+                      return Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                        child: AppCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppGlyph(
+                                icon: e.isCredit
+                                    ? Icons.arrow_downward_rounded
+                                    : Icons.arrow_upward_rounded,
+                                tone: e.isCredit ? AppColors.success : AppColors.danger,
+                                size: 34,
+                              ),
+                              const Gap(10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      e.description ?? '',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(fontWeight: FontWeight.w500),
+                                    ),
+                                    const Gap(3),
+                                    Text(
+                                      '${e.createdAt ?? ''} • ${e.party} • رصيد تراكمي: ${e.runningBalance}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.labelSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Gap(8),
+                              BalanceText(e.amount),
+                            ],
+                          ),
                         ),
-                        title: Text(e.description ?? ''),
-                        subtitle: Text('${e.createdAt ?? ''} • ${e.party} • رصيد تراكمي: ${e.runningBalance}'),
-                        trailing: BalanceText(e.amount),
                       );
                     },
                   ),
           ),
         ]);
       },
+    );
+  }
+}
+
+/// رقم مساند داخل لوحة نقود هادئة: تسمية صغيرة + قيمة بأرقام جدولية.
+class _TabMoneyStat extends StatelessWidget {
+  const _TabMoneyStat({required this.label, required this.value, required this.color});
+  final String label;
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: theme.textTheme.labelSmall),
+        const Gap(2),
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            CurrencyFormatter.format(value),
+            style: TextStyle(
+              color: AppSemantic.resolve(context, color),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              height: 1.2,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

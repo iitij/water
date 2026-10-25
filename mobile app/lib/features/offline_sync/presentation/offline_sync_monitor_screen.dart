@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/finance/finance_feedback.dart';
 import '../../../core/navigation/sub_page.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_controls.dart';
@@ -136,6 +138,7 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
                     item: item,
                     isSyncing: syncing,
                     onRetry: () => manager.retry(item.id),
+                    onDiscard: () => _discardItem(context, manager, item),
                   ),
                 ),
             ] else ...<Widget>[
@@ -180,6 +183,43 @@ class OfflineSyncMonitorScreen extends StatelessWidget {
       },
     );
   }
+  /// تجاهل عملية متعثرة: لقراءات العدادات تُحذف أيضاً النسخة المحلية المخزنة
+  /// (cached_readings + pending_sync_actions + إعادة احتساب آخر قراءة للعداد)
+  /// حتى لا تبقى «قراءة غير مزامنة» وهمية في شاشات الميدان.
+  Future<void> _discardItem(
+    BuildContext context,
+    SyncQueueManager manager,
+    SyncQueueItem item,
+  ) async {
+    final isReading = item.type == SyncQueueType.reading;
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'تجاهل العملية وحذفها',
+      message: isReading
+          ? 'ستُحذف القراءة المحفوظة على الجهاز نهائياً ولن تُرسل إلى الخادم. '
+              'إذا كان الخادم يملك قراءة أحدث لنفس الفترة فاختر التجاهل، وإلا أعد المحاولة.'
+          : 'ستُحذف هذه العملية من طابور المزامنة ولن تُرسل إلى الخادم. '
+              'تأكد من عدم حاجتك لها قبل المتابعة.',
+      confirmLabel: 'تجاهل وحذف',
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    if (isReading) {
+      try {
+        final database = GetIt.I<AppDatabase>();
+        final localId = item.payload['local_id']?.toString() ?? item.id;
+        // تحذف السطر المخزّن وإجراء المزامنة المرتبط به معاً وتطلق تحديث
+        // الطابور عبر onExternalChange.
+        await database.deleteCachedReadingByLocalId(localId);
+      } catch (_) {
+        // تعذر الوصول لقاعدة الميدان: نحذف من الطابور المشترك على الأقل.
+        await manager.discard(item.id);
+      }
+      return;
+    }
+    await manager.discard(item.id);
+  }
 }
 
 class _QueueItemCard extends StatelessWidget {
@@ -187,11 +227,13 @@ class _QueueItemCard extends StatelessWidget {
     required this.item,
     required this.isSyncing,
     required this.onRetry,
+    required this.onDiscard,
   });
 
   final SyncQueueItem item;
   final bool isSyncing;
   final VoidCallback onRetry;
+  final VoidCallback onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -310,13 +352,22 @@ class _QueueItemCard extends StatelessWidget {
           if (item.status == SyncQueueStatus.failed ||
               item.status == SyncQueueStatus.needsAttention) ...<Widget>[
             const SizedBox(height: 6),
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton.icon(
-                onPressed: isSyncing ? null : onRetry,
-                icon: const Icon(Icons.replay_rounded, size: 17),
-                label: const Text('إعادة المحاولة'),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                TextButton.icon(
+                  onPressed: isSyncing ? null : onDiscard,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                  label: const Text('تجاهل وحذف'),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: isSyncing ? null : onRetry,
+                  icon: const Icon(Icons.replay_rounded, size: 17),
+                  label: const Text('إعادة المحاولة'),
+                ),
+              ],
             ),
           ],
         ],

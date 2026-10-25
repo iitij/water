@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/diagnostics/api_log_manager.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/diagnostics/api_log_manager.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_tokens.dart';
 
 /// زر عائم قابل للسحب يظهر فوق الشاشات لمراقبة طلبات الـ API والأخطاء في الوقت الفعلي.
 ///
@@ -70,28 +71,15 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
             },
             child: Material(
               color: Colors.transparent,
-              elevation: 6,
-              borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: hasErrors
-                      ? AppColors.danger.withOpacity(0.92)
-                      : (hasSlow
-                          ? AppColors.warning.withOpacity(0.92)
-                          : AppColors.panel.withOpacity(0.88)),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.35),
-                    width: 1.2,
-                  ),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 8,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
+                      ? AppColors.danger
+                      : (hasSlow ? AppColors.warning : AppColors.panel),
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(color: AppColors.panelLine),
+                  boxShadow: AppShadows.floating(context),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -101,7 +89,7 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                           ? Icons.error_outline_rounded
                           : (hasSlow ? Icons.speed_rounded : Icons.sync_alt_rounded),
                       size: 14,
-                      color: Colors.white,
+                      color: AppColors.onPanel,
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -109,7 +97,7 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: AppColors.onPanel,
                       ),
                     ),
                     if (hasErrors) ...<Widget>[
@@ -117,8 +105,8 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(AppRadius.xs),
                         ),
                         child: Text(
                           '$errors ❌',

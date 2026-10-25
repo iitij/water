@@ -9,24 +9,33 @@ class RolesState extends Equatable {
     this.roles = const [],
     this.catalog,
     this.deletingIds = const {},
+    this.selectedIds = const {},
     this.isLoading = false,
     this.isSaving = false,
+    this.isBulkDeleting = false,
     this.errorMessage,
   });
 
   final List<Role> roles;
   final ShieldPermissionCatalog? catalog;
   final Set<int> deletingIds;
+  final Set<int> selectedIds;
   final bool isLoading;
   final bool isSaving;
+  final bool isBulkDeleting;
   final String? errorMessage;
+
+  /// الأدوار القابلة للتحديد/الحذف — دور `super_admin` محمي دائماً.
+  List<Role> get selectableRoles => roles.where((role) => !role.isSuperAdmin).toList();
 
   RolesState copyWith({
     List<Role>? roles,
     ShieldPermissionCatalog? catalog,
     Set<int>? deletingIds,
+    Set<int>? selectedIds,
     bool? isLoading,
     bool? isSaving,
+    bool? isBulkDeleting,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -34,14 +43,25 @@ class RolesState extends Equatable {
       roles: roles ?? this.roles,
       catalog: catalog ?? this.catalog,
       deletingIds: deletingIds ?? this.deletingIds,
+      selectedIds: selectedIds ?? this.selectedIds,
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
+      isBulkDeleting: isBulkDeleting ?? this.isBulkDeleting,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
 
   @override
-  List<Object?> get props => [roles, catalog, deletingIds, isLoading, isSaving, errorMessage];
+  List<Object?> get props => [
+        roles,
+        catalog,
+        deletingIds,
+        selectedIds,
+        isLoading,
+        isSaving,
+        isBulkDeleting,
+        errorMessage,
+      ];
 }
 
 class RolesCubit extends Cubit<RolesState> {
@@ -108,6 +128,7 @@ class RolesCubit extends Cubit<RolesState> {
         state.copyWith(
           roles: state.roles.where((item) => item.id != role.id).toList(),
           deletingIds: {...state.deletingIds}..remove(role.id),
+          selectedIds: {...state.selectedIds}..remove(role.id),
         ),
       );
     } catch (error) {
@@ -117,6 +138,46 @@ class RolesCubit extends Cubit<RolesState> {
           errorMessage: error.toString(),
         ),
       );
+    }
+  }
+
+  void toggleSelect(Role role) {
+    if (role.isSuperAdmin) return;
+    final updated = {...state.selectedIds};
+    if (!updated.remove(role.id)) updated.add(role.id);
+    emit(state.copyWith(selectedIds: updated, clearError: true));
+  }
+
+  void clearSelection() => emit(state.copyWith(selectedIds: const {}));
+
+  void selectAll() => emit(
+        state.copyWith(
+          selectedIds: state.selectedIds.length >= state.selectableRoles.length
+              ? const <int>{}
+              : state.selectableRoles.map((role) => role.id).toSet(),
+          clearError: true,
+        ),
+      );
+
+  /// حذف جماعي للأدوار المحددة (مواصفة `S-ROL-01`: Bulk Delete).
+  Future<void> bulkDelete() async {
+    final ids = state.selectedIds
+        .where((id) => state.roles.any((role) => role.id == id && !role.isSuperAdmin))
+        .toList(growable: false);
+    if (ids.isEmpty || state.isBulkDeleting) return;
+    emit(state.copyWith(isBulkDeleting: true, clearError: true));
+    try {
+      await _repository.bulkDeleteRoles(ids);
+      final removed = ids.toSet();
+      emit(
+        state.copyWith(
+          roles: state.roles.where((role) => !removed.contains(role.id)).toList(),
+          selectedIds: const <int>{},
+          isBulkDeleting: false,
+        ),
+      );
+    } catch (error) {
+      emit(state.copyWith(isBulkDeleting: false, errorMessage: error.toString()));
     }
   }
 }

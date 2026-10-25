@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/utils/compound_search_parser.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
 
@@ -163,7 +167,7 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
     });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool addAnother = false}) async {
     if (!_formKey.currentState!.validate()) return;
     final subscriber = _selectedSubscriber;
     if (subscriber == null) {
@@ -215,6 +219,26 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
         ),
         meterId: widget.meter?.id,
       );
+      if (!mounted) return;
+      if (addAnother && widget.meter == null) {
+        // سلسلة «حفظ وإضافة عداد آخر» (توازي Filament: Create & create another):
+        // يُحفظ العداد ثم يُفرَّغ النموذج ويبقى المشترك نفسه محدداً.
+        _formKey.currentState!.reset();
+        _uniqueCodeController.clear();
+        _pathController.clear();
+        _tenantNameController.clear();
+        _tenantPhoneController.clear();
+        setState(() {
+          _isSaving = false;
+          _status = 'active';
+          _pathConflict = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ العداد — أضف العداد التالي للمشترك نفسه.')),
+        );
+        _schedulePathValidation('');
+        return;
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
@@ -260,15 +284,19 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(title: Text(widget.meter == null ? 'إضافة عداد' : 'تعديل العداد')),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+      child: SubPageScaffold(
+        title: widget.meter == null ? 'إضافة عداد' : 'تعديل العداد',
+        child: _isLoading
+            ? const Center(child: AppLoader(label: 'جارٍ تحميل بيانات النموذج…'))
             : _loadError != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(_loadError!, textAlign: TextAlign.center),
+                ? EmptyStateWidget(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'تعذر تحميل النموذج',
+                    message: _loadError!,
+                    action: TextButton.icon(
+                      onPressed: _isLoading ? null : _loadFormOptions,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('إعادة المحاولة'),
                     ),
                   )
                 : Form(
@@ -282,152 +310,184 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                             child: ListView(
                               padding: const EdgeInsets.all(16),
                               children: [
-                                _sectionHeader(context, 'بيانات العداد'),
-                                TextFormField(
-                                  controller: _uniqueCodeController,
-                                  textDirection: TextDirection.ltr,
-                                  decoration: const InputDecoration(
-                                    labelText: 'رقم العداد',
-                                    prefixIcon: Icon(Icons.speed_outlined),
-                                  ),
-                                  textInputAction: TextInputAction.next,
-                                  validator: (value) => value == null || value.trim().isEmpty
-                                      ? 'رقم العداد مطلوب.'
-                                      : value.trim().length > 50
-                                          ? 'الحد الأقصى 50 حرفاً.'
-                                          : null,
+                                const SectionHeading(
+                                  icon: Icons.speed_rounded,
+                                  title: 'بيانات العداد',
                                 ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _pathController,
-                                  textDirection: TextDirection.ltr,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'رقم المسار (اختياري)',
-                                    hintText: 'مثال: 1',
-                                    prefixIcon: const Icon(Icons.route_outlined),
-                                    suffixIcon: _isCheckingPath
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(12),
-                                            child: SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                            ),
-                                          )
-                                        : _pathConflict == true
-                                            ? Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error)
-                                            : _pathConflict == false && _pathController.text.isNotEmpty
-                                                ? const Icon(Icons.check_circle_outline, color: AppColors.success)
-                                                : null,
-                                    helperText: _pathConflict == true
-                                        ? 'رقم المسار مستخدم بالفعل في هذا المربع.'
-                                        : 'يجب أن يكون رقم المسار فريداً داخل المربع السكني.',
-                                    helperStyle: TextStyle(
-                                      color: _pathConflict == true ? Theme.of(context).colorScheme.error : null,
-                                    ),
-                                  ),
-                                  onChanged: _schedulePathValidation,
-                                  validator: (value) {
-                                    final text = value?.trim() ?? '';
-                                    if (text.isEmpty) return null;
-                                    if (int.tryParse(CompoundSearchQuery.normalizeDigits(text)) == null) {
-                                      return 'أدخل رقم مسار صحيحاً.';
-                                    }
-                                    if (_pathConflict == true) {
-                                      return 'هذا المسار مستخدم في المربع نفسه.';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<int>(
-                                  key: ValueKey<int?>(_selectedSubscriber?.id),
-                                  initialValue: _selectedSubscriber?.id,
-                                  isExpanded: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'المشترك المالك',
-                                    prefixIcon: const Icon(Icons.person_outline),
-                                    helperText: widget.meter == null
-                                        ? null
-                                        : 'يمكنك نقل ملكية العداد لمشترك آخر؛ سيتم التحقق من توافر رقم المسار في مربع المشترك الجديد.',
-                                  ),
-                                  items: _subscribers
-                                      .map((subscriber) => DropdownMenuItem<int>(
-                                            value: subscriber.id,
-                                            child: Text(
-                                              '${subscriber.name}${subscriber.squareName == null ? '' : ' — ${subscriber.squareName}'}',
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ))
-                                      .toList(growable: false),
-                                  validator: (value) => value == null ? 'اختر المشترك.' : null,
-                                  onChanged: (id) => _onSubscriberChanged(
-                                    _subscribers.cast<SubscriberOption?>().firstWhere(
-                                          (item) => item?.id == id,
-                                          orElse: () => null,
+                                const SizedBox(height: 8),
+                                AppCard(
+                                  child: Column(
+                                    children: [
+                                      TextFormField(
+                                        controller: _uniqueCodeController,
+                                        textDirection: TextDirection.ltr,
+                                        decoration: const InputDecoration(
+                                          labelText: 'رقم العداد',
+                                          prefixIcon: Icon(Icons.speed_outlined),
                                         ),
+                                        textInputAction: TextInputAction.next,
+                                        validator: (value) => value == null || value.trim().isEmpty
+                                            ? 'رقم العداد مطلوب.'
+                                            : value.trim().length > 50
+                                                ? 'الحد الأقصى 50 حرفاً.'
+                                                : null,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextFormField(
+                                        controller: _pathController,
+                                        textDirection: TextDirection.ltr,
+                                        keyboardType: TextInputType.number,
+                                        decoration: InputDecoration(
+                                          labelText: 'رقم المسار (اختياري)',
+                                          hintText: 'مثال: 1',
+                                          prefixIcon: const Icon(Icons.route_outlined),
+                                          suffixIcon: _isCheckingPath
+                                              ? const Padding(
+                                                  padding: EdgeInsets.all(12),
+                                                  child: SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                                  ),
+                                                )
+                                              : _pathConflict == true
+                                                  ? Icon(Icons.error_outline,
+                                                      color: Theme.of(context).colorScheme.error)
+                                                  : _pathConflict == false &&
+                                                          _pathController.text.isNotEmpty
+                                                      ? const Icon(Icons.check_circle_outline,
+                                                          color: AppColors.success)
+                                                      : null,
+                                          helperText: _pathConflict == true
+                                              ? 'رقم المسار مستخدم بالفعل في هذا المربع.'
+                                              : 'يجب أن يكون رقم المسار فريداً داخل المربع السكني.',
+                                          helperStyle: TextStyle(
+                                            color: _pathConflict == true
+                                                ? Theme.of(context).colorScheme.error
+                                                : null,
+                                          ),
+                                        ),
+                                        onChanged: _schedulePathValidation,
+                                        validator: (value) {
+                                          final text = value?.trim() ?? '';
+                                          if (text.isEmpty) return null;
+                                          if (int.tryParse(CompoundSearchQuery.normalizeDigits(text)) ==
+                                              null) {
+                                            return 'أدخل رقم مسار صحيحاً.';
+                                          }
+                                          if (_pathConflict == true) {
+                                            return 'هذا المسار مستخدم في المربع نفسه.';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      DropdownButtonFormField<int>(
+                                        key: ValueKey<int?>(_selectedSubscriber?.id),
+                                        initialValue: _selectedSubscriber?.id,
+                                        isExpanded: true,
+                                        decoration: InputDecoration(
+                                          labelText: 'المشترك المالك',
+                                          prefixIcon: const Icon(Icons.person_outline),
+                                          helperText: widget.meter == null
+                                              ? null
+                                              : 'يمكنك نقل ملكية العداد لمشترك آخر؛ سيتم التحقق من توافر رقم المسار في مربع المشترك الجديد.',
+                                        ),
+                                        items: _subscribers
+                                            .map((subscriber) => DropdownMenuItem<int>(
+                                                  value: subscriber.id,
+                                                  child: Text(
+                                                    '${subscriber.name}${subscriber.squareName == null ? '' : ' — ${subscriber.squareName}'}',
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ))
+                                            .toList(growable: false),
+                                        validator: (value) => value == null ? 'اختر المشترك.' : null,
+                                        onChanged: (id) => _onSubscriberChanged(
+                                          _subscribers.cast<SubscriberOption?>().firstWhere(
+                                                (item) => item?.id == id,
+                                                orElse: () => null,
+                                              ),
+                                        ),
+                                      ),
+                                      if (_selectedSubscriber?.squareName != null) ...[
+                                        const SizedBox(height: 6),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Text('المربع: ${_selectedSubscriber!.squareName}'),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 12),
+                                      DropdownButtonFormField<String>(
+                                        key: ValueKey<String>('status-$_status'),
+                                        initialValue: _status,
+                                        decoration: const InputDecoration(
+                                          labelText: 'حالة العداد',
+                                          prefixIcon: Icon(Icons.toggle_on_outlined),
+                                        ),
+                                        items: const [
+                                          DropdownMenuItem(value: 'active', child: Text('نشط')),
+                                          DropdownMenuItem(value: 'inactive', child: Text('غير نشط')),
+                                        ],
+                                        onChanged: (value) {
+                                          if (value != null) setState(() => _status = value);
+                                        },
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                if (_selectedSubscriber?.squareName != null) ...[
-                                  const SizedBox(height: 6),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text('المربع: ${_selectedSubscriber!.squareName}'),
-                                  ),
-                                ],
                                 if (_showTenantFields) ...[
                                   const SizedBox(height: 20),
-                                  _sectionHeader(context, 'بيانات المستأجر (اختيارية)'),
-                                  TextFormField(
-                                    controller: _tenantNameController,
-                                    textInputAction: TextInputAction.next,
-                                    decoration: const InputDecoration(
-                                      labelText: 'اسم المستأجر',
-                                      prefixIcon: Icon(Icons.person_pin_outlined),
-                                    ),
-                                    onChanged: (_) => setState(() {}),
+                                  const SectionHeading(
+                                    icon: Icons.person_pin_outlined,
+                                    title: 'بيانات المستأجر (اختيارية)',
                                   ),
-                                  const SizedBox(height: 12),
-                                  TextFormField(
-                                    controller: _tenantPhoneController,
-                                    textDirection: TextDirection.ltr,
-                                    keyboardType: TextInputType.phone,
-                                    decoration: const InputDecoration(
-                                      labelText: 'هاتف المستأجر',
-                                      prefixIcon: Icon(Icons.phone_outlined),
-                                      hintText: '+967…',
+                                  const SizedBox(height: 8),
+                                  AppCard(
+                                    child: Column(
+                                      children: [
+                                        TextFormField(
+                                          controller: _tenantNameController,
+                                          textInputAction: TextInputAction.next,
+                                          decoration: const InputDecoration(
+                                            labelText: 'اسم المستأجر',
+                                            prefixIcon: Icon(Icons.person_pin_outlined),
+                                          ),
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextFormField(
+                                          controller: _tenantPhoneController,
+                                          textDirection: TextDirection.ltr,
+                                          keyboardType: TextInputType.phone,
+                                          decoration: const InputDecoration(
+                                            labelText: 'هاتف المستأجر',
+                                            prefixIcon: Icon(Icons.phone_outlined),
+                                            hintText: '+967…',
+                                          ),
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ],
                                     ),
-                                    onChanged: (_) => setState(() {}),
                                   ),
                                 ],
-                                const SizedBox(height: 20),
-                                DropdownButtonFormField<String>(
-                                  key: ValueKey<String>('status-$_status'),
-                                  initialValue: _status,
-                                  decoration: const InputDecoration(
-                                    labelText: 'حالة العداد',
-                                    prefixIcon: Icon(Icons.toggle_on_outlined),
+                                const SizedBox(height: 24),
+                                AppPrimaryButton(
+                                  label: _isSaving ? 'جارٍ الحفظ…' : 'حفظ بيانات العداد',
+                                  icon: Icons.save_outlined,
+                                  loading: _isSaving,
+                                  onPressed: _isSaving || _isCheckingPath ? null : () => _save(),
+                                ),
+                                if (widget.meter == null) ...[
+                                  const SizedBox(height: 10),
+                                  AppSecondaryButton(
+                                    label: 'حفظ وإضافة عداد آخر',
+                                    icon: Icons.playlist_add_outlined,
+                                    onPressed: _isSaving || _isCheckingPath
+                                        ? null
+                                        : () => _save(addAnother: true),
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(value: 'active', child: Text('نشط')),
-                                    DropdownMenuItem(value: 'inactive', child: Text('غير نشط')),
-                                  ],
-                                  onChanged: (value) {
-                                    if (value != null) setState(() => _status = value);
-                                  },
-                                ),
-                                const SizedBox(height: 28),
-                                FilledButton.icon(
-                                  onPressed: _isSaving || _isCheckingPath ? null : _save,
-                                  icon: _isSaving
-                                      ? const SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.save_outlined),
-                                  label: Text(_isSaving ? 'جارٍ الحفظ…' : 'حفظ بيانات العداد'),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -438,9 +498,4 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
       ),
     );
   }
-
-  Widget _sectionHeader(BuildContext context, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-      );
 }

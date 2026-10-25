@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
-import '../../../admin_shared/presentation/theme/admin_palette.dart';
 
 class SettingImageField extends StatelessWidget {
   const SettingImageField({
@@ -29,30 +30,29 @@ class SettingImageField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = _resolveUrl(path, mediaBaseUrl);
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: AppCard(
+        padding: const EdgeInsets.all(12),
+        child: Row(
         children: [
-          Container(
+          SizedBox(
             width: 64,
             height: 64,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: AdminPalette.primary.withAlpha(15),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
             child: imageUrl == null
-                ? const Icon(Icons.image_outlined, color: AdminPalette.primary)
-                : Image.network(
-                    imageUrl,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.broken_image_outlined),
+                ? const AppGlyph(icon: Icons.image_outlined, size: 64, neutral: true)
+                : Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.broken_image_outlined),
+                    ),
                   ),
           ),
           const SizedBox(width: 12),
@@ -75,29 +75,28 @@ class SettingImageField extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton.filledTonal(
-            key: ValueKey('upload-$settingKey'),
-            tooltip: 'اختيار ورفع صورة',
-            onPressed: isUploading
-                ? null
-                : () async {
-                    final file = await (picker ?? ImagePicker()).pickImage(
-                      source: ImageSource.gallery,
-                      maxWidth: 2048,
-                      maxHeight: 2048,
-                      imageQuality: 92,
-                    );
-                    if (file != null) onSelected(file);
-                  },
-            icon: isUploading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.upload_rounded),
-          ),
+          if (isUploading)
+            const SizedBox.square(
+              dimension: 40,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            AppIconButton(
+              key: ValueKey('upload-$settingKey'),
+              tooltip: 'اختيار ورفع صورة',
+              onPressed: () async {
+                final file = await (picker ?? ImagePicker()).pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 2048,
+                  maxHeight: 2048,
+                  imageQuality: 92,
+                );
+                if (file != null) onSelected(file);
+              },
+              icon: Icons.upload_rounded,
+            ),
         ],
+        ),
       ),
     );
   }

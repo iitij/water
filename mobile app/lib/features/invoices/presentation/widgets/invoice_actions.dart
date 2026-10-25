@@ -7,6 +7,8 @@ import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
 import '../../data/models/invoice_model.dart';
@@ -345,29 +347,99 @@ Future<void> showInvoiceActionSheet(
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+    ),
     builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ListTile(
-            title: Text('فاتورة ${invoice.billNumber}'),
-            subtitle: Text(invoice.beneficiaryName),
-          ),
-          const Divider(height: 1),
-          ...actions.map(
-            (action) => ListTile(
-              leading: Icon(action.icon, color: action.color),
-              title: Text(action.label),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                action.onTap();
-              },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(10, 4, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'فاتورة ${invoice.billNumber}',
+                    style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    invoice.beneficiaryName,
+                    style: Theme.of(sheetContext).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const Divider(height: 1),
+            const SizedBox(height: 6),
+            ...actions.map(
+              (action) => _SheetActionRow(
+                icon: action.icon,
+                label: action.label,
+                color: action.color,
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await action.onTap();
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
+}
+
+/// صف إجراء هادئ: حبّة أيقونة + عنوان + سهم — بديل `ListTile` الخام.
+class _SheetActionRow extends StatelessWidget {
+  const _SheetActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Future<void> Function() onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => onTap(),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            AppGlyph(icon: icon, tone: color, size: 36),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SheetAction {

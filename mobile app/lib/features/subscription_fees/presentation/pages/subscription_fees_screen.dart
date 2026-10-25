@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
-import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
@@ -254,42 +259,63 @@ class _SubscriptionFeesView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('رسوم الاشتراك'),
-            actions: [
-              if (state.selectedIds.isNotEmpty) ...[
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'إلغاء التحديد',
-                  onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep),
-                  tooltip: 'حذف المحدد (${state.selectedIds.length})',
-                  onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
-                ),
-              ],
-              IconButton(
-                icon: const Icon(Icons.receipt_long_outlined),
-                tooltip: 'إصدار فاتورة اشتراك',
-                onPressed: () => _openGenerateInvoiceSheet(context),
+        final scheme = Theme.of(context).colorScheme;
+        return SubPageScaffold(
+          title: 'رسوم الاشتراك',
+          subtitle: 'رسوم الربط السكني ومفوتراتها',
+          actions: [
+            if (state.selectedIds.isNotEmpty) ...[
+              AppIconButton(
+                icon: Icons.clear_rounded,
+                tooltip: 'إلغاء التحديد',
+                size: 38,
+                onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
+              ),
+              AppIconButton(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: 'حذف المحدد (${state.selectedIds.length})',
+                size: 38,
+                onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
               ),
             ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _openFeeDialog(context),
-            icon: const Icon(Icons.add),
-            label: const Text('إضافة رسوم'),
-          ),
-          body: Column(children: [
+            AppIconButton(
+              icon: Icons.receipt_long_outlined,
+              tooltip: 'إصدار فاتورة اشتراك',
+              size: 38,
+              onPressed: () => _openGenerateInvoiceSheet(context),
+            ),
+            AppIconButton(
+              icon: Icons.add_rounded,
+              tooltip: 'إضافة رسوم',
+              size: 38,
+              onPressed: () => _openFeeDialog(context),
+            ),
+          ],
+          child: Column(children: [
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: SumBar(items: [
-                (label: 'إجمالي الرسوم', value: state.totalSum, color: Colors.white),
-                (label: 'المفوتر', value: state.invoicedSum, color: AppColors.success),
-                (label: 'المتبقي غير المفوتر', value: state.remainingSum, color: AppColors.brandAmber),
-              ]),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+              child: AppStatStrip(
+                items: [
+                  AppStatItem(
+                    label: 'إجمالي الرسوم',
+                    value: CurrencyFormatter.format(state.totalSum),
+                    icon: Icons.payments_outlined,
+                    color: scheme.primary,
+                  ),
+                  AppStatItem(
+                    label: 'المفوتر',
+                    value: CurrencyFormatter.format(state.invoicedSum),
+                    icon: Icons.receipt_long_rounded,
+                    color: AppColors.success,
+                  ),
+                  AppStatItem(
+                    label: 'المتبقي غير المفوتر',
+                    value: CurrencyFormatter.format(state.remainingSum),
+                    icon: Icons.hourglass_bottom_rounded,
+                    color: AppColors.warning,
+                  ),
+                ],
+              ),
             ),
             AppFilterChips(
               children: <Widget>[
@@ -307,26 +333,43 @@ class _SubscriptionFeesView extends StatelessWidget {
               ],
             ),
             if (state.selectedIds.isNotEmpty)
-              MaterialBanner(
-                content: Text('تم تحديد ${state.selectedIds.length} رسوم اشتراك'),
-                leading: const Icon(Icons.checklist),
-                actions: [
-                  TextButton(
-                    onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
-                    child: const Text('إلغاء'),
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+                child: Container(
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: AppColors.border),
                   ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
-                    icon: const Icon(Icons.delete_sweep, color: AppColors.danger),
-                    label: const Text('حذف المحدد'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.checklist, size: 18, color: scheme.primary),
+                      const Gap(8),
+                      Expanded(
+                        child: Text(
+                          'تم تحديد ${state.selectedIds.length} رسوم اشتراك',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
+                        child: const Text('إلغاء'),
+                      ),
+                      TextButton(
+                        onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+                        child: const Text('حذف المحدد'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             if (state.loading) const LinearProgressIndicator(),
             Expanded(
               child: state.fees.isEmpty && !state.loading
-                  ? const EmptyState(message: 'لا توجد رسوم اشتراك مطابقة')
+                  ? const Center(child: AdminEmptyView(title: 'لا توجد رسوم اشتراك مطابقة'))
                   : ListView.builder(
+                      padding: const EdgeInsets.only(top: 10, bottom: 24),
                       itemCount: state.fees.length,
                       itemBuilder: (_, i) {
                         final f = state.fees[i];
@@ -334,66 +377,143 @@ class _SubscriptionFeesView extends StatelessWidget {
                         return Padding(
                           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
                           child: AppCard(
-                          padding: EdgeInsets.zero,
-                          color: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .04) : null,
-                          borderColor: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .4) : null,
-                          child: ListTile(
-                            onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
-                            leading: Checkbox(
-                              value: checked,
-                              onChanged: (_) => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            title: Text('${f.subscriberName ?? 'مشترك #${f.subscriberId}'} • ${f.meterCode ?? 'بدون عداد'}'),
-                            subtitle: Text(
-                              'أُضيفت: ${f.createdAt != null && f.createdAt!.length >= 10 ? f.createdAt!.substring(0, 10) : (f.createdAt ?? '-')}'
-                              '${f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}'
-                              '${f.notes != null && f.notes!.isNotEmpty ? '\n${f.notes}' : ''}',
-                            ),
-                            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Text(
-                                CurrencyFormatter.format(f.amount),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                            padding: EdgeInsets.zero,
+                            color: checked ? scheme.primary.withValues(alpha: .04) : null,
+                            borderColor: checked ? scheme.primary.withValues(alpha: .4) : null,
+                            child: InkWell(
+                              onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
+                              borderRadius: BorderRadius.circular(AppRadius.xl),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Checkbox(
+                                          value: checked,
+                                          onChanged: (_) => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                f.subscriberName ?? 'مشترك #${f.subscriberId}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                                              ),
+                                              const Gap(2),
+                                              Text(
+                                                '${f.meterCode ?? 'بدون عداد'} • أُضيفت: ${f.createdAt != null && f.createdAt!.length >= 10 ? f.createdAt!.substring(0, 10) : (f.createdAt ?? '-')}'
+                                                '${f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context).textTheme.labelSmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        StatusBadge(
+                                          label: f.status.label,
+                                          color: switch (f.status) {
+                                            FeeStatus.uninvoiced => AppColors.danger,
+                                            FeeStatus.invoiced => AppColors.warning,
+                                            FeeStatus.partiallyPaid => AppColors.info,
+                                            FeeStatus.paid => AppColors.success,
+                                          },
+                                        ),
+                                        PopupMenuButton<String>(
+                                          tooltip: 'إجراءات الرسوم',
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(AppRadius.lg),
+                                          ),
+                                          onSelected: (value) {
+                                            if (value == 'invoice') {
+                                              _openGenerateInvoiceSheet(context, fee: f);
+                                            }
+                                            if (value == 'edit') _openFeeDialog(context, existing: f);
+                                            if (value == 'delete') asyncDeleteFee(context, f);
+                                          },
+                                          itemBuilder: (context) => [
+                                            if (f.canInvoice)
+                                              const PopupMenuItem(
+                                                value: 'invoice',
+                                                child: Row(children: [
+                                                  Icon(Icons.receipt_long, size: 18),
+                                                  SizedBox(width: 10),
+                                                  Text('إصدار فاتورة اشتراك'),
+                                                ]),
+                                              ),
+                                            const PopupMenuItem(
+                                              value: 'edit',
+                                              child: Row(children: [
+                                                Icon(Icons.edit_outlined, size: 18),
+                                                SizedBox(width: 10),
+                                                Text('تعديل الرسوم'),
+                                              ]),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'delete',
+                                              child: Row(children: [
+                                                Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                                SizedBox(width: 10),
+                                                Text('حذف الرسوم', style: TextStyle(color: AppColors.danger)),
+                                              ]),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    if (f.notes != null && f.notes!.isNotEmpty) ...[
+                                      const Gap(6),
+                                      Text(
+                                        f.notes!,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                    const Gap(10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Text('مبلغ الرسم', style: Theme.of(context).textTheme.labelSmall),
+                                          const Gap(8),
+                                          Directionality(
+                                            textDirection: TextDirection.ltr,
+                                            child: Text(
+                                              CurrencyFormatter.format(f.amount),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 15,
+                                                fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                                              ),
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          if (f.canInvoice)
+                                            AppIconButton(
+                                              icon: Icons.receipt_long_rounded,
+                                              tooltip: 'إصدار فاتورة اشتراك',
+                                              size: 38,
+                                              onPressed: () => _openGenerateInvoiceSheet(context, fee: f),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              StatusBadge(
-                                label: f.status.label,
-                                color: switch (f.status) {
-                                  FeeStatus.uninvoiced => AppColors.danger,
-                                  FeeStatus.invoiced => AppColors.warning,
-                                  FeeStatus.partiallyPaid => AppColors.info,
-                                  FeeStatus.paid => AppColors.success,
-                                },
-                              ),
-                              if (f.canInvoice)
-                                IconButton(
-                                  icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-                                  tooltip: 'إصدار فاتورة اشتراك',
-                                  onPressed: () => _openGenerateInvoiceSheet(context, fee: f),
-                                ),
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                tooltip: 'تعديل الرسوم',
-                                onPressed: () => _openFeeDialog(context, existing: f),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                tooltip: 'حذف الرسوم',
-                                onPressed: () async {
-                                  if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
-                                    if (context.mounted) {
-                                      await context.read<SubscriptionFeesCubit>().delete(f.id);
-                                    }
-                                  }
-                                },
-                              ),
-                            ]),
-                          ),
+                            ),
                           ),
                         );
                       },
@@ -403,5 +523,14 @@ class _SubscriptionFeesView extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// حذف رسوم بعد تأكيد — نفس منطق الزر الأحمر السابق دون تغيير سلوك الـ cubit.
+  Future<void> asyncDeleteFee(BuildContext context, SubscriptionFee f) async {
+    if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
+      if (context.mounted) {
+        await context.read<SubscriptionFeesCubit>().delete(f.id);
+      }
+    }
   }
 }

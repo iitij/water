@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
 import '../../domain/repositories/settings_repository.dart';
@@ -69,55 +72,65 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
       builder: (context, state) {
         final settings = state.settings;
         if (settings != null && !_hydrated) _hydrate(settings);
-        return Scaffold(
-          appBar: widget.embedded ? null : AppBar(title: const Text('إعدادات تنبيهات الواتساب')),
-          body: state.isLoading && settings == null
-              ? const SettingsLoadingBody()
-              : settings == null
-                  ? SettingsErrorBody(
-                      message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
-                      onRetry: () => context.read<WhatsAppSettingsCubit>().load(),
-                    )
-                  : Form(
-                      key: _formKey,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1200),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _basicSettings(context, settings),
-                                if (settings.enabled && settings.method == 'local_api') ...[
-                                  const SizedBox(height: 16),
-                                  const LocalServerControlPanel(),
-                                ],
-                                if (settings.enabled && settings.method != 'meta_api') ...[
-                                  const SizedBox(height: 16),
-                                  _templatesEditor(settings),
-                                ],
-                                if (settings.enabled && settings.method == 'meta_api') ...[
-                                  const SizedBox(height: 16),
-                                  _metaSettings(settings),
-                                ],
-                                const SizedBox(height: 24),
+        final body = state.isLoading && settings == null
+            ? const SettingsLoadingBody()
+            : settings == null
+                ? SettingsErrorBody(
+                    message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
+                    onRetry: () => context.read<WhatsAppSettingsCubit>().load(),
+                  )
+                : Form(
+                    key: _formKey,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1200),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _basicSettings(context, settings),
+                              if (settings.enabled && settings.method == 'local_api') ...[
+                                const SizedBox(height: 16),
+                                const LocalServerControlPanel(),
                               ],
-                            ),
+                              if (settings.enabled && settings.method != 'meta_api') ...[
+                                const SizedBox(height: 16),
+                                _templatesEditor(settings),
+                              ],
+                              if (settings.enabled && settings.method == 'meta_api') ...[
+                                const SizedBox(height: 16),
+                                _metaSettings(settings),
+                              ],
+                              const SizedBox(height: 24),
+                            ],
                           ),
                         ),
                       ),
                     ),
-          bottomNavigationBar: settings == null
-              ? null
-              : SettingsSaveBar(
-                  isSaving: state.isSaving,
-                  onSave: () {
-                    if (_formKey.currentState?.validate() ?? false) {
-                      context.read<WhatsAppSettingsCubit>().save();
-                    }
-                  },
-                ),
+                  );
+        final saveBar = settings == null
+            ? null
+            : SettingsSaveBar(
+                isSaving: state.isSaving,
+                onSave: () {
+                  if (_formKey.currentState?.validate() ?? false) {
+                    context.read<WhatsAppSettingsCubit>().save();
+                  }
+                },
+              );
+        if (widget.embedded) {
+          return Scaffold(body: body, bottomNavigationBar: saveBar);
+        }
+        return SubPageScaffold(
+          title: 'إعدادات تنبيهات الواتساب',
+          subtitle: 'محرك الإرسال وقوالب الرسائل',
+          child: Column(
+            children: [
+              Expanded(child: body),
+              if (saveBar != null) saveBar,
+            ],
+          ),
         );
       },
     );
@@ -129,10 +142,15 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
       title: 'الضبط الأساسي',
       subtitle: 'اختر محرك الإرسال المناسب؛ التقارير والقوالب تستخدم الإعداد نفسه.',
       children: [
-        SwitchListTile(
-          value: settings.enabled,
-          onChanged: (value) => cubit.update(settings.copyWith(enabled: value)),
-          title: const Text('تفعيل خدمة الواتساب بشكل عام'),
+        AppSettingRow(
+          icon: Icons.chat_outlined,
+          color: Theme.of(context).colorScheme.primary,
+          showChevron: false,
+          title: 'تفعيل خدمة الواتساب بشكل عام',
+          trailing: Switch(
+            value: settings.enabled,
+            onChanged: (value) => cubit.update(settings.copyWith(enabled: value)),
+          ),
         ),
         if (settings.enabled) ...[
           DropdownButtonFormField<String>(
@@ -149,15 +167,25 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
             onChanged: (value) => cubit.update(settings.copyWith(method: value)),
           ),
           if (settings.usesAutomaticSending) ...[
-            SwitchListTile(
-              value: settings.autoSendInvoice,
-              onChanged: (value) => cubit.update(settings.copyWith(autoSendInvoice: value)),
-              title: const Text('إرسال الفاتورة تلقائياً عند الإصدار'),
+            AppSettingRow(
+              icon: Icons.send_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              showChevron: false,
+              title: 'إرسال الفاتورة تلقائياً عند الإصدار',
+              trailing: Switch(
+                value: settings.autoSendInvoice,
+                onChanged: (value) => cubit.update(settings.copyWith(autoSendInvoice: value)),
+              ),
             ),
-            SwitchListTile(
-              value: settings.autoSendPayment,
-              onChanged: (value) => cubit.update(settings.copyWith(autoSendPayment: value)),
-              title: const Text('إرسال سند القبض تلقائياً عند السداد'),
+            AppSettingRow(
+              icon: Icons.payments_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              showChevron: false,
+              title: 'إرسال سند القبض تلقائياً عند السداد',
+              trailing: Switch(
+                value: settings.autoSendPayment,
+                onChanged: (value) => cubit.update(settings.copyWith(autoSendPayment: value)),
+              ),
             ),
           ],
         ],
@@ -329,13 +357,14 @@ class _MetaTemplateGuide extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
-                IconButton(
+                AppIconButton(
                   tooltip: 'نسخ النص',
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: text));
                     if (context.mounted) showAdminSnackBar(context, 'تم نسخ نص القالب.');
                   },
-                  icon: const Icon(Icons.copy_outlined),
+                  icon: Icons.copy_outlined,
+                  size: 38,
                 ),
               ],
             ),

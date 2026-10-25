@@ -4,6 +4,10 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/info_notice.dart';
 import '../../../meters/data/models/meter.dart';
 
 class OfflinePackDialog extends StatefulWidget {
@@ -104,15 +108,30 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final result = _result;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl)),
+        titlePadding: const EdgeInsetsDirectional.fromSTEB(18, 18, 18, 0),
+        contentPadding: const EdgeInsetsDirectional.fromSTEB(18, 14, 18, 0),
+        actionsPadding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 16),
         title: Row(
           children: [
-            Icon(Icons.cloud_download_outlined, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-            const Expanded(child: Text('تنزيل حزمة العمل أوفلاين')),
+            AppGlyph(
+              icon: Icons.cloud_download_outlined,
+              tone: scheme.primary,
+              size: 38,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'تنزيل حزمة العمل أوفلاين',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
           ],
         ),
         content: ConstrainedBox(
@@ -124,22 +143,39 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.check_circle_rounded, color: AppColors.success),
-                        const SizedBox(width: 8),
+                        const AppGlyph(
+                          icon: Icons.check_circle_rounded,
+                          tone: AppColors.success,
+                          size: 42,
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'اكتمل حفظ البيانات للعمل الميداني دون اتصال!',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const Divider(height: 20),
-                    _statRow('المربعات المخزنة', '${result.squareCount}'),
-                    _statRow('المشتركون', '${result.subscriberCount}'),
-                    _statRow('العدادات', '${result.meterCount}'),
-                    _statRow('سجل القراءات', '${result.readingCount}'),
-                    _statRow('فترات العدادات الجاهزة', '${result.cachedPeriodCount}'),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                      ),
+                      child: Column(
+                        children: [
+                          _statRow('المربعات المخزنة', '${result.squareCount}'),
+                          _statRow('المشتركون', '${result.subscriberCount}'),
+                          _statRow('العدادات', '${result.meterCount}'),
+                          _statRow('سجل القراءات', '${result.readingCount}'),
+                          _statRow('فترات العدادات الجاهزة', '${result.cachedPeriodCount}'),
+                        ],
+                      ),
+                    ),
                   ],
                 )
               : Column(
@@ -177,7 +213,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                     ),
                     if (_isDownloading) ...[
                       const SizedBox(height: 16),
-                      LinearProgressIndicator(value: _progress),
+                      LinearProgressIndicator(value: _progress, minHeight: 4),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -185,46 +221,52 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                           Expanded(
                             child: Text(
                               _stage,
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: theme.textTheme.bodySmall,
                             ),
                           ),
                           Text(
                             '${(_progress * 100).round()}%',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ],
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      InfoNotice(
+                        text: _error!,
+                        icon: Icons.error_outline_rounded,
+                        color: scheme.error,
+                      ),
                     ],
                   ],
                 ),
         ),
         actions: [
           if (result != null)
-            FilledButton(
+            AppPrimaryButton(
+              label: 'تم',
               onPressed: () => Navigator.pop(context, result),
-              child: const Text('تم'),
+              expand: false,
             )
           else ...[
-            TextButton(
+            AppSecondaryButton(
+              label: 'إلغاء',
               onPressed: _isDownloading ? null : () => Navigator.pop(context),
-              child: const Text('إلغاء'),
+              expand: false,
             ),
-            FilledButton.icon(
+            const SizedBox(width: 10),
+            AppPrimaryButton(
+              label: _isDownloading ? 'جارٍ التنزيل…' : 'بدء التنزيل',
+              icon: Icons.download_outlined,
+              loading: _isDownloading,
               onPressed: _isDownloading ? null : _startDownload,
-              icon: _isDownloading
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_outlined),
-              label: Text(_isDownloading ? 'جارٍ التنزيل…' : 'بدء التنزيل'),
+              expand: false,
             ),
           ],
         ],
@@ -232,14 +274,22 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
     );
   }
 
-  Widget _statRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-      );
+  Widget _statRow(String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

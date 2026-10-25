@@ -13,7 +13,9 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
         if (subscriberId != null) 'subscriber_id': subscriberId,
         if (meterId != null) 'meter_id': meterId,
         if (type != null) 'type': type,
-        if (fromDate != null) 'from_date': fromDate,
-        if (toDate != null) 'to_date': toDate,
+        // يُرسَل التنسيقان معاً: `from`/`to` للخادم الحالي و`from_date`/`to_date`
+        // لتوافق خادم Laravel الموسّع — المفاتيح غير المعروفة تُتجاهل دائماً.
+        if (fromDate != null) ...<String, dynamic>{'from': fromDate, 'from_date': fromDate},
+        if (toDate != null) ...<String, dynamic>{'to': toDate, 'to_date': toDate},
       });
 }

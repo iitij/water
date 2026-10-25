@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../finance/finance_responsive.dart';
+import '../navigation/sub_page.dart';
 import '../router/finance_route_names.dart';
 
 /// نسخة تعاقدية من `core/widgets/responsive_scaffold.dart` — المالك الفعلي Dev 1.
@@ -123,6 +124,10 @@ class FinanceDestination {
 }
 
 /// غلاف مختصر للشاشات الفرعية التي لا تحتاج شريط تنقل (تفاصيل، نماذج).
+///
+/// الواجهة التعاقدية (title/body/actions/floatingActionButton) كما هي؛ البنية
+/// الداخلية انتقلت إلى `SubPageScaffold` حتى تحمل كل صفحة فرعية زر رجوع
+/// وشريط حالة المزامنة بنفس شكل بقية التطبيق.
 class FinanceDetailScaffold extends StatelessWidget {
   const FinanceDetailScaffold({
     super.key,
@@ -139,16 +144,27 @@ class FinanceDetailScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title), actions: actions),
-      floatingActionButton: floatingActionButton,
-      body: SafeArea(child: body),
+    return SubPageScaffold(
+      title: title,
+      actions: actions ?? const <Widget>[],
+      child: floatingActionButton == null
+          ? body
+          : Stack(
+              children: <Widget>[
+                body,
+                PositionedDirectional(
+                  bottom: 22,
+                  end: 18,
+                  child: floatingActionButton!,
+                ),
+              ],
+            ),
     );
   }
 }
 
 /// يربط وجهات [FinanceScaffold] بالمسارات: الوجهة الحالية تُستنتج من
-/// `GoRouterState.matchedLocation`، فتبقى القائمة单一 مصدر للحقيقة.
+/// `GoRouterState.matchedLocation`، فتبقى القائمة مصدراً واحداً للحقيقة.
 class FinanceShell extends StatelessWidget {
   const FinanceShell({super.key, required this.state, required this.child});
 

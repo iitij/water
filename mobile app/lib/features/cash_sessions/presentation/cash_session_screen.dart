@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/error/failures.dart';
 import '../../../core/finance/finance_feedback.dart';
+import '../../../core/finance/finance_fields.dart';
 import '../../../core/finance/finance_locator.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/ui/app_controls.dart';
 import '../../../core/ui/app_surfaces.dart';
+import '../../../core/ui/app_tiles.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/widgets/finance_badges.dart';
 import '../domain/cash_session.dart';
 import '../services/cash_session_service.dart';
 import 'widgets/cash_session_report.dart';
@@ -158,33 +161,41 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text('صندوق المحصّل', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'صندوق المحصّل',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.onPanel,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
                 const Gap(6),
                 Text(
                   _service.isOpen
                       ? 'الصندوق مفتوح — كل سند قبض تسجله اليوم يُحتسب في هذا الصندوق.'
                       : 'افتح صندوقاً قبل التحصيل ليُطابق النقد المسلَّم مع السندات.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.onPanelSoft,
+                        height: 1.6,
+                      ),
                 ),
+                if (session != null) ...<Widget>[
+                  const Gap(AppSpacing.md),
+                  _HeroFigures(session: session),
+                ],
                 if (_service.isLoading) ...<Widget>[
                   const Gap(AppSpacing.md),
-                  const LinearProgressIndicator(),
+                  const LinearProgressIndicator(minHeight: 2),
                 ],
               ],
             ),
           ),
           const Gap(AppSpacing.md),
           if (_error != null) ...<Widget>[
-            AppCard(
-              borderColor: AppColors.danger,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Icon(Icons.error_outline, color: AppColors.danger),
-                  const Gap(8),
-                  Expanded(child: Text(_error!)),
-                ],
-              ),
+            AppNotice(
+              title: 'تعذّر إكمال العملية',
+              message: _error!,
+              icon: Icons.error_outline,
+              color: AppColors.danger,
             ),
             const Gap(AppSpacing.md),
           ],
@@ -231,28 +242,98 @@ class _OpenForm extends StatelessWidget {
           const Gap(4),
           const Text('المبلغ الافتتاحي هو النقد الموجود معك قبل أول سند (عهدة فكّة).'),
           const Gap(AppSpacing.md),
-          TextField(
+          AppNumericField(
             controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-            ],
-            decoration: const InputDecoration(
-              labelText: 'المبلغ الافتتاحي',
-              suffixText: 'ريال',
-              border: OutlineInputBorder(),
-            ),
+            label: 'المبلغ الافتتاحي',
+            prefixText: 'ريال',
           ),
           const Gap(AppSpacing.md),
-          FilledButton.icon(
+          AppPrimaryButton(
+            label: busy ? 'جارٍ الفتح…' : 'فتح الصندوق',
+            icon: Icons.lock_open_rounded,
+            loading: busy,
             onPressed: busy ? null : onOpen,
-            icon: const Icon(Icons.lock_open_rounded),
-            label: Text(busy ? 'جارٍ الفتح…' : 'فتح الصندوق'),
           ),
         ],
       ),
     );
   }
+}
+
+/// أرقام الصندوق على لوحة الحبر: الافتتاحي/المتوقع/السندات عند الفتح،
+/// والمتوقع/المعدود/الفرق بعد الإغلاق.
+class _HeroFigures extends StatelessWidget {
+  const _HeroFigures({required this.session});
+
+  final CashSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = session.isOpen;
+    final List<_HeroCell> cells = open
+        ? <_HeroCell>[
+            _HeroCell('الافتتاحي', CurrencyFormatter.amount(session.openingAmount)),
+            _HeroCell('المتوقع من السندات', CurrencyFormatter.amount(session.expectedAmount),
+                hero: true),
+            _HeroCell('عدد السندات', '${session.receipts}'),
+          ]
+        : <_HeroCell>[
+            _HeroCell('المتوقع', CurrencyFormatter.amount(session.expectedAmount)),
+            _HeroCell('المعدود', CurrencyFormatter.amount(session.countedAmount ?? 0)),
+            _HeroCell('الفرق', CurrencyFormatter.amount(session.varianceAmount ?? 0), hero: true),
+          ];
+
+    return Row(
+      children: <Widget>[
+        for (var index = 0; index < cells.length; index++) ...<Widget>[
+          if (index > 0)
+            Container(
+              width: 1,
+              height: 30,
+              color: Colors.white.withValues(alpha: .12),
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  cells[index].label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.onPanelMuted,
+                    fontSize: 10.5,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                LtrNumberText(
+                  cells[index].value,
+                  style: TextStyle(
+                    color: AppColors.onPanel,
+                    fontWeight: FontWeight.w600,
+                    fontSize: cells[index].hero ? 16 : 13,
+                    height: 1.2,
+                    letterSpacing: -.3,
+                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// خلية رقمية على اللوحة: تسمية هادئة + قيمة (القيمة البطولية أكبر).
+class _HeroCell {
+  const _HeroCell(this.label, this.value, {this.hero = false});
+  final String label;
+  final String value;
+  final bool hero;
 }
 
 class _OpenSessionCard extends StatelessWidget {
@@ -328,17 +409,10 @@ class _OpenSessionCard extends StatelessWidget {
               const Gap(4),
               const Text('عُدّ النقد فعلياً؛ الفرق يُحسب تلقائياً ويُسجَّل في سجل التدقيق.'),
               const Gap(AppSpacing.md),
-              TextField(
+              AppNumericField(
                 controller: countedController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'المبلغ المعدود نقداً',
-                  suffixText: 'ريال',
-                  border: OutlineInputBorder(),
-                ),
+                label: 'المبلغ المعدود نقداً',
+                prefixText: 'ريال',
               ),
               const Gap(AppSpacing.sm),
               TextField(
@@ -347,14 +421,14 @@ class _OpenSessionCard extends StatelessWidget {
                 maxLength: 1000,
                 decoration: const InputDecoration(
                   labelText: 'تفسير الفرق / ملاحظات الإغلاق',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const Gap(AppSpacing.sm),
-              FilledButton.icon(
+              AppPrimaryButton(
+                label: busy ? 'جارٍ الإغلاق…' : 'إغلاق وإرسال للاعتماد',
+                icon: Icons.lock_rounded,
+                loading: busy,
                 onPressed: busy ? null : onClose,
-                icon: const Icon(Icons.lock_rounded),
-                label: Text(busy ? 'جارٍ الإغلاق…' : 'إغلاق وإرسال للاعتماد'),
               ),
             ],
           ),
@@ -426,7 +500,7 @@ class _AmountRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
-          Text(
+          LtrNumberText(
             money ? CurrencyFormatter.amount(value) : value.toStringAsFixed(0),
             style: Theme.of(context)
                 .textTheme

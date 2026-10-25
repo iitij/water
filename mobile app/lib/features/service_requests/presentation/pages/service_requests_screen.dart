@@ -3,15 +3,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/fouad/api_client.dart' show friendlyError;
-import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
@@ -133,11 +138,11 @@ class _ServiceRequestsView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('تاريخ الخدمة *'),
-                    subtitle: Text(selectedDate.toIso8601String().substring(0, 10)),
-                    trailing: const Icon(Icons.calendar_today),
+                  AppSettingRow(
+                    icon: Icons.calendar_month_rounded,
+                    color: Theme.of(ctx).colorScheme.primary,
+                    title: 'تاريخ الخدمة *',
+                    subtitle: selectedDate.toIso8601String().substring(0, 10),
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: ctx,
@@ -232,43 +237,59 @@ class _ServiceRequestsView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('طلبات الخدمة والوايت'),
-            actions: [
-              if (state.selectedIds.isNotEmpty && can('Delete:ServiceRequest')) ...[
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'إلغاء التحديد',
-                  onPressed: context.read<ServiceRequestsCubit>().clearSelection,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep),
-                  tooltip: 'حذف المحدد (${state.selectedIds.length})',
-                  onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
-                ),
-              ],
-              if (can('invoices.create'))
-                IconButton(
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  tooltip: 'إصدار فاتورة وايت',
-                  onPressed: () => _openGenerateTankerInvoice(context),
-                ),
+        final scheme = Theme.of(context).colorScheme;
+        return SubPageScaffold(
+          title: 'طلبات الخدمة والوايت',
+          subtitle: 'طلبات صهاريج المياه وحالتها',
+          actions: [
+            if (state.selectedIds.isNotEmpty && can('Delete:ServiceRequest')) ...[
+              AppIconButton(
+                icon: Icons.clear_rounded,
+                tooltip: 'إلغاء التحديد',
+                size: 38,
+                onPressed: context.read<ServiceRequestsCubit>().clearSelection,
+              ),
+              AppIconButton(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: 'حذف المحدد (${state.selectedIds.length})',
+                size: 38,
+                onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+              ),
             ],
-          ),
-          floatingActionButton: can('Create:ServiceRequest')
-              ? FloatingActionButton.extended(
-                  onPressed: () => _openCreateRequestDialog(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('طلب وايت جديد'),
-                )
-              : null,
-          body: Column(children: [
+            if (can('invoices.create'))
+              AppIconButton(
+                icon: Icons.receipt_long_outlined,
+                tooltip: 'إصدار فاتورة وايت',
+                size: 38,
+                onPressed: () => _openGenerateTankerInvoice(context),
+              ),
+            if (can('Create:ServiceRequest'))
+              AppIconButton(
+                icon: Icons.add_rounded,
+                tooltip: 'طلب وايت جديد',
+                size: 38,
+                onPressed: () => _openCreateRequestDialog(context),
+              ),
+          ],
+          child: Column(children: [
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: SumBar(items: [
-                (label: 'إجمالي مبالغ الطلبات المعروضة', value: state.totalSum, color: Colors.white),
-              ]),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+              child: AppStatStrip(
+                items: [
+                  AppStatItem(
+                    label: 'عدد الطلبات المعروضة',
+                    value: '${state.requests.length}',
+                    icon: Icons.local_shipping_outlined,
+                    color: scheme.primary,
+                  ),
+                  AppStatItem(
+                    label: 'إجمالي مبالغ الطلبات المعروضة',
+                    value: CurrencyFormatter.format(state.totalSum),
+                    icon: Icons.payments_outlined,
+                    color: AppColors.success,
+                  ),
+                ],
+              ),
             ),
             AppFilterChips(
               children: <Widget>[
@@ -295,26 +316,48 @@ class _ServiceRequestsView extends StatelessWidget {
               ],
             ),
             if (state.selectedIds.isNotEmpty && can('Delete:ServiceRequest'))
-              MaterialBanner(
-                content: Text('تم تحديد ${state.selectedIds.length} طلب وايت'),
-                leading: const Icon(Icons.checklist),
-                actions: [
-                  TextButton(
-                    onPressed: context.read<ServiceRequestsCubit>().clearSelection,
-                    child: const Text('إلغاء'),
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+                child: Container(
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: AppColors.border),
                   ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
-                    icon: const Icon(Icons.delete_sweep, color: AppColors.danger),
-                    label: const Text('حذف المحدد'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.checklist, size: 18, color: scheme.primary),
+                      const Gap(8),
+                      Expanded(
+                        child: Text(
+                          'تم تحديد ${state.selectedIds.length} طلب وايت',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: context.read<ServiceRequestsCubit>().clearSelection,
+                        child: const Text('إلغاء'),
+                      ),
+                      TextButton(
+                        onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+                        child: const Text('حذف المحدد'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             if (state.loading) const LinearProgressIndicator(),
             Expanded(
               child: state.requests.isEmpty && !state.loading
-                  ? const EmptyState(message: 'لا توجد طلبات وايت مطابقة', icon: Icons.local_shipping)
+                  ? const Center(
+                      child: AdminEmptyView(
+                        title: 'لا توجد طلبات وايت مطابقة',
+                        icon: Icons.local_shipping,
+                      ),
+                    )
                   : ListView.builder(
+                      padding: const EdgeInsets.only(top: 10, bottom: 24),
                       itemCount: state.requests.length,
                       itemBuilder: (_, i) {
                         final r = state.requests[i];
@@ -322,104 +365,140 @@ class _ServiceRequestsView extends StatelessWidget {
                         return Padding(
                           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
                           child: AppCard(
-                          padding: EdgeInsets.zero,
-                          color: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .04) : null,
-                          borderColor: checked ? Theme.of(context).colorScheme.primary.withValues(alpha: .4) : null,
-                          child: ListTile(
-                            onLongPress: can('Delete:ServiceRequest')
-                                ? () => context.read<ServiceRequestsCubit>().toggleSelect(r.id)
-                                : null,
-                            leading: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (can('Delete:ServiceRequest'))
-                                  Checkbox(
-                                    value: checked,
-                                    onChanged: (_) =>
-                                        context.read<ServiceRequestsCubit>().toggleSelect(r.id),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                const Icon(Icons.local_shipping, color: AppColors.info),
-                              ],
-                            ),
-                            title: Text('${r.subscriberName ?? 'مشترك #${r.subscriberId}'}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}'),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}'),
-                                if (r.invoiceNumber != null) Text('فاتورة: ${r.invoiceNumber}'),
-                                if (r.hasNote) Text(r.notes!),
-                                const SizedBox(height: 6),
-                                StatusBadge(
-                                  label: r.status.label,
-                                  color: switch (r.status) {
-                                    TankerStatus.pending => AppColors.warning,
-                                    TankerStatus.completed => AppColors.info,
-                                    TankerStatus.invoiced => AppColors.primary,
-                                    TankerStatus.paid => AppColors.success,
-                                  },
-                                ),
-                              ],
-                            ),
-                            trailing: r.canEdit && (can('Update:ServiceRequest') || can('Delete:ServiceRequest'))
-                                ? PopupMenuButton<String>(
-                                    tooltip: 'إجراءات الطلب',
-                                    onSelected: (action) async {
-                                      final cubit = context.read<ServiceRequestsCubit>();
-                                      try {
-                                        switch (action) {
-                                          case 'edit':
-                                            await ServiceRequestEditSheet.show(
-                                              context,
-                                              request: r,
-                                              onSave: cubit.updateRequest,
-                                            );
-                                            break;
-                                          case 'complete':
-                                            if (await confirmAction(
-                                                  context,
-                                                  'إنجاز الطلب',
-                                                  'تأكيد إنجاز طلب الوايت؟',
-                                                ) &&
-                                                context.mounted) {
-                                              await cubit.markCompleted(r.id);
-                                            }
-                                            break;
-                                          case 'invoice':
-                                            await _openGenerateTankerInvoice(context, request: r);
-                                            break;
-                                          case 'delete':
-                                            if (await confirmAction(
-                                                  context,
-                                                  'حذف طلب',
-                                                  'حذف طلب الوايت هذا؟',
-                                                ) &&
-                                                context.mounted) {
-                                              await cubit.delete(r.id);
-                                            }
-                                            break;
-                                        }
-                                      } catch (error) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text(friendlyError(error))),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    itemBuilder: (_) => [
-                                      if (r.canEdit && can('Update:ServiceRequest'))
-                                        const PopupMenuItem(value: 'edit', child: Text('تعديل الطلب')),
-                                      if (r.canComplete && can('Update:ServiceRequest'))
-                                        const PopupMenuItem(value: 'complete', child: Text('إنجاز الطلب')),
-                                      if (r.canInvoice && can('Update:ServiceRequest'))
-                                        const PopupMenuItem(value: 'invoice', child: Text('إصدار فاتورة')),
-                                      if (r.canEdit && can('Delete:ServiceRequest'))
-                                        const PopupMenuItem(value: 'delete', child: Text('حذف الطلب')),
+                            padding: EdgeInsets.zero,
+                            color: checked ? scheme.primary.withValues(alpha: .04) : null,
+                            borderColor: checked ? scheme.primary.withValues(alpha: .4) : null,
+                            child: InkWell(
+                              onLongPress: can('Delete:ServiceRequest')
+                                  ? () => context.read<ServiceRequestsCubit>().toggleSelect(r.id)
+                                  : null,
+                              borderRadius: BorderRadius.circular(AppRadius.xl),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (can('Delete:ServiceRequest'))
+                                          Checkbox(
+                                            value: checked,
+                                            onChanged: (_) =>
+                                                context.read<ServiceRequestsCubit>().toggleSelect(r.id),
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                        const AppGlyph(
+                                          icon: Icons.local_shipping_rounded,
+                                          tone: AppColors.info,
+                                          size: 38,
+                                        ),
+                                        const Gap(10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                '${r.subscriberName ?? 'مشترك #${r.subscriberId}'}${r.hasNote ? '  📝 يوجد ملاحظة' : ''}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
+                                              ),
+                                              const Gap(2),
+                                              Text(
+                                                '${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}'
+                                                '${r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context).textTheme.labelSmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        StatusBadge(
+                                          label: r.status.label,
+                                          color: switch (r.status) {
+                                            TankerStatus.pending => AppColors.warning,
+                                            TankerStatus.completed => AppColors.info,
+                                            TankerStatus.invoiced => AppColors.primary,
+                                            TankerStatus.paid => AppColors.success,
+                                          },
+                                        ),
+                                        if (r.canEdit && (can('Update:ServiceRequest') || can('Delete:ServiceRequest')))
+                                          PopupMenuButton<String>(
+                                            tooltip: 'إجراءات الطلب',
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(AppRadius.lg),
+                                            ),
+                                            onSelected: (action) async {
+                                              final cubit = context.read<ServiceRequestsCubit>();
+                                              try {
+                                                switch (action) {
+                                                  case 'edit':
+                                                    await ServiceRequestEditSheet.show(
+                                                      context,
+                                                      request: r,
+                                                      onSave: cubit.updateRequest,
+                                                    );
+                                                    break;
+                                                  case 'complete':
+                                                    if (await confirmAction(
+                                                          context,
+                                                          'إنجاز الطلب',
+                                                          'تأكيد إنجاز طلب الوايت؟',
+                                                        ) &&
+                                                        context.mounted) {
+                                                      await cubit.markCompleted(r.id);
+                                                    }
+                                                    break;
+                                                  case 'invoice':
+                                                    await _openGenerateTankerInvoice(context, request: r);
+                                                    break;
+                                                  case 'delete':
+                                                    if (await confirmAction(
+                                                          context,
+                                                          'حذف طلب',
+                                                          'حذف طلب الوايت هذا؟',
+                                                        ) &&
+                                                        context.mounted) {
+                                                      await cubit.delete(r.id);
+                                                    }
+                                                    break;
+                                                }
+                                              } catch (error) {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text(friendlyError(error))),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            itemBuilder: (_) => [
+                                              if (r.canEdit && can('Update:ServiceRequest'))
+                                                const PopupMenuItem(value: 'edit', child: Text('تعديل الطلب')),
+                                              if (r.canComplete && can('Update:ServiceRequest'))
+                                                const PopupMenuItem(value: 'complete', child: Text('إنجاز الطلب')),
+                                              if (r.canInvoice && can('Update:ServiceRequest'))
+                                                const PopupMenuItem(value: 'invoice', child: Text('إصدار فاتورة')),
+                                              if (r.canEdit && can('Delete:ServiceRequest'))
+                                                const PopupMenuItem(value: 'delete', child: Text('حذف الطلب')),
+                                            ],
+                                          ),
+                                      ],
+                                    ),
+                                    if (r.hasNote && r.notes != null && r.notes!.isNotEmpty) ...[
+                                      const Gap(8),
+                                      Text(
+                                        r.notes!,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
                                     ],
-                                  )
-                                : null,
-                          ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         );
                       },

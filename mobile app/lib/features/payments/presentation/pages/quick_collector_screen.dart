@@ -6,8 +6,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_search.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
@@ -68,20 +72,22 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
   Widget build(BuildContext context) {
     final cubit = context.read<QuickCollectorCubit>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('المحصل السريع'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'تحديث',
-            onPressed: cubit.loadUnpaid,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: BlocBuilder<QuickCollectorCubit, QuickCollectorState>(
-          builder: (context, state) {
+    return SubPageScaffold(
+      title: 'المحصل السريع',
+      subtitle: 'بحث فوري وتحصيل بلمسة واحدة',
+      actions: <Widget>[
+        AppIconButton(
+          tooltip: 'تحديث',
+          onPressed: cubit.loadUnpaid,
+          icon: Icons.refresh_rounded,
+          size: 38,
+        ),
+      ],
+      child: SafeArea(
+        top: false,
+        child: AppReveal(
+          child: BlocBuilder<QuickCollectorCubit, QuickCollectorState>(
+            builder: (context, state) {
             final invoices = state.visibleInvoices;
             final overdueCount = state.invoices
                 .where((i) => i.isOverdue && i.status.isOpenForCollection)
@@ -129,7 +135,8 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
                 Expanded(child: _buildList(context, cubit, state, invoices)),
               ],
             );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -234,13 +241,17 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
               padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Text(
                 'تصفية بالمربع',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.filter_alt_off_outlined),
-              title: const Text('كل المربعات'),
-              onTap: () => Navigator.of(sheetContext).pop(0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: AppFilterOptionTile(
+                label: 'كل المربعات',
+                icon: Icons.filter_alt_off_outlined,
+                selected: state.selectedSquareId == null,
+                onTap: () => Navigator.of(sheetContext).pop(0),
+              ),
             ),
             const Divider(height: 1),
             if (state.loadingSquares)
@@ -252,20 +263,17 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   itemCount: state.squares.length,
                   itemBuilder: (context, index) {
                     final square = state.squares[index];
-                    return ListTile(
-                      leading: Icon(
-                        state.selectedSquareId == square.id
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(square.name),
-                      subtitle: square.subscribersCount != null
-                          ? Text('${square.subscribersCount} مشترك')
-                          : null,
+                    return AppFilterOptionTile(
+                      label: square.name,
+                      icon: Icons.grid_view_rounded,
+                      meta: square.subscribersCount == null
+                          ? null
+                          : '${square.subscribersCount} مشترك',
+                      selected: state.selectedSquareId == square.id,
                       onTap: () => Navigator.of(sheetContext).pop(square.id),
                     );
                   },
@@ -357,19 +365,21 @@ class _CollectorCard extends StatelessWidget {
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Text(
                 invoice.beneficiaryName,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
               const SizedBox(height: 2),
               Text(
                 'فاتورة ${invoice.billNumber} • ${invoice.status.label}',
-                style: const TextStyle(fontSize: 12, color: AppColors.neutral),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 14),
               _DetailRow(label: 'إجمالي الفاتورة', value: CurrencyFormatter.withLabel(invoice.totalAmount)),
@@ -385,14 +395,14 @@ class _CollectorCard extends StatelessWidget {
                 _DetailRow(label: 'المسدد', value: CurrencyFormatter.withLabel(invoice.amountPaid)),
               _DetailRow(label: 'صافي المستحق', value: CurrencyFormatter.debt(due), bold: true),
               const SizedBox(height: 16),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.success),
+              AppPrimaryButton(
+                label: 'تحصيل ${CurrencyFormatter.amount(due)} ريال',
+                icon: Icons.payments_outlined,
+                height: 48,
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
                   onCollect();
                 },
-                icon: const Icon(Icons.payments_outlined),
-                label: Text('تحصيل ${CurrencyFormatter.amount(due)} ريال'),
               ),
             ],
           ),

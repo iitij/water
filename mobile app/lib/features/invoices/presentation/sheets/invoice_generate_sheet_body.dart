@@ -17,11 +17,45 @@ class _PickerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    final theme = Theme.of(context);
+    return InkWell(
       onTap: onTap,
-      leading: AppGlyph(icon: icon, tone: color, size: 40),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            AppGlyph(icon: icon, tone: color, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -119,17 +153,21 @@ class _GenerateSheetBody extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
               child: Row(
                 children: <Widget>[
-                  Icon(chrome.icon, color: chrome.color),
-                  const SizedBox(width: 8),
+                  AppGlyph(icon: chrome.icon, tone: chrome.color, size: 36),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       chrome.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
-                  IconButton(
+                  AppIconButton(
+                    tooltip: 'إغلاق',
+                    size: 38,
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close),
+                    icon: Icons.close_rounded,
                   ),
                 ],
               ),
@@ -247,22 +285,14 @@ class _GenerateSubmitBar extends StatelessWidget {
               text: blocking,
             ),
           ),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: chrome.color,
-            minimumSize: const Size(0, 46),
-          ),
+        AppPrimaryButton(
+          label: chrome.submitLabel,
+          icon: Icons.bolt_rounded,
+          height: 48,
+          loading: state.submitting,
           onPressed: (state.canSubmit && blocking == null && !state.submitting)
               ? onSubmit
               : null,
-          icon: state.submitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.bolt),
-          label: Text(chrome.submitLabel),
         ),
       ],
     );

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -68,6 +69,8 @@ class CollectPaymentForm extends StatelessWidget {
           const SizedBox(height: 10),
           ReasonField(cubit: cubit),
           const SizedBox(height: 10),
+          NotesField(cubit: cubit),
+          const SizedBox(height: 10),
           PaymentDateField(state: state, cubit: cubit),
           const SizedBox(height: 12),
           AllocationPreviewCard(state: state),
@@ -111,7 +114,9 @@ class DueHeaderCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   state.subscriberName ?? '—',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
               if (invoice != null)
@@ -122,27 +127,31 @@ class DueHeaderCard extends StatelessWidget {
             ],
           ),
           if (invoice != null)
-            Text(
-              '${invoice!.billNumber} • ${DateFormat.range(invoice!.periodStart, invoice!.periodEnd)}',
-              style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '${invoice!.billNumber} • ${DateFormat.range(invoice!.periodStart, invoice!.periodEnd)}',
+                style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+              ),
             ),
           if (state.loadingInvoices)
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: ShimmerSkeleton(height: 4),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
-              const Expanded(
-                child: Text('المطلوب تحصيله', style: TextStyle(fontSize: 12)),
-              ),
+              const Expanded(child: Text('المطلوب تحصيله', style: TextStyle(fontSize: 12))),
               Text(
                 CurrencyFormatter.debt(state.dueAmount),
-                style: const TextStyle(
-                  fontSize: 15,
+                style: TextStyle(
+                  fontSize: 22,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.danger,
+                  height: 1.15,
+                  letterSpacing: -.4,
+                  color: AppSemantic.resolve(context, AppColors.danger),
                 ),
               ),
             ],
@@ -150,9 +159,16 @@ class DueHeaderCard extends StatelessWidget {
           if (invoice != null && invoice!.previousBalance > 0)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'يشمل ${CurrencyFormatter.withLabel(invoice!.previousBalance)} متأخرات سابقة',
-                style: const TextStyle(fontSize: 11, color: AppColors.warning),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.warning_amber_rounded, size: 13, color: AppSemantic.resolve(context, AppColors.warning)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'يشمل ${CurrencyFormatter.withLabel(invoice!.previousBalance)} متأخرات سابقة',
+                    style: TextStyle(fontSize: 11, color: AppSemantic.resolve(context, AppColors.warning)),
+                  ),
+                ],
               ),
             ),
           if (state.invoiceId == null)
@@ -388,6 +404,36 @@ class _ReasonFieldState extends State<ReasonField> {
       );
 }
 
+/// حقل `notes` متعدد الأسطر — الحقل التاسع في مواصفة سند القبض
+/// (`S-PAY-02` حقل 9: reason + notes) ويظهر في تبويب بيانات السند.
+class NotesField extends StatefulWidget {
+  const NotesField({super.key, required this.cubit});
+
+  final CollectPaymentCubit cubit;
+
+  @override
+  State<NotesField> createState() => _NotesFieldState();
+}
+
+class _NotesFieldState extends State<NotesField> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppTextField(
+        controller: _controller,
+        label: 'ملاحظات',
+        hint: 'ملاحظات إضافية تُحفظ مع السند (اختياري)',
+        maxLines: 3,
+        onChanged: widget.cubit.setNotes,
+      );
+}
+
 class PaymentDateField extends StatelessWidget {
   const PaymentDateField({super.key, required this.state, required this.cubit});
 
@@ -569,24 +615,14 @@ class CollectSubmitButton extends StatelessWidget {
               text: 'أدخل رقم الحوالة/الشيك للمتابعة.',
             ),
           ),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(0, 46),
-            backgroundColor: AppColors.success,
-          ),
+        AppPrimaryButton(
+          label: state.amount > 0
+              ? 'تحصيل ${CurrencyFormatter.amount(state.amount)} ريال'
+              : 'تحصيل الدفعة',
+          icon: Icons.check_circle_outline,
+          height: 48,
+          loading: state.submitting,
           onPressed: state.submitting ? null : () => _submit(context),
-          icon: state.submitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.check_circle_outline),
-          label: Text(
-            state.amount > 0
-                ? 'تحصيل ${CurrencyFormatter.amount(state.amount)} ريال'
-                : 'تحصيل الدفعة',
-          ),
         ),
       ],
     );

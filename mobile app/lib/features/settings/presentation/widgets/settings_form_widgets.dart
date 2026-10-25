@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../admin_shared/presentation/theme/admin_palette.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 
 class SettingsSaveBar extends StatelessWidget {
@@ -19,20 +20,12 @@ class SettingsSaveBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: FilledButton.icon(
+      child: AppPrimaryButton(
         onPressed: enabled && !isSaving ? onSave : null,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          backgroundColor: AdminPalette.primary,
-        ),
-        icon: isSaving
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-            : const Icon(Icons.save_outlined),
-        label: Text(isSaving ? 'جارٍ الحفظ...' : 'حفظ الإعدادات وتحديث التطبيق'),
+        loading: isSaving,
+        height: 52,
+        icon: Icons.save_outlined,
+        label: isSaving ? 'جارٍ الحفظ...' : 'حفظ الإعدادات وتحديث التطبيق',
       ),
     );
   }
@@ -122,11 +115,11 @@ class SettingsSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AdminCard(
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AdminSectionHeader(title: title, subtitle: subtitle),
+          SectionHeading(title: title, subtitle: subtitle),
           const SizedBox(height: 12),
           ...children,
         ],

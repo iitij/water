@@ -6,10 +6,13 @@ import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/arabic_number_spellout.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
+import '../../../../core/widgets/finance_badges.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
 import '../widgets/payment_actions.dart';
@@ -95,27 +98,33 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+        padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Icon(
-              widget.queuedOffline ? Icons.cloud_upload_outlined : Icons.check_circle,
-              color: widget.queuedOffline ? AppColors.warning : AppColors.success,
-              size: 44,
+            Center(
+              child: AppGlyph(
+                icon: widget.queuedOffline
+                    ? Icons.cloud_upload_outlined
+                    : Icons.check_circle_rounded,
+                tone: widget.queuedOffline ? AppColors.warning : AppColors.success,
+                size: 62,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
               widget.queuedOffline ? 'الدفعة في طابور المزامنة' : 'تم التحصيل بنجاح',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 2),
             Text(
               payment.receiptNumber.isEmpty ? 'سند محلي — يُرقَّم عند المزامنة' : 'سند قبض ${payment.receiptNumber}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: AppColors.neutral),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 14),
             Container(
@@ -127,9 +136,15 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
               ),
               child: Column(
                 children: <Widget>[
-                  Text(
+                  LtrNumberText(
                     CurrencyFormatter.withLabel(payment.amount),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      letterSpacing: -.4,
+                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -185,49 +200,52 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppSecondaryButton(
+                    label: 'طباعة',
+                    icon: Icons.print_outlined,
+                    height: 44,
                     onPressed: () => printPaymentThermal(
                       context,
                       payment,
                       receiptData: receipt,
                       invoice: widget.invoice,
                     ),
-                    icon: const Icon(Icons.print_outlined),
-                    label: const Text('طباعة'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: AppSecondaryButton(
+                    label: 'PDF',
+                    icon: Icons.picture_as_pdf_outlined,
+                    height: 44,
                     onPressed: () => openPaymentPdfPreview(context, payment),
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('PDF'),
                   ),
                 ),
                 if (sl<FinanceConfigRepository>().cached.whatsappEnabled) ...<Widget>[
                   const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: AppSecondaryButton(
+                      label: 'واتساب',
+                      icon: Icons.chat_outlined,
+                      height: 44,
                       onPressed: () => sendPaymentWhatsapp(
                         context,
                         payment,
                         receiptData: receipt,
                         invoice: widget.invoice,
                       ),
-                      icon: const Icon(Icons.chat_outlined),
-                      label: const Text('واتساب'),
                     ),
                   ),
                 ],
               ],
             ),
             const SizedBox(height: 10),
-            FilledButton(
+            AppPrimaryButton(
+              label: 'تم',
               onPressed: () {
                 Navigator.of(context).pop();
                 widget.onDone?.call();
               },
-              child: const Text('تم'),
             ),
           ],
         ),

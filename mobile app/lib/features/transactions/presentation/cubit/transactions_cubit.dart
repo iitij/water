@@ -35,6 +35,8 @@ class TransactionsState extends Equatable {
     this.type,
     this.subscriberId,
     this.meterId,
+    this.fromDate,
+    this.toDate,
     this.error,
   });
 
@@ -46,6 +48,8 @@ class TransactionsState extends Equatable {
   final String? type; // payment|invoice|adjustment
   final int? subscriberId;
   final String? meterId; // 'general' أو id
+  final DateTime? fromDate;
+  final DateTime? toDate;
   final String? error;
 
   double get totalCredit => transactions.where((t) => t.isCredit).fold(0, (a, t) => a + t.amount);
@@ -67,6 +71,9 @@ class TransactionsState extends Equatable {
     bool clearSubscriber = false,
     String? meterId,
     bool clearMeter = false,
+    DateTime? fromDate,
+    DateTime? toDate,
+    bool clearDates = false,
     String? error,
   }) =>
       TransactionsState(
@@ -78,11 +85,25 @@ class TransactionsState extends Equatable {
         type: clearType ? null : (type ?? this.type),
         subscriberId: clearSubscriber ? null : (subscriberId ?? this.subscriberId),
         meterId: clearMeter ? null : (meterId ?? this.meterId),
+        fromDate: clearDates ? null : (fromDate ?? this.fromDate),
+        toDate: clearDates ? null : (toDate ?? this.toDate),
         error: error,
       );
 
   @override
-  List<Object?> get props => [loading, transactions, subscribers, meters, search, type, subscriberId, meterId, error];
+  List<Object?> get props => [
+        loading,
+        transactions,
+        subscribers,
+        meters,
+        search,
+        type,
+        subscriberId,
+        meterId,
+        fromDate,
+        toDate,
+        error,
+      ];
 }
 
 /// دفتر الأستاذ العام (SCR-22) — قراءة فقط، مع فلتر مشترك وفلتر عداد فعلي.
@@ -103,12 +124,22 @@ class TransactionsCubit extends Cubit<TransactionsState> {
         subscriberId: state.subscriberId,
         meterId: state.meterId,
         type: state.type,
+        fromDate: _formatDate(state.fromDate),
+        toDate: _formatDate(state.toDate),
       );
       final mergedMeters = _mergeMetersFromTransactions(state.meters, list);
       emit(state.copyWith(loading: false, transactions: list, meters: mergedMeters));
     } catch (e) {
       emit(state.copyWith(loading: false, error: friendlyError(e)));
     }
+  }
+
+  /// تنسيق التاريخ للخادم بصيغة `YYYY-MM-DD` (سلوك فلاتر Filament).
+  String? _formatDate(DateTime? date) {
+    if (date == null) return null;
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 
   Future<void> _loadLookups() async {
@@ -206,5 +237,16 @@ class TransactionsCubit extends Cubit<TransactionsState> {
   void filterMeter(String? m) {
     emit(m == null ? state.copyWith(clearMeter: true) : state.copyWith(meterId: m));
     load();
+  }
+
+  /// فلتر الفترة الزمنية (`R-11`: filters subscriber/meter/type/date).
+  /// تمرير قيمتين `null` يزيل الفلتر.
+  Future<void> filterDateRange(DateTime? from, DateTime? to) async {
+    if (from == null && to == null) {
+      emit(state.copyWith(clearDates: true));
+    } else {
+      emit(state.copyWith(fromDate: from, toDate: to));
+    }
+    await load();
   }
 }

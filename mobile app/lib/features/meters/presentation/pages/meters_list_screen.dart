@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
@@ -61,65 +64,81 @@ class _MetersListView extends StatelessWidget {
     final cubit = context.read<MetersCubit>();
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          title: BlocBuilder<MetersCubit, MetersState>(
-            buildWhen: (prev, curr) => prev.selectedIds.length != curr.selectedIds.length,
-            builder: (context, state) => Text(
-              state.isSelecting ? 'تم تحديد ${state.selectedIds.length} عداد' : 'إدارة العدادات',
-            ),
+      child: SubPageScaffold(
+        title: 'إدارة العدادات',
+        subtitle: 'متابعة الحالات والقراءات الميدانية',
+        actions: [
+          BlocBuilder<MetersCubit, MetersState>(
+            buildWhen: (prev, curr) =>
+                prev.selectedIds != curr.selectedIds ||
+                prev.isMutating != curr.isMutating ||
+                prev.meters.length != curr.meters.length,
+            builder: (context, state) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (state.meters.isNotEmpty)
+                    AppIconButton(
+                      size: 38,
+                      color: state.isSelecting
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      tooltip: state.isSelecting
+                          ? 'إلغاء التحديد'
+                          : 'تحديد الكل',
+                      onPressed: state.isMutating
+                          ? null
+                          : (state.isSelecting
+                                ? cubit.clearSelection
+                                : cubit.selectAllVisible),
+                      icon: state.isSelecting
+                          ? Icons.deselect
+                          : Icons.select_all,
+                    ),
+                  if (state.isSelecting)
+                    AppIconButton(
+                      size: 38,
+                      tooltip: 'حذف العدادات المحددة',
+                      onPressed: state.isMutating
+                          ? null
+                          : () => _confirmBulkDelete(
+                              context,
+                              cubit,
+                              state.selectedIds.length,
+                            ),
+                      icon: Icons.delete_sweep_outlined,
+                    ),
+                  if (!state.isSelecting && onOpenFieldReader != null)
+                    AppIconButton(
+                      size: 38,
+                      tooltip: 'القارئ الميداني',
+                      onPressed: onOpenFieldReader,
+                      icon: Icons.qr_code_scanner_rounded,
+                    ),
+                ],
+              );
+            },
           ),
-          actions: [
-            BlocBuilder<MetersCubit, MetersState>(
-              buildWhen: (prev, curr) =>
-                  prev.selectedIds != curr.selectedIds ||
-                  prev.isMutating != curr.isMutating ||
-                  prev.meters.length != curr.meters.length,
-              builder: (context, state) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (state.meters.isNotEmpty)
-                      IconButton(
-                        tooltip: state.isSelecting ? 'إلغاء التحديد' : 'تحديد الكل',
-                        onPressed: state.isMutating
-                            ? null
-                            : (state.isSelecting ? cubit.clearSelection : cubit.selectAllVisible),
-                        icon: Icon(state.isSelecting ? Icons.deselect : Icons.select_all),
-                      ),
-                    if (state.isSelecting)
-                      IconButton(
-                        tooltip: 'حذف العدادات المحددة',
-                        onPressed: state.isMutating
-                            ? null
-                            : () => _confirmBulkDelete(context, cubit, state.selectedIds.length),
-                        icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-                      ),
-                    if (!state.isSelecting && onOpenFieldReader != null)
-                      IconButton(
-                        tooltip: 'القارئ الميداني',
-                        onPressed: onOpenFieldReader,
-                        icon: const Icon(Icons.qr_code_scanner),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openForm(context),
-          icon: const Icon(Icons.add),
-          label: const Text('عداد جديد'),
-        ),
-        body: BlocConsumer<MetersCubit, MetersState>(
+          const SizedBox(width: 8),
+          AppIconButton(
+            icon: Icons.add_rounded,
+            tooltip: 'إضافة عداد جديد',
+            size: 38,
+            onPressed: () => _openForm(context),
+          ),
+        ],
+        child: BlocConsumer<MetersCubit, MetersState>(
           listenWhen: (previous, current) =>
-              (previous.errorMessage != current.errorMessage && current.errorMessage != null) ||
-              (previous.actionMessage != current.actionMessage && current.actionMessage != null),
+              (previous.errorMessage != current.errorMessage &&
+                  current.errorMessage != null) ||
+              (previous.actionMessage != current.actionMessage &&
+                  current.actionMessage != null),
           listener: (context, state) {
             final message = state.errorMessage ?? state.actionMessage;
             if (message != null) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(message)));
             }
           },
           builder: (context, state) {
@@ -128,42 +147,97 @@ class _MetersListView extends StatelessWidget {
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  SliverToBoxAdapter(child: _filters(context, state, cubit)),
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        _filters(context, state, cubit),
+                        Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                            16,
+                            8,
+                            16,
+                            8,
+                          ),
+                          child: AppStatStrip(
+                            items: [
+                              AppStatItem(
+                                label: 'إجمالي النتائج',
+                                value: '${state.meters.length}',
+                                icon: Icons.speed_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              AppStatItem(
+                                label: 'نشطة',
+                                value:
+                                    '${state.meters.where((m) => m.status.toLowerCase() == 'active').length}',
+                                icon: Icons.check_circle_outline_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              AppStatItem(
+                                label: 'غير نشطة',
+                                value:
+                                    '${state.meters.where((m) => m.status.toLowerCase() != 'active').length}',
+                                icon: Icons.pause_circle_outline_rounded,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   if (state.isSelecting)
                     SliverToBoxAdapter(
                       child: MaterialBanner(
                         content: Text('محدد ${state.selectedIds.length} عداد'),
                         actions: [
                           TextButton(
-                            onPressed: state.isMutating ? null : cubit.selectAllVisible,
+                            onPressed: state.isMutating
+                                ? null
+                                : cubit.selectAllVisible,
                             child: const Text('تحديد كل الظاهر'),
                           ),
                           TextButton(
-                            onPressed: state.isMutating ? null : cubit.clearSelection,
+                            onPressed: state.isMutating
+                                ? null
+                                : cubit.clearSelection,
                             child: const Text('إلغاء'),
                           ),
                           FilledButton.tonalIcon(
                             onPressed: state.isMutating
                                 ? null
-                                : () => _confirmBulkDelete(context, cubit, state.selectedIds.length),
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                : () => _confirmBulkDelete(
+                                    context,
+                                    cubit,
+                                    state.selectedIds.length,
+                                  ),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                            ),
                             label: const Text('حذف المحدد'),
                           ),
                         ],
                       ),
                     ),
-                  if (state.status == MetersLoadStatus.loading && state.meters.isEmpty)
+                  if (state.status == MetersLoadStatus.loading &&
+                      state.meters.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(child: CircularProgressIndicator()),
                     )
-                  else if (state.status == MetersLoadStatus.failure && state.meters.isEmpty)
+                  else if (state.status == MetersLoadStatus.failure &&
+                      state.meters.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: EmptyStateWidget(
                         icon: Icons.wifi_off_outlined,
                         title: 'تعذر تحميل العدادات',
-                        message: state.errorMessage ?? 'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
+                        message:
+                            state.errorMessage ??
+                            'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
                         action: TextButton.icon(
                           onPressed: cubit.load,
                           icon: const Icon(Icons.refresh),
@@ -177,7 +251,8 @@ class _MetersListView extends StatelessWidget {
                       child: EmptyStateWidget(
                         icon: Icons.filter_alt_off_rounded,
                         title: 'لا توجد عدادات مطابقة',
-                        message: 'غيّر البحث أو أزل الفلاتر، أو أضف عداداً جديداً.',
+                        message:
+                            'غيّر البحث أو أزل الفلاتر، أو أضف عداداً جديداً.',
                         action: TextButton.icon(
                           onPressed: () {
                             cubit.setQuery('');
@@ -193,7 +268,9 @@ class _MetersListView extends StatelessWidget {
                     SliverLayoutBuilder(
                       builder: (context, constraints) {
                         final width = constraints.crossAxisExtent;
-                        final columns = width >= 1000 ? 3 : (width >= 650 ? 2 : 1);
+                        final columns = width >= 1000
+                            ? 3
+                            : (width >= 650 ? 2 : 1);
                         if (columns == 1) {
                           return SliverList.builder(
                             itemCount: state.meters.length,
@@ -209,12 +286,13 @@ class _MetersListView extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(8, 4, 8, 92),
                           sliver: SliverGrid.builder(
                             itemCount: state.meters.length,
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: columns,
-                              crossAxisSpacing: 4,
-                              mainAxisSpacing: 4,
-                              mainAxisExtent: 245,
-                            ),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  crossAxisSpacing: 4,
+                                  mainAxisSpacing: 4,
+                                  mainAxisExtent: 245,
+                                ),
                             itemBuilder: (context, index) => _meterCard(
                               context,
                               state,
@@ -237,7 +315,8 @@ class _MetersListView extends StatelessWidget {
 
   Widget _filters(BuildContext context, MetersState state, MetersCubit cubit) {
     final activeCount =
-        (state.squareFilter == null ? 0 : 1) + (state.statusFilter == null ? 0 : 1);
+        (state.squareFilter == null ? 0 : 1) +
+        (state.statusFilter == null ? 0 : 1);
     final squareName = _meterSquareName(state);
 
     return Column(
@@ -285,7 +364,8 @@ class _MetersListView extends StatelessWidget {
               ),
             if (state.statusFilter != null)
               AppFilterChip(
-                label: 'الحالة · ${state.statusFilter == 'active' ? 'نشط' : 'غير نشط'}',
+                label:
+                    'الحالة · ${state.statusFilter == 'active' ? 'نشط' : 'غير نشط'}',
                 selected: true,
                 onRemove: () => cubit.setStatusFilter(null),
               ),
@@ -297,7 +377,8 @@ class _MetersListView extends StatelessWidget {
                   cubit.setStatusFilter(null);
                 },
         ),
-        if ((state.status == MetersLoadStatus.loading && state.meters.isNotEmpty) ||
+        if ((state.status == MetersLoadStatus.loading &&
+                state.meters.isNotEmpty) ||
             state.isMutating)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -340,10 +421,16 @@ class _MetersListView extends StatelessWidget {
             'هل تريد حذف العداد "${meter.uniqueCode}"؟ لا يمكن حذف عداد له سجل قراءات أو فواتير أو سندات محفوظة.',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
             FilledButton.tonal(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('حذف', style: TextStyle(color: Colors.redAccent)),
+              child: const Text(
+                'حذف',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         ),
@@ -369,10 +456,16 @@ class _MetersListView extends StatelessWidget {
             'سيتم حذف العدادات المحددة ($count) التي ليس لها سجل قراءات أو فواتير مرتبط، وتخطي المرتبط منها تلقائياً. هل تريد المتابعة؟',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
             FilledButton.tonal(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('حذف المحدد', style: TextStyle(color: Colors.redAccent)),
+              child: const Text(
+                'حذف المحدد',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         ),
@@ -397,10 +490,8 @@ class _MetersListView extends StatelessWidget {
   Future<void> _openForm(BuildContext context, [Meter? meter]) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => MeterFormScreen(
-          repository: metersRepository,
-          meter: meter,
-        ),
+        builder: (_) =>
+            MeterFormScreen(repository: metersRepository, meter: meter),
       ),
     );
     if (changed == true && context.mounted) {
@@ -456,9 +547,9 @@ class _MetersFilterSheetState extends State<_MetersFilterSheet> {
   }
 
   void _reset() => setState(() {
-        _square = null;
-        _status = null;
-      });
+    _square = null;
+    _status = null;
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -526,4 +617,3 @@ class _MetersFilterSheetState extends State<_MetersFilterSheet> {
     );
   }
 }
-

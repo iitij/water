@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
@@ -30,8 +34,9 @@ class GeneralSettingsResourceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!can(AdminPermissions.viewSettings)) {
-      return const Scaffold(
-        body: AdminErrorView(message: 'لا تملك صلاحية ViewAny:Setting لعرض الإعدادات.'),
+      return const SubPageScaffold(
+        title: 'إدارة الإعدادات العامة',
+        child: AdminErrorView(message: 'لا تملك صلاحية ViewAny:Setting لعرض الإعدادات.'),
       );
     }
     return BlocProvider(
@@ -69,60 +74,48 @@ class _GeneralSettingsView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: embedded ? null : AppBar(title: const Text('إدارة الإعدادات العامة')),
-          floatingActionButton: AdminPermissionGuard(
-            permission: AdminPermissions.createSettings,
-            can: can,
-            child: FloatingActionButton.extended(
-              key: const ValueKey('add-general-setting'),
-              onPressed: state.isSaving ? null : () => _openEditor(context),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('إضافة إعداد'),
+        final cubit = context.read<GeneralSettingsCubit>();
+        final selectionBar = _SelectionBar(
+          visible: state.selectedIds.isNotEmpty && can(AdminPermissions.deleteSettings),
+          selectedCount: state.selectedIds.length,
+          isSaving: state.isSaving,
+          onSelectAll: cubit.selectAllVisible,
+          onClear: cubit.clearSelection,
+          onDelete: () => _confirmBulkDelete(context, state.selectedIds.length),
+        );
+        final body = Column(
+          children: [
+            AppFilterBar(
+              key: const ValueKey('general-settings-search'),
+              query: state.query,
+              hint: 'بحث بالمفتاح أو الاسم أو القيمة',
+              onChanged: cubit.search,
+              onClear: () => cubit.search(''),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             ),
+            selectionBar,
+            Expanded(child: _buildList(context, state)),
+          ],
+        );
+        final fab = AdminPermissionGuard(
+          permission: AdminPermissions.createSettings,
+          can: can,
+          child: FloatingActionButton.extended(
+            key: const ValueKey('add-general-setting'),
+            onPressed: state.isSaving ? null : () => _openEditor(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('إضافة إعداد'),
           ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  key: const ValueKey('general-settings-search'),
-                  onChanged: context.read<GeneralSettingsCubit>().search,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search_rounded),
-                    labelText: 'بحث بالمفتاح أو الاسم أو القيمة',
-                  ),
-                ),
-              ),
-              if (state.selectedIds.isNotEmpty && can(AdminPermissions.deleteSettings))
-                MaterialBanner(
-                  content: Text('تم تحديد ${state.selectedIds.length} إعداد'),
-                  leading: const Icon(Icons.checklist_rounded),
-                  actions: [
-                    TextButton(
-                      onPressed: state.isSaving
-                          ? null
-                          : context.read<GeneralSettingsCubit>().selectAllVisible,
-                      child: const Text('تحديد الكل'),
-                    ),
-                    TextButton(
-                      onPressed: state.isSaving
-                          ? null
-                          : context.read<GeneralSettingsCubit>().clearSelection,
-                      child: const Text('إلغاء'),
-                    ),
-                    TextButton.icon(
-                      key: const ValueKey('bulk-delete-general-settings'),
-                      onPressed: state.isSaving
-                          ? null
-                          : () => _confirmBulkDelete(context, state.selectedIds.length),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('حذف المحدد'),
-                    ),
-                  ],
-                ),
-              Expanded(child: _buildList(context, state)),
-            ],
+        );
+        if (embedded) {
+          return Scaffold(body: body, floatingActionButton: fab);
+        }
+        return Scaffold(
+          floatingActionButton: fab,
+          body: SubPageScaffold(
+            title: 'إدارة الإعدادات العامة',
+            subtitle: 'المفاتيح المشتركة بين شاشات النظام',
+            child: body,
           ),
         );
       },
@@ -148,93 +141,71 @@ class _GeneralSettingsView extends StatelessWidget {
       onRefresh: () => context.read<GeneralSettingsCubit>().load(),
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
         itemCount: items.length,
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final item = items[index];
-          return AdminCard(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: can(AdminPermissions.deleteSettings)
-                  ? Checkbox(
-                      key: ValueKey('select-setting-${item.id}'),
-                      value: state.selectedIds.contains(item.id),
-                      onChanged: (val) => context
-                          .read<GeneralSettingsCubit>()
-                          .toggleSelected(item.id, val ?? false),
-                    )
-                  : AppGlyph(
-                      icon: item.type == 'image'
-                          ? Icons.image_outlined
-                          : Icons.text_fields_rounded,
-                      neutral: true,
-                    ),
-              title: Row(
-                children: [
-                  if (can(AdminPermissions.deleteSettings)) ...[
-                    AppGlyph(
-                      icon: item.type == 'image'
-                          ? Icons.image_outlined
-                          : Icons.text_fields_rounded,
-                      size: 32,
-                      neutral: true,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Text(
-                      item.label,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+          final canDelete = can(AdminPermissions.deleteSettings);
+          final isDeleting = state.deletingIds.contains(item.id);
+          return AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                if (canDelete) ...[
+                  Checkbox(
+                    key: ValueKey('select-setting-${item.id}'),
+                    value: state.selectedIds.contains(item.id),
+                    onChanged: (val) => context
+                        .read<GeneralSettingsCubit>()
+                        .toggleSelected(item.id, val ?? false),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                AppGlyph(
+                  icon: item.type == 'image' ? Icons.image_outlined : Icons.text_fields_rounded,
+                  neutral: true,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 3),
+                      LtrText(item.key, style: Theme.of(context).textTheme.labelSmall),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.type == 'image' ? (item.imagePath ?? 'لا توجد صورة') : item.value,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (isDeleting) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ],
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LtrText(item.key, style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.type == 'image' ? (item.imagePath ?? 'لا توجد صورة') : item.value,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-              trailing: Wrap(
-                children: [
-                  AdminPermissionGuard(
-                    permission: AdminPermissions.updateSettings,
-                    can: can,
-                    child: IconButton(
-                      key: ValueKey('edit-setting-${item.id}'),
-                      tooltip: 'تعديل',
-                      onPressed: () => _openEditor(context, item),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ),
-                  AdminPermissionGuard(
-                    permission: AdminPermissions.deleteSettings,
-                    can: can,
-                    child: IconButton(
-                      key: ValueKey('delete-setting-${item.id}'),
-                      tooltip: 'حذف',
-                      onPressed: state.deletingIds.contains(item.id)
-                          ? null
-                          : () => _confirmDelete(context, item),
-                      icon: state.deletingIds.contains(item.id)
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_outline_rounded),
-                    ),
-                  ),
-                ],
-              ),
+                _SettingRowMenu(
+                  item: item,
+                  canEdit: can(AdminPermissions.updateSettings),
+                  canDelete: canDelete,
+                  deleteDisabled: isDeleting || state.isSaving,
+                  onEdit: () => _openEditor(context, item),
+                  onDelete: () => _confirmDelete(context, item),
+                ),
+              ],
             ),
           );
         },
@@ -369,47 +340,150 @@ class _GeneralSettingsView extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context, GeneralSetting item) async {
     final cubit = context.read<GeneralSettingsCubit>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف الإعداد'),
-        content: Text('سيتم حذف «${item.label}» نهائياً. هل أنت متأكد؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'حذف الإعداد',
+      message: 'سيتم حذف «${item.label}» نهائياً. هل أنت متأكد؟',
+      confirmLabel: 'حذف',
+      destructive: true,
     );
-    if (confirmed ?? false) await cubit.delete(item);
+    if (confirmed) await cubit.delete(item);
   }
 
   Future<void> _confirmBulkDelete(BuildContext context, int count) async {
     final cubit = context.read<GeneralSettingsCubit>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('حذف جماعي للإعدادات'),
-        content: Text('سيتم حذف $count إعداد نهائياً. هل أنت متأكد؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('حذف الكل'),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmDialog.show(
+      context,
+      title: 'حذف جماعي للإعدادات',
+      message: 'سيتم حذف $count إعداد نهائياً. هل أنت متأكد؟',
+      confirmLabel: 'حذف الكل',
+      destructive: true,
     );
-    if (confirmed ?? false) {
+    if (confirmed) {
       final ok = await cubit.bulkDelete();
       if (ok && context.mounted) {
         showAdminSnackBar(context, 'تم حذف $count إعداد بنجاح.');
       }
     }
+  }
+}
+
+/// Quiet selection banner replacing the raw MaterialBanner: count on the
+/// start edge, the three selection actions on the end edge.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.visible,
+    required this.selectedCount,
+    required this.isSaving,
+    required this.onSelectAll,
+    required this.onClear,
+    required this.onDelete,
+  });
+
+  final bool visible;
+  final int selectedCount;
+  final bool isSaving;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Icon(Icons.checklist_rounded, size: 18, color: scheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'تم تحديد $selectedCount إعداد',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            TextButton(
+              onPressed: isSaving ? null : onSelectAll,
+              child: const Text('تحديد الكل'),
+            ),
+            TextButton(
+              onPressed: isSaving ? null : onClear,
+              child: const Text('إلغاء'),
+            ),
+            TextButton.icon(
+              key: const ValueKey('bulk-delete-general-settings'),
+              onPressed: isSaving ? null : onDelete,
+              style: TextButton.styleFrom(foregroundColor: scheme.error),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('حذف المحدد'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Row actions collapsed into one overflow menu (wave-1 quiet-card pattern).
+class _SettingRowMenu extends StatelessWidget {
+  const _SettingRowMenu({
+    required this.item,
+    required this.canEdit,
+    required this.canDelete,
+    required this.deleteDisabled,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final GeneralSetting item;
+  final bool canEdit;
+  final bool canDelete;
+  final bool deleteDisabled;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canEdit && !canDelete) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return PopupMenuButton<String>(
+      key: ValueKey('setting-actions-${item.id}'),
+      tooltip: 'خيارات الإعداد',
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+      onSelected: (value) {
+        if (value == 'edit') onEdit();
+        if (value == 'delete') onDelete();
+      },
+      itemBuilder: (context) => [
+        if (canEdit)
+          const PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('تعديل'),
+              ],
+            ),
+          ),
+        if (canDelete)
+          PopupMenuItem(
+            value: 'delete',
+            enabled: !deleteDisabled,
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline_rounded, size: 18, color: scheme.error),
+                const SizedBox(width: 10),
+                Text('حذف', style: TextStyle(color: scheme.error)),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }

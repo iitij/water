@@ -87,12 +87,18 @@ Do not call the app “all Laravel functions verified” until these are complet
 - Compare **each** Filament form field, filter, relation action, export, single
   action and bulk action with the Flutter UI and API, using seeded test data.
   Module availability is not proof of action-level equivalence. The current
-  source-level matrix lives in `docs/MOBILE_PARITY_AUDIT_AR.md`; the remaining
-  action-level gaps it lists are tariff bulk restore/force-delete, meter-owner
-  transfer, and the Filament "save and add meter/subscription fee" chains.
-- Resolve meter-owner transfer: the mobile meter form currently disables owner
-  changes even though the current API accepts `subscriber_id` updates. Review
-  balance/history isolation before enabling financial ownership changes.
+  source-level matrix lives in `docs/MOBILE_PARITY_AUDIT_AR.md`.
+- Action-level gaps **closed against the master plan** (this change): payment
+  `notes` field in the shared collect form (S-PAY-02 field 9), payment edit
+  action (`/payments/:id/edit`, S-PAY-01), ledger date-range filter (R-11),
+  roles bulk delete (S-ROL-01), discard-for-failed sync items (ch 26.2),
+  meter form «حفظ وإضافة عداد آخر», and subscription-fee dialog
+  «حفظ وإضافة أخرى» — the Filament create-and-create-another chains.
+- Deliberately deferred (need product/owner decision, not silent enablement):
+  tariff bulk restore/force-delete, and meter-owner transfer — the mobile meter
+  form intentionally disables owner changes even though the current API accepts
+  `subscriber_id` updates. Review balance/history isolation before enabling
+  financial ownership changes.
 - Consolidate the shared auth queue, field SQLite queue and finance queue.
   The home summary intentionally reports **only `SyncQueueManager`**, not all
   three stores. Network availability does not prove server reachability; the UI

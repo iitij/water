@@ -4,14 +4,18 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/fouad/api_client.dart';
-import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import '../../../invoices/presentation/sheets/generate_invoice_sheets.dart';
@@ -200,46 +204,60 @@ class _Subscriber360View extends StatelessWidget {
       builder: (context, state) {
         final detail = state.detail;
         final activeSubscriber = detail?.subscriber ?? subscriber;
+        final scheme = Theme.of(context).colorScheme;
         return DefaultTabController(
           length: 6,
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text(activeSubscriber.name),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.payments_outlined),
-                  tooltip: 'تحصيل دفعة',
-                  onPressed: () => _collect(context, activeSubscriber),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'تعديل المشترك',
-                  onPressed: () => _editSubscriber(context, activeSubscriber),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'حذف المشترك',
-                  onPressed: () => _deleteSubscriber(context, activeSubscriber),
-                ),
-              ],
-              bottom: const TabBar(
-                isScrollable: true,
-                tabs: [
-                  Tab(icon: Icon(Icons.speed), text: 'العدادات'),
-                  Tab(icon: Icon(Icons.receipt_long), text: 'الفواتير'),
-                  Tab(icon: Icon(Icons.payments), text: 'المدفوعات'),
-                  Tab(icon: Icon(Icons.card_membership), text: 'رسوم الاشتراك'),
-                  Tab(icon: Icon(Icons.local_shipping), text: 'طلبات الوايت'),
-                  Tab(icon: Icon(Icons.account_balance), text: 'كشف الحساب'),
-                ],
+          child: SubPageScaffold(
+            title: activeSubscriber.name,
+            subtitle: 'الملف المالي الشامل 360°',
+            actions: [
+              AppIconButton(
+                icon: Icons.payments_outlined,
+                tooltip: 'تحصيل دفعة',
+                size: 38,
+                onPressed: () => _collect(context, activeSubscriber),
               ),
-            ),
-            body: state.loading
-                ? const Center(child: CircularProgressIndicator())
+              AppIconButton(
+                icon: Icons.edit_outlined,
+                tooltip: 'تعديل المشترك',
+                size: 38,
+                onPressed: () => _editSubscriber(context, activeSubscriber),
+              ),
+              AppIconButton(
+                icon: Icons.delete_outline,
+                tooltip: 'حذف المشترك',
+                size: 38,
+                onPressed: () => _deleteSubscriber(context, activeSubscriber),
+              ),
+            ],
+            child: state.loading
+                ? const AppLoader()
                 : detail == null
-                    ? EmptyState(message: state.error ?? 'تعذر تحميل الملف')
+                    ? AdminEmptyView(
+                        title: 'تعذر تحميل الملف',
+                        message: state.error,
+                        icon: Icons.error_outline_rounded,
+                      )
                     : Column(children: [
                         _FinancialSummaryHeader(summary: detail.summary),
+                        Material(
+                          color: scheme.surface,
+                          child: TabBar(
+                            isScrollable: true,
+                            tabAlignment: TabAlignment.start,
+                            labelColor: scheme.primary,
+                            unselectedLabelColor: scheme.onSurfaceVariant,
+                            indicatorColor: scheme.primary,
+                            tabs: const [
+                              Tab(icon: Icon(Icons.speed), text: 'العدادات'),
+                              Tab(icon: Icon(Icons.receipt_long), text: 'الفواتير'),
+                              Tab(icon: Icon(Icons.payments), text: 'المدفوعات'),
+                              Tab(icon: Icon(Icons.card_membership), text: 'رسوم الاشتراك'),
+                              Tab(icon: Icon(Icons.local_shipping), text: 'طلبات الوايت'),
+                              Tab(icon: Icon(Icons.account_balance), text: 'كشف الحساب'),
+                            ],
+                          ),
+                        ),
                         Expanded(
                           child: TabBarView(children: [
                             _MetersTab(
@@ -270,54 +288,101 @@ class _Subscriber360View extends StatelessWidget {
 }
 
 /// لوحة الملخص المالي: فصل صريح بين الرصيد العام وأرصدة كل عداد (قاعدة العزل).
+/// الرصيد العام هو رقم الصفحة البطل على لوحة الحبر الوحيدة، والبقية أرقام مساندة.
 class _FinancialSummaryHeader extends StatelessWidget {
   const _FinancialSummaryHeader({required this.summary});
   final FinancialSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.primaryDark,
-      padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 12, runSpacing: 8, children: [
-          _SummaryChip(label: 'إجمالي دائن (عام + عدادات)', value: summary.totalCredit, color: AppColors.success),
-          _SummaryChip(label: 'إجمالي مدين / متأخرات', value: -summary.totalDebit, color: AppColors.danger),
-          _SummaryChip(label: 'الرصيد العام للمشترك (اشتراك/وايت)', value: summary.generalBalance, color: Colors.lightBlueAccent),
-          _SummaryChip(label: 'متبقي رسوم اشتراك غير مفوترة', value: -summary.remainingSubscriptionFee, color: AppColors.brandAmber),
-        ]),
-        if (summary.meterBalances.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          const Text('أرصدة العدادات المعزولة:', style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            for (final m in summary.meterBalances)
-              Chip(
-                avatar: const Icon(Icons.speed, size: 16),
-                label: Text('${m.title} | دائن ${m.credit.toStringAsFixed(0)} / مدين ${m.debit.toStringAsFixed(0)}'),
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 4),
+      child: AppHeroPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'الرصيد العام للمشترك (اشتراك/وايت)',
+              style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted),
+            ),
+            const Gap(4),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                CurrencyFormatter.format(summary.generalBalance),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: AppColors.onPanel,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                ),
               ),
-          ]),
-        ],
-      ]),
+            ),
+            const Gap(12),
+            Wrap(
+              spacing: 20,
+              runSpacing: 10,
+              children: [
+                _HeroStat(label: 'إجمالي دائن (عام + عدادات)', value: summary.totalCredit),
+                _HeroStat(label: 'إجمالي مدين / متأخرات', value: -summary.totalDebit),
+                _HeroStat(label: 'متبقي رسوم اشتراك غير مفوترة', value: -summary.remainingSubscriptionFee),
+              ],
+            ),
+            if (summary.meterBalances.isNotEmpty) ...[
+              const Gap(12),
+              Text(
+                'أرصدة العدادات المعزولة:',
+                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelSoft),
+              ),
+              const Gap(8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final m in summary.meterBalances)
+                    HeroMetaChip(
+                      icon: Icons.speed_rounded,
+                      label: '${m.title} | دائن ${m.credit.toStringAsFixed(0)} / مدين ${m.debit.toStringAsFixed(0)}',
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _SummaryChip extends StatelessWidget {
-  const _SummaryChip({required this.label, required this.value, required this.color});
+/// رقم مساند داخل لوحة الحبر: تسمية صامتة + قيمة بيضاء بأرقام جدولية.
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({required this.label, required this.value});
   final String label;
   final double value;
-  final Color color;
+
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted)),
+        const Gap(2),
         Directionality(
           textDirection: TextDirection.ltr,
-          child: Text(CurrencyFormatter.format(value),
-              style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+          child: Text(
+            CurrencyFormatter.format(value),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.onPanel,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
         ),
-      ]);
+      ],
+    );
+  }
 }
 
 // ─── التبويب 1: العدادات ───

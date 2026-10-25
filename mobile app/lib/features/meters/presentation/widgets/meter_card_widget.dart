@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/finance_badges.dart';
 import '../../data/models/meter.dart';
 
+/// بطاقة عداد — تصميم v3:
+///  - اسم المشترك أولاً وكود العداد سطر ثانوي هادئ.
+///  - سطر معلومات واحد بلا إطارات (المربع · آخر قراءة · الرصيد).
+///  - زر «تسجيل قراءة» أساسي + قائمة خيارات (تعديل/حذف) بدل أيقونات متناثرة.
 class MeterCardWidget extends StatelessWidget {
   const MeterCardWidget({
     required this.meter,
@@ -32,14 +37,14 @@ class MeterCardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final hasMenu = onEdit != null || onDelete != null;
+
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
       child: AppCard(
         padding: EdgeInsets.zero,
         borderColor: selected ? colorScheme.primary.withValues(alpha: .45) : null,
-        color: selected
-            ? colorScheme.primary.withValues(alpha: .04)
-            : null,
+        color: selected ? colorScheme.primary.withValues(alpha: .04) : null,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.xl),
           onTap: selectionMode && onSelectChanged != null
@@ -48,135 +53,190 @@ class MeterCardWidget extends StatelessWidget {
           onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.all(13),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (onSelectChanged != null)
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: Checkbox(
-                            value: selected,
-                            onChanged: onSelectChanged,
-                          ),
-                        ),
-                      if (meter.pathNumber != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: meter.isPathMatch
-                                ? colorScheme.primary
-                                : colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                          ),
-                          child: Text(
-                            'مسار #${meter.pathNumber}',
-                            style: TextStyle(
-                              color: meter.isPathMatch
-                                  ? colorScheme.onPrimary
-                                  : colorScheme.onPrimaryContainer,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── الترويسة: المشترك + الحالة ──
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (onSelectChanged != null) ...[
+                      SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: Checkbox(value: selected, onChanged: onSelectChanged),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            meter.subscriberName?.isNotEmpty == true
+                                ? meter.subscriberName!
+                                : 'مشترك غير محدد',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14.5,
                               fontWeight: FontWeight.w600,
+                              height: 1.3,
                             ),
                           ),
-                        ),
-                      _StatusChip(isActive: meter.isActive),
-                    ],
-                  ),
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(
-                      meter.uniqueCode,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: .2,
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: LtrNumberText(
+                                  meter.uniqueCode,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: .3,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              if (meter.pathNumber != null) ...[
+                                const SizedBox(width: 6),
+                                Icon(
+                                  Icons.alt_route_rounded,
+                                  size: 12,
+                                  color: meter.isPathMatch
+                                      ? colorScheme.primary
+                                      : colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'مسار ${meter.pathNumber}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight:
+                                        meter.isPathMatch ? FontWeight.w600 : FontWeight.w500,
+                                    color: meter.isPathMatch
+                                        ? colorScheme.primary
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                meter.subscriberName?.isNotEmpty == true
-                    ? meter.subscriberName!
-                    : 'مشترك غير محدد',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              if (meter.tenantName?.isNotEmpty == true) ...[
-                const SizedBox(height: 3),
-                Text(
-                  'المستأجر: ${meter.tenantName}',
-                  style: TextStyle(color: colorScheme.tertiary),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 16,
-                runSpacing: 6,
-                children: [
-                  if (meter.squareName?.isNotEmpty == true)
-                    _InfoText(icon: Icons.location_on_outlined, text: meter.squareName!),
-                  if (meter.pathNumber != null)
-                    _InfoText(icon: Icons.route_outlined, text: 'المسار ${meter.pathNumber}'),
-                  _InfoText(
-                    icon: Icons.speed_outlined,
-                    text: 'آخر قراءة ${_number(meter.lastReading)}',
-                    ltr: true,
-                  ),
-                  _InfoText(
-                    icon: Icons.account_balance_wallet_outlined,
-                    text: 'الرصيد ${_number(meter.balance)} ريال',
-                    ltr: true,
-                  ),
-                ],
-              ),
-              if (onRecordReading != null || onEdit != null || onDelete != null) ...[
-                const SizedBox(height: 8),
-                const Divider(height: 1),
-                Row(
-                  children: [
-                    if (onRecordReading != null)
-                      Expanded(
-                        child: TextButton.icon(
-                          onPressed: onRecordReading,
-                          icon: const Icon(Icons.add_chart_outlined),
-                          label: const Text('تسجيل قراءة'),
-                        ),
-                      )
-                    else
-                      const Spacer(),
-                    if (onEdit != null)
-                      IconButton(
-                        tooltip: 'تعديل العداد',
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit_outlined),
+                        ],
                       ),
-                    if (onDelete != null)
-                      IconButton(
-                        tooltip: 'حذف العداد',
-                        onPressed: onDelete,
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatusDot(isActive: meter.isActive),
                   ],
                 ),
+                if (meter.tenantName?.isNotEmpty == true) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'المستأجر: ${meter.tenantName}',
+                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+                const SizedBox(height: 10),
+
+                // ── سطر المعلومات الصامت ──
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (meter.squareName?.isNotEmpty == true)
+                      _QuietMeta(
+                        icon: Icons.location_on_outlined,
+                        text: meter.squareName!,
+                      ),
+                    _QuietMeta(
+                      icon: Icons.speed_outlined,
+                      text: 'آخر قراءة ${_number(meter.lastReading)}',
+                      ltr: true,
+                    ),
+                    _QuietMeta(
+                      icon: Icons.account_balance_wallet_outlined,
+                      text: 'الرصيد ${_number(meter.balance)} ريال',
+                      ltr: true,
+                      tone: meter.balance < 0 ? AppColors.danger : AppColors.success,
+                    ),
+                  ],
+                ),
+
+                // ── الإجراءات ──
+                if (onRecordReading != null || hasMenu) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (onRecordReading != null)
+                        Expanded(
+                          child: SizedBox(
+                            height: 36,
+                            child: FilledButton.tonalIcon(
+                              onPressed: onRecordReading,
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                minimumSize: const Size(0, 36),
+                                textStyle: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              icon: const Icon(Icons.add_chart_outlined, size: 16),
+                              label: const Text('تسجيل قراءة'),
+                            ),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      if (hasMenu) ...[
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          tooltip: 'خيارات العداد',
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.lg),
+                          ),
+                          onSelected: (value) {
+                            if (value == 'edit') onEdit?.call();
+                            if (value == 'delete') onDelete?.call();
+                          },
+                          itemBuilder: (context) => [
+                            if (onEdit != null)
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_outlined, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('تعديل العداد'),
+                                  ],
+                                ),
+                              ),
+                            if (onDelete != null)
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                    SizedBox(width: 10),
+                                    Text('حذف العداد', style: TextStyle(color: AppColors.danger)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            size: 20,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -187,55 +247,74 @@ class MeterCardWidget extends StatelessWidget {
       );
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.isActive});
+/// حالة العداد كنقطة ملوّنة + كلمة — بلا صندوق مُحيّط.
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.isActive});
 
   final bool isActive;
 
   @override
   Widget build(BuildContext context) {
     final color = isActive ? AppColors.success : AppColors.neutral;
+    final resolved = AppSemantic.resolve(context, color);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppTint.soft(color, context),
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: color.withValues(alpha: .2)),
       ),
-      child: Text(
-        isActive ? 'نشط' : 'غير نشط',
-        style: TextStyle(
-          color: AppSemantic.resolve(context, color),
-          fontSize: 10.5,
-          height: 1.2,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: resolved, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isActive ? 'نشط' : 'غير نشط',
+            style: TextStyle(
+              color: resolved,
+              fontSize: 10.5,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _InfoText extends StatelessWidget {
-  const _InfoText({required this.icon, required this.text, this.ltr = false});
+/// عنصر معلومات صامت — أيقونة + نص بلا إطار.
+class _QuietMeta extends StatelessWidget {
+  const _QuietMeta({required this.icon, required this.text, this.tone, this.ltr = false});
 
   final IconData icon;
   final String text;
+  final Color? tone;
   final bool ltr;
 
   @override
   Widget build(BuildContext context) {
+    final color =
+        tone == null ? Theme.of(context).colorScheme.onSurfaceVariant : AppSemantic.resolve(context, tone!);
+    final style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: color,
+      height: 1.3,
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+        Icon(icon, size: 13, color: color),
         const SizedBox(width: 4),
         if (ltr)
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-          )
+          Directionality(textDirection: TextDirection.ltr, child: Text(text, style: style))
         else
-          Text(text, style: Theme.of(context).textTheme.bodySmall),
+          Text(text, style: style),
       ],
     );
   }

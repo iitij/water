@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/tariff_model.dart';
@@ -131,17 +133,21 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.sell_outlined, color: AppColors.primary),
-                  const SizedBox(width: 8),
+                  const AppGlyph(icon: Icons.sell_outlined, tone: AppColors.primary, size: 36),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.tariff == null ? 'تسعيرة جديدة' : 'تعديل التسعيرة',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
-                  IconButton(
+                  AppIconButton(
+                    tooltip: 'إغلاق',
+                    size: 38,
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close),
+                    icon: Icons.close_rounded,
                   ),
                 ],
               ),
@@ -170,14 +176,33 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                       helperText: 'يُستخدم في فوترة الاستهلاك تلقائياً (BillingService)',
                     ),
                     const SizedBox(height: 8),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _isActive,
-                      onChanged: (value) => setState(() => _isActive = value),
-                      title: const Text('مفعّلة', style: TextStyle(fontSize: 13)),
-                      subtitle: const Text(
-                        'تسعيرة واحدة فقط تكون نشطة للسعر الافتراضي',
-                        style: TextStyle(fontSize: 11),
+                    InkWell(
+                      onTap: () => setState(() => _isActive = !_isActive),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Text('مفعّلة', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                                  SizedBox(height: 1),
+                                  Text(
+                                    'تسعيرة واحدة فقط تكون نشطة للسعر الافتراضي',
+                                    style: TextStyle(fontSize: 11, color: AppColors.neutral),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: _isActive,
+                              onChanged: (value) => setState(() => _isActive = value),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -226,16 +251,11 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    FilledButton.icon(
+                    AppPrimaryButton(
+                      label: widget.tariff == null ? 'إضافة التسعيرة' : 'حفظ التعديلات',
+                      icon: Icons.save_outlined,
+                      loading: saving,
                       onPressed: saving ? null : _submit,
-                      icon: saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save_outlined),
-                      label: Text(widget.tariff == null ? 'إضافة التسعيرة' : 'حفظ التعديلات'),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -358,25 +378,31 @@ class TariffCard extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else if (tariff.isTrashed)
-                    Row(
-                      children: <Widget>[
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'استعادة',
-                          onPressed: onRestore,
-                          icon: const Icon(Icons.restore, size: 18),
+                    PopupMenuButton<String>(
+                      tooltip: 'خيارات',
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
+                      onSelected: (value) {
+                        if (value == 'restore') onRestore?.call();
+                        if (value == 'force') onForceDelete?.call();
+                      },
+                      itemBuilder: (context) => <PopupMenuEntry<String>>[
+                        const PopupMenuItem<String>(
+                          value: 'restore',
+                          child: Text('استعادة'),
                         ),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'حذف نهائي',
-                          onPressed: onForceDelete,
-                          icon: const Icon(
-                            Icons.delete_forever_outlined,
-                            size: 18,
-                            color: AppColors.danger,
-                          ),
+                        const PopupMenuItem<String>(
+                          value: 'force',
+                          child: Text('حذف نهائي'),
                         ),
                       ],
+                      icon: const Icon(
+                        Icons.more_horiz_rounded,
+                        size: 18,
+                        color: AppColors.neutral,
+                      ),
                     )
                   else
                     Row(
@@ -389,19 +415,28 @@ class TariffCard extends StatelessWidget {
                             color: tariff.isActive ? AppColors.success : AppColors.neutral,
                           ),
                         ),
-                        if (onSoftDelete != null) ...<Widget>[
-                          const SizedBox(width: 4),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'نقل إلى سلة المحذوفات',
-                            onPressed: onSoftDelete,
+                        if (onSoftDelete != null)
+                          PopupMenuButton<String>(
+                            tooltip: 'خيارات',
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
+                            onSelected: (value) {
+                              if (value == 'trash') onSoftDelete?.call();
+                            },
+                            itemBuilder: (context) => <PopupMenuEntry<String>>[
+                              const PopupMenuItem<String>(
+                                value: 'trash',
+                                child: Text('نقل إلى سلة المحذوفات'),
+                              ),
+                            ],
                             icon: const Icon(
-                              Icons.delete_outline,
+                              Icons.more_horiz_rounded,
                               size: 18,
-                              color: AppColors.danger,
+                              color: AppColors.neutral,
                             ),
                           ),
-                        ],
                       ],
                     ),
                 ],

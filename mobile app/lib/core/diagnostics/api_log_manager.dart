@@ -22,9 +22,11 @@ class ApiLogManager extends ChangeNotifier {
   final StreamController<ApiLogEntry> _streamController =
       StreamController<ApiLogEntry>.broadcast();
 
-  bool _showFloatingPill = true;
+  bool _showFloatingPill = false;
 
   /// هل يظهر الزر العائم لسجلات الـ API فوق الشاشات للمتابعة اللحظية؟
+  /// معطّل افتراضياً — أداة تشخيص للمطوّر تُفعَّل من شاشة التشخيص فقط،
+  /// حتى لا تظهر شارة «API: n» حمراء فوق واجهات المستخدم النهائية.
   bool get showFloatingPill => _showFloatingPill;
 
   set showFloatingPill(bool value) {

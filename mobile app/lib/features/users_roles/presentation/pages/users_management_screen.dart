@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
@@ -55,28 +60,27 @@ class _UsersView extends StatelessWidget {
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('إدارة المستخدمين'),
-            actions: [
-              IconButton(
-                tooltip: 'تحديث',
-                onPressed: () => context.read<UsersCubit>().load(),
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          floatingActionButton: AdminPermissionGuard(
-            permission: AdminPermissions.createUsers,
-            can: can,
-            child: FloatingActionButton.extended(
-              key: const ValueKey('create-user'),
-              onPressed: state.isSaving ? null : () => _openUserEditor(context, state),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('إضافة مستخدم'),
+        return SubPageScaffold(
+          title: 'إدارة المستخدمين',
+          subtitle: 'الحسابات والأدوار وحالة الوصول',
+          actions: [
+            AppIconButton(
+              tooltip: 'تحديث',
+              onPressed: () => context.read<UsersCubit>().load(),
+              icon: Icons.refresh_rounded,
             ),
-          ),
-          body: Column(
+            AdminPermissionGuard(
+              permission: AdminPermissions.createUsers,
+              can: can,
+              child: AppIconButton(
+                key: const ValueKey('create-user'),
+                tooltip: 'إضافة مستخدم',
+                onPressed: state.isSaving ? null : () => _openUserEditor(context, state),
+                icon: Icons.person_add_alt_1_rounded,
+              ),
+            ),
+          ],
+          child: Column(
             children: [
               _UsersFilters(state: state),
               if (state.selectedIds.isNotEmpty && can(AdminPermissions.deleteAnyUsers))
@@ -102,84 +106,85 @@ class _UsersView extends StatelessWidget {
     final users = state.visibleUsers;
     if (users.isEmpty) return const AdminEmptyView(title: 'لا توجد حسابات مطابقة', icon: Icons.group_outlined);
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       itemCount: users.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final user = users[index];
         final isCurrent = user.id == currentUserId;
+        final deleting = state.deletingIds.contains(user.id);
         return AdminCard(
-          padding: EdgeInsets.zero,
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            leading: can(AdminPermissions.deleteUsers)
-                ? Checkbox(
-                    value: state.selectedIds.contains(user.id),
-                    onChanged: isCurrent
-                        ? null
-                        : (value) => context.read<UsersCubit>().toggleSelected(user.id, value ?? false),
-                  )
-                : AppPhotoAvatar(url: user.avatarUrl, size: 40),
-            title: Row(
-              children: [
-                if (can(AdminPermissions.deleteUsers)) ...[
-                  AppPhotoAvatar(url: user.avatarUrl, size: 36),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    isCurrent ? '${user.name} (أنت)' : user.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (can(AdminPermissions.deleteUsers)) ...[
+                Checkbox(
+                  value: state.selectedIds.contains(user.id),
+                  onChanged: isCurrent
+                      ? null
+                      : (value) => context.read<UsersCubit>().toggleSelected(user.id, value ?? false),
                 ),
+                const SizedBox(width: 2),
               ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LtrText(user.email, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 5,
+              AppPhotoAvatar(url: user.avatarUrl, size: 40),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final role in user.roles)
-                      AdminStatusBadge(label: _roleName(role), color: _roleColor(role)),
-                    Text('أضيف ${AdminFormat.date(user.createdAt)}'),
+                    Text(
+                      isCurrent ? '${user.name} (أنت)' : user.name,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    LtrText(user.email, style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        for (final role in user.roles)
+                          AdminStatusBadge(label: _roleName(role), color: _roleColor(role)),
+                        Text(
+                          'أضيف ${AdminFormat.date(user.createdAt)}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-            trailing: SizedBox(
-              width: 100,
-              child: Row(
-                children: [
-                  if (can(AdminPermissions.updateUsers))
-                    IconButton(
-                      key: ValueKey('edit-user-${user.id}'),
-                      tooltip: 'تعديل',
-                      onPressed: () => _openUserEditor(context, state, user),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  if (can(AdminPermissions.deleteUsers))
-                    IconButton(
-                      key: ValueKey('delete-user-${user.id}'),
-                      tooltip: isCurrent ? 'لا يمكن حذف حسابك' : 'حذف',
-                      onPressed: isCurrent || state.deletingIds.contains(user.id)
-                          ? null
-                          : () => _confirmDelete(context, user),
-                      icon: state.deletingIds.contains(user.id)
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_outline_rounded),
-                    ),
-                ],
               ),
-            ),
+              const SizedBox(width: 4),
+              if (can(AdminPermissions.updateUsers))
+                AppIconButton(
+                  key: ValueKey('edit-user-${user.id}'),
+                  tooltip: 'تعديل',
+                  onPressed: () => _openUserEditor(context, state, user),
+                  icon: Icons.edit_outlined,
+                  size: 38,
+                ),
+              if (can(AdminPermissions.deleteUsers)) ...[
+                const SizedBox(width: 6),
+                if (deleting)
+                  const SizedBox.square(
+                    dimension: 38,
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else
+                  AppIconButton(
+                    key: ValueKey('delete-user-${user.id}'),
+                    tooltip: isCurrent ? 'لا يمكن حذف حسابك' : 'حذف',
+                    onPressed: isCurrent ? null : () => _confirmDelete(context, user),
+                    icon: Icons.delete_outline_rounded,
+                    color: isCurrent ? null : Theme.of(context).colorScheme.error,
+                    size: 38,
+                  ),
+              ],
+            ],
           ),
         );
       },
@@ -408,18 +413,14 @@ class _UsersView extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context, SystemUser user) async {
     final cubit = context.read<UsersCubit>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف المستخدم'),
-        content: Text('هل تريد حذف حساب «${user.name}»؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حذف')),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'حذف المستخدم',
+      message: 'هل تريد حذف حساب «${user.name}»؟',
+      confirmLabel: 'حذف',
+      destructive: true,
     );
-    if (confirmed ?? false) await cubit.delete(user);
+    if (confirmed) await cubit.delete(user);
   }
 }
 
@@ -430,40 +431,48 @@ class _UsersFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roleFilter = AppFilterDropdown<String>(
+      value: state.roleFilter,
+      label: 'فلترة بالدور',
+      icon: Icons.badge_outlined,
+      items: [
+        const DropdownMenuItem<String>(child: Text('كل الأدوار')),
+        for (final role in state.availableRoles)
+          DropdownMenuItem<String>(value: role.name, child: LtrText(role.name)),
+      ],
+      onChanged: context.read<UsersCubit>().filterRole,
+    );
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 4),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final search = TextField(
-            key: const ValueKey('users-search'),
-            onChanged: context.read<UsersCubit>().search,
-            decoration: const InputDecoration(
-              labelText: 'بحث بالاسم أو البريد أو الدور',
-              prefixIcon: Icon(Icons.search_rounded),
-            ),
-          );
-          final filter = DropdownButtonFormField<String>(
-            key: ValueKey(state.roleFilter),
-            initialValue: state.roleFilter,
-            decoration: const InputDecoration(labelText: 'فلترة بالدور'),
-            items: [
-              const DropdownMenuItem(child: Text('كل الأدوار')),
-              for (final role in state.availableRoles)
-                DropdownMenuItem(value: role.name, child: LtrText(role.name)),
-            ],
-            onChanged: context.read<UsersCubit>().filterRole,
-          );
           if (constraints.maxWidth < 650) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [search, const SizedBox(height: 10), filter],
+              children: [
+                AppFilterBar(
+                  query: state.query,
+                  hint: 'بحث بالاسم أو البريد أو الدور',
+                  onChanged: context.read<UsersCubit>().search,
+                  padding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 8),
+                roleFilter,
+              ],
             );
           }
           return Row(
             children: [
-              Expanded(flex: 2, child: search),
+              Expanded(
+                child: AppFilterBar(
+                  query: state.query,
+                  hint: 'بحث بالاسم أو البريد أو الدور',
+                  onChanged: context.read<UsersCubit>().search,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: filter),
+              SizedBox(width: 230, child: roleFilter),
             ],
           );
         },
@@ -480,16 +489,36 @@ class _BulkDeleteBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialBanner(
-      content: Text('تم تحديد $count مستخدم'),
-      leading: const Icon(Icons.checklist_rounded),
-      actions: [
-        TextButton.icon(
-          onPressed: isBusy ? null : context.read<UsersCubit>().bulkDelete,
-          icon: const Icon(Icons.delete_outline_rounded),
-          label: const Text('حذف المحدد'),
-        ),
-      ],
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+      decoration: BoxDecoration(
+        color: AppColors.accentSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.checklist_rounded, size: 18, color: AppColors.accentStrong),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'تم تحديد $count مستخدم',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.inkSoft,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: isBusy ? null : context.read<UsersCubit>().bulkDelete,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('حذف المحدد'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          ),
+        ],
+      ),
     );
   }
 }

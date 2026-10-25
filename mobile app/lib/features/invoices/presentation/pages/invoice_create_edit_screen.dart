@@ -5,13 +5,16 @@ import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/finance_badges.dart';
-import '../../../../core/widgets/status_badge.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/finance_enums.dart';
@@ -140,95 +143,76 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
   Widget build(BuildContext context) {
     final gutter = context.gutter;
 
-    return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'تعديل فاتورة' : 'فاتورة يدوية')),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(gutter * 0.6),
-          child: Row(
-            children: <Widget>[
-              if (_error != null)
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
-                  ),
-                ),
-              if (_error != null) const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(isEditing ? 'حفظ التعديلات' : 'إصدار الفاتورة'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: Form(
+    return SubPageScaffold(
+      title: isEditing ? 'تعديل فاتورة' : 'فاتورة يدوية',
+      subtitle: isEditing ? 'تحديث بيانات الفاتورة والمبالغ' : 'إصدار فاتورة بمبالغ مدخلة يدوياً',
+      child: SafeArea(
+        top: false,
+        child: Form(
         key: _formKey,
         child: ListView(
           padding: EdgeInsets.all(gutter),
           children: <Widget>[
-            const _SectionTitle('بيانات الفاتورة'),
-            _SubscriberPicker(
-              initialId: _subscriberId,
-              initialName: widget.invoice?.subscriber?.name,
-              onSelected: (id) => setState(() => _subscriberId = id),
+            const SectionHeading(
+              title: 'بيانات الفاتورة',
+              icon: Icons.description_outlined,
             ),
-            const SizedBox(height: 12),
-            if (isEditing)
-              Row(
+            const SizedBox(height: 8),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Expanded(
-                    child: LtrNumberTextTile(
+                  _SubscriberPicker(
+                    initialId: _subscriberId,
+                    initialName: widget.invoice?.subscriber?.name,
+                    onSelected: (id) => setState(() => _subscriberId = id),
+                  ),
+                  const SizedBox(height: 12),
+                  if (isEditing) ...<Widget>[
+                    LtrNumberTextTile(
                       label: 'رقم الفاتورة',
                       value: widget.invoice!.billNumber,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _billDate ?? DateTime.now(),
-                          firstDate: DateTime(2015),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (picked != null) setState(() => _billDate = picked);
-                      },
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                      label: Text(DateFormat.day(_billDate)),
+                    const SizedBox(height: 10),
+                  ],
+                  AppSettingRow(
+                    icon: Icons.calendar_today_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                    title: 'تاريخ الفاتورة',
+                    showChevron: false,
+                    trailing: Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(
+                        DateFormat.day(_billDate),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
                     ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _billDate ?? DateTime.now(),
+                        firstDate: DateTime(2015),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) setState(() => _billDate = picked);
+                    },
                   ),
                 ],
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _billDate ?? DateTime.now(),
-                    firstDate: DateTime(2015),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                  );
-                  if (picked != null) setState(() => _billDate = picked);
-                },
-                icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                label: Text('تاريخ الفاتورة: ${DateFormat.day(_billDate)}'),
               ),
+            ),
             const SizedBox(height: 16),
-            const _SectionTitle('تفاصيل المبالغ'),
+            const SectionHeading(
+              title: 'تفاصيل المبالغ',
+              subtitle: 'الإجمالي يُحسب تلقائياً من الاستهلاك + الاشتراك + الوايت',
+              icon: Icons.calculate_outlined,
+            ),
+            const SizedBox(height: 8),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
             AppNumericField(
               controller: _consumption,
               label: 'قيمة الاستهلاك',
@@ -276,24 +260,37 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               label: 'ملاحظات',
               maxLines: 3,
             ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             if (isEditing) ...<Widget>[
-              const _SectionTitle('الحالة'),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: InvoiceStatus.values
-                    .where((s) => s != InvoiceStatus.cancelled)
-                    .map(
-                      (s) => AppFilterChip(
-                        label: s.label,
-                        selected: _status == s,
-                        onTap: () => setState(() => _status = s),
-                      ),
-                    )
-                    .toList(),
+              const SectionHeading(title: 'الحالة', icon: Icons.flag_outlined),
+              const SizedBox(height: 8),
+              AppCard(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: InvoiceStatus.values
+                      .where((s) => s != InvoiceStatus.cancelled)
+                      .map(
+                        (s) => AppFilterChip(
+                          label: s.label,
+                          selected: _status == s,
+                          onTap: () => setState(() => _status = s),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
               const SizedBox(height: 16),
+            ],
+            if (_error != null) ...<Widget>[
+              Text(
+                _error!,
+                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
             ],
             Container(
               padding: const EdgeInsets.all(14),
@@ -320,8 +317,17 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            AppPrimaryButton(
+              label: isEditing ? 'حفظ التعديلات' : 'إصدار الفاتورة',
+              icon: Icons.save_outlined,
+              loading: _saving,
+              onPressed: _saving ? null : _save,
+            ),
+            const SizedBox(height: 20),
           ],
         ),
+      ),
       ),
     );
   }
@@ -330,21 +336,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     // يُبقي الحقل التلقائي متزامناً طالما لم يعدّله المستخدم يدوياً بقيمة مختلفة.
     if (_total.text.trim().isEmpty) setState(() {});
   }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Text(
-          title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-      );
 }
 
 /// خانة عرض قيمة رقمية داخل LTR (لأرقام المستندات).
@@ -442,16 +433,20 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
         if (_selectedId != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Chip(
-              avatar: const Icon(Icons.person_outline),
-              label: Text(_selectedName ?? 'مشترك #$_selectedId'),
-              onDeleted: () {
-                setState(() {
-                  _selectedId = null;
-                  _selectedName = null;
-                });
-                widget.onSelected(null);
-              },
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppFilterChip(
+                label: _selectedName ?? 'مشترك #$_selectedId',
+                selected: true,
+                icon: Icons.person_outline_rounded,
+                onRemove: () {
+                  setState(() {
+                    _selectedId = null;
+                    _selectedName = null;
+                  });
+                  widget.onSelected(null);
+                },
+              ),
             ),
           ),
         AppTextField(
@@ -470,21 +465,22 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
           Container(
             constraints: const BoxConstraints(maxHeight: 220),
             margin: const EdgeInsets.only(top: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.lightBorder),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
             child: ListView.builder(
+              shrinkWrap: true,
               itemCount: _results.length,
               itemBuilder: (context, index) {
                 final option = _results[index];
-                return ListTile(
-                  dense: true,
-                  title: Text(option.name),
-                  subtitle: Text(
-                    [
-                      option.squareName,
-                      option.phone,
-                      if (option.meters.isNotEmpty)
-                        option.meters.map((m) => m.uniqueCode).join('، '),
-                    ].whereType<String>().join(' • '),
-                  ),
+                final meta = [
+                  option.squareName,
+                  option.phone,
+                  if (option.meters.isNotEmpty)
+                    option.meters.map((m) => m.uniqueCode).join('، '),
+                ].whereType<String>().join(' • ');
+                return InkWell(
                   onTap: () {
                     setState(() {
                       _selectedId = option.id;
@@ -493,6 +489,28 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                     });
                     widget.onSelected(option.id);
                   },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          option.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          meta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),

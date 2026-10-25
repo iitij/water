@@ -9,7 +9,7 @@ Color workspaceColor(WorkspaceGroup group) => switch (group) {
   WorkspaceGroup.customers => AppColors.info,
   WorkspaceGroup.field => AppColors.primary,
   WorkspaceGroup.finance => AppColors.success,
-  WorkspaceGroup.management => AppColors.violet,
+  WorkspaceGroup.management => AppColors.info,
   WorkspaceGroup.settings => AppColors.warning,
   WorkspaceGroup.account => AppColors.neutral,
 };

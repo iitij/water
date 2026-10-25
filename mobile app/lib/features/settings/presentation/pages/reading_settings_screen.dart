@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
 import '../../domain/repositories/settings_repository.dart';
@@ -64,111 +67,132 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
           _graceController.text = settings.gracePeriod.toString();
           _hydrated = true;
         }
-        return Scaffold(
-          appBar: widget.embedded ? null : AppBar(title: const Text('إعدادات فترة القراءات')),
-          body: state.isLoading && settings == null
-              ? const SettingsLoadingBody()
-              : settings == null
-                  ? SettingsErrorBody(
-                      message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
-                      onRetry: () => context.read<ReadingSettingsCubit>().load(),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
-                          child: SettingsSectionCard(
-                            title: 'دورة القراءات والفوترة',
-                            subtitle: 'تنعكس هذه القيم على حساب فترات القراءة وإصدار الفواتير مباشرة.',
-                            children: [
-                              SwitchListTile(
+        final body = state.isLoading && settings == null
+            ? const SettingsLoadingBody()
+            : settings == null
+                ? SettingsErrorBody(
+                    message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
+                    onRetry: () => context.read<ReadingSettingsCubit>().load(),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 900),
+                        child: SettingsSectionCard(
+                          title: 'دورة القراءات والفوترة',
+                          subtitle: 'تنعكس هذه القيم على حساب فترات القراءة وإصدار الفواتير مباشرة.',
+                          children: [
+                            AppSettingRow(
+                              icon: Icons.receipt_long_outlined,
+                              color: Theme.of(context).colorScheme.primary,
+                              showChevron: false,
+                              title: 'إصدار الفاتورة تلقائياً عند إدخال القراءة',
+                              subtitle: 'إنشاء فاتورة العداد فور حفظ قراءة جديدة.',
+                              trailing: Switch(
                                 value: settings.autoIssueInvoiceOnReading,
                                 onChanged: (value) => _update(
                                   context,
                                   settings.copyWith(autoIssueInvoiceOnReading: value),
                                 ),
-                                title: const Text('إصدار الفاتورة تلقائياً عند إدخال القراءة'),
-                                subtitle: const Text('إنشاء فاتورة العداد فور حفظ قراءة جديدة.'),
                               ),
-                              const Divider(),
+                            ),
+                            const AppDivider(),
+                            DropdownButtonFormField<String>(
+                              key: ValueKey(settings.readingPeriod),
+                              initialValue: settings.readingPeriod,
+                              decoration: const InputDecoration(
+                                labelText: 'دورة القراءات',
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'weekly', child: Text('أسبوعية (كل 7 أيام)')),
+                                DropdownMenuItem(value: 'ten_days', child: Text('كل 10 أيام')),
+                                DropdownMenuItem(value: 'half_monthly', child: Text('نصف شهرية (كل 15 يوم)')),
+                                DropdownMenuItem(value: 'monthly', child: Text('شهرية')),
+                              ],
+                              onChanged: (value) => _update(
+                                context,
+                                settings.copyWith(readingPeriod: value),
+                              ),
+                            ),
+                            if (settings.readingPeriod == 'monthly') ...[
+                              const SizedBox(height: 16),
                               DropdownButtonFormField<String>(
-                                key: ValueKey(settings.readingPeriod),
-                                initialValue: settings.readingPeriod,
+                                key: ValueKey(settings.readingDay),
+                                initialValue: settings.readingDay,
                                 decoration: const InputDecoration(
-                                  labelText: 'دورة القراءات',
+                                  labelText: 'يوم إدخال القراءة',
+                                  helperText: 'يحدد نهاية فترة الاستهلاك في الدورة الشهرية.',
                                 ),
-                                items: const [
-                                  DropdownMenuItem(value: 'weekly', child: Text('أسبوعية (كل 7 أيام)')),
-                                  DropdownMenuItem(value: 'ten_days', child: Text('كل 10 أيام')),
-                                  DropdownMenuItem(value: 'half_monthly', child: Text('نصف شهرية (كل 15 يوم)')),
-                                  DropdownMenuItem(value: 'monthly', child: Text('شهرية')),
+                                items: [
+                                  for (var day = 20; day <= 28; day++)
+                                    DropdownMenuItem(value: '$day', child: Text('يوم $day')),
+                                  const DropdownMenuItem(
+                                    value: 'last_day',
+                                    child: Text('آخر يوم في الشهر'),
+                                  ),
                                 ],
                                 onChanged: (value) => _update(
                                   context,
-                                  settings.copyWith(readingPeriod: value),
+                                  settings.copyWith(readingDay: value),
                                 ),
                               ),
-                              if (settings.readingPeriod == 'monthly') ...[
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  key: ValueKey(settings.readingDay),
-                                  initialValue: settings.readingDay,
-                                  decoration: const InputDecoration(
-                                    labelText: 'يوم إدخال القراءة',
-                                    helperText: 'يحدد نهاية فترة الاستهلاك في الدورة الشهرية.',
-                                  ),
-                                  items: [
-                                    for (var day = 20; day <= 28; day++)
-                                      DropdownMenuItem(value: '$day', child: Text('يوم $day')),
-                                    const DropdownMenuItem(
-                                      value: 'last_day',
-                                      child: Text('آخر يوم في الشهر'),
-                                    ),
-                                  ],
-                                  onChanged: (value) => _update(
-                                    context,
-                                    settings.copyWith(readingDay: value),
-                                  ),
+                            ],
+                            const SizedBox(height: 16),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: TextFormField(
+                                controller: _graceController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'مدة السماح (أيام)',
+                                  helperText: 'الأيام بعد إصدار الفاتورة قبل اعتبارها متأخرة.',
                                 ),
-                              ],
-                              const SizedBox(height: 16),
-                              Directionality(
-                                textDirection: TextDirection.ltr,
-                                child: TextFormField(
-                                  controller: _graceController,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                  decoration: const InputDecoration(
-                                    labelText: 'مدة السماح (أيام)',
-                                    helperText: 'الأيام بعد إصدار الفاتورة قبل اعتبارها متأخرة.',
-                                  ),
-                                  onChanged: (value) => _update(
-                                    context,
-                                    settings.copyWith(gracePeriod: int.tryParse(value) ?? 0),
-                                  ),
+                                onChanged: (value) => _update(
+                                  context,
+                                  settings.copyWith(gracePeriod: int.tryParse(value) ?? 0),
                                 ),
                               ),
-                              SwitchListTile(
+                            ),
+                            const SizedBox(height: 8),
+                            AppSettingRow(
+                              icon: Icons.rule_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                              showChevron: false,
+                              title: 'اعتبار الفاتورة السابقة متأخرة عند إصدار فاتورة جديدة',
+                              subtitle: 'يتجاوز هذا الخيار مدة السماح المتبقية.',
+                              trailing: Switch(
                                 value: settings.strictOverdueOnNewInvoice,
                                 onChanged: (value) => _update(
                                   context,
                                   settings.copyWith(strictOverdueOnNewInvoice: value),
                                 ),
-                                title: const Text('اعتبار الفاتورة السابقة متأخرة عند إصدار فاتورة جديدة'),
-                                subtitle: const Text('يتجاوز هذا الخيار مدة السماح المتبقية.'),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-          bottomNavigationBar: settings == null
-              ? null
-              : SettingsSaveBar(
-                  isSaving: state.isSaving,
-                  onSave: () => context.read<ReadingSettingsCubit>().save(),
-                ),
+                  );
+        final saveBar = settings == null
+            ? null
+            : SettingsSaveBar(
+                isSaving: state.isSaving,
+                onSave: () => context.read<ReadingSettingsCubit>().save(),
+              );
+        if (widget.embedded) {
+          return Scaffold(body: body, bottomNavigationBar: saveBar);
+        }
+        return SubPageScaffold(
+          title: 'إعدادات فترة القراءات',
+          subtitle: 'دورة القراءات والفوترة الآلية',
+          child: Column(
+            children: [
+              Expanded(child: body),
+              if (saveBar != null) saveBar,
+            ],
+          ),
         );
       },
     );

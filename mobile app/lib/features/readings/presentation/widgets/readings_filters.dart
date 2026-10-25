@@ -182,7 +182,6 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
             padding: const EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(
               minHeight: 1.5,
-              backgroundColor: Colors.transparent,
               color: Theme.of(context).colorScheme.primary.withValues(alpha: .5),
             ),
           ),

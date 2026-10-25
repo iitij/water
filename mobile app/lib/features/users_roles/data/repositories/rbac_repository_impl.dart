@@ -64,6 +64,9 @@ class RbacRepositoryImpl implements RbacRepository {
   @override
   Future<void> deleteRole(int id) => _remote.deleteRole(id);
 
+  @override
+  Future<void> bulkDeleteRoles(List<int> ids) => _remote.bulkDeleteRoles(ids);
+
   SystemUserModel _userModel(SystemUser user) => user is SystemUserModel
       ? user
       : SystemUserModel(

@@ -119,6 +119,11 @@ class RbacRemoteDataSource {
 
   Future<void> deleteRole(int id) => _api.delete('${AdminApiEndpoints.roles}/$id');
 
+  Future<void> bulkDeleteRoles(List<int> ids) => _api.post(
+        AdminApiEndpoints.rolesBulkDelete,
+        data: {'ids': ids},
+      );
+
   SystemUserModel _userResponse(dynamic response, SystemUserModel fallback) {
     final root = adminMap(adminUnwrap(response));
     final json = root.containsKey('user') ? adminMap(root['user']) : root;

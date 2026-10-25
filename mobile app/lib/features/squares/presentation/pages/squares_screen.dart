@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../../subscribers/domain/repositories/subscribers_repository.dart';
@@ -249,25 +252,54 @@ class _MasterList extends StatelessWidget {
                           subtitle: Text(sq.description ?? ''),
                           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                             StatusBadge(label: '${sq.subscribersCount} مشترك', color: AppColors.info),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined),
-                              tooltip: 'تعديل المربع',
-                              onPressed: () => SquaresScreen._showForm(context, square: sq),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                              tooltip: 'حذف المربع',
-                              onPressed: () async {
-                                if (await confirmAction(
-                                  context,
-                                  'حذف المربع',
-                                  'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
-                                )) {
-                                  if (context.mounted) {
-                                    await context.read<SquaresCubit>().delete(sq.id);
+                            PopupMenuButton<String>(
+                              tooltip: 'خيارات المربع',
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(AppRadius.lg),
+                              ),
+                              onSelected: (value) async {
+                                if (value == 'edit') {
+                                  unawaited(SquaresScreen._showForm(context, square: sq));
+                                }
+                                if (value == 'delete') {
+                                  if (await confirmAction(
+                                    context,
+                                    'حذف المربع',
+                                    'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
+                                  )) {
+                                    if (context.mounted) {
+                                      await context.read<SquaresCubit>().delete(sq.id);
+                                    }
                                   }
                                 }
                               },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('تعديل المربع'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                                      SizedBox(width: 10),
+                                      Text('حذف المربع', style: TextStyle(color: AppColors.danger)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              icon: Icon(
+                                Icons.more_vert_rounded,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ]),
                           onTap: () => _selectSquare(context, sq),

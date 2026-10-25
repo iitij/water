@@ -74,7 +74,10 @@ class WhatsAppTemplateEditor extends StatelessWidget {
             ),
             child: Text(
               renderWhatsAppPreview(controller.text, sampleValues),
-              style: const TextStyle(color: Colors.black87, height: 1.5),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                height: 1.5,
+              ),
             ),
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -48,30 +49,30 @@ class _DataQualityView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(AppStrings.of(context).dataQualityTitle),
-        actions: <Widget>[
-          BlocBuilder<DataQualityCubit, DataQualityState>(
-            builder: (context, state) => PopupMenuButton<int>(
-              tooltip: 'عتبة القراءة القديمة',
-              icon: const Icon(Icons.filter_alt_outlined),
-              onSelected: (days) => context.read<DataQualityCubit>().load(staleDays: days),
-              itemBuilder: (_) => <PopupMenuEntry<int>>[
-                for (final days in <int>[30, 45, 60, 90])
-                  PopupMenuItem<int>(
-                    value: days,
-                    child: Text('قراءة قديمة: $days يوماً${state.staleDays == days ? ' ✓' : ''}'),
-                  ),
-              ],
-            ),
+    return SubPageScaffold(
+      title: AppStrings.of(context).dataQualityTitle,
+      subtitle: 'قائمة مهام: كل مشكلة تنقلك إلى مكان الإصلاح',
+      actions: <Widget>[
+        BlocBuilder<DataQualityCubit, DataQualityState>(
+          builder: (context, state) => PopupMenuButton<int>(
+            tooltip: 'عتبة القراءة القديمة',
+            icon: const Icon(Icons.filter_alt_outlined, size: 20),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+            onSelected: (days) => context.read<DataQualityCubit>().load(staleDays: days),
+            itemBuilder: (_) => <PopupMenuEntry<int>>[
+              for (final days in <int>[30, 45, 60, 90])
+                PopupMenuItem<int>(
+                  value: days,
+                  child: Text('قراءة قديمة: $days يوماً${state.staleDays == days ? ' ✓' : ''}'),
+                ),
+            ],
           ),
-        ],
-      ),
-      body: BlocBuilder<DataQualityCubit, DataQualityState>(
+        ),
+      ],
+      child: BlocBuilder<DataQualityCubit, DataQualityState>(
         builder: (context, state) {
           if (state.status == DataQualityStatus.loading && state.report == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppLoader();
           }
           if (state.status == DataQualityStatus.failure && state.report == null) {
             return AdminErrorView(
@@ -101,9 +102,8 @@ class _DataQualityView extends StatelessWidget {
                     child: _IssueCard(issue: issue),
                   ),
               const SizedBox(height: AppSpacing.md),
-              Text(
-                'المعلومات التشخيصية',
-                style: Theme.of(context).textTheme.titleSmall,
+              const SectionHeading(
+                title: 'المعلومات التشخيصية',
               ),
               const SizedBox(height: AppSpacing.sm),
               for (final issue in state.report!.issues.where((issue) => issue.isInfo))
@@ -226,11 +226,10 @@ class _IssueCard extends StatelessWidget {
               runSpacing: AppSpacing.xs,
               children: <Widget>[
                 for (final sample in issue.samples)
-                  ActionChip(
-                    label: Text(
-                      sample.meta == null ? sample.label : '${sample.label} • ${sample.meta}',
-                    ),
-                    onPressed: () {
+                  AppPill(
+                    label: sample.meta == null ? sample.label : '${sample.label} • ${sample.meta}',
+                    icon: Icons.open_in_new_rounded,
+                    onTap: () {
                       final route = _routeOf(sample.route);
                       if (route != null) context.push(route);
                     },

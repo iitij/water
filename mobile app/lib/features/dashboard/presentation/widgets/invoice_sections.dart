@@ -321,10 +321,13 @@ class _OverdueTile extends StatelessWidget {
                         textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                       ),
                       icon: busy
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 15,
                               height: 15,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.onPrimary,
+                              ),
                             )
                           : const Icon(Icons.payments_outlined, size: 17),
                       label: const Text('تحصيل فوري'),

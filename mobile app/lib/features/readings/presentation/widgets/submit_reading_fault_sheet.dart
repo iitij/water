@@ -59,73 +59,128 @@ class _FaultSheetState extends State<_FaultSheet> {
         padding: EdgeInsets.only(
           left: 16,
           right: 16,
-          top: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          top: 8,
+          bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('تعذّر قراءة العداد', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(
-              'العداد ${widget.meterCode}'
-              '${widget.subscriberName == null ? '' : ' — ${widget.subscriberName}'}',
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            for (final reason in ReadingFaultReason.values)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  _reason == reason
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color: _reason == reason ? theme.colorScheme.primary : null,
-                ),
-                title: Text(reason.label),
-                onTap: () => setState(() {
-                  _reason = reason;
-                  _error = null;
-                }),
-              ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _noteController,
-              maxLines: 2,
-              maxLength: 200,
-              decoration: InputDecoration(
-                labelText: _reason == null || _reason!.needsNote
-                    ? 'ملاحظة (مطلوبة مع «سبب آخر»)'
-                    : 'ملاحظة اختيارية',
-                hintText: 'مثال: الزجاج مكسور والمشترك طلب زيارة فني',
-              ),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-                ),
-              ),
-            Row(
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.dividerColor,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _submit,
-                    child: const Text('تسجيل التعذّر'),
+                const SizedBox(height: 14),
+                Text(
+                  'تعذّر قراءة العداد',
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'العداد ${widget.meterCode}'
+                  '${widget.subscriberName == null ? '' : ' — ${widget.subscriberName}'}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      for (var index = 0;
+                          index < ReadingFaultReason.values.length;
+                          index++) ...<Widget>[
+                        if (index > 0) const AppDivider(indent: 14, endIndent: 14),
+                        _reasonRow(ReadingFaultReason.values[index]),
+                      ],
+                    ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _noteController,
+                  maxLines: 2,
+                  maxLength: 200,
+                  decoration: InputDecoration(
+                    labelText: _reason == null || _reason!.needsNote
+                        ? 'ملاحظة (مطلوبة مع «سبب آخر»)'
+                        : 'ملاحظة اختيارية',
+                    hintText: 'مثال: الزجاج مكسور والمشترك طلب زيارة فني',
+                  ),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _error!,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppSecondaryButton(
+                        label: 'إلغاء',
+                        onPressed: () => Navigator.pop(context),
+                        expand: false,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'تسجيل التعذّر',
+                        onPressed: _submit,
+                        expand: false,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reasonRow(ReadingFaultReason reason) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selected = _reason == reason;
+    return InkWell(
+      onTap: () => setState(() {
+        _reason = reason;
+        _error = null;
+      }),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 20,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant.withValues(alpha: .6),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                reason.label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
             ),
           ],
         ),

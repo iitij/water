@@ -189,3 +189,26 @@ Page content is capped at 1120 px (dashboards may pass a larger `maxWidth`).
 
 `gradient` parameters on `AppCard`, `AppHeroPanel`, `AppPrimaryButton` and
 `AquaBackdrop` are accepted and ignored, so step 1 can be done gradually.
+
+## Card pattern v3.1 — «البطاقة الهادئة» (quiet card)
+
+The list cards (invoice, payment, meter, subscriber, reading) share one anatomy.
+No more bordered chip soup: metadata lives on **one borderless quiet line**
+(icon + 11 px muted text, `spacing: 12`), separated from the header by 10 px.
+
+1. **Header** — entity name first (`14.5 w600`), identity line second
+   (number/code + type icon, muted `11.5`). Status as badge or dot at the end
+   edge; row actions collapse into one `PopupMenuButton` (⋯) — bare edit/delete
+   `IconButton`s are gone.
+2. **Quiet meta line** — `Wrap(spacing: 12, runSpacing: 4)` of icon+text items,
+   no borders, no backgrounds. Semantic colour only when it means something
+   (overdue, negative balance).
+3. **Money panel** — a soft `surfaceContainerHighest @ 45%` rounded panel: the
+   hero figure on the start edge (`19–20 w600` tabular) + hairline + 2–3
+   supporting figures (`12 w600`).
+4. **Actions** — one row: primary action as a 36–38 px filled/tonal button
+   (flex), secondary actions as 38 px quiet icon buttons with tooltips.
+
+Diagnostics: the floating `API: n` overlay is **off by default**
+(`ApiLogManager.showFloatingPill = false`) and is toggled only from the
+diagnostics screen — it must never ship on top of user UI.

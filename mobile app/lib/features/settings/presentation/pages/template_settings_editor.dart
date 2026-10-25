@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_surfaces.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
 import '../../domain/repositories/settings_repository.dart';
@@ -84,35 +87,41 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
           if (settings != null && !_hydrated) {
             _hydrate(settings);
           }
-          return Scaffold(
-            appBar: widget.embedded
-                ? null
-                : AppBar(
-                    title: Text(_isInvoice ? 'إعدادات وتصميم الفاتورة' : 'إعدادات وتصميم سند القبض'),
-                  ),
-            body: state.isLoading && settings == null
-                ? const SettingsLoadingBody()
-                : settings == null
-                    ? SettingsErrorBody(
-                        message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
-                        onRetry: _cubit.load,
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) => _buildEditor(
-                          context,
-                          settings,
-                          showSidePreview: constraints.maxWidth >= 1100,
-                        ),
+          final body = state.isLoading && settings == null
+              ? const SettingsLoadingBody()
+              : settings == null
+                  ? SettingsErrorBody(
+                      message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل الإعدادات.'),
+                      onRetry: _cubit.load,
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) => _buildEditor(
+                        context,
+                        settings,
+                        showSidePreview: constraints.maxWidth >= 1100,
                       ),
-            bottomNavigationBar: settings == null
-                ? null
-                : SettingsSaveBar(
-                    isSaving: state.isSaving,
-                    enabled: state.uploadingImages.isEmpty,
-                    onSave: () {
-                      if (_formKey.currentState?.validate() ?? false) _cubit.save();
-                    },
-                  ),
+                    );
+          final saveBar = settings == null
+              ? null
+              : SettingsSaveBar(
+                  isSaving: state.isSaving,
+                  enabled: state.uploadingImages.isEmpty,
+                  onSave: () {
+                    if (_formKey.currentState?.validate() ?? false) _cubit.save();
+                  },
+                );
+          if (widget.embedded) {
+            return Scaffold(body: body, bottomNavigationBar: saveBar);
+          }
+          return SubPageScaffold(
+            title: _isInvoice ? 'إعدادات وتصميم الفاتورة' : 'إعدادات وتصميم سند القبض',
+            subtitle: _isInvoice ? 'نصوص الفاتورة وشعاراتها وحقولها' : 'نصوص السند وشعاراته وحقوله',
+            child: Column(
+              children: [
+                Expanded(child: body),
+                if (saveBar != null) saveBar,
+              ],
+            ),
           );
         },
       ),
@@ -146,10 +155,12 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
                         ),
                       ),
                       if (!showSidePreview)
-                        OutlinedButton.icon(
+                        AppSecondaryButton(
+                          label: 'معاينة حية',
+                          icon: Icons.visibility_outlined,
+                          expand: false,
+                          height: 40,
                           onPressed: () => _showPreview(context, settings),
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: const Text('معاينة حية'),
                         ),
                     ],
                   ),
@@ -548,7 +559,18 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         builder: (context, controller) => SingleChildScrollView(
           controller: controller,
           padding: const EdgeInsets.all(20),
-          child: TemplatePreview(settings: _cubit.state.settings!),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SectionHeading(
+                title: 'معاينة حية',
+                subtitle: 'تتحدث فور تعديل أي مسمى أو مفتاح إظهار.',
+                icon: Icons.visibility_outlined,
+              ),
+              const SizedBox(height: 16),
+              TemplatePreview(settings: _cubit.state.settings!),
+            ],
+          ),
         ),
       ),
     );

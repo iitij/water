@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_controls.dart';
+import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/app_motion.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/dashboard_entities.dart';
 import '../../domain/repositories/dashboard_repository.dart';
@@ -29,23 +35,22 @@ class _ReportsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('التقارير المالية والتحليلية'),
-        actions: [
-          IconButton(
-            tooltip: 'تحديد الفترة',
-            onPressed: () => _selectPeriod(context),
-            icon: const Icon(Icons.date_range_rounded),
-          ),
-          IconButton(
-            tooltip: 'تحديث',
-            onPressed: () => context.read<ReportsCubit>().refresh(),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: BlocBuilder<ReportsCubit, ReportsState>(
+    return SubPageScaffold(
+      title: 'التقارير المالية والتحليلية',
+      subtitle: 'حركة الإيرادات والتحصيل حسب الفترة',
+      actions: [
+        AppIconButton(
+          tooltip: 'تحديد الفترة',
+          onPressed: () => _selectPeriod(context),
+          icon: Icons.date_range_rounded,
+        ),
+        AppIconButton(
+          tooltip: 'تحديث',
+          onPressed: () => context.read<ReportsCubit>().refresh(),
+          icon: Icons.refresh_rounded,
+        ),
+      ],
+      child: BlocBuilder<ReportsCubit, ReportsState>(
         builder: (context, state) {
           if (state.status == ReportsRequestStatus.loading && state.snapshot == null) {
             return const Padding(padding: EdgeInsets.all(20), child: AdminLoadingView());
@@ -58,113 +63,108 @@ class _ReportsView extends StatelessWidget {
           }
           final snapshot = state.snapshot!;
           final report = snapshot.report;
-          return RefreshIndicator(
+          return AppPageBody(
+            maxWidth: 1400,
             onRefresh: () => context.read<ReportsCubit>().refresh(),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1400),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _ReportToolbar(filter: state.filter, onSelect: () => _selectPeriod(context)),
-                      if (state.status == ReportsRequestStatus.loading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 12),
-                          child: ShimmerSkeleton(height: 8),
-                        ),
-                      if (snapshot.isFromCache)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            'تقرير مخزن • ${AdminFormat.dateTime(snapshot.updatedAt)}',
-                            style: const TextStyle(color: AdminPalette.warning),
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      AdminResponsiveGrid(
-                        minItemWidth: 210,
-                        childAspectRatio: 1.65,
-                        children: [
-                          _ReportMetric(
-                            title: 'إجمالي الفواتير',
-                            value: AdminFormat.money(report.totalInvoiced),
-                            caption: '${AdminFormat.number(report.invoicesCount)} فاتورة',
-                            icon: Icons.receipt_long_outlined,
-                            color: AdminPalette.info,
-                          ),
-                          _ReportMetric(
-                            title: 'إجمالي التحصيل',
-                            value: AdminFormat.money(report.totalCollected),
-                            caption: 'نسبة التحصيل ${AdminFormat.number(report.collectionRate)}%',
-                            icon: Icons.payments_outlined,
-                            color: AdminPalette.success,
-                          ),
-                          _ReportMetric(
-                            title: 'الرصيد المستحق',
-                            value: AdminFormat.money(report.totalOutstanding),
-                            caption: '${AdminFormat.number(report.invoicesCount - report.paidInvoicesCount)} غير مسددة',
-                            icon: Icons.account_balance_wallet_outlined,
-                            color: AdminPalette.warning,
-                          ),
-                          _ReportMetric(
-                            title: 'المتأخرات',
-                            value: AdminFormat.money(report.overdueAmount),
-                            caption: '${AdminFormat.number(report.overdueInvoicesCount)} فاتورة متأخرة',
-                            icon: Icons.warning_amber_rounded,
-                            color: AdminPalette.danger,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      MonthlyRevenueChartCard(
-                        title: 'حركة الإيرادات',
-                        subtitle: 'قيم التحصيل خلال الفترة المحددة',
-                        revenue: MonthlyRevenue(
-                          labels: report.revenueSeries.map((point) => point.label).toList(),
-                          values: report.revenueSeries.map((point) => point.value).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final statuses = _BreakdownCard(
-                            title: 'الفواتير حسب الحالة',
-                            items: report.statusBreakdown,
-                            total: report.totalInvoiced,
-                          );
-                          final squares = _BreakdownCard(
-                            title: 'التحصيل حسب المربع',
-                            items: report.squareBreakdown,
-                            total: report.squareBreakdown.fold<double>(
-                              0,
-                              (sum, item) => sum + item.value,
-                            ),
-                          );
-                          if (constraints.maxWidth < 950) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [statuses, const SizedBox(height: 16), squares],
-                            );
-                          }
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: statuses),
-                              const SizedBox(width: 16),
-                              Expanded(child: squares),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                    ],
+            children: [
+              _ReportToolbar(filter: state.filter, onSelect: () => _selectPeriod(context)),
+              if (state.status == ReportsRequestStatus.loading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: ShimmerSkeleton(height: 8, radius: 8),
+                ),
+              if (snapshot.isFromCache)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: AppNotice(
+                    title: 'تقرير مخزن',
+                    message: 'آخر تحديث ${AdminFormat.dateTime(snapshot.updatedAt)} — قد تكون الأرقام أقدم من لحظة العرض.',
+                    icon: Icons.history_rounded,
+                    color: AppColors.warning,
                   ),
                 ),
+              const SizedBox(height: 16),
+              AppReveal(
+                child: _ReportHero(report: report),
               ),
-            ),
+              const SizedBox(height: 16),
+              AdminResponsiveGrid(
+                minItemWidth: 210,
+                childAspectRatio: 1.65,
+                children: [
+                  AppMetricCard(
+                    title: 'إجمالي الفواتير',
+                    value: AdminFormat.money(report.totalInvoiced),
+                    caption: '${AdminFormat.number(report.invoicesCount)} فاتورة',
+                    icon: Icons.receipt_long_outlined,
+                    color: AppColors.info,
+                  ),
+                  AppMetricCard(
+                    title: 'إجمالي التحصيل',
+                    value: AdminFormat.money(report.totalCollected),
+                    caption: 'نسبة التحصيل ${AdminFormat.number(report.collectionRate)}%',
+                    icon: Icons.payments_outlined,
+                    color: AppColors.success,
+                  ),
+                  AppMetricCard(
+                    title: 'الرصيد المستحق',
+                    value: AdminFormat.money(report.totalOutstanding),
+                    caption: '${AdminFormat.number(report.invoicesCount - report.paidInvoicesCount)} غير مسددة',
+                    icon: Icons.account_balance_wallet_outlined,
+                    color: AppColors.warning,
+                  ),
+                  AppMetricCard(
+                    title: 'المتأخرات',
+                    value: AdminFormat.money(report.overdueAmount),
+                    caption: '${AdminFormat.number(report.overdueInvoicesCount)} فاتورة متأخرة',
+                    icon: Icons.warning_amber_rounded,
+                    color: AppColors.danger,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              MonthlyRevenueChartCard(
+                title: 'حركة الإيرادات',
+                subtitle: 'قيم التحصيل خلال الفترة المحددة',
+                revenue: MonthlyRevenue(
+                  labels: report.revenueSeries.map((point) => point.label).toList(),
+                  values: report.revenueSeries.map((point) => point.value).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final statuses = _BreakdownCard(
+                    title: 'الفواتير حسب الحالة',
+                    items: report.statusBreakdown,
+                    total: report.totalInvoiced,
+                  );
+                  final squares = _BreakdownCard(
+                    title: 'التحصيل حسب المربع',
+                    items: report.squareBreakdown,
+                    total: report.squareBreakdown.fold<double>(
+                      0,
+                      (sum, item) => sum + item.value,
+                    ),
+                  );
+                  if (constraints.maxWidth < 950) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [statuses, const SizedBox(height: 16), squares],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: statuses),
+                      const SizedBox(width: 16),
+                      Expanded(child: squares),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+            ],
           );
         },
       ),
@@ -192,6 +192,64 @@ class _ReportsView extends StatelessWidget {
   }
 }
 
+/// The page's single headline figure: the outstanding balance for the period.
+class _ReportHero extends StatelessWidget {
+  const _ReportHero({required this.report});
+
+  final FinancialReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppHeroPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'الرصيد المستحق',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.onPanelMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: LtrText(
+              AdminFormat.money(report.totalOutstanding),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: AppColors.onPanel,
+                    fontWeight: FontWeight.w600,
+                    height: 1.15,
+                    letterSpacing: -.4,
+                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              HeroMetaChip(
+                icon: Icons.receipt_long_outlined,
+                label: '${AdminFormat.number(report.invoicesCount - report.paidInvoicesCount)} غير مسددة',
+              ),
+              HeroMetaChip(
+                icon: Icons.percent_rounded,
+                label: 'نسبة التحصيل ${AdminFormat.number(report.collectionRate)}%',
+              ),
+              HeroMetaChip(
+                icon: Icons.warning_amber_rounded,
+                label: 'المتأخرات: ${AdminFormat.number(report.overdueInvoicesCount)}',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ReportToolbar extends StatelessWidget {
   const _ReportToolbar({required this.filter, required this.onSelect});
 
@@ -200,73 +258,28 @@ class _ReportToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = filter.from == null && filter.to == null
-        ? 'كل الفترات'
-        : '${AdminFormat.date(filter.from)} ← ${AdminFormat.date(filter.to)}';
-    return AdminCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const Icon(Icons.filter_alt_outlined, color: AdminPalette.primary),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          OutlinedButton.icon(
-            onPressed: onSelect,
-            icon: const Icon(Icons.date_range_outlined),
-            label: const Text('تغيير الفترة'),
-          ),
-          if (filter.from != null || filter.to != null)
-            TextButton(
-              onPressed: () => context.read<ReportsCubit>().load(const ReportFilter()),
-              child: const Text('كل الفترات'),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReportMetric extends StatelessWidget {
-  const _ReportMetric({
-    required this.title,
-    required this.value,
-    required this.caption,
-    required this.icon,
-    required this.color,
-  });
-
-  final String title;
-  final String value;
-  final String caption;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return AdminCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color),
-          const Spacer(),
-          Text(title, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: AlignmentDirectional.centerStart,
-            child: LtrText(
-              value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(caption, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ],
-      ),
+    final hasRange = filter.from != null || filter.to != null;
+    final label = hasRange
+        ? '${AdminFormat.date(filter.from)} ← ${AdminFormat.date(filter.to)}'
+        : 'كل الفترات';
+    return AppFilterChips(
+      padding: EdgeInsets.zero,
+      children: [
+        AppFilterChip(
+          label: label,
+          icon: Icons.date_range_rounded,
+          selected: hasRange,
+          onTap: onSelect,
+          onRemove: hasRange
+              ? () => context.read<ReportsCubit>().load(const ReportFilter())
+              : null,
+        ),
+        AppFilterChip(
+          label: 'تغيير الفترة',
+          icon: Icons.edit_calendar_rounded,
+          onTap: onSelect,
+        ),
+      ],
     );
   }
 }
@@ -291,6 +304,7 @@ class _BreakdownCard extends StatelessWidget {
           else
             ...items.map((item) {
               final fraction = total <= 0 ? 0.0 : (item.value / total).clamp(0, 1).toDouble();
+              final scheme = Theme.of(context).colorScheme;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: Column(
@@ -306,10 +320,22 @@ class _BreakdownCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: fraction,
-                      minHeight: 7,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    Container(
+                      height: 7,
+                      alignment: AlignmentDirectional.centerStart,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: FractionallySizedBox(
+                        widthFactor: fraction,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/services/pdf_print_service.dart';
+import '../../../../core/ui/app_controls.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../domain/cash_session.dart';
 
@@ -37,10 +38,11 @@ class CashSessionReportButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return AppSecondaryButton(
+      label: 'تقرير الصندوق (PDF)',
+      icon: Icons.picture_as_pdf_outlined,
+      height: 44,
       onPressed: () => openCashSessionReportPdf(context, session),
-      icon: const Icon(Icons.picture_as_pdf_outlined),
-      label: const Text('تقرير الصندوق (PDF)'),
     );
   }
 }

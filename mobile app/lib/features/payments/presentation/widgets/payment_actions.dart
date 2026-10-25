@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_feedback.dart';
@@ -11,6 +12,8 @@ import '../../../../core/services/thermal_printer_service.dart';
 import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../../core/widgets/thermal_printer_prompt.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -265,6 +268,12 @@ Future<void> showPaymentActionSheet(
       ),
     if (!payment.isVoided)
       _PaymentSheetAction(
+        icon: Icons.edit_outlined,
+        label: 'تعديل السند',
+        run: () => context.push('/payments/${payment.id}/edit', extra: payment),
+      ),
+    if (!payment.isVoided)
+      _PaymentSheetAction(
         icon: Icons.block_outlined,
         label: 'إلغاء السند بسبب مكتوب',
         destructive: true,
@@ -293,37 +302,111 @@ Future<void> showPaymentActionSheet(
   ];
 
   if (!context.mounted) return;
+  final theme = Theme.of(context);
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
     builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: Text('سند ${payment.receiptNumber}'),
-            subtitle: Text(payment.displayName),
-          ),
-          const Divider(height: 1),
-          ...actions.map(
-            (action) => ListTile(
-              leading: Icon(
-                action.icon,
-                color: action.destructive ? AppColors.danger : null,
-              ),
-              title: Text(action.label),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                action.run();
-              },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const AppGlyph(icon: Icons.receipt_long_outlined, size: 40),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        'سند ${payment.receiptNumber}',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        payment.displayName,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 8),
+            ...actions.map(
+              (action) => _PaymentSheetActionRow(
+                icon: action.icon,
+                label: action.label,
+                color: action.destructive ? AppColors.danger : null,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  action.run();
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
+}
+
+/// صف إجراء داخل ورقة السند — نفس لغة `_SheetActionRow` في invoice_actions:
+/// AppGlyph + تسمية + سهم RTL، بدل ListTile الخام.
+class _PaymentSheetActionRow extends StatelessWidget {
+  const _PaymentSheetActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final void Function() onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => onTap(),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            AppGlyph(icon: icon, tone: color, size: 36),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PaymentSheetAction {
