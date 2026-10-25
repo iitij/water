@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\CashSession;
 use App\Models\Device;
 use App\Models\Invoice;
 use App\Models\Meter;
@@ -11,6 +10,7 @@ use App\Models\Square;
 use App\Models\Subscriber;
 use App\Models\Tariff;
 use App\Models\User;
+use Illuminate\Auth\AuthManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Spatie\LaravelPdf\Facades\Pdf;
@@ -27,9 +27,13 @@ class CashSessionApiTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private Square $square;
+
     private Subscriber $subscriber;
+
     private Meter $meter;
+
     private Invoice $invoice;
 
     protected function setUp(): void
@@ -129,7 +133,7 @@ class CashSessionApiTest extends TestCase
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/invoices/' . $this->invoice->id . '/pay', [
+            ->postJson('/api/invoices/'.$this->invoice->id.'/pay', [
                 'amount' => 600,
                 'payment_method' => 'cash',
                 'sync_uuid' => (string) Str::uuid(),
@@ -182,7 +186,7 @@ class CashSessionApiTest extends TestCase
 
         $oldToken = $login->json('access_token');
 
-        $refreshed = $this->withHeader('Authorization', 'Bearer ' . $oldToken)
+        $refreshed = $this->withHeader('Authorization', 'Bearer '.$oldToken)
             ->postJson('/api/refresh')
             ->assertOk()
             ->assertJsonStructure(['access_token', 'token_type', 'user']);
@@ -190,11 +194,19 @@ class CashSessionApiTest extends TestCase
         $newToken = $refreshed->json('access_token');
         $this->assertNotSame($oldToken, $newToken);
 
-        $this->withHeader('Authorization', 'Bearer ' . $newToken)
+        // داخل اختبارات Laravel يتشارك كل الطلبات نسخة التطبيق نفسها، وحارس
+        // RequestGuard يخزّن المستخدم بعد أول حل، لذا نُصفّي الحواجز المحفوظة
+        // حتى يُعاد التحقق من التوكن فعلياً في الطلبات التالية (في الإنتاج كل
+        // طلب يعمل بنسخة تطبيق مستقلة والسلوك صحيح بدون هذا السطر).
+        $this->app->make(AuthManager::class)->forgetGuards();
+
+        $this->withHeader('Authorization', 'Bearer '.$newToken)
             ->getJson('/api/me')
             ->assertOk();
 
-        $this->withHeader('Authorization', 'Bearer ' . $oldToken)
+        $this->app->make(AuthManager::class)->forgetGuards();
+
+        $this->withHeader('Authorization', 'Bearer '.$oldToken)
             ->getJson('/api/me')
             ->assertUnauthorized();
     }

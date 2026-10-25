@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -17,6 +19,7 @@ import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../meters/data/models/meter.dart';
+import '../../../offline_sync/services/field_data_sync_service.dart';
 import '../../data/models/reading.dart';
 import '../../data/reading_fault_log.dart';
 import '../../data/services/reading_invoice_actions_service.dart';
@@ -34,6 +37,7 @@ class SubmitReadingScreen extends StatefulWidget {
     this.invoiceActions,
     this.onNextPath,
     this.faultLog,
+    this.fieldDataSync,
     super.key,
   });
 
@@ -44,6 +48,10 @@ class SubmitReadingScreen extends StatefulWidget {
 
   /// سجل «تعذّر القراءة». يُمرَّر في الاختبارات، ويُستخدم الافتراضي على الجهاز.
   final ReadingFaultLog? faultLog;
+
+  /// خدمة مزامنة الأعطال مع الخادم. تُمرَّر في الاختبارات، ويُستخدم المسجّل
+  /// في الحاوية على الجهاز.
+  final FieldDataSyncService? fieldDataSync;
 
   @override
   State<SubmitReadingScreen> createState() => _SubmitReadingScreenState();
@@ -59,6 +67,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   late Meter _meter;
   late final ReadingFaultLog _faultLog =
       widget.faultLog ?? SharedPreferencesReadingFaultLog();
+  late final FieldDataSyncService? _fieldDataSync = widget.fieldDataSync ?? _resolveSync();
   ReadingFault? _todayFault;
   MeterPeriodResponse? _period;
   ReadingSaveResult? _saveResult;
@@ -85,6 +94,27 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     _meter = widget.meter;
     _loadPeriod();
     _loadTodaysFault();
+  }
+
+  /// رفع الأعطال المتراكمة للخادم بصمت — تُعاد المحاولة عند عودة الاتصال.
+  Future<void> _syncFaultsQuietly() async {
+    final sync = _fieldDataSync;
+    if (sync == null) return;
+    try {
+      await sync.syncReadingFaults();
+    } catch (_) {
+      // الرفع غير الحرج — السجل المحلي هو المرجع حتى تتم المزامنة.
+    }
+  }
+
+  FieldDataSyncService? _resolveSync() {
+    try {
+      return GetIt.I.isRegistered<FieldDataSyncService>()
+          ? GetIt.I<FieldDataSyncService>()
+          : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// هل سُجّل تعذّر قراءة لهذا العداد اليوم؟ يُعرض كتنبيه حتى لا يُنسى العداد.
@@ -130,7 +160,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
         _todayFault = fault;
         _isRecordingFault = false;
       });
-      _showMessage('سُجّل تعذّر القراءة محلياً — سيظهر العداد للمشرف كمتأخر.');
+      _showMessage('سُجّل تعذّر القراءة — سيُرفع للخادم ويظهر العداد للمشرف كمتأخر.');
+      // الرفع الفوري للخادم؛ عند الفشل (أوفلاين) يُعاد المحاولة تلقائياً
+      // عند عودة الاتصال عبر FieldDataSyncService.
+      unawaited(_syncFaultsQuietly());
     } catch (error) {
       if (!mounted) return;
       setState(() => _isRecordingFault = false);

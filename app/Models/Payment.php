@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Services\PaymentService;
+use App\Services\TransactionService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Payment extends Model
 {
     use SoftDeletes;
+
     protected $fillable = [
         'subscriber_id',
         'meter_id',
@@ -47,6 +50,9 @@ class Payment extends Model
         'void_decided_at' => 'datetime',
         'whatsapp_sent_at' => 'datetime',
     ];
+
+    /** حقول محسوبة تُضاف تلقائياً إلى استجابات الـ API لتطبيق الهاتف. */
+    protected $appends = ['voided', 'void_requested'];
 
     // ─── Relationships ───
 
@@ -93,7 +99,7 @@ class Payment extends Model
     }
 
     /** طلب إلغاء معلّق: طُلب ولم يُلغَ بعد ولم يُرفض. */
-    public function scopeVoidRequested(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    public function scopeVoidRequested(Builder $query): Builder
     {
         return $query->whereNotNull('void_requested_at')->whereNull('voided_at');
     }
@@ -104,7 +110,7 @@ class Payment extends Model
     }
 
     /** السندات الصالحة فقط — تُستخدم في كل حساب مالي. */
-    public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    public function scopeActive(Builder $query): Builder
     {
         return $query->whereNull('voided_at');
     }
@@ -114,18 +120,30 @@ class Payment extends Model
         return $this->voided_at !== null;
     }
 
+    /** السند الملغي (للاستخدام في JSON). */
+    public function getVoidedAttribute(): bool
+    {
+        return $this->voided_at !== null;
+    }
+
+    /** هل يوجد طلب إلغاء معلّق بانتظار قرار المشرف؟ */
+    public function getVoidRequestedAttribute(): bool
+    {
+        return $this->void_requested_at !== null && $this->voided_at === null;
+    }
+
     protected static function booted()
     {
         // ملاحظة: منطق الإنشاء يُعالَج بالكامل في PaymentService
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
 
         static::updated(function (Payment $payment) {
-            $transactionService = new \App\Services\TransactionService();
-            $paymentService = new \App\Services\PaymentService();
+            $transactionService = new TransactionService;
+            $paymentService = new PaymentService;
             $oldSubscriberId = (int) $payment->getOriginal('subscriber_id');
             $oldMeterId = $payment->getOriginal('meter_id') ? (int) $payment->getOriginal('meter_id') : null;
 
-            $transaction = \App\Models\Transaction::where('reference_type', Payment::class)
+            $transaction = Transaction::where('reference_type', Payment::class)
                 ->where('reference_id', $payment->id)
                 ->first();
             if ($transaction) {
@@ -137,7 +155,7 @@ class Payment extends Model
             }
 
             if ($oldMeterId) {
-                if ($oldMeter = \App\Models\Meter::find($oldMeterId)) {
+                if ($oldMeter = Meter::find($oldMeterId)) {
                     $transactionService->updateMeterBalance($oldMeter);
                 }
             } elseif ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
@@ -159,19 +177,19 @@ class Payment extends Model
         });
 
         static::deleted(function (Payment $payment) {
-            \App\Models\Transaction::where('reference_type', Payment::class)
+            Transaction::where('reference_type', Payment::class)
                 ->where('reference_id', $payment->id)
                 ->delete();
 
-            $transactionService = new \App\Services\TransactionService();
+            $transactionService = new TransactionService;
             if ($payment->meter) {
                 $transactionService->updateMeterBalance($payment->meter);
             } elseif ($payment->subscriber) {
                 $transactionService->updateSubscriberBalance($payment->subscriber);
             }
-            
+
             if ($payment->subscriber) {
-                $paymentService = new \App\Services\PaymentService();
+                $paymentService = new PaymentService;
                 $paymentService->recalculateInvoices($payment->subscriber, $payment->meter_id);
             }
         });
@@ -182,17 +200,18 @@ class Payment extends Model
      */
     public static function generateReceiptNumber(): string
     {
-        $prefix = 'REC-' . date('Ym') . '-';
+        $prefix = 'REC-'.date('Ym').'-';
         $lastPayment = static::withTrashed()
-            ->where('receipt_number', 'like', $prefix . '%')
+            ->where('receipt_number', 'like', $prefix.'%')
             ->orderByDesc('receipt_number')
             ->first();
 
         if ($lastPayment) {
             $lastNumber = (int) str_replace($prefix, '', $lastPayment->receipt_number);
-            return $prefix . str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+
+            return $prefix.str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
         }
 
-        return $prefix . '0001';
+        return $prefix.'0001';
     }
 }

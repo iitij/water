@@ -8,7 +8,10 @@ use App\Models\InvoiceItem;
 use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Reading;
+use App\Models\ServiceRequest;
 use App\Models\Subscriber;
+use App\Models\SubscriptionFee;
+use App\Models\Tariff;
 use App\Models\Transaction;
 use App\Services\InvoiceService;
 use App\Services\PaymentService;
@@ -19,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\LaravelPdf\Enums\Unit;
 use Spatie\LaravelPdf\Facades\Pdf;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class InvoiceController extends ApiController
 {
@@ -104,8 +108,10 @@ class InvoiceController extends ApiController
         }
         if ($request->filled('q') || $request->filled('query')) {
             $request->query->set('status', 'unpaid');
+
             return $this->search($request);
         }
+
         return $query->paginate($this->perPage($request, 50))->through(fn (Invoice $invoice) => $this->decorate($invoice))
             ->appends($request->query());
     }
@@ -129,8 +135,9 @@ class InvoiceController extends ApiController
             ->map(fn (Invoice $invoice) => [
                 'billing_period_start' => optional($invoice->billing_period_start)->format('Y-m-d'),
                 'billing_period_end' => optional($invoice->billing_period_end)->format('Y-m-d'),
-                'value' => optional($invoice->billing_period_start)->format('Y-m-d') . '|' . optional($invoice->billing_period_end)->format('Y-m-d'),
+                'value' => optional($invoice->billing_period_start)->format('Y-m-d').'|'.optional($invoice->billing_period_end)->format('Y-m-d'),
             ]);
+
         return response()->json(['data' => $periods]);
     }
 
@@ -141,6 +148,7 @@ class InvoiceController extends ApiController
             'subscriber.square', 'meter', 'items', 'readings',
             'payments' => fn ($q) => $q->with(['user:id,name', 'meter:id,unique_code,tenant_name'])->latest('payment_date'),
         ])->findOrFail($id);
+
         return response()->json(['invoice' => $this->decorate($invoice)]);
     }
 
@@ -190,10 +198,11 @@ class InvoiceController extends ApiController
                 subscriber: $subscriber,
                 type: 'invoice',
                 amount: -(float) $invoice->total_amount,
-                description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
+                description: 'إصدار فاتورة رقم '.$invoice->bill_number,
                 reference: $invoice,
                 meter: $meter,
             );
+
             return $invoice;
         });
 
@@ -245,14 +254,14 @@ class InvoiceController extends ApiController
                     'subscriber_id' => $invoice->subscriber_id,
                     'meter_id' => $invoice->meter_id,
                     'amount' => -(float) $invoice->total_amount,
-                    'description' => 'إصدار فاتورة رقم ' . $invoice->bill_number,
+                    'description' => 'إصدار فاتورة رقم '.$invoice->bill_number,
                 ]);
             } else {
                 app(TransactionService::class)->recordTransaction(
                     subscriber: $invoice->subscriber,
                     type: 'invoice',
                     amount: -(float) $invoice->total_amount,
-                    description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
+                    description: 'إصدار فاتورة رقم '.$invoice->bill_number,
                     reference: $invoice,
                     meter: $invoice->meter,
                 );
@@ -284,6 +293,7 @@ class InvoiceController extends ApiController
         $this->authorizeApi(Invoice::class, 'delete');
         $invoice = Invoice::findOrFail($id);
         DB::transaction(fn () => $invoice->delete());
+
         return response()->json(['message' => 'تم حذف الفاتورة وإعادة توزيع الدفعات المرتبطة بها.']);
     }
 
@@ -298,6 +308,7 @@ class InvoiceController extends ApiController
                 $count++;
             }
         });
+
         return response()->json(['deleted_count' => $count]);
     }
 
@@ -309,6 +320,7 @@ class InvoiceController extends ApiController
             return response()->json(['message' => 'الفاتورة ليست محذوفة.'], 409);
         }
         $invoice->restore();
+
         return response()->json(['message' => 'تمت استعادة الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter']))]);
     }
 
@@ -323,6 +335,7 @@ class InvoiceController extends ApiController
             InvoiceItem::where('invoice_id', $invoice->id)->delete();
             $invoice->forceDelete();
         });
+
         return response()->json(['message' => 'تم حذف الفاتورة نهائياً.']);
     }
 
@@ -337,6 +350,7 @@ class InvoiceController extends ApiController
                 $restored++;
             }
         });
+
         return response()->json(['restored_count' => $restored]);
     }
 
@@ -355,6 +369,7 @@ class InvoiceController extends ApiController
                 $deleted++;
             }
         });
+
         return response()->json(['deleted_count' => $deleted]);
     }
 
@@ -375,6 +390,7 @@ class InvoiceController extends ApiController
             ? (float) ($data['subscription_installment'] ?? $meter->subscriber->getRemainingSubscriptionFee()) : null;
         $tanker = $request->boolean('has_tanker_fee')
             ? (float) ($data['tanker_installment'] ?? 0) : null;
+
         return $this->generateResponse(fn () => $invoiceService->generateInvoice(
             subscriber: $meter->subscriber,
             meter: $meter,
@@ -396,15 +412,17 @@ class InvoiceController extends ApiController
             'notes' => ['nullable', 'string'],
         ]);
         if (! empty($data['subscription_fee_id'])) {
-            $fee = \App\Models\SubscriptionFee::with(['subscriber', 'meter'])->findOrFail($data['subscription_fee_id']);
+            $fee = SubscriptionFee::with(['subscriber', 'meter'])->findOrFail($data['subscription_fee_id']);
             if ($fee->subscriber_id !== (int) $data['subscriber_id'] || $fee->status !== 'uninvoiced') {
                 return response()->json(['message' => 'رسوم الاشتراك المحددة غير متاحة لهذا المشترك.'], 422);
             }
+
             return $this->generateResponse(fn () => $invoiceService->generateInvoiceForSubscriptionFee($fee, $data['notes'] ?? null));
         }
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
         $amount = (float) ($data['subscription_installment'] ?? $data['amount'] ?? $subscriber->getRemainingSubscriptionFee());
+
         return $this->generateResponse(fn () => $invoiceService->generateInvoice(
             subscriber: $subscriber,
             meter: $meter,
@@ -426,14 +444,16 @@ class InvoiceController extends ApiController
             'notes' => ['nullable', 'string'],
         ]);
         if (! empty($data['service_request_id'])) {
-            $serviceRequest = \App\Models\ServiceRequest::with('subscriber')->findOrFail($data['service_request_id']);
+            $serviceRequest = ServiceRequest::with('subscriber')->findOrFail($data['service_request_id']);
             if ($serviceRequest->subscriber_id !== (int) $data['subscriber_id'] || $serviceRequest->status !== 'completed') {
                 return response()->json(['message' => 'طلب الوايت المحدد غير جاهز للفوترة.'], 422);
             }
+
             return $this->generateResponse(fn () => $invoiceService->generateInvoiceForTankerFee($serviceRequest, $data['notes'] ?? null));
         }
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $amount = (float) ($data['tanker_installment'] ?? $data['amount'] ?? 0);
+
         return $this->generateResponse(fn () => $invoiceService->generateInvoice(
             subscriber: $subscriber,
             meter: null,
@@ -448,6 +468,7 @@ class InvoiceController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'create');
         $invoice = Invoice::with('subscriber')->findOrFail($id);
+
         return $this->collectForInvoice($request, $invoice, $paymentService);
     }
 
@@ -456,6 +477,7 @@ class InvoiceController extends ApiController
         $data = $request->validate(['invoice_id' => ['required', 'integer', 'exists:invoices,id']]);
         $this->authorizeApi(Payment::class, 'create');
         $invoice = Invoice::with('subscriber')->findOrFail($data['invoice_id']);
+
         return $this->collectForInvoice($request, $invoice, $paymentService);
     }
 
@@ -469,7 +491,7 @@ class InvoiceController extends ApiController
                 ->whereBetween('reading_date', [$invoice->billing_period_start, $invoice->billing_period_end])->get();
         }
         if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
-            $invoice->consumption_fee = (float) $readings->sum('consumption_units') * \App\Models\Tariff::getActivePrice();
+            $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
             ->where('invoice_type', $invoice->invoice_type)->where('id', '<', $invoice->id)
@@ -486,6 +508,7 @@ class InvoiceController extends ApiController
             }
             $paymentService->recalculateInvoices($invoice->subscriber, $invoice->meter_id);
         });
+
         return response()->json(['message' => 'تمت إعادة احتساب الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter', 'items', 'readings']))]);
     }
 
@@ -510,6 +533,7 @@ class InvoiceController extends ApiController
                 $errors[] = ['invoice_id' => $invoice->id, 'message' => $exception->getMessage()];
             }
         }
+
         return response()->json(['recalculated_count' => $processed, 'errors' => $errors]);
     }
 
@@ -517,11 +541,12 @@ class InvoiceController extends ApiController
     {
         $this->authorizeApi(Invoice::class, 'view');
         $invoice = Invoice::with(['subscriber.square', 'meter', 'items', 'readings'])->findOrFail($id);
+
         return Pdf::view('pdf.invoice', ['invoice' => $invoice])
             ->withBrowsershot(fn ($browsershot) => $browsershot->noSandbox())
             ->margins(0, 0, 0, 0, Unit::Millimeter)
             ->format('A5')->landscape()
-            ->name('invoice-' . $invoice->bill_number . '.pdf')->download();
+            ->name('invoice-'.$invoice->bill_number.'.pdf')->download();
     }
 
     public function whatsappLink(int $id, WhatsAppService $whatsAppService)
@@ -533,6 +558,7 @@ class InvoiceController extends ApiController
             return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.'], 422);
         }
         parse_str(parse_url($url, PHP_URL_QUERY) ?? '', $query);
+
         return response()->json(['url' => $url, 'message' => $query['text'] ?? null]);
     }
 
@@ -542,6 +568,7 @@ class InvoiceController extends ApiController
         $this->authorizeApi(Payment::class, 'create');
         $invoice = Invoice::with(['subscriber', 'meter'])->findOrFail($id);
         SendWhatsAppInvoiceJob::dispatch($invoice);
+
         return response()->json(['message' => 'تمت إضافة إرسال الفاتورة إلى قائمة المهام.', 'queued' => true], 202);
     }
 
@@ -571,16 +598,21 @@ class InvoiceController extends ApiController
                 $data['sync_uuid'] ?? null,
             );
             $invoice->refresh();
+
+            // يقرأ تطبيق الهاتف إجمالي الفاتورة والمسدد من كائن `invoice`
+            // لعرض الإيصال بعد التحصيل (payments_remote_datasource._parseOutcome).
             return response()->json([
                 'message' => 'تم تسجيل الدفعة بنجاح.',
                 'payment' => $payment->load(['subscriber.square', 'meter', 'invoice', 'user']),
+                'invoice' => $this->decorate($invoice),
                 'invoice_status' => $invoice->status,
                 'receipt_data' => $this->receiptData($payment, $invoice, $request),
             ], 201);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+        } catch (HttpExceptionInterface $exception) {
             return response()->json(['message' => $exception->getMessage()], $exception->getStatusCode());
         } catch (\Throwable $exception) {
             Log::error('Invoice payment failed', ['invoice_id' => $invoice->id, 'error' => $exception->getMessage()]);
+
             return response()->json(['message' => 'حدث خطأ أثناء معالجة الدفع.'], 500);
         }
     }
@@ -589,10 +621,11 @@ class InvoiceController extends ApiController
     {
         try {
             $invoice = $callback();
+
             return response()->json([
                 'message' => 'تم إصدار الفاتورة بنجاح.',
                 'invoice' => $this->decorate($invoice->load(['subscriber.square', 'meter', 'items', 'readings'])),
-                'pdf_url' => url('/api/invoices/' . $invoice->id . '/pdf'),
+                'pdf_url' => url('/api/invoices/'.$invoice->id.'/pdf'),
             ], 201);
         } catch (\Throwable $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -605,6 +638,7 @@ class InvoiceController extends ApiController
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
+
         return $data;
     }
 
@@ -637,10 +671,11 @@ class InvoiceController extends ApiController
         $numberWords = class_exists(\NumberFormatter::class)
             ? (new \NumberFormatter('ar', \NumberFormatter::SPELLOUT))->format((float) $payment->amount)
             : null;
+
         return [
             'receipt_number' => $payment->receipt_number,
             'amount' => number_format((float) $payment->amount, 2, '.', ''),
-            'amount_in_words' => $numberWords ? $numberWords . ' ريال يمني لا غير' : null,
+            'amount_in_words' => $numberWords ? $numberWords.' ريال يمني لا غير' : null,
             'date' => optional($payment->payment_date)->format('Y-m-d'),
             'payment_method' => $payment->payment_method,
             'reason' => $payment->reason,
@@ -650,7 +685,9 @@ class InvoiceController extends ApiController
             'outstanding_balance' => number_format($subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance()), 2, '.', ''),
             'credit_balance' => number_format(max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance)), 2, '.', ''),
             'collector' => $request->user()?->name,
-            'pdf_url' => url('/api/payments/' . $payment->id . '/pdf'),
+            'pdf_url' => url('/api/payments/'.$payment->id.'/pdf'),
+            // نص رسالة واتساب للفاتورة — يستخدمه التطبيق في شاشة الإيصال.
+            'message_template' => app(WhatsAppService::class)->invoiceMessage($invoice),
         ];
     }
 }

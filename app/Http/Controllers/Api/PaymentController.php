@@ -7,8 +7,10 @@ use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Subscriber;
+use App\Models\User;
 use App\Services\PaymentService;
 use App\Services\WhatsAppService;
+use App\Support\ArabicNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\LaravelPdf\Enums\Unit;
@@ -39,6 +41,10 @@ class PaymentController extends ApiController
         if ($request->filled('subscriber_id')) {
             $query->where('subscriber_id', $request->integer('subscriber_id'));
         }
+        // يرسلها تطبيق الهاتف لعرض سندات فاتورة معيّنة (تفاصيل الفاتورة).
+        if ($request->filled('invoice_id')) {
+            $query->where('invoice_id', $request->integer('invoice_id'));
+        }
         if ($request->filled('from_date')) {
             $query->whereDate('payment_date', '>=', $request->query('from_date'));
         }
@@ -58,6 +64,7 @@ class PaymentController extends ApiController
 
         return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
             $payment->setAttribute('receipt_data', $this->receiptData($payment));
+
             return $payment;
         })->appends($request->query());
     }
@@ -68,6 +75,7 @@ class PaymentController extends ApiController
         $payment = Payment::with([
             'subscriber.square', 'meter', 'invoice', 'user',
         ])->findOrFail($id);
+
         return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
 
@@ -114,6 +122,7 @@ class PaymentController extends ApiController
             $data['sync_uuid'] ?? null,
         );
         $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
+
         return response()->json(['message' => 'تم تسجيل سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)], 201);
     }
 
@@ -144,6 +153,7 @@ class PaymentController extends ApiController
 
         DB::transaction(fn () => $payment->update($data));
         $payment->refresh()->load(['subscriber.square', 'meter', 'invoice', 'user']);
+
         return response()->json(['message' => 'تم تحديث سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
 
@@ -252,6 +262,7 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'delete');
         Payment::findOrFail($id)->delete();
+
         return response()->json(['message' => 'تم حذف سند القبض وإعادة توزيع الدفعات.']);
     }
 
@@ -266,6 +277,7 @@ class PaymentController extends ApiController
                 $deleted++;
             }
         });
+
         return response()->json(['deleted_count' => $deleted]);
     }
 
@@ -273,11 +285,12 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'view');
         $payment = Payment::with(['subscriber.square', 'meter', 'invoice', 'user'])->findOrFail($id);
+
         return Pdf::view('pdf.receipt', ['payment' => $payment])
             ->withBrowsershot(fn ($browsershot) => $browsershot->noSandbox())
             ->margins(0, 0, 0, 0, Unit::Millimeter)
             ->format('A5')->landscape()
-            ->name('receipt-' . $payment->receipt_number . '.pdf')->download();
+            ->name('receipt-'.$payment->receipt_number.'.pdf')->download();
     }
 
     public function whatsappLink(int $id, WhatsAppService $whatsAppService)
@@ -289,6 +302,7 @@ class PaymentController extends ApiController
             return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.'], 422);
         }
         parse_str(parse_url($url, PHP_URL_QUERY) ?? '', $query);
+
         return response()->json(['url' => $url, 'message' => $query['text'] ?? null]);
     }
 
@@ -297,6 +311,7 @@ class PaymentController extends ApiController
         $this->authorizeApi(Payment::class, 'update');
         $payment = Payment::with(['subscriber', 'meter', 'invoice'])->findOrFail($id);
         SendWhatsAppPaymentJob::dispatch($payment);
+
         return response()->json(['message' => 'تمت إضافة إرسال سند القبض إلى قائمة المهام.', 'queued' => true], 202);
     }
 
@@ -336,11 +351,12 @@ class PaymentController extends ApiController
     {
         $payment->loadMissing(['subscriber.meters', 'meter', 'invoice', 'user']);
         $amount = (float) $payment->amount;
-        $amountInWords = \App\Support\ArabicNumber::spellout($amount);
+        $amountInWords = ArabicNumber::spellout($amount);
         $invoiceRemaining = $payment->invoice ? $payment->invoice->getTrueRemainingAmount() : null;
         $subscriber = $payment->subscriber;
         $debit = $subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
         $credit = max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
+
         return [
             'receipt_number' => $payment->receipt_number,
             'amount' => number_format($amount, 2, '.', ''),
@@ -361,12 +377,14 @@ class PaymentController extends ApiController
             'voided' => $payment->voided_at !== null,
             'void_reason' => $payment->void_reason,
             'cash_session_id' => $payment->cash_session_id,
-            'pdf_url' => url('/api/payments/' . $payment->id . '/pdf'),
+            // نص رسالة واتساب المُعدّ من قالب الإعدادات — يستخدمه التطبيق في شاشة الإيصال.
+            'message_template' => app(WhatsAppService::class)->paymentMessage($payment),
+            'pdf_url' => url('/api/payments/'.$payment->id.'/pdf'),
         ];
     }
 
     /** اعتماد الإلغاء يحتاج صلاحية مشرف صريحة. */
-    private function authorizeVoidApprover(\App\Models\User $user): void
+    private function authorizeVoidApprover(User $user): void
     {
         if ($this->isAdminUser($user)
             || $user->can('payments.void.approve')

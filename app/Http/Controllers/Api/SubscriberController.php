@@ -52,6 +52,7 @@ class SubscriberController extends ApiController
         }
 
         $subscribers = $query->paginate($this->perPage($request))->through(fn (Subscriber $subscriber) => $this->subscriberListItem($subscriber));
+
         return $subscribers->appends($request->query());
     }
 
@@ -126,6 +127,7 @@ class SubscriberController extends ApiController
             ], 409);
         }
         $subscriber->delete();
+
         return response()->json(['message' => 'تم حذف المشترك بنجاح.']);
     }
 
@@ -139,12 +141,14 @@ class SubscriberController extends ApiController
             foreach (Subscriber::whereIn('id', $data['ids'])->lockForUpdate()->get() as $subscriber) {
                 if ($this->hasHistory($subscriber)) {
                     $skipped[] = $subscriber->id;
+
                     continue;
                 }
                 $subscriber->delete();
                 $deleted++;
             }
         });
+
         return response()->json([
             'deleted_count' => $deleted,
             'skipped_count' => count($skipped),
@@ -167,6 +171,7 @@ class SubscriberController extends ApiController
         $this->authorizeApi(Subscriber::class, 'view');
         $subscriber = Subscriber::with(['square:id,name', 'meters:id,subscriber_id,unique_code,path_number,status,balance'])
             ->findOrFail($id);
+
         return response()->json([
             'subscriber' => $subscriber->only(['id', 'name', 'phone', 'address', 'status', 'square_id', 'subscription_start_date']),
             'financial_summary' => $this->financialSummary($subscriber),
@@ -183,7 +188,7 @@ class SubscriberController extends ApiController
                 'type' => 'invoice',
                 'date' => optional($invoice->bill_date)->format('Y-m-d'),
                 'reference' => $invoice->bill_number,
-                'description' => 'فاتورة ' . $this->invoiceTypeLabel($invoice->invoice_type),
+                'description' => 'فاتورة '.$this->invoiceTypeLabel($invoice->invoice_type),
                 'amount' => (float) $invoice->total_amount,
                 'previous_balance' => (float) $invoice->previous_balance,
                 'amount_paid' => (float) $invoice->amount_paid,
@@ -199,7 +204,7 @@ class SubscriberController extends ApiController
                 'type' => 'payment',
                 'date' => optional($payment->payment_date)->format('Y-m-d'),
                 'reference' => $payment->receipt_number,
-                'description' => 'سند قبض' . ($payment->reason ? ' - ' . $payment->reason : ''),
+                'description' => 'سند قبض'.($payment->reason ? ' - '.$payment->reason : ''),
                 'amount' => (float) $payment->amount,
                 'payment_method' => $payment->payment_method,
                 'meter' => $payment->meter,
@@ -242,7 +247,7 @@ class SubscriberController extends ApiController
                 'amount' => (float) $transaction->amount,
                 'meter_id' => $transaction->meter_id,
                 'party' => $transaction->meter_id
-                    ? 'عداد رقم: ' . $transaction->meter_id . ($transaction->meter?->unique_code ? ' (' . $transaction->meter->unique_code . ')' : '')
+                    ? 'عداد رقم: '.$transaction->meter_id.($transaction->meter?->unique_code ? ' ('.$transaction->meter->unique_code.')' : '')
                     : 'الحساب العام للمشترك',
                 'description' => $transaction->description,
                 'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
@@ -302,11 +307,33 @@ class SubscriberController extends ApiController
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
+        // مفاتيح يقرأها تطبيق الهاتف لملء شاشة التحصيل السريع مسبقاً
+        // (references_remote_datasource.SubscriberDueSummary) — تُضاف إضافياً
+        // دون كسر المفاتيح القديمة (general_balance/invoices/total_remaining).
+        $latestUnpaid = $invoices->first();
+        $subscriber->loadMissing('meters');
+        $outstanding = (float) $subscriber->getOutstandingBalance()
+            + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
+        $credit = max(0, (float) $subscriber->balance)
+            + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
+        $uninvoicedFee = (float) SubscriptionFee::where('subscriber_id', $subscriber->id)
+            ->where('status', 'uninvoiced')->sum('amount');
+        $tankerAmount = (float) ServiceRequest::where('subscriber_id', $subscriber->id)
+            ->where('status', 'completed')->sum('amount');
+
         return response()->json([
             'subscriber_id' => $subscriber->id,
             'general_balance' => (float) $subscriber->balance,
             'invoices' => $invoices,
             'total_remaining' => round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2),
+            'invoice_id' => $latestUnpaid?->id,
+            'bill_number' => $latestUnpaid?->bill_number,
+            'due_amount' => $latestUnpaid ? round((float) $latestUnpaid->getRemainingAmount(), 2) : 0.0,
+            'outstanding_balance' => round($outstanding, 2),
+            'credit_balance' => round($credit, 2),
+            'uninvoiced_subscription_fee' => round($uninvoicedFee, 2),
+            'pending_tanker_amount' => round($tankerAmount, 2),
+            'open_invoices_count' => $invoices->count(),
         ]);
     }
 
@@ -314,6 +341,7 @@ class SubscriberController extends ApiController
     public function squares()
     {
         $this->authorizeApi(Square::class, 'viewAny');
+
         return Square::withCount('subscribers')->orderBy('name')->get();
     }
 
@@ -321,12 +349,14 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Square::class, 'create');
         $data = $request->validate(['name' => ['required', 'string', 'max:100'], 'description' => ['nullable', 'string']]);
+
         return response()->json(['square' => Square::create($data)], 201);
     }
 
     private function subscriberListItem(Subscriber $subscriber): array
     {
         $summary = $this->financialSummary($subscriber);
+
         return [
             'id' => $subscriber->id,
             'name' => $subscriber->name,

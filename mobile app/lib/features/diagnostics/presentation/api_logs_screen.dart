@@ -77,14 +77,16 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
       };
 
       final response = await dio.get<Map<String, dynamic>>(
-        '/system/api-logs',
+        // بلا شرطة بادئة حتى يحافظ Dio على /api/ في baseUrl (انظر api_endpoints.dart).
+        'system/api-logs',
         queryParameters: query,
       );
 
       final data = response.data;
       final rawList = data?['logs'];
+      final parsed = <ApiLogEntry>[];
       if (rawList is List) {
-        final parsed = rawList.map((item) {
+        parsed.addAll(rawList.map((item) {
           if (item is Map) {
             return ApiLogEntry(
               id: item['id']?.toString() ?? '',
@@ -108,21 +110,50 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
             );
           }
           return null;
-        }).whereType<ApiLogEntry>().toList();
+        }).whereType<ApiLogEntry>().toList());
+      }
 
-        if (mounted) {
-          setState(() {
-            _backendLogs = parsed;
-            _loadingBackend = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _backendLogs = <ApiLogEntry>[];
-            _loadingBackend = false;
-          });
-        }
+      // تقارير أعطال التطبيق المرفوعة إلى الخادم (system/error-reports) — تظهر
+      // في نفس القائمة بوسم واضح ليتمكن الدعم من رؤية أعطال الأجهزة.
+      final rawReports = data?['client_reports'];
+      if (rawReports is List) {
+        parsed.addAll(rawReports.map((item) {
+          if (item is Map) {
+            return ApiLogEntry(
+              id: item['id']?.toString() ?? '',
+              timestamp: item['occurred_at'] != null
+                  ? DateTime.tryParse(item['occurred_at'].toString()) ?? DateTime.now()
+                  : DateTime.now(),
+              method: 'APP-CRASH',
+              url: item['message']?.toString() ?? '',
+              endpoint: 'تقرير عطل من الجهاز',
+              requestBody: <String, dynamic>{
+                if (item['stack'] != null) 'stack': item['stack'],
+                if (item['context'] is Map) 'context': item['context'],
+                if (item['app_version'] != null) 'app_version': item['app_version'],
+                if (item['device_id'] != null) 'device_id': item['device_id'],
+              },
+              statusCode: 500,
+              responseBody: null,
+              durationMs: 0,
+              isSlow: false,
+              isError: true,
+              errorMessage: item['message']?.toString(),
+              requestId: item['id']?.toString(),
+              context: 'client-report',
+            );
+          }
+          return null;
+        }).whereType<ApiLogEntry>().toList());
+      }
+
+      parsed.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      if (mounted) {
+        setState(() {
+          _backendLogs = parsed;
+          _loadingBackend = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -165,7 +196,11 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
     } else {
       try {
         final dio = getIt<Dio>();
+<<<<<<< HEAD
         await dio.delete<dynamic>('/system/api-logs');
+=======
+        await dio.delete<void>('system/api-logs');
+>>>>>>> 5b4fffb634f8e386c43d2ed0cd25e91c1145f837
         await _fetchBackendLogs();
         if (mounted) AppFeedback.success(context, 'تم مسح سجلات الخادم بنجاح.');
       } catch (e) {

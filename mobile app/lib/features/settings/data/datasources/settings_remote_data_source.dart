@@ -65,10 +65,12 @@ class SettingsRemoteDataSource {
   }) async {
     final response = await _api.upload(
       AdminApiEndpoints.uploadSettingImage,
-      field: 'image',
+      // الخادم يتطلب الحقل باسم `file` مع `key` فقط (SettingController::uploadLogo)
+      // — كان التطبيق يرسل `image` + `section` فتفشل الرفع دائماً بـ 422.
+      field: 'file',
       bytes: bytes,
       fileName: fileName,
-      fields: {'key': key, 'section': section.name},
+      fields: {'key': key},
     );
     final json = adminDataMap(response);
     final path = adminNullableString(

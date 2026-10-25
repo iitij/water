@@ -211,6 +211,8 @@ class AppRouter {
               metersRepository: GetIt.I<MetersRepository>(),
               readingsRepository: GetIt.I<ReadingsRepository>(),
               invoiceActions: GetIt.I<ReadingInvoiceActionsService>(),
+              // ?meter= من Route Mode — يفتح شاشة القراءة معبّأة بمحطة الجولة.
+              initialMeterQuery: state.uri.queryParameters['meter'],
             ),
           ),
           GoRoute(

@@ -233,6 +233,29 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   }
 
   @override
+  Future<List<PaymentVoidRequest>> voidRequests({int page = 1, int perPage = 25}) =>
+      _remote.voidRequests(page: page, perPage: perPage);
+
+  @override
+  Future<bool> decideVoidRequest(
+    int id, {
+    required bool approve,
+    String? notes,
+  }) async {
+    final ok = await _remote.decideVoidRequest(id, approve: approve, notes: notes);
+    _record(
+      approve ? 'payment.void_request_approved' : 'payment.void_request_rejected',
+      entityType: 'Payment',
+      entityId: id,
+      after: <String, dynamic>{
+        'approve': approve,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return ok;
+  }
+
+  @override
   Future<void> delete(int id) => _remote.delete(id);
 
   @override

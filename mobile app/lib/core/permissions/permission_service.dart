@@ -15,6 +15,9 @@ class PermissionService {
     'payments.collect': <String>{'Create:Payment', 'create_payment'},
     'payments.edit': <String>{'Update:Payment', 'update_payment'},
     'payments.delete': <String>{'Delete:Payment', 'DeleteAny:Payment', 'delete_payment'},
+    // اعتماد/رفض طلبات إلغاء السندات — نفس الأسماء التي يقبلها الخادم
+    // (PaymentController::authorizeVoidApprover).
+    'payments.void.approve': <String>{'Approve:Payment', 'approve_payment', 'payments.void.approve'},
     'tariffs.view': <String>{'ViewAny:Tariff', 'View:Tariff', 'view_any_tariff'},
     'tariffs.manage': <String>{'Create:Tariff', 'Update:Tariff', 'Delete:Tariff'},
     'print.pdf': <String>{'ViewAny:Invoice', 'ViewAny:Payment', 'view_any_payment', 'view_any_invoice'},

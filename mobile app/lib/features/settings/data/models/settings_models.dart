@@ -63,6 +63,7 @@ class TemplateSettingsModel extends TemplateSettings {
 class WhatsAppSettingsModel extends WhatsAppSettings {
   const WhatsAppSettingsModel({
     required super.enabled,
+    super.tokenConfigured = false,
     required super.method,
     required super.autoSendInvoice,
     required super.autoSendPayment,
@@ -85,6 +86,9 @@ class WhatsAppSettingsModel extends WhatsAppSettings {
     const methods = {'click_to_chat', 'meta_api', 'local_api'};
     return WhatsAppSettingsModel(
       enabled: adminBool(json['whatsapp_enabled']),
+      // الخادم يشطب الرمز الحساس ويرسل مؤشراً بأنه محفوظ.
+      tokenConfigured: adminBool(json['whatsapp_access_token_configured']) ||
+          (rawToken.isNotEmpty && !maskedTokens.contains(rawToken.toLowerCase())),
       method: methods.contains(rawMethod) ? rawMethod : 'click_to_chat',
       autoSendInvoice: adminBool(json['auto_send_whatsapp_invoice']),
       autoSendPayment: adminBool(json['auto_send_whatsapp_payment']),

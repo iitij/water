@@ -103,6 +103,7 @@ class TemplateSettings extends Equatable {
 class WhatsAppSettings extends Equatable {
   const WhatsAppSettings({
     required this.enabled,
+    this.tokenConfigured = false,
     required this.method,
     required this.autoSendInvoice,
     required this.autoSendPayment,
@@ -132,6 +133,10 @@ class WhatsAppSettings extends Equatable {
       );
 
   final bool enabled;
+
+  /// هل يوجد رمز واتساب محفوظ في الخادم؟ الخادم لا يعيد الرمز نفسه أبداً
+  /// (يُشطف من SECRET_KEYS ويعيد whatsapp_access_token_configured بدلاً منه).
+  final bool tokenConfigured;
   final String method;
   final bool autoSendInvoice;
   final bool autoSendPayment;
@@ -148,6 +153,7 @@ class WhatsAppSettings extends Equatable {
 
   WhatsAppSettings copyWith({
     bool? enabled,
+    bool? tokenConfigured,
     String? method,
     bool? autoSendInvoice,
     bool? autoSendPayment,
@@ -162,6 +168,7 @@ class WhatsAppSettings extends Equatable {
   }) {
     return WhatsAppSettings(
       enabled: enabled ?? this.enabled,
+      tokenConfigured: tokenConfigured ?? this.tokenConfigured,
       method: method ?? this.method,
       autoSendInvoice: autoSendInvoice ?? this.autoSendInvoice,
       autoSendPayment: autoSendPayment ?? this.autoSendPayment,
@@ -180,6 +187,7 @@ class WhatsAppSettings extends Equatable {
   List<Object> get props => [
         enabled,
         method,
+        tokenConfigured,
         autoSendInvoice,
         autoSendPayment,
         invoiceMessage,

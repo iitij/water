@@ -50,7 +50,10 @@ class InvoicesRemoteDataSource {
     final response = await _client.getRaw(FinanceEndpoints.invoice(id));
     final map = JsonUtils.asMap(response);
     if (map == null) throw const NotFoundFailure('استجابة غير صالحة لتفاصيل الفاتورة.');
-    final data = JsonUtils.asMap(map['data']);
+    // الخادم يغلّف التفاصيل بـ {"invoice": {...}} (InvoiceController::show) —
+    // وكان التطبيق يقرأ "data" فقط فتظهر التفاصيل فارغة.
+    final data = JsonUtils.asMap(map['invoice']) ??
+        JsonUtils.asMap(map['data']);
     return InvoiceModel.fromJson(data ?? map);
   }
 

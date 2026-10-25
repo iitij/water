@@ -152,13 +152,20 @@ class WhatsAppLauncherService {
     String? serverEndpoint,
     Map<String, dynamic>? payload,
   }) async {
+    final endpoint = serverEndpoint ?? '';
+    // وضع النقر إلى المحادثة يجلب الرابط من الخادم عبر مسار `whatsapp-link`
+    // (GET) بينما الإرسال المباشر عبر API يستخدم `send-whatsapp` (POST) —
+    // سابقاً كان الـ GET يُرسل على مسار POST فقط فيفشل بصمت ويُستخدم رابط محلي.
+    final linkPath = endpoint.endsWith('/send-whatsapp')
+        ? endpoint.replaceFirst('/send-whatsapp', '/whatsapp-link')
+        : endpoint;
     return send(WhatsAppPayload(
       kind: 'message',
       recordId: (payload?['invoice_id'] as int?) ?? (payload?['reading_id'] as int?) ?? 0,
       phone: recipientPhone,
       message: message,
-      linkPath: serverEndpoint ?? '',
-      sendPath: serverEndpoint ?? '',
+      linkPath: linkPath,
+      sendPath: endpoint,
     ));
   }
 
