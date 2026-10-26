@@ -640,7 +640,7 @@
    "files": "mobile app/lib/features/diagnostics/presentation/api_logs_screen.dart",
    "definition_of_done": "الشاشة خالية من علامات تعارض Git وتحذف سجلات الخادم عبر مسار API النسبي",
    "status": "done",
-   "evidence": "إزالة علامات التعارض؛ DELETE يستخدم system/api-logs للحفاظ على بادئة /api/ في baseUrl؛ dart analyze والتحقق المستهدف موثق بعد التشغيل"
+   "evidence": "إزالة علامات التعارض؛ DELETE يستخدم system/api-logs للحفاظ على بادئة /api/ في baseUrl؛ dart analyze lib/features/diagnostics/presentation/api_logs_screen.dart بلا أخطاء؛ flutter test --no-pub --concurrency=1 test/core/diagnostics/api_log_manager_test.dart نجح (7 اختبارات)"
   }
  ]
 }
