@@ -588,6 +588,17 @@
    "evidence": "الشاشات الجديدة رُحّلت؛ شاشات v1 ما زالت تحمل نصوصها داخلها"
   },
   {
+   "id": "S8-03",
+   "sprint": "S8",
+   "agent": "A8",
+   "subagent": "field-ux",
+   "task": "تحديث واجهات العدادات والقراءات والمسار",
+   "files": "mobile app/lib/features/meters/presentation/pages/meters_list_screen.dart، mobile app/lib/features/readings/presentation/pages/readings_list_screen.dart، mobile app/lib/features/field_route/presentation/route_mode_screen.dart",
+   "definition_of_done": "قوائم موحدة وغنية بالحالة، وصول واضح للإضافة والاختيار الجماعي، ومسار سهل القراءة ميدانياً دون تغيير سلوك الحفظ أو الفلترة",
+   "status": "partial",
+   "evidence": "SubPageScaffold وAppStatStrip وأزرار AppIconButton لقائمتي العدادات والقراءات، وتحسين صف المحطة التالية والمسار؛ dart analyze --fatal-infos على الملفات الثلاثة بلا أخطاء؛ flutter test --no-pub --concurrency=1 test/features/field_route/route_plan_test.dart نجح (9 اختبارات). يلزم فحص مرئي على جهاز ومتابعة بقية قائمة الشاشات"
+  },
+  {
    "id": "S9-01",
    "sprint": "S9",
    "agent": "A3",
@@ -619,6 +630,17 @@
    "definition_of_done": "MSIX موقّع متحقَّق + SHA256SUMS منشور + ملاحظات عربية",
    "status": "partial",
    "evidence": "سكربت البصمات مُنفَّذ واختُبر محلياً؛ MSIX لم يُبنَ (لا Windows SDK) وملاحظات الإصدار مكتوبة"
+  },
+  {
+   "id": "S9-04",
+   "sprint": "S9",
+   "agent": "A2",
+   "subagent": "diagnostics-screen",
+   "task": "إصلاح تعارض دمج حذف سجلات API",
+   "files": "mobile app/lib/features/diagnostics/presentation/api_logs_screen.dart",
+   "definition_of_done": "الشاشة خالية من علامات تعارض Git وتحذف سجلات الخادم عبر مسار API النسبي",
+   "status": "done",
+   "evidence": "إزالة علامات التعارض؛ DELETE يستخدم system/api-logs للحفاظ على بادئة /api/ في baseUrl؛ dart analyze والتحقق المستهدف موثق بعد التشغيل"
   }
  ]
 }

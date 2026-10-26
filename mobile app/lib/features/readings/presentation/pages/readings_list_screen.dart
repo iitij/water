@@ -88,6 +88,19 @@ class _ReadingsListView extends StatelessWidget {
         actions: [
           BlocBuilder<ReadingsCubit, ReadingsState>(
             buildWhen: (previous, current) =>
+                previous.selectedKeys.length != current.selectedKeys.length,
+            builder: (context, state) => state.isSelecting
+                ? Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 4),
+                    child: Text(
+                      '${state.selectedKeys.length}',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          BlocBuilder<ReadingsCubit, ReadingsState>(
+            buildWhen: (previous, current) =>
                 previous.selectedKeys != current.selectedKeys ||
                 previous.isMutating != current.isMutating ||
                 previous.squares != current.squares ||

@@ -196,11 +196,7 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
     } else {
       try {
         final dio = getIt<Dio>();
-<<<<<<< HEAD
-        await dio.delete<dynamic>('/system/api-logs');
-=======
-        await dio.delete<void>('system/api-logs');
->>>>>>> 5b4fffb634f8e386c43d2ed0cd25e91c1145f837
+        await dio.delete<dynamic>('system/api-logs');
         await _fetchBackendLogs();
         if (mounted) AppFeedback.success(context, 'تم مسح سجلات الخادم بنجاح.');
       } catch (e) {

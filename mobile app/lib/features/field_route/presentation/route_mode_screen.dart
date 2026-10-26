@@ -198,7 +198,9 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
       context.push(RouteNames.fieldReader);
       return;
     }
-    context.push('${RouteNames.fieldReader}?meter=${Uri.encodeQueryComponent(query)}');
+    context.push(
+      '${RouteNames.fieldReader}?meter=${Uri.encodeQueryComponent(query)}',
+    );
   }
 
   @override

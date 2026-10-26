@@ -69,6 +69,19 @@ class _MetersListView extends StatelessWidget {
         subtitle: 'متابعة الحالات والقراءات الميدانية',
         actions: [
           BlocBuilder<MetersCubit, MetersState>(
+            buildWhen: (previous, current) =>
+                previous.selectedIds.length != current.selectedIds.length,
+            builder: (context, state) => state.isSelecting
+                ? Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 4),
+                    child: Text(
+                      '${state.selectedIds.length}',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          BlocBuilder<MetersCubit, MetersState>(
             buildWhen: (prev, curr) =>
                 prev.selectedIds != curr.selectedIds ||
                 prev.isMutating != curr.isMutating ||
@@ -98,6 +111,7 @@ class _MetersListView extends StatelessWidget {
                   if (state.isSelecting)
                     AppIconButton(
                       size: 38,
+                      color: Theme.of(context).colorScheme.error,
                       tooltip: 'حذف العدادات المحددة',
                       onPressed: state.isMutating
                           ? null
