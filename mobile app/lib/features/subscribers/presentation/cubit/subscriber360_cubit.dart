@@ -38,32 +38,38 @@ class Subscriber360Cubit extends Cubit<Subscriber360State> {
   Subscriber360Cubit(this._repo) : super(const Subscriber360State());
   final SubscribersRepository _repo;
 
+  void _safeEmit(Subscriber360State nextState) {
+    if (!isClosed) {
+      emit(nextState);
+    }
+  }
+
   Future<void> load(int subscriberId) async {
-    emit(state.copyWith(loading: true));
+    _safeEmit(state.copyWith(loading: true));
     try {
       final detail = await _repo.getSubscriber360(subscriberId);
-      emit(state.copyWith(loading: false, detail: detail));
+      _safeEmit(state.copyWith(loading: false, detail: detail));
       await loadStatement();
     } catch (e) {
-      emit(state.copyWith(loading: false, error: friendlyError(e)));
+      _safeEmit(state.copyWith(loading: false, error: friendlyError(e)));
     }
   }
 
   /// فلتر الجهة: الكل / الحساب العام / عداد محدد (مطابق SubscriberTransactionsTable.php).
   Future<void> filterParty(PartyFilter party) async {
-    emit(state.copyWith(party: party));
+    _safeEmit(state.copyWith(party: party));
     await loadStatement();
   }
 
   Future<void> loadStatement() async {
     final id = state.detail?.subscriber.id;
     if (id == null) return;
-    emit(state.copyWith(statementLoading: true));
+    _safeEmit(state.copyWith(statementLoading: true));
     try {
       final entries = await _repo.getStatement(id, party: state.party);
-      emit(state.copyWith(statementLoading: false, statement: entries));
+      _safeEmit(state.copyWith(statementLoading: false, statement: entries));
     } catch (e) {
-      emit(state.copyWith(statementLoading: false, error: friendlyError(e)));
+      _safeEmit(state.copyWith(statementLoading: false, error: friendlyError(e)));
     }
   }
 }

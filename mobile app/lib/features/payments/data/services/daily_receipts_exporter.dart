@@ -36,7 +36,7 @@ class DailyReceiptsExport {
 /// * المستندات المحذوفة تُستثنى لأنها لا تمثّل نقداً مستلماً.
 class DailyReceiptsExporter {
   const DailyReceiptsExporter({DateTime Function()? now})
-      : _now = now ?? DateTime.now;
+    : _now = now ?? DateTime.now;
 
   final DateTime Function() _now;
 
@@ -89,9 +89,20 @@ class DailyReceiptsExporter {
     }
 
     buffer.writeln(
-      <String>['', '', 'الإجمالي', '', total.toStringAsFixed(2), '', '', '', '', '', '', '']
-          .map(_escape)
-          .join(','),
+      <String>[
+        '',
+        '',
+        'الإجمالي',
+        '',
+        total.toStringAsFixed(2),
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ].map(_escape).join(','),
     );
     return buffer.toString();
   }
@@ -132,7 +143,11 @@ class DailyReceiptsExporter {
 
   static String _escape(String value) {
     final needsQuotes =
-        value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r');
+        value.contains(',') ||
+        value.contains('،') ||
+        value.contains('"') ||
+        value.contains('\n') ||
+        value.contains('\r');
     final escaped = value.replaceAll('"', '""');
     return needsQuotes ? '"$escaped"' : escaped;
   }

@@ -1019,6 +1019,94 @@
   "evidence": "قبل الإصلاح: اختبار إعادة دخول مسجل الأخطاء استدعى المستمع 8 مرات بدل 1؛ اختبار نموذج العداد فشل بسبب ListTile تحت ColoredBox. بعد الإصلاح: flutter test --no-pub --concurrency=1 test/core/diagnostics/api_log_manager_test.dart test/core/diagnostics/floating_api_log_overlay_test.dart test/features/invoices/invoice_generation_sheet_test.dart test/ui/app_amount_layout_test.dart test/ui/water_experience_test.dart: 27 passed. flutter analyze --no-pub للملفات الستة الأساسية المتغيرة: No issues found. docs/v2/qa/INVOICE_FREEZE_20261026.md",
   "verification_status": "local_regression_tests_passed",
   "owner_acceptance": "not_tested"
+},
+{
+  "id": "PARITY-20261026-01",
+  "sprint": "S9",
+  "agent": "A1+A6+A7+A9+A10",
+  "task": "مراجعة الصناديق وسجل التدقيق المركزي مع صلاحيات مستقلة وفلاتر وتفاصيل وقرارات آمنة",
+  "files": "cash_session_review_screen.dart; audit_events_screen.dart; CashSessionController.php; AuditEventController.php; CashSessionService.php",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "PHPUnit full64 tests441 assertions PASS؛ cash_session_review_test.dart8 وaudit_events_screen_test.dart8 PASS؛ docs/v2/qa/MOBILE_WEB_PARITY_2026-10-26.md"
+},
+{
+  "id": "PARITY-20261026-02",
+  "sprint": "S9",
+  "agent": "A1+A8+A9+A10",
+  "task": "حفظ مشترك ثم عداد ثم رسوم بهويات محفوظة ومنع تكرار الخطوات عند الإلغاء أو الفشل",
+  "files": "subscriber_form_screen.dart; meter_form_screen.dart; setup_fee_dialog.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "subscriber_setup_flow_test.dart4 PASS: identities101/501/701؛ إلغاء العداد وفشل الرسوم لا يعيدان إنشاء المشترك؛ تقريرQA"
+},
+{
+  "id": "PARITY-20261026-03",
+  "sprint": "S9",
+  "agent": "A6+A9+A10",
+  "task": "إكمال بيانات الطلب المفوتر والرسوم وروابط الفواتير وحفظ إعدادات تصميم الاشتراك وصلاحيات الصور",
+  "files": "service_requests/**; subscription_fees/**; SettingController.php",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "service_request_edit_test.dart6 PASS؛ WebMobileParityTest.php11 tests71 assertions PASS ضمن full64؛ لا تعديل هوية مالية مفوترة؛ تقريرQA"
+},
+{
+  "id": "PARITY-20261026-04",
+  "sprint": "S9",
+  "agent": "A6+A9+A10",
+  "task": "عرض مصفوفة الدور دون تعديل واختيار guard مع فصل الصلاحيات والتأكيد والتراجع",
+  "files": "RoleController.php; users_roles/**",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "RoleGuardParityTest.php5 tests20 assertions PASS؛ role_matrix_editor_test.dart4 PASS تشمل تأكيد/إلغاء تغييرالحارس؛ تقريرQA"
+},
+{
+  "id": "PARITY-20261026-05",
+  "sprint": "S9",
+  "agent": "A6+A7+A8+A9+A10",
+  "task": "تحميل جميع صفحات القوائم وفرز آمن وحجم صفحة وحقول ظاهرة وعرض مضغوط",
+  "files": "ApiController.php LIST_SORTS; core/network/paginated_collection.dart; core/ui/list_presentation_controls.dart; feature lists/datasources",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "ListSortingParityTest.php5 tests40 assertions PASS؛ paginated_collection_test.dart9 وlist_presentation_test.dart2 PASS؛ payments4/invoices2/tariffs2/voidRequests1 pagination tests PASS؛ الفرز قبلpaginate أو بعد جمعALLpages؛ تقريرQA"
+},
+{
+  "id": "PARITY-20261026-06",
+  "sprint": "S9",
+  "agent": "A7+A8+A10",
+  "task": "اختيار تاريخ القراءة الفعلي دون تغيير فترة الفوترة المعتمدة",
+  "files": "submit_reading_screen.dart; core/l10n/app_strings.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "actual_reading_date_test.dart2 PASS: تاريخمختار وفترةثابتة وقفلأثناءالحفظ وإلغاءالاختيار؛ previous_reading readonly في الويب أيضًا"
+},
+{
+  "id": "PARITY-20261026-07",
+  "sprint": "S9",
+  "agent": "A1+A2+A6+A7+A10",
+  "task": "إصلاح فقد أحداث التدقيق وعزل الحساب/الخادم ورسائل الأجهزة وbusyId وتشخيص الفاتورة وCSV",
+  "files": "audit_log_service.dart; audit_event_store.dart; injection_container.dart; devices_cubit.dart; finance cubits; invoice_model.dart; daily_receipts_exporter.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "UUID500 concurrent events/record during upload/account and server isolation/legacy quarantine regression tests PASS في التشغيل الكامل؛ DevicesCubit12 PASS؛ invoices loading2 وpayments4 وCSV9 PASS؛ تقريرQA"
+},
+{
+  "id": "PARITY-20261026-08",
+  "sprint": "S9",
+  "agent": "A1+A10",
+  "task": "تصحيح مصفوفة المطابقة القديمة وتسجيل التحقق التشغيلي وحدوده",
+  "files": "docs/MOBILE_PARITY_AUDIT_AR.md; docs/V2_S1_HANDOVER.md; docs/v2/qa/MOBILE_WEB_PARITY_2026-10-26.md; FEATURE_COVERAGE.md; RELEASE_NOTES.md; AGENTS.md",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "تقريرQA بأوامرPHP/Flutter ونتائجفعلية؛ نقل ملكية العداد وجماعيالتعرفة موجودان مسبقًا؛ لاادعاءقبولأجهزةأوإطلاقإنتاجي"
 }
 ]
 }

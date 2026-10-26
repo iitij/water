@@ -38,28 +38,34 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   final WhatsAppLauncherService _whatsapp;
   final InvoiceWhatsAppBuilder _whatsappBuilder;
 
+  void _safeEmit(InvoiceDetailState nextState) {
+    if (!isClosed) {
+      emit(nextState);
+    }
+  }
+
   Future<void> load() async {
-    emit(state.copyWith(status: FinanceLoadStatus.loading, clearError: true));
+    _safeEmit(state.copyWith(status: FinanceLoadStatus.loading, clearError: true));
     try {
       final invoice = await _repository.byId(state.invoiceId);
-      emit(state.copyWith(invoice: invoice, status: FinanceLoadStatus.ready));
+      _safeEmit(state.copyWith(invoice: invoice, status: FinanceLoadStatus.ready));
     } on AppFailure catch (failure) {
-      emit(state.copyWith(status: FinanceLoadStatus.failure, errorMessage: failure.message));
+      _safeEmit(state.copyWith(status: FinanceLoadStatus.failure, errorMessage: failure.message));
     }
   }
 
   Future<bool> saveManualEdit(InvoiceModel invoice) async {
-    emit(state.copyWith(actionRunning: true, clearError: true));
+    _safeEmit(state.copyWith(actionRunning: true, clearError: true));
     try {
       final updated = await _repository.update(invoice.id, invoice.toUpdatePayload());
-      emit(state.copyWith(
+      _safeEmit(state.copyWith(
         invoice: updated,
         actionRunning: false,
         lastActionLabel: 'تم حفظ التعديلات',
       ));
       return true;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(
+      _safeEmit(state.copyWith(
         actionRunning: false,
         errorMessage: failure.message,
       ));
@@ -71,17 +77,17 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   Future<bool> recalculate() async {
     final invoice = state.invoice;
     if (invoice == null) return false;
-    emit(state.copyWith(actionRunning: true, clearError: true));
+    _safeEmit(state.copyWith(actionRunning: true, clearError: true));
     try {
       final updated = await _repository.recalculate(invoice.id);
-      emit(state.copyWith(
+      _safeEmit(state.copyWith(
         invoice: updated,
         actionRunning: false,
         lastActionLabel: 'تمت إعادة الاحتساب',
       ));
       return true;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      _safeEmit(state.copyWith(actionRunning: false, errorMessage: failure.message));
       return false;
     }
   }
@@ -89,13 +95,13 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   Future<bool> delete() async {
     final invoice = state.invoice;
     if (invoice == null) return false;
-    emit(state.copyWith(actionRunning: true, clearError: true));
+    _safeEmit(state.copyWith(actionRunning: true, clearError: true));
     try {
       await _repository.delete(invoice.id);
-      emit(state.copyWith(actionRunning: false, lastActionLabel: 'تم حذف الفاتورة'));
+      _safeEmit(state.copyWith(actionRunning: false, lastActionLabel: 'تم حذف الفاتورة'));
       return true;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      _safeEmit(state.copyWith(actionRunning: false, errorMessage: failure.message));
       return false;
     }
   }
@@ -103,18 +109,18 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   Future<bool> restore() async {
     final invoice = state.invoice;
     if (invoice == null) return false;
-    emit(state.copyWith(actionRunning: true, clearError: true));
+    _safeEmit(state.copyWith(actionRunning: true, clearError: true));
     try {
       await _repository.restore(invoice.id);
       final refreshed = await _repository.byId(invoice.id);
-      emit(state.copyWith(
+      _safeEmit(state.copyWith(
         invoice: refreshed,
         actionRunning: false,
         lastActionLabel: 'تمت استعادة الفاتورة بنجاح',
       ));
       return true;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      _safeEmit(state.copyWith(actionRunning: false, errorMessage: failure.message));
       return false;
     }
   }
@@ -122,13 +128,13 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   Future<bool> forceDelete() async {
     final invoice = state.invoice;
     if (invoice == null) return false;
-    emit(state.copyWith(actionRunning: true, clearError: true));
+    _safeEmit(state.copyWith(actionRunning: true, clearError: true));
     try {
       await _repository.forceDelete(invoice.id);
-      emit(state.copyWith(actionRunning: false, lastActionLabel: 'تم حذف الفاتورة نهائياً'));
+      _safeEmit(state.copyWith(actionRunning: false, lastActionLabel: 'تم حذف الفاتورة نهائياً'));
       return true;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(actionRunning: false, errorMessage: failure.message));
+      _safeEmit(state.copyWith(actionRunning: false, errorMessage: failure.message));
       return false;
     }
   }
@@ -137,16 +143,16 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   Future<Uint8List?> loadPdfBytes() async {
     final invoice = state.invoice;
     if (invoice == null) return null;
-    emit(state.copyWith(printingBusy: true, clearError: true));
+    _safeEmit(state.copyWith(printingBusy: true, clearError: true));
     try {
       final bytes = await _pdf.fetchPdf(
         _repository.pdfPath(invoice.id),
         fallbackUrl: _repository.printFallbackPath(invoice.id),
       );
-      emit(state.copyWith(printingBusy: false));
+      _safeEmit(state.copyWith(printingBusy: false));
       return bytes;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(printingBusy: false, errorMessage: failure.message));
+      _safeEmit(state.copyWith(printingBusy: false, errorMessage: failure.message));
       return null;
     }
   }
@@ -160,9 +166,9 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
         message: 'الفاتورة غير محمّلة بعد.',
       );
     }
-    emit(state.copyWith(printingBusy: true));
+    _safeEmit(state.copyWith(printingBusy: true));
     final result = await _thermal.printTicket(buildInvoiceThermalTicket(invoice));
-    emit(state.copyWith(
+    _safeEmit(state.copyWith(
       printingBusy: false,
       lastActionLabel: result.isSuccess ? 'تمت الطباعة الحرارية' : result.message,
       errorMessage: result.isSuccess ? null : result.message,
@@ -179,10 +185,10 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
         error: 'الفاتورة غير محمّلة بعد.',
       );
     }
-    emit(state.copyWith(whatsappBusy: true, clearError: true));
+    _safeEmit(state.copyWith(whatsappBusy: true, clearError: true));
     final payload = _whatsappBuilder.build(invoice);
     final result = await _whatsapp.send(payload);
-    emit(state.copyWith(
+    _safeEmit(state.copyWith(
       whatsappBusy: false,
       lastActionLabel: result.isSuccess ? 'تم إرسال الفاتورة' : null,
       errorMessage: result.isSuccess
@@ -200,7 +206,7 @@ class InvoiceDetailCubit extends Cubit<InvoiceDetailState> {
   void applyPayment({required double paidAmount, required String? invoiceStatus}) {
     final invoice = state.invoice;
     if (invoice == null) return;
-    emit(state.copyWith(
+    _safeEmit(state.copyWith(
       invoice: invoice.copyWith(
         amountPaid: invoice.amountPaid + paidAmount,
         status: invoiceStatus == null

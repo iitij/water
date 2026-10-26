@@ -66,7 +66,7 @@ void main() {
     )));
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('role-name'))).enabled, isFalse);
     expect(tester.widget<Switch>(find.byKey(const ValueKey('select-all-permissions'))).onChanged, isNull);
-    expect(tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('role-guard-web'))).onChanged, isNull);
+    expect(tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>)).onChanged, isNull);
     await tester.tap(find.byKey(const ValueKey('save-role-matrix')));
     await tester.pump();
     expect(saves, 0);
@@ -85,11 +85,18 @@ void main() {
         role: const Role(id: 12, name: 'auditor', guardName: 'web', permissions: ['View:Invoice', 'Update:Invoice']),
         catalog: catalog, onSave: (role) async { saved = role; return false; },
       )));
-    await tester.tap(find.byKey(const ValueKey('role-guard-web')));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('staff').last);
     await tester.pumpAndSettle();
     expect(find.text(AppStrings.ar.roleGuardChangeTitle), findsOneWidget);
+    await tester.tap(find.text(AppStrings.ar.cancel));
+    await tester.pumpAndSettle();
+    expect(tester.state<FormFieldState<String>>(find.byType(DropdownButtonFormField<String>)).value, 'web');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('staff').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text(AppStrings.ar.roleGuardConfirm));
     await tester.pumpAndSettle();
     expect(find.text('1 من 1 صلاحية محددة'), findsOneWidget);

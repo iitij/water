@@ -15,10 +15,12 @@ Route::get('/invoices/{invoice}/print', function (Invoice $invoice) {
 
     return Pdf::view('pdf.invoice', ['invoice' => $invoice])
         ->withBrowsershot(function ($browsershot) {
-            $browsershot->setNodeBinary("/usr/bin/node")
-                        ->setNpmBinary("/usr/bin/npm")
-                        ->setChromePath("/usr/bin/chromium")
-                        ->noSandbox();
+            if (PHP_OS_FAMILY !== 'Windows') {
+                $browsershot->setNodeBinary("/usr/bin/node")
+                            ->setNpmBinary("/usr/bin/npm")
+                            ->setChromePath("/usr/bin/chromium");
+            }
+            $browsershot->noSandbox();
         })
         ->margins(0, 0, 0, 0, Unit::Millimeter)
         ->format('A5')
@@ -32,10 +34,12 @@ Route::get('/payments/{payment}/print', function (\App\Models\Payment $payment) 
 
     return Pdf::view('pdf.receipt', ['payment' => $payment])
         ->withBrowsershot(function ($browsershot) {
-            $browsershot->setNodeBinary("/usr/bin/node")
-                        ->setNpmBinary("/usr/bin/npm")
-                        ->setChromePath("/usr/bin/chromium")
-                        ->noSandbox();
+            if (PHP_OS_FAMILY !== 'Windows') {
+                $browsershot->setNodeBinary("/usr/bin/node")
+                            ->setNpmBinary("/usr/bin/npm")
+                            ->setChromePath("/usr/bin/chromium");
+            }
+            $browsershot->noSandbox();
         })
         ->margins(0, 0, 0, 0, Unit::Millimeter)
         ->format('A5')
