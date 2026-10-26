@@ -203,6 +203,8 @@ class GeneralSettingModel extends GeneralSetting {
     required super.type,
     super.value,
     super.imagePath,
+    super.createdAt,
+    super.updatedAt,
   });
 
   factory GeneralSettingModel.fromJson(dynamic value) {
@@ -215,6 +217,8 @@ class GeneralSettingModel extends GeneralSetting {
       type: rawType == 'image' ? 'image' : 'text',
       value: adminString(json['value']),
       imagePath: adminNullableString(json['image_path']),
+      createdAt: adminDate(json['created_at']),
+      updatedAt: adminDate(json['updated_at']),
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/l10n/app_strings.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -12,12 +13,14 @@ class RoleMatrixEditor extends StatefulWidget {
     required this.role,
     required this.catalog,
     required this.onSave,
+    this.readOnly = false,
     super.key,
   });
 
   final Role role;
   final ShieldPermissionCatalog catalog;
   final Future<bool> Function(Role role) onSave;
+  final bool readOnly;
 
   @override
   State<RoleMatrixEditor> createState() => _RoleMatrixEditorState();
@@ -27,16 +30,21 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late Set<String> _selected;
+  late String _guard;
+  int _guardRevision = 0;
+  String? _error;
   bool _saving = false;
+  ShieldPermissionCatalog get _catalog => widget.catalog.forGuard(_guard);
 
-  bool get _readOnly => widget.role.isSuperAdmin;
+  bool get _readOnly => widget.readOnly || widget.role.isSuperAdmin;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.role.name);
-    _selected = _readOnly
-        ? widget.catalog.allNames
+    _guard = widget.role.guardName;
+    _selected = widget.role.isSuperAdmin
+        ? _catalog.allNames
         : widget.role.permissions.toSet();
   }
 
@@ -48,7 +56,7 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final allNames = widget.catalog.allNames;
+    final allNames = _catalog.allNames;
     final allSelected = allNames.isNotEmpty && _selected.containsAll(allNames);
     return DefaultTabController(
       length: 3,
@@ -65,9 +73,9 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
           ],
           bottom: TabBar(
             tabs: [
-              Tab(text: 'الموارد (${widget.catalog.byKind(ShieldPermissionKind.resource).length})'),
-              Tab(text: 'الصفحات (${widget.catalog.byKind(ShieldPermissionKind.page).length})'),
-              Tab(text: 'الودجات (${widget.catalog.byKind(ShieldPermissionKind.widget).length})'),
+              Tab(text: 'الموارد (${_catalog.byKind(ShieldPermissionKind.resource).length})'),
+              Tab(text: 'الصفحات (${_catalog.byKind(ShieldPermissionKind.page).length})'),
+              Tab(text: 'الودجات (${_catalog.byKind(ShieldPermissionKind.widget).length})'),
             ],
           ),
         ),
@@ -82,7 +90,7 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                     final name = TextFormField(
                       key: const ValueKey('role-name'),
                       controller: _nameController,
-                      enabled: !_readOnly,
+                      enabled: !_readOnly && !_saving,
                       textDirection: TextDirection.ltr,
                       validator: (value) => value == null || value.trim().isEmpty
                           ? 'اسم الدور مطلوب'
@@ -93,13 +101,12 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                         labelText: 'اسم الدور (name)',
                       ),
                     );
-                    final guard = TextFormField(
-                      initialValue: widget.role.guardName,
-                      enabled: false,
-                      textDirection: TextDirection.ltr,
-                      decoration: const InputDecoration(
-                        labelText: 'Guard',
-                      ),
+                    final guard = DropdownButtonFormField<String>(
+                      key: ValueKey('role-guard-$_guard-$_guardRevision'), initialValue: _guard,
+                      decoration: InputDecoration(labelText: AppStrings.of(context).roleGuard),
+                      items: [for (final guard in {...widget.catalog.guardNames, _guard})
+                        DropdownMenuItem(value: guard, child: Text(guard, textDirection: TextDirection.ltr))],
+                      onChanged: _readOnly || _saving ? null : _changeGuard,
                     );
                     final selectAll = AppSettingRow(
                       title: 'تحديد الكل (Select All)',
@@ -110,7 +117,7 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                       trailing: Switch(
                         key: const ValueKey('select-all-permissions'),
                         value: allSelected,
-                        onChanged: _readOnly
+                        onChanged: _readOnly || _saving
                             ? null
                             : (value) => setState(() {
                                   _selected = value ? {...allNames} : {};
@@ -136,21 +143,25 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
                   },
                 ),
               ),
-              if (_readOnly)
+              if (widget.role.isSuperAdmin)
                 const AppNotice(
                   title: 'دور محمي',
                   message: 'super_admin يملك وصولاً ضمنياً كاملاً؛ المصفوفة للعرض فقط.',
                   icon: Icons.lock_outline_rounded,
                   color: AppColors.warning,
                 ),
+              if (_error != null) Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ),
               Expanded(
                 child: TabBarView(
                   children: [
                     for (final kind in ShieldPermissionKind.values)
                       _PermissionGroupsList(
-                        groups: widget.catalog.byKind(kind),
+                        groups: _catalog.byKind(kind),
                         selected: _selected,
-                        readOnly: _readOnly,
+                        readOnly: _readOnly || _saving,
                         onChanged: (names, selected) => setState(() {
                           if (selected) {
                             _selected.addAll(names);
@@ -176,10 +187,10 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
           minimum: const EdgeInsets.all(16),
           child: AppPrimaryButton(
             key: const ValueKey('save-role-matrix'),
-            onPressed: _readOnly ? null : _save,
+            onPressed: _readOnly || _saving ? null : _save,
             icon: Icons.save_outlined,
             loading: _saving,
-            label: _readOnly ? 'دور محمي — للعرض فقط' : 'حفظ الدور ومزامنة الصلاحيات',
+            label: _readOnly ? AppStrings.of(context).roleReadOnly : 'حفظ الدور ومزامنة الصلاحيات',
           ),
         ),
       ),
@@ -187,20 +198,39 @@ class _RoleMatrixEditorState extends State<RoleMatrixEditor> {
   }
 
   Future<void> _save() async {
+    if (_readOnly || _saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
+    setState(() { _saving = true; _error = null; });
     final role = Role(
       id: widget.role.id,
       name: _nameController.text.trim(),
-      guardName: widget.role.guardName,
+      guardName: _guard,
       permissions: _selected.toList()..sort(),
       permissionsCount: _selected.length,
       updatedAt: widget.role.updatedAt,
     );
-    final success = await widget.onSave(role);
+    try {
+      final success = await widget.onSave(role);
+      if (!mounted) return;
+      setState(() { _saving = false; _error = success ? null : AppStrings.of(context).unknownError; });
+      if (success) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() { _saving = false; _error = AppStrings.of(context).unknownError; });
+    }
+  }
+
+  Future<void> _changeGuard(String? guard) async {
+    if (guard == null || guard == _guard || _saving || _readOnly) return;
+    final strings = AppStrings.of(context);
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: Text(strings.roleGuardChangeTitle), content: Text(strings.roleGuardChangeMessage),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(strings.cancel)),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(strings.roleGuardConfirm))],
+    ));
     if (!mounted) return;
-    setState(() => _saving = false);
-    if (success) Navigator.pop(context);
+    if (confirmed != true) { setState(() => _guardRevision++); return; }
+    final allowed = widget.catalog.forGuard(guard).allNames;
+    setState(() { _guard = guard; _guardRevision++; _selected = _selected.intersection(allowed); _error = null; });
   }
 }
 

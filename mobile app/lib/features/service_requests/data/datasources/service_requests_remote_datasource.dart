@@ -1,5 +1,6 @@
 import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/network/paginated_collection.dart';
 import '../models/service_request_model.dart';
 
 class ServiceRequestsRemoteDatasource {
@@ -7,13 +8,14 @@ class ServiceRequestsRemoteDatasource {
   final ApiClient _api;
 
   Future<Map<String, dynamic>> getRequests({String? status, int? subscriberId, String? from, String? until}) async {
-    final data = await _api.get('/service-requests', query: {
+    final data = await collectPaginatedCollection((page) => _api.get('/service-requests', query: {
       if (status != null) 'status': status,
       if (subscriberId != null) 'subscriber_id': subscriberId,
       if (from != null) 'created_from': from,
       if (until != null) 'created_until': until,
-    });
-    return data is List ? {'data': data} : jMap(data);
+      'page': page,
+    }));
+    return data;
   }
 
   ServiceRequestModel _one(Object? raw) {

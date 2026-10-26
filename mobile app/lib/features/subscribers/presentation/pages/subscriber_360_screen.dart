@@ -7,6 +7,7 @@ import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/subscriber_experience_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -15,6 +16,7 @@ import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/utils/json_utils.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -43,8 +45,10 @@ import 'subscribers_screen.dart'
 part '../widgets/subscriber_360_tabs.dart';
 
 /// منافذ تكامل: أنور (Dev 2) بطاقة عداد + تسجيل قراءة — أكرم (Dev 3) تحصيل/فواتير/مدفوعات.
-typedef RecordReadingLauncher = void Function(BuildContext context, MeterBalance meter);
-typedef AddMeterLauncher = void Function(BuildContext context, Subscriber subscriber);
+typedef RecordReadingLauncher =
+    void Function(BuildContext context, MeterBalance meter);
+typedef AddMeterLauncher =
+    void Function(BuildContext context, Subscriber subscriber);
 
 bool _has360Cubits(BuildContext context) {
   try {
@@ -81,7 +85,8 @@ class Subscriber360Screen extends StatelessWidget {
         child: MultiBlocProvider(
           providers: [
             BlocProvider<Subscriber360Cubit>(
-              create: (_) => Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
+              create: (_) =>
+                  Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
             ),
             BlocProvider<SubscriptionFeesCubit>(
               create: (_) => SubscriptionFeesCubit(deps.fees)
@@ -125,7 +130,10 @@ class _Subscriber360View extends StatelessWidget {
   final AddMeterLauncher? onAddMeter;
   final CollectPaymentLauncher? onCollectPayment;
 
-  Future<void> _collect(BuildContext context, Subscriber activeSubscriber) async {
+  Future<void> _collect(
+    BuildContext context,
+    Subscriber activeSubscriber,
+  ) async {
     if (onCollectPayment != null) {
       await onCollectPayment!(context, activeSubscriber);
       if (context.mounted) {
@@ -134,19 +142,28 @@ class _Subscriber360View extends StatelessWidget {
       return;
     }
     final cubit = context.read<Subscriber360Cubit>();
-    final saved = await launchDefaultSubscriberPayment(context, activeSubscriber);
+    final saved = await launchDefaultSubscriberPayment(
+      context,
+      activeSubscriber,
+    );
     if (saved && context.mounted) {
       await cubit.load(activeSubscriber.id);
     }
   }
 
-  Future<void> _editSubscriber(BuildContext context, Subscriber activeSubscriber) async {
+  Future<void> _editSubscriber(
+    BuildContext context,
+    Subscriber activeSubscriber,
+  ) async {
     final cubit = context.read<Subscriber360Cubit>();
     bool? saved;
     final router = GoRouter.maybeOf(context);
     if (router != null) {
       try {
-        saved = await context.push<bool>('/subscriber-form', extra: activeSubscriber);
+        saved = await context.push<bool>(
+          '/subscriber-form',
+          extra: activeSubscriber,
+        );
       } catch (_) {
         if (!context.mounted) return;
         saved = await Navigator.of(context).push<bool>(
@@ -173,7 +190,10 @@ class _Subscriber360View extends StatelessWidget {
     }
   }
 
-  Future<void> _deleteSubscriber(BuildContext context, Subscriber activeSubscriber) async {
+  Future<void> _deleteSubscriber(
+    BuildContext context,
+    Subscriber activeSubscriber,
+  ) async {
     final confirmed = await confirmAction(
       context,
       'حذف المشترك',
@@ -192,7 +212,10 @@ class _Subscriber360View extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.danger),
+          SnackBar(
+            content: Text(friendlyError(e)),
+            backgroundColor: AppColors.danger,
+          ),
         );
       }
     }
@@ -204,82 +227,77 @@ class _Subscriber360View extends StatelessWidget {
       builder: (context, state) {
         final detail = state.detail;
         final activeSubscriber = detail?.subscriber ?? subscriber;
-        final scheme = Theme.of(context).colorScheme;
         return DefaultTabController(
           length: 6,
           child: SubPageScaffold(
             title: activeSubscriber.name,
-            subtitle: 'الملف المالي الشامل 360°',
+            subtitle: SubscriberExperienceStrings.profile,
             actions: [
               AppIconButton(
                 icon: Icons.payments_outlined,
-                tooltip: 'تحصيل دفعة',
-                size: 38,
+                tooltip: SubscriberExperienceStrings.collect,
+                size: 48,
                 onPressed: () => _collect(context, activeSubscriber),
               ),
-              AppIconButton(
-                icon: Icons.edit_outlined,
-                tooltip: 'تعديل المشترك',
-                size: 38,
-                onPressed: () => _editSubscriber(context, activeSubscriber),
-              ),
-              AppIconButton(
-                icon: Icons.delete_outline,
-                tooltip: 'حذف المشترك',
-                size: 38,
-                onPressed: () => _deleteSubscriber(context, activeSubscriber),
+              PopupMenuButton<String>(
+                tooltip: SubscriberExperienceStrings.options,
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _editSubscriber(context, activeSubscriber);
+                  }
+                  if (value == 'delete') {
+                    _deleteSubscriber(context, activeSubscriber);
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Text(SubscriberExperienceStrings.edit),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(SubscriberExperienceStrings.delete),
+                  ),
+                ],
               ),
             ],
             child: state.loading
                 ? const AppLoader()
                 : detail == null
-                    ? AdminEmptyView(
-                        title: 'تعذر تحميل الملف',
-                        message: state.error,
-                        icon: Icons.error_outline_rounded,
-                      )
-                    : Column(children: [
-                        _FinancialSummaryHeader(summary: detail.summary),
-                        Material(
-                          color: scheme.surface,
-                          child: TabBar(
-                            isScrollable: true,
-                            tabAlignment: TabAlignment.start,
-                            labelColor: scheme.primary,
-                            unselectedLabelColor: scheme.onSurfaceVariant,
-                            indicatorColor: scheme.primary,
-                            tabs: const [
-                              Tab(icon: Icon(Icons.speed), text: 'العدادات'),
-                              Tab(icon: Icon(Icons.receipt_long), text: 'الفواتير'),
-                              Tab(icon: Icon(Icons.payments), text: 'المدفوعات'),
-                              Tab(icon: Icon(Icons.card_membership), text: 'رسوم الاشتراك'),
-                              Tab(icon: Icon(Icons.local_shipping), text: 'طلبات الوايت'),
-                              Tab(icon: Icon(Icons.account_balance), text: 'كشف الحساب'),
-                            ],
-                          ),
+                ? AdminEmptyView(
+                    title: 'تعذر تحميل الملف',
+                    message: state.error,
+                    icon: Icons.error_outline_rounded,
+                  )
+                : NestedScrollView(
+                    headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                      SliverToBoxAdapter(
+                        child: _FinancialSummaryHeader(summary: detail.summary),
+                      ),
+                      const SliverToBoxAdapter(child: _SubscriberSections()),
+                    ],
+                    body: TabBarView(
+                      children: [
+                        _MetersTab(
+                          detail: detail,
+                          onRecordReading: onRecordReading,
+                          onAddMeter: onAddMeter,
                         ),
-                        Expanded(
-                          child: TabBarView(children: [
-                            _MetersTab(
-                              detail: detail,
-                              onRecordReading: onRecordReading,
-                              onAddMeter: onAddMeter,
-                            ),
-                            _InvoicesTab(
-                              subscriber: activeSubscriber,
-                              invoices: detail.invoices,
-                              onCollect: () => _collect(context, activeSubscriber),
-                            ),
-                            _PaymentsTab(
-                              subscriber: activeSubscriber,
-                              payments: detail.payments,
-                            ),
-                            _FeesTab(meters: detail.summary.meterBalances),
-                            const _RequestsTab(),
-                            _StatementTab(subscriberName: activeSubscriber.name),
-                          ]),
+                        _InvoicesTab(
+                          subscriber: activeSubscriber,
+                          invoices: detail.invoices,
+                          onCollect: () => _collect(context, activeSubscriber),
                         ),
-                      ]),
+                        _PaymentsTab(
+                          subscriber: activeSubscriber,
+                          payments: detail.payments,
+                        ),
+                        _FeesTab(meters: detail.summary.meterBalances),
+                        const _RequestsTab(),
+                        _StatementTab(subscriberName: activeSubscriber.name),
+                      ],
+                    ),
+                  ),
           ),
         );
       },
@@ -287,8 +305,107 @@ class _Subscriber360View extends StatelessWidget {
   }
 }
 
-/// لوحة الملخص المالي: فصل صريح بين الرصيد العام وأرصدة كل عداد (قاعدة العزل).
-/// الرصيد العام هو رقم الصفحة البطل على لوحة الحبر الوحيدة، والبقية أرقام مساندة.
+/// All six sections remain visible without a horizontally hidden tab rail.
+class _SubscriberSections extends StatelessWidget {
+  const _SubscriberSections();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    final theme = Theme.of(context);
+    const sections = [
+      (Icons.speed_outlined, SubscriberExperienceStrings.meters),
+      (Icons.receipt_long_outlined, SubscriberExperienceStrings.invoices),
+      (Icons.payments_outlined, SubscriberExperienceStrings.payments),
+      (Icons.card_membership_outlined, SubscriberExperienceStrings.fees),
+      (Icons.local_shipping_outlined, SubscriberExperienceStrings.tankers),
+      (Icons.account_balance_outlined, SubscriberExperienceStrings.statement),
+    ];
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
+            final columns = constraints.maxWidth > 700
+                ? 6
+                : largeText
+                ? 2
+                : 3;
+            final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < sections.length; i++)
+                  SizedBox(
+                    width: width,
+                    child: Semantics(
+                      selected: controller.index == i,
+                      button: true,
+                      child: Material(
+                        color: controller.index == i
+                            ? theme.colorScheme.primaryContainer
+                            : theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: () => controller.animateTo(i),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 52),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: controller.index == i
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.outlineVariant,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  sections[i].$1,
+                                  size: 19,
+                                  color: controller.index == i
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const Gap(4),
+                                Text(
+                                  sections[i].$2,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: controller.index == i
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: controller.index == i
+                                        ? theme.colorScheme.onPrimaryContainer
+                                        : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// General account stays separate from meter debts and uninvoiced fees.
 class _FinancialSummaryHeader extends StatelessWidget {
   const _FinancialSummaryHeader({required this.summary});
   final FinancialSummary summary;
@@ -296,94 +413,302 @@ class _FinancialSummaryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 4),
-      child: AppHeroPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'الرصيد العام للمشترك (اشتراك/وايت)',
-              style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF123451),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF24577B)),
             ),
-            const Gap(4),
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(
-                CurrencyFormatter.format(summary.generalBalance),
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  color: AppColors.onPanel,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            const Gap(12),
-            Wrap(
-              spacing: 20,
-              runSpacing: 10,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroStat(label: 'إجمالي دائن (عام + عدادات)', value: summary.totalCredit),
-                _HeroStat(label: 'إجمالي مدين / متأخرات', value: -summary.totalDebit),
-                _HeroStat(label: 'متبقي رسوم اشتراك غير مفوترة', value: -summary.remainingSubscriptionFee),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        SubscriberExperienceStrings.generalBalance,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: const Color(0xFFCCE6F7),
+                        ),
+                      ),
+                      const Gap(6),
+                      _SubscriberMoney(
+                        value: summary.generalBalance,
+                        color: Colors.white,
+                        fontSize: 32,
+                      ),
+                      const Gap(6),
+                      Text(
+                        SubscriberExperienceStrings.generalHint,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFCCE6F7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Gap(12),
+                const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Color(0xFF7BD9F1),
+                  size: 30,
+                ),
               ],
             ),
-            if (summary.meterBalances.isNotEmpty) ...[
-              const Gap(12),
-              Text(
-                'أرصدة العدادات المعزولة:',
-                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelSoft),
+          ),
+          const Gap(10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
+              final columns = constraints.maxWidth < 330 || largeText ? 1 : 3;
+              final width =
+                  (constraints.maxWidth - 8 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _HeroStat(
+                      label: SubscriberExperienceStrings.totalCredit,
+                      value: summary.totalCredit,
+                      icon: Icons.south_west_rounded,
+                      color: AppSemantic.resolve(context, AppColors.success),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _HeroStat(
+                      label: SubscriberExperienceStrings.totalDebit,
+                      value: summary.totalDebit,
+                      icon: Icons.north_east_rounded,
+                      color: AppSemantic.resolve(context, AppColors.danger),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _HeroStat(
+                      label: SubscriberExperienceStrings.uninvoicedFees,
+                      value: summary.remainingSubscriptionFee,
+                      icon: Icons.pending_actions_outlined,
+                      color: AppSemantic.resolve(context, AppColors.warning),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (summary.meterBalances.isNotEmpty) ...[
+            const Gap(10),
+            ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+              childrenPadding: const EdgeInsetsDirectional.fromSTEB(
+                12,
+                0,
+                12,
+                12,
+              ),
+              collapsedShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: scheme.outlineVariant),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: scheme.outlineVariant),
+              ),
+              leading: Icon(Icons.speed_outlined, color: scheme.primary),
+              title: Text(
+                SubscriberExperienceStrings.isolatedMeters,
+                style: theme.textTheme.labelLarge,
+              ),
+              children: [
+                for (final meter in summary.meterBalances)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${SubscriberExperienceStrings.meterTitle(meter.meterId)} • ${meter.tenantName ?? meter.uniqueCode}',
+                          style: theme.textTheme.labelMedium,
+                        ),
+                        const Gap(5),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 5,
+                          children: [
+                            _MeterAmount(
+                              label: SubscriberExperienceStrings.credit,
+                              amount: meter.credit,
+                            ),
+                            _MeterAmount(
+                              label: SubscriberExperienceStrings.debit,
+                              amount: meter.debit,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MeterAmount extends StatelessWidget {
+  const _MeterAmount({required this.label, required this.amount});
+  final String label;
+  final double amount;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      const Gap(6),
+      _SubscriberMoney(value: amount, fontSize: 13),
+    ],
+  );
+}
+
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+  final String label;
+  final double value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    radius: 12,
+    padding: const EdgeInsets.all(12),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 200) {
+          return Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const Gap(8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
               ),
               const Gap(8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  for (final m in summary.meterBalances)
-                    HeroMetaChip(
-                      icon: Icons.speed_rounded,
-                      label: '${m.title} | دائن ${m.credit.toStringAsFixed(0)} / مدين ${m.debit.toStringAsFixed(0)}',
-                    ),
-                ],
+              Flexible(
+                child: _SubscriberMoney(
+                  value: value,
+                  color: color,
+                  fontSize: 19,
+                ),
               ),
             ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 17, color: color),
+            const Gap(8),
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+            const Gap(6),
+            _SubscriberMoney(value: value, color: color, fontSize: 17),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Isolates the numeral direction while retaining Arabic currency direction.
+class _SubscriberMoney extends StatelessWidget {
+  const _SubscriberMoney({required this.value, this.color, this.fontSize = 18});
+  final double value;
+  final Color? color;
+  final double fontSize;
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 5,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Text(
+          CurrencyFormatter.format(
+            value == 0 ? 0 : value,
+          ).replaceAll(' ريال', ''),
+          style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+      Text(
+        SubscriberExperienceStrings.currency,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ],
+  );
+}
+
+typedef Subscriber360View = Subscriber360;
+
+class _SubscriberEmptyState extends StatelessWidget {
+  const _SubscriberEmptyState({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 24, 16, 24),
+      child: AppCard(
+        radius: 16,
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppGlyph(icon: icon, size: 44),
+            const Gap(14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleMedium),
+                  const Gap(6),
+                  Text(
+                    SubscriberExperienceStrings.emptyHint,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
-
-/// رقم مساند داخل لوحة الحبر: تسمية صامتة + قيمة بيضاء بأرقام جدولية.
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label, required this.value});
-  final String label;
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted)),
-        const Gap(2),
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: Text(
-            CurrencyFormatter.format(value),
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: AppColors.onPanel,
-              fontWeight: FontWeight.w600,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── التبويب 1: العدادات ───
-typedef Subscriber360View = Subscriber360;

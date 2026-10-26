@@ -1,5 +1,6 @@
 import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/network/paginated_collection.dart';
 import '../../../squares/data/models/square_model.dart';
 import '../models/subscriber_model.dart';
 
@@ -10,12 +11,13 @@ class SubscribersRemoteDatasource {
   Future<List<SubscriberModel>> getSubscribers({
     String? query, int? squareId, String? status, int? perPage,
   }) async {
-    final data = await _api.get('/subscribers', query: {
+    final data = await collectPaginatedCollection((page) => _api.get('/subscribers', query: {
       if (query != null && query.isNotEmpty) 'q': query,
       if (squareId != null) 'square_id': squareId,
       if (status != null) 'status': status,
       if (perPage != null) 'per_page': perPage,
-    });
+      'page': page,
+    }), collectionKeys: const ['subscribers']);
     return jMapList(data).map(SubscriberModel.fromJson).toList();
   }
 

@@ -3,12 +3,95 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /** Shared helpers for the mobile API controllers. */
 abstract class ApiController extends Controller
 {
+    /** Trusted field mappings only; request values are never SQL identifiers. */
+    protected const LIST_SORTS = [
+        'subscribers' => ['id', 'name', 'subscription_start_date', 'balance', 'status', 'created_at', 'square_name' => 'square.name', 'meters_count' => '@meters_count'],
+        'meters' => ['id', 'unique_code', 'path_number', 'tenant_name', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'square_name' => 'subscriber.square.name'],
+        'readings' => ['id', 'reading_date', 'actual_reading_date', 'previous_reading', 'current_reading', 'consumption_units', 'created_at', 'meter_code' => 'meter.unique_code', 'subscriber_name' => 'meter.subscriber.name'],
+        'invoices' => ['id', 'bill_number', 'bill_date', 'total_amount', 'amount_paid', 'status', 'created_at', 'beneficiary_name' => 'subscriber.name', 'subscriber_name' => 'subscriber.name', 'total_due' => ['expression' => 'COALESCE(invoices.total_amount, 0) + COALESCE(invoices.previous_balance, 0)']],
+        'payments' => ['id', 'receipt_number', 'payment_date', 'amount', 'created_at', 'subscriber_name' => 'subscriber.name', 'user_name' => 'user.name'],
+        'void_requests' => ['id', 'receipt_number', 'amount', 'void_requested_at', 'subscriber_name' => 'subscriber.name'],
+        'subscription_fees' => ['id', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'meter_code' => 'meter.unique_code', 'invoice_number' => 'invoice.bill_number'],
+        'service_requests' => ['id', 'service_date', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name'],
+        'squares' => ['id', 'name', 'created_at', 'subscribers_count' => '@subscribers_count'],
+        'tariffs' => ['id', 'name', 'unit_price', 'start_date', 'end_date', 'created_at', 'updated_at', 'deleted_at'],
+        'transactions' => ['id', 'created_at', 'amount', 'type', 'subscriber_name' => 'subscriber.name'],
+        'users' => ['id', 'name', 'email', 'email_verified_at', 'created_at', 'updated_at'],
+        'roles' => ['id', 'name', 'guard_name', 'created_at', 'updated_at', 'permissions_count' => '@permissions_count'],
+        'cash_sessions' => ['id', 'session_date', 'expected_amount', 'counted_amount', 'variance_amount', 'closed_at', 'collector_name' => 'user.name'],
+        'audit_events' => ['id', 'event', 'source', 'created_at', 'occurred_at' => 'created_at', 'actor_name' => 'actor.name'],
+        'settings' => ['id', 'key', 'label', 'type', 'created_at', 'updated_at'],
+    ];
+
+    /** Sort the complete authorized query before pagination, with a stable key. */
+    protected function applySorting(Builder $query, Request $request, array $fields): Builder
+    {
+        $allowed = [];
+        foreach ($fields as $key => $field) {
+            $allowed[is_int($key) ? $field : $key] = $field;
+        }
+        $input = $request->validate([
+            'sort_by' => ['nullable', 'string', Rule::in(array_keys($allowed))],
+            'sort_direction' => ['nullable', Rule::in(['asc', 'desc'])],
+        ]);
+        $primaryKey = $query->getModel()->getQualifiedKeyName();
+        if (! empty($input['sort_by'])) {
+            $field = $allowed[$input['sort_by']];
+            $direction = $input['sort_direction'] ?? 'asc';
+            $query->reorder();
+            if (is_array($field)) {
+                $query->orderByRaw($field['expression'] . ' ' . $direction);
+            } elseif (str_starts_with($field, '@')) {
+                $query->orderBy(substr($field, 1), $direction);
+            } elseif (str_contains($field, '.')) {
+                [$relation, $column] = [substr($field, 0, strrpos($field, '.')), substr($field, strrpos($field, '.') + 1)];
+                $query->orderBy($this->relatedSortQuery($query->getModel(), $relation, $column), $direction);
+            } else {
+                $query->orderBy($query->getModel()->qualifyColumn($field), $direction);
+            }
+            if ($field !== $query->getModel()->getKeyName()) {
+                $query->orderBy($primaryKey, $direction);
+            }
+        } else {
+            // Keep every existing default order and make equal values stable.
+            $orders = $query->getQuery()->orders ?? [];
+            $hasPrimaryKey = collect($orders)->contains(fn ($order) => in_array($order['column'] ?? null, [$primaryKey, $query->getModel()->getKeyName()], true));
+            if (! $hasPrimaryKey) {
+                $query->orderBy($primaryKey, end($orders)['direction'] ?? 'asc');
+            }
+        }
+        return $query;
+    }
+
+    /** Correlated belongs-to subqueries avoid joins changing rows or scopes. */
+    private function relatedSortQuery(Model $model, string $path, string $column): Builder
+    {
+        [$head, $tail] = array_pad(explode('.', $path, 2), 2, null);
+        $relation = Relation::noConstraints(fn () => $model->{$head}());
+        if (! $relation instanceof BelongsTo) {
+            throw new \LogicException('Only belongs-to relations can be used in list sorting.');
+        }
+        $related = $relation->getRelated();
+        $sort = $related->newQuery();
+        if ($tail !== null) {
+            $sort->selectSub($this->relatedSortQuery($related, $tail, $column), 'list_sort_value');
+        } else {
+            $sort->select($related->qualifyColumn($column));
+        }
+        return $sort->whereColumn($relation->getQualifiedOwnerKeyName(), $relation->getQualifiedForeignKeyName())->limit(1);
+    }
+
     /**
      * Check the project’s Shield-style permission names as well as the older
      * snake_case names used by sync_permissions.php. Admin roles are explicit
@@ -64,8 +147,10 @@ abstract class ApiController extends Controller
             return;
         }
 
-        $legacy = Str::snake(str_replace(':', '_', $permission));
-        abort_unless($user->can($permission) || $user->can($legacy), 403, 'ليست لديك صلاحية لإدارة النظام.');
+        [$ability, $resource] = array_pad(explode(':', $permission, 2), 2, '');
+        $legacy = Str::snake($ability) . ($resource === '' ? '' : '_' . Str::snake($resource));
+        $previousLegacy = Str::snake(str_replace(':', '_', $permission));
+        abort_unless($user->can($permission) || $user->can($legacy) || $user->can($previousLegacy), 403, 'ليست لديك صلاحية لإدارة النظام.');
     }
 
     protected function authorizeSystemWrite(string $resource): void
@@ -73,11 +158,20 @@ abstract class ApiController extends Controller
         $user = request()->user();
         abort_unless($user, 401, 'يلزم تسجيل الدخول.');
 
-        if ($this->isAdminUser($user)) return;
+        abort_unless($this->allowsSystemWrite($resource), 403, 'ليست لديك صلاحية تعديل إعدادات النظام.');
+    }
 
-        $permission = 'Update:' . $resource;
-        $legacy = Str::snake('update_' . $resource);
-        abort_unless($user->can($permission) || $user->can($legacy), 403, 'ليست لديك صلاحية تعديل إعدادات النظام.');
+    protected function allowsSystemWrite(string $resource): bool
+    {
+        $user = request()->user();
+        if (! $user) return false;
+
+        return $this->isAdminUser($user)
+            || $user->can('Update:' . $resource)
+            || $user->can('update_' . Str::snake($resource))
+            // Preserve previously issued aliases while accepting the normal
+            // snake_case names used by the permission catalog.
+            || $user->can(Str::snake('update_' . $resource));
     }
 
     private function hasBuiltInRoleAccess(object $user, string $resource, string $ability): bool

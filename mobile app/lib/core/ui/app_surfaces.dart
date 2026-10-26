@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/experience_strings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import 'app_tokens.dart';
@@ -90,8 +91,9 @@ class AppGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final base = AppSemantic.resolve(context, tone ?? scheme.primary);
-    final background =
-        neutral ? scheme.surfaceContainerHighest : AppTint.soft(base, context);
+    final background = neutral
+        ? scheme.surfaceContainerHighest
+        : AppTint.soft(base, context);
     return Container(
       width: size,
       height: size,
@@ -104,7 +106,11 @@ class AppGlyph extends StatelessWidget {
               : base.withValues(alpha: AppTheme.isDark(context) ? .22 : .14),
         ),
       ),
-      child: Icon(icon, size: size * .46, color: neutral ? scheme.onSurfaceVariant : base),
+      child: Icon(
+        icon,
+        size: size * .46,
+        color: neutral ? scheme.onSurfaceVariant : base,
+      ),
     );
   }
 }
@@ -174,7 +180,9 @@ class AppField extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final color = tone == null ? scheme.onSurface : AppSemantic.resolve(context, tone!);
+    final color = tone == null
+        ? scheme.onSurface
+        : AppSemantic.resolve(context, tone!);
     return Column(
       crossAxisAlignment: crossAxisAlignment,
       mainAxisSize: MainAxisSize.min,
@@ -183,7 +191,11 @@ class AppField extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (icon != null) ...<Widget>[
-              Icon(icon, size: 12, color: scheme.onSurfaceVariant.withValues(alpha: .8)),
+              Icon(
+                icon,
+                size: 12,
+                color: scheme.onSurfaceVariant.withValues(alpha: .8),
+              ),
               const SizedBox(width: 4),
             ],
             Text(label, style: theme.textTheme.labelSmall),
@@ -209,8 +221,7 @@ class AppField extends StatelessWidget {
 /// The dark "ink" panel used for the one highlighted summary on a page —
 /// outstanding balance, hub introduction, sync status.
 ///
-/// It is intentionally flat: solid ink, a hairline inner border and generous
-/// padding. The accent colour appears only inside the panel's primary action.
+/// A restrained marine wash distinguishes summaries from operational rows.
 class AppHeroPanel extends StatelessWidget {
   const AppHeroPanel({
     super.key,
@@ -225,14 +236,14 @@ class AppHeroPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
-  /// Deprecated: ignored. Kept so existing call sites compile.
+  /// Optional custom treatment for branded summary surfaces.
   final Gradient? gradient;
 
-  /// Deprecated: ignored.
+  /// Optional border tint for a highlighted state.
   final Color? accent;
   final double radius;
 
-  /// Deprecated: ignored (no decorative ornaments).
+  /// Kept for compatibility with existing summary call sites.
   final bool showOrnaments;
 
   @override
@@ -244,9 +255,15 @@ class AppHeroPanel extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: background,
+        gradient:
+            gradient ??
+            LinearGradient(
+              begin: AlignmentDirectional.topStart,
+              end: AlignmentDirectional.bottomEnd,
+              colors: [background, AppColors.panelElevated],
+            ),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: line),
+        border: Border.all(color: accent?.withValues(alpha: .4) ?? line),
       ),
       child: Padding(padding: padding, child: child),
     );
@@ -342,7 +359,12 @@ class AppPageBody extends StatelessWidget {
     final content = SingleChildScrollView(
       controller: scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsetsDirectional.fromSTEB(gutter, topPadding, gutter, bottomPadding),
+      padding: EdgeInsetsDirectional.fromSTEB(
+        gutter,
+        topPadding,
+        gutter,
+        bottomPadding,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
@@ -383,4 +405,66 @@ class Gap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(height: size, width: size);
+}
+
+/// Keeps a signed amount and its Arabic unit in separate direction contexts.
+/// Accepts the formatted values used by existing screens, including `ريال`.
+class AppAmount extends StatelessWidget {
+  const AppAmount({
+    super.key,
+    required this.value,
+    this.unit,
+    this.style,
+    this.unitStyle,
+  });
+
+  final String value;
+  final String? unit;
+  final TextStyle? style;
+  final TextStyle? unitStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasCurrency = value.trim().endsWith(ExperienceStrings.currency);
+    var number = hasCurrency
+        ? value
+              .trim()
+              .substring(
+                0,
+                value.trim().length - ExperienceStrings.currency.length,
+              )
+              .trim()
+        : value.trim();
+    // A formatted negative zero is visually misleading while still equal to zero.
+    if (RegExp(r'^-0([,.]0+)?$').hasMatch(number)) number = number.substring(1);
+    final suffix = unit ?? (hasCurrency ? ExperienceStrings.currency : null);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Flexible(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                number,
+                maxLines: 1,
+                style: (style ?? theme.textTheme.headlineSmall)?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (suffix != null && suffix.isNotEmpty) ...[
+          const SizedBox(width: 5),
+          Text(suffix, style: unitStyle ?? theme.textTheme.labelSmall),
+        ],
+      ],
+    );
+  }
 }

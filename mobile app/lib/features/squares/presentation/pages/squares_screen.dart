@@ -8,8 +8,10 @@ import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../../subscribers/domain/repositories/subscribers_repository.dart';
@@ -212,14 +214,21 @@ class _MasterList extends StatelessWidget {
           ],
         ),
       Expanded(
-        child: state.loading
+        child: ListPresentation<Square>(items: state.squares,
+          sortValues: {
+            'name': (label: ListOptionsStrings.name, value: (square) => square.name),
+            'id': (label: ListOptionsStrings.id, value: (square) => square.id),
+            'subscribers_count': (label: ListOptionsStrings.subscriber, value: (square) => square.subscribersCount),
+          }, fields: const {'description': ListOptionsStrings.description,
+            'subscribers_count': ListOptionsStrings.subscriber},
+          builder: (context, squares, options) => state.loading
             ? const Center(child: CircularProgressIndicator())
-            : state.squares.isEmpty
+            : squares.isEmpty
                 ? const EmptyState(message: 'لا توجد مربعات سكنية')
                 : ListView.builder(
-                    itemCount: state.squares.length,
+                    itemCount: squares.length,
                     itemBuilder: (_, i) {
-                      final sq = state.squares[i];
+                      final sq = squares[i];
                       final selected = state.selected?.id == sq.id;
                       final checked = state.selectedIds.contains(sq.id);
                       return Padding(
@@ -233,6 +242,7 @@ class _MasterList extends StatelessWidget {
                             ? Theme.of(context).colorScheme.primary.withValues(alpha: .4)
                             : null,
                         child: ListTile(
+                          dense: options.compact,
                           leading: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -249,9 +259,10 @@ class _MasterList extends StatelessWidget {
                             ],
                           ),
                           title: Text(sq.name),
-                          subtitle: Text(sq.description ?? ''),
+                          subtitle: options.isVisible('description') ? Text(sq.description ?? '') : null,
                           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            StatusBadge(label: '${sq.subscribersCount} مشترك', color: AppColors.info),
+                            if (options.isVisible('subscribers_count'))
+                              StatusBadge(label: '${sq.subscribersCount} مشترك', color: AppColors.info),
                             PopupMenuButton<String>(
                               tooltip: 'خيارات المربع',
                               shape: RoundedRectangleBorder(
@@ -309,6 +320,7 @@ class _MasterList extends StatelessWidget {
                       );
                     },
                   ),
+        ),
       ),
     ]);
   }

@@ -1,46 +1,44 @@
 # Design system — Water platform (v2)
 
-Version 2 replaces the "gradient + glow + colour-per-module" treatment with a
-single, quiet system: **one accent, two backgrounds, hairlines instead of
-shadows, and weight instead of colour for hierarchy**. Everything below lives in
-`lib/core/theme` and `lib/core/ui`; screens do not hard-code hex values.
+The October 26 refresh gives the water workspace a marine blue identity in
+both light and dark modes. Shared components live in `lib/core/theme` and
+`lib/core/ui`. See `../docs/v2/UI_REDESIGN_20261026_AR.md` for validation.
 
 ## The five rules
 
-1. **One accent.** Deep teal `#0C6B60` marks primary actions, the selected tab
-   and the active rail item. Nothing else is saturated.
-2. **No decorative gradients.** Surfaces are flat. The only gradients left in
-   the product are the soft area fill under a chart line (≤12% alpha).
-3. **Hairlines, not shadows.** Cards are `surface` + 1 px `border`. Elevation is
-   reserved for chrome that actually floats: the tab bar, sheets, menus.
-4. **One dark surface per page.** A single ink panel carries the page's headline
-   number (e.g. outstanding balance). The rest of the page is light.
-5. **Weight, not colour, for hierarchy.** Titles are `w600`, body `w400`,
-   numbers `w600` with tabular figures. Semantic colour is used on icons and dots
-   only, always next to a label.
+1. **One brand family.** Blue marks actions and navigation; green, amber and
+   red convey operational status beside a readable label.
+2. **Distinct surfaces.** Navy or pale blue backgrounds separate work areas
+   from cards. A restrained marine gradient may identify the main hero.
+3. **Readable metrics.** Put the label above a dominant number. Isolate signed
+   numbers in LTR and Arabic currency in its own direction context.
+4. **Responsive tasks.** Keep key actions at least 48dp. Let controls and lists
+   scroll together on short viewports and enlarged text.
+5. **Visible navigation.** The six subscriber sections remain visible in a
+   responsive grid; meter balances expand without crowding the summary.
 
 ## Palette
 
 | Token | Light | Use |
 | --- | --- | --- |
-| `accent` | `#0C6B60` | Primary actions, active navigation, key figures |
-| `accentStrong` | `#095149` | Pressed accent, text on `accentSoft` |
-| `accentSoft` | `#E4EFEC` | Selected rows, avatar fallback, active tab pill |
-| `accentOnPanel` | `#5FC9B9` | Accent *inside* the dark panel (buttons, progress) |
-| `ink` / `inkSoft` / `muted` | `#0F1A18` / `#46534F` / `#78857F` | Text hierarchy |
-| `paper` | `#F4F6F5` | Page background |
+| `accent` | `#1265C8` | Primary actions, active navigation, key figures |
+| `accentStrong` | `#084991` | Pressed accent, text on `accentSoft` |
+| `accentSoft` | `#E8F2FF` | Selected rows, avatar fallback, active tab pill |
+| `accentOnPanel` | `#7CD9FF` | Accent *inside* the dark panel (buttons, progress) |
+| `ink` / `inkSoft` / `muted` | `#142B46` / `#3E5570` / `#566A80` | Text hierarchy |
+| `paper` | `#F1F5FA` | Page background |
 | `surface` | `#FFFFFF` | Cards, sheets, tab bar |
-| `surfaceAlt` | `#EDF1EF` | Segmented control track, quiet chips |
-| `border` / `borderStrong` | `#E4E9E7` / `#D3DBD8` | Hairlines, inputs |
-| `panel` | `#0F1A18` | The single dark summary surface, splash/login backdrop |
+| `surfaceAlt` | `#EAF0F7` | Segmented control track, quiet chips |
+| `border` / `borderStrong` | `#DBE4EF` / `#BACADB` | Hairlines, inputs |
+| `panel` | `#102C4D` | The single dark summary surface, splash/login backdrop |
 | `success` | `#157347` | Paid, online, completed |
 | `warning` | `#9A5B00` | Pending, offline, needs attention |
 | `danger` | `#B02A37` | Overdue, destructive |
-| `info` | `#2F5D7C` | Neutral information |
+| `info` | `#24639A` | Neutral information |
 
-Dark theme mirrors the same roles: `darkPaper #0A0F0E`, `darkSurface #121A18`,
-`darkSurfaceAlt #18221F`, `darkBorder #24302D`, `darkInk #E9EFED`,
-`darkAccent #5FC9B9`, `darkPanel #16211E`.
+Dark theme mirrors the same roles: `darkPaper #0B1423`, `darkSurface #142238`,
+`darkSurfaceAlt #1B2D47`, `darkBorder #2A405D`, `darkInk #F2F7FF`,
+`darkAccent #77CFFF`, `darkPanel #123658`.
 
 The legacy aliases (`primary`, `primaryDark`, `secondary`, `mint`, `brandAmber`,
 `violet`, `coral`, `oceanGradient`, `aquaGradient`, …) still exist so older

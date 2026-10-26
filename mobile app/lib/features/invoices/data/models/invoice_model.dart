@@ -93,13 +93,13 @@ class InvoiceModel extends Equatable {
   /// اسم المستلم الحقيقي للرسائل (المستأجر أولاً — كما في `WhatsAppService#L62`).
   String get messageRecipientName =>
       (meter?.tenantName?.trim().isNotEmpty ?? false)
-          ? meter!.tenantName!.trim()
-          : (subscriber?.name ?? '');
+      ? meter!.tenantName!.trim()
+      : (subscriber?.name ?? '');
 
   String? get messageRecipientPhone =>
       (meter?.tenantPhone?.trim().isNotEmpty ?? false)
-          ? meter!.tenantPhone
-          : subscriber?.phone;
+      ? meter!.tenantPhone
+      : subscriber?.phone;
 
   /// `total_amount + previous_balance` (`total_due` في Filament).
   double get totalDue => totalAmount + previousBalance;
@@ -120,10 +120,8 @@ class InvoiceModel extends Equatable {
   /// `Invoice::updateStatus()` مع `grace_period`) — العرض فقط، لا إعادة احتساب.
   bool get isOverdue => status == InvoiceStatus.overdue;
 
-  double get consumptionUnits => readings.fold<double>(
-        0,
-        (sum, r) => sum + r.consumptionUnits,
-      );
+  double get consumptionUnits =>
+      readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
 
   /// سعر الوحدة الضمني (مطابق لمنطق `WhatsAppService#L120`).
   double? get impliedUnitPrice {
@@ -135,18 +133,15 @@ class InvoiceModel extends Equatable {
   }
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
-    final items = JsonUtils
-        .asMapList(json['items'])
-        .map(InvoiceItemModel.fromJson)
-        .toList(growable: false);
-    final readings = JsonUtils
-        .asMapList(json['readings'])
-        .map(InvoiceReadingModel.fromJson)
-        .toList(growable: false);
-    final payments = JsonUtils
-        .asMapList(json['payments'])
-        .map(InvoicePaymentRecord.fromJson)
-        .toList(growable: false);
+    final items = JsonUtils.asMapList(
+      json['items'],
+    ).map(InvoiceItemModel.fromJson).toList(growable: false);
+    final readings = JsonUtils.asMapList(
+      json['readings'],
+    ).map(InvoiceReadingModel.fromJson).toList(growable: false);
+    final payments = JsonUtils.asMapList(
+      json['payments'],
+    ).map(InvoicePaymentRecord.fromJson).toList(growable: false);
 
     return InvoiceModel(
       id: JsonUtils.asInt(json['id']),
@@ -158,7 +153,9 @@ class InvoiceModel extends Equatable {
       periodStart: JsonUtils.asDate(json['billing_period_start']),
       periodEnd: JsonUtils.asDate(json['billing_period_end']),
       consumptionFee: JsonUtils.asDouble(json['consumption_fee']),
-      subscriptionInstallment: JsonUtils.asDouble(json['subscription_installment']),
+      subscriptionInstallment: JsonUtils.asDouble(
+        json['subscription_installment'],
+      ),
       tankerCharges: JsonUtils.asDouble(json['tanker_charges']),
       previousBalance: JsonUtils.asDouble(json['previous_balance']),
       creditApplied: JsonUtils.asDouble(json['credit_applied']),
@@ -174,12 +171,16 @@ class InvoiceModel extends Equatable {
             )
           : null,
       meter: json['meter'] is Map
-          ? InvoiceMeterRef.fromJson((json['meter'] as Map).cast<String, dynamic>())
+          ? InvoiceMeterRef.fromJson(
+              (json['meter'] as Map).cast<String, dynamic>(),
+            )
           : null,
       items: items,
       readings: readings,
       payments: payments,
-      serverTrueRemaining: JsonUtils.asDoubleOrNull(json['true_remaining_amount']),
+      serverTrueRemaining: JsonUtils.asDoubleOrNull(
+        json['true_remaining_amount'],
+      ),
       isLatestInvoice: json['is_latest_invoice'] == null
           ? null
           : JsonUtils.asBool(json['is_latest_invoice']),
@@ -188,40 +189,40 @@ class InvoiceModel extends Equatable {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'subscriber_id': subscriberId,
-        'meter_id': meterId,
-        'invoice_type': invoiceType.wire,
-        'bill_number': billNumber,
-        'bill_date': DateFormat.day(billDate),
-        'billing_period_start': DateFormat.day(periodStart),
-        'billing_period_end': DateFormat.day(periodEnd),
-        'consumption_fee': consumptionFee,
-        'subscription_installment': subscriptionInstallment,
-        'tanker_charges': tankerCharges,
-        'previous_balance': previousBalance,
-        'credit_applied': creditApplied,
-        'total_amount': totalAmount,
-        'amount_paid': amountPaid,
-        'status': status.wire,
-        'notes': notes,
-        'true_remaining_amount': serverTrueRemaining,
-        'is_latest_invoice': isLatestInvoice,
-      };
+    'id': id,
+    'subscriber_id': subscriberId,
+    'meter_id': meterId,
+    'invoice_type': invoiceType.wire,
+    'bill_number': billNumber,
+    'bill_date': DateFormat.day(billDate),
+    'billing_period_start': DateFormat.day(periodStart),
+    'billing_period_end': DateFormat.day(periodEnd),
+    'consumption_fee': consumptionFee,
+    'subscription_installment': subscriptionInstallment,
+    'tanker_charges': tankerCharges,
+    'previous_balance': previousBalance,
+    'credit_applied': creditApplied,
+    'total_amount': totalAmount,
+    'amount_paid': amountPaid,
+    'status': status.wire,
+    'notes': notes,
+    'true_remaining_amount': serverTrueRemaining,
+    'is_latest_invoice': isLatestInvoice,
+  };
 
   /// جسم الطلب لـ `PUT /api/invoices/{id}` (الإنشاء اليدوي يعادل `CreateInvoice`).
   Map<String, dynamic> toUpdatePayload() => <String, dynamic>{
-        'subscriber_id': subscriberId,
-        'bill_date': DateFormat.day(billDate),
-        'status': status.wire,
-        'consumption_fee': consumptionFee,
-        'subscription_installment': subscriptionInstallment,
-        'tanker_charges': tankerCharges,
-        'previous_balance': previousBalance,
-        'credit_applied': creditApplied,
-        'total_amount': totalAmount,
-        'notes': notes,
-      };
+    'subscriber_id': subscriberId,
+    'bill_date': DateFormat.day(billDate),
+    'status': status.wire,
+    'consumption_fee': consumptionFee,
+    'subscription_installment': subscriptionInstallment,
+    'tanker_charges': tankerCharges,
+    'previous_balance': previousBalance,
+    'credit_applied': creditApplied,
+    'total_amount': totalAmount,
+    'notes': notes,
+  };
 
   InvoiceModel copyWith({
     InvoiceStatus? status,
@@ -241,50 +242,49 @@ class InvoiceModel extends Equatable {
     List<InvoicePaymentRecord>? payments,
     InvoiceSubscriberRef? subscriber,
     InvoiceMeterRef? meter,
-  }) =>
-      InvoiceModel(
-        id: id,
-        subscriberId: subscriberId,
-        meterId: meterId,
-        invoiceType: invoiceType,
-        billNumber: billNumber,
-        billDate: billDate ?? this.billDate,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
-        consumptionFee: consumptionFee ?? this.consumptionFee,
-        subscriptionInstallment:
-            subscriptionInstallment ?? this.subscriptionInstallment,
-        tankerCharges: tankerCharges ?? this.tankerCharges,
-        previousBalance: previousBalance ?? this.previousBalance,
-        creditApplied: creditApplied ?? this.creditApplied,
-        totalAmount: totalAmount ?? this.totalAmount,
-        amountPaid: amountPaid ?? this.amountPaid,
-        status: status ?? this.status,
-        notes: notes ?? this.notes,
-        createdAt: createdAt,
-        deletedAt: deletedAt,
-        subscriber: subscriber ?? this.subscriber,
-        meter: meter ?? this.meter,
-        items: items ?? this.items,
-        readings: readings ?? this.readings,
-        payments: payments ?? this.payments,
-        serverTrueRemaining: serverTrueRemaining ?? this.serverTrueRemaining,
-        isLatestInvoice: isLatestInvoice ?? this.isLatestInvoice,
-        isPathMatch: isPathMatch,
-      );
+  }) => InvoiceModel(
+    id: id,
+    subscriberId: subscriberId,
+    meterId: meterId,
+    invoiceType: invoiceType,
+    billNumber: billNumber,
+    billDate: billDate ?? this.billDate,
+    periodStart: periodStart,
+    periodEnd: periodEnd,
+    consumptionFee: consumptionFee ?? this.consumptionFee,
+    subscriptionInstallment:
+        subscriptionInstallment ?? this.subscriptionInstallment,
+    tankerCharges: tankerCharges ?? this.tankerCharges,
+    previousBalance: previousBalance ?? this.previousBalance,
+    creditApplied: creditApplied ?? this.creditApplied,
+    totalAmount: totalAmount ?? this.totalAmount,
+    amountPaid: amountPaid ?? this.amountPaid,
+    status: status ?? this.status,
+    notes: notes ?? this.notes,
+    createdAt: createdAt,
+    deletedAt: deletedAt,
+    subscriber: subscriber ?? this.subscriber,
+    meter: meter ?? this.meter,
+    items: items ?? this.items,
+    readings: readings ?? this.readings,
+    payments: payments ?? this.payments,
+    serverTrueRemaining: serverTrueRemaining ?? this.serverTrueRemaining,
+    isLatestInvoice: isLatestInvoice ?? this.isLatestInvoice,
+    isPathMatch: isPathMatch,
+  );
 
   @override
   List<Object?> get props => <Object?>[
-        id,
-        billNumber,
-        status,
-        totalAmount,
-        amountPaid,
-        previousBalance,
-        creditApplied,
-        serverTrueRemaining,
-        isLatestInvoice,
-      ];
+    id,
+    billNumber,
+    status,
+    totalAmount,
+    amountPaid,
+    previousBalance,
+    creditApplied,
+    serverTrueRemaining,
+    isLatestInvoice,
+  ];
 }
 
 /// بنود الفاتورة (`invoice_items`) — تُنشأ في `InvoiceService::generateInvoice` سطر 165-205.
@@ -301,7 +301,8 @@ class InvoiceItemModel extends Equatable {
   final String description;
   final double amount;
 
-  factory InvoiceItemModel.fromJson(Map<String, dynamic> json) => InvoiceItemModel(
+  factory InvoiceItemModel.fromJson(Map<String, dynamic> json) =>
+      InvoiceItemModel(
         id: JsonUtils.asInt(json['id']),
         type: InvoiceItemType.parse(json['type'] as String?),
         description: JsonUtils.asString(json['description']),
@@ -309,11 +310,11 @@ class InvoiceItemModel extends Equatable {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'type': type.wire,
-        'description': description,
-        'amount': amount,
-      };
+    'id': id,
+    'type': type.wire,
+    'description': description,
+    'amount': amount,
+  };
 
   @override
   List<Object?> get props => <Object?>[id, type, description, amount];
@@ -339,7 +340,8 @@ class InvoiceReadingModel extends Equatable {
   final DateTime? periodStart;
   final DateTime? periodEnd;
 
-  factory InvoiceReadingModel.fromJson(Map<String, dynamic> json) => InvoiceReadingModel(
+  factory InvoiceReadingModel.fromJson(Map<String, dynamic> json) =>
+      InvoiceReadingModel(
         id: JsonUtils.asInt(json['id']),
         previousReading: JsonUtils.asDouble(json['previous_reading']),
         currentReading: JsonUtils.asDouble(json['current_reading']),
@@ -350,7 +352,12 @@ class InvoiceReadingModel extends Equatable {
       );
 
   @override
-  List<Object?> get props => <Object?>[id, previousReading, currentReading, consumptionUnits];
+  List<Object?> get props => <Object?>[
+    id,
+    previousReading,
+    currentReading,
+    consumptionUnits,
+  ];
 }
 
 /// سجل دفعة مرتبطة بالفاتورة (يظهر في `SCR-15`).
@@ -382,7 +389,9 @@ class InvoicePaymentRecord extends Equatable {
       method: PaymentMethod.parse(json['payment_method'] as String?),
       paymentDate: JsonUtils.asDate(json['payment_date']),
       referenceNumber: JsonUtils.asStringOrNull(json['reference_number']),
-      collectorName: user is Map ? JsonUtils.asStringOrNull(user['name']) : null,
+      collectorName: user is Map
+          ? JsonUtils.asStringOrNull(user['name'])
+          : null,
     );
   }
 
@@ -422,7 +431,9 @@ class InvoiceSubscriberRef extends Equatable {
       name: JsonUtils.asString(json['name'], fallback: '-'),
       phone: JsonUtils.asStringOrNull(json['phone']),
       squareId: JsonUtils.asIntOrNull(json['square_id']),
-      squareName: square is Map ? JsonUtils.asStringOrNull(square['name']) : null,
+      squareName: square is Map
+          ? JsonUtils.asStringOrNull(square['name'])
+          : null,
       balance: JsonUtils.asDouble(json['balance']),
       status: JsonUtils.asStringOrNull(json['status']),
     );
@@ -462,7 +473,8 @@ class InvoiceMeterRef extends Equatable {
     return pathNumber == null ? code : '$code / مسار $pathNumber';
   }
 
-  factory InvoiceMeterRef.fromJson(Map<String, dynamic> json) => InvoiceMeterRef(
+  factory InvoiceMeterRef.fromJson(Map<String, dynamic> json) =>
+      InvoiceMeterRef(
         id: JsonUtils.asInt(json['id']),
         uniqueCode: JsonUtils.asStringOrNull(json['unique_code']),
         pathNumber: JsonUtils.asIntOrNull(json['path_number']),
@@ -473,8 +485,14 @@ class InvoiceMeterRef extends Equatable {
       );
 
   @override
-  List<Object?> get props =>
-      <Object?>[id, uniqueCode, pathNumber, tenantName, tenantPhone, balance];
+  List<Object?> get props => <Object?>[
+    id,
+    uniqueCode,
+    pathNumber,
+    tenantName,
+    tenantPhone,
+    balance,
+  ];
 }
 
 /// فترة فوترة مميزة (لملء فلتر `billing_period`) — `GET /api/invoices/billing-periods`.
@@ -501,14 +519,24 @@ class BillingPeriodOption extends Equatable {
     if (parts.length == 2) {
       final start = JsonUtils.asDate(parts[0]) ?? DateTime.now();
       final end = JsonUtils.asDate(parts[1]) ?? start;
-      return BillingPeriodOption(start: start, end: end, invoiceCount: invoiceCount);
+      return BillingPeriodOption(
+        start: start,
+        end: end,
+        invoiceCount: invoiceCount,
+      );
     }
     final now = DateTime.now();
-    return BillingPeriodOption(start: now, end: now, invoiceCount: invoiceCount);
+    return BillingPeriodOption(
+      start: now,
+      end: now,
+      invoiceCount: invoiceCount,
+    );
   }
 
   factory BillingPeriodOption.fromJson(Map<String, dynamic> json) {
-    final start = JsonUtils.asDate(json['billing_period_start'] ?? json['start']);
+    final start = JsonUtils.asDate(
+      json['billing_period_start'] ?? json['start'],
+    );
     final end = JsonUtils.asDate(json['billing_period_end'] ?? json['end']);
     return BillingPeriodOption(
       start: start ?? DateTime.now(),
@@ -521,5 +549,8 @@ class BillingPeriodOption extends Equatable {
   List<Object?> get props => <Object?>[start, end];
 
   @override
-  String toString() => jsonEncode(<String, dynamic>{'start': start, 'end': end});
+  String toString() => jsonEncode(<String, dynamic>{
+    'start': start.toIso8601String(),
+    'end': end.toIso8601String(),
+  });
 }

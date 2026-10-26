@@ -18,12 +18,15 @@ class MeterFormScreen extends StatefulWidget {
     required this.repository,
     this.meter,
     this.initialSubscriberId,
+    this.onSaved,
     super.key,
   });
 
   final MetersRepository repository;
   final Meter? meter;
   final int? initialSubscriberId;
+  /// Receives the persisted meter only after a successful save while mounted.
+  final ValueChanged<Meter>? onSaved;
 
   @override
   State<MeterFormScreen> createState() => _MeterFormScreenState();
@@ -208,7 +211,7 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
 
     setState(() => _isSaving = true);
     try {
-      await widget.repository.saveMeter(
+      final savedMeter = await widget.repository.saveMeter(
         MeterDraft(
           uniqueCode: _uniqueCodeController.text.trim(),
           subscriberId: subscriber.id,
@@ -220,6 +223,7 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
         meterId: widget.meter?.id,
       );
       if (!mounted) return;
+      widget.onSaved?.call(savedMeter);
       if (addAnother && widget.meter == null) {
         // سلسلة «حفظ وإضافة عداد آخر» (توازي Filament: Create & create another):
         // يُحفظ العداد ثم يُفرَّغ النموذج ويبقى المشترك نفسه محدداً.

@@ -13,17 +13,24 @@ import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/data/models/invoice_query.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../../invoices/domain/accounting/invoice_accounting.dart';
+import '../../domain/repositories/paginated_payments_repository.dart';
 import '../../domain/repositories/payments_repository.dart';
+import '../../domain/repositories/sorted_void_requests_repository.dart';
 import '../datasources/payments_remote_datasource.dart';
 import '../models/collect_payment_models.dart';
 import '../models/payment_model.dart';
+import '../models/payments_page.dart';
 
 /// مستودع السندات: شبكة + طابور مزامنة أوفلاين للتحصيل الميداني.
 ///
 /// منطق «الدفعة أوفلاين»: سند القبض يُسجَّل في `pending_sync_actions` بمفتاح
 /// idempotency محلي، لأن رقم السند الرسمي (`REC-YYYYMM-XXXX`) يولّده الخادم فقط
 /// (`Payment::generateReceiptNumber`). عند المزامنة يستبدل Dev 2 الرقم المحلي.
-class PaymentsRepositoryImpl implements PaymentsRepository {
+class PaymentsRepositoryImpl
+    implements
+        PaymentsRepository,
+        PaginatedPaymentsRepository,
+        SortedVoidRequestsRepository {
   const PaymentsRepositoryImpl({
     required PaymentsRemoteDataSource remote,
     required InvoicesRemoteDataSource invoices,
@@ -32,12 +39,12 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     AuditLogService? audit,
     Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
-  })  : _remote = remote,
-        _invoices = invoices,
-        _network = networkInfo,
-        _syncQueue = syncQueue,
-        _audit = audit,
-        _uuid = uuid;
+  }) : _remote = remote,
+       _invoices = invoices,
+       _network = networkInfo,
+       _syncQueue = syncQueue,
+       _audit = audit,
+       _uuid = uuid;
 
   final PaymentsRemoteDataSource _remote;
   final InvoicesRemoteDataSource _invoices;
@@ -53,6 +60,9 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
 
   @override
   Future<List<PaymentModel>> list(PaymentQuery query) => _remote.list(query);
+
+  @override
+  Future<PaymentsPage> listPage(PaymentQuery query) => _remote.listPage(query);
 
   @override
   Future<PaymentModel> byId(int id) => _remote.byId(id);
@@ -168,13 +178,20 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     final audit = _audit;
     if (audit == null) return;
     unawaited(() async {
-      await audit.record(event, entityType: entityType, entityId: entityId, after: after);
+      await audit.record(
+        event,
+        entityType: entityType,
+        entityId: entityId,
+        after: after,
+      );
       await audit.flush();
     }());
   }
 
   static bool _isNetworkLike(AppFailure failure) =>
-      failure is NetworkFailure || failure is TimeoutFailure || failure.statusCode == 0;
+      failure is NetworkFailure ||
+      failure is TimeoutFailure ||
+      failure.statusCode == 0;
 
   @override
   Future<PaymentModel> update(int id, Map<String, dynamic> payload) =>
@@ -184,7 +201,10 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   /// مشرف). عند انقطاع الشبكة يُحفظ **طلب** الإلغاء في طابور المزامنة بسبب
   /// مكتوب، ويُرسَل تلقائياً عند العودة؛ السند يبقى صالحاً حتى يقبل الخادم.
   @override
-  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
+  Future<VoidPaymentOutcome> voidPayment(
+    int id, {
+    required String reason,
+  }) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(
@@ -196,7 +216,9 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     try {
       final outcome = await _remote.voidPayment(id, reason: trimmed);
       _record(
-        outcome.pendingApproval ? 'payment.void_pending_approval' : 'payment.voided',
+        outcome.pendingApproval
+            ? 'payment.void_pending_approval'
+            : 'payment.voided',
         entityType: 'Payment',
         entityId: id,
         after: <String, dynamic>{'reason': trimmed},
@@ -211,10 +233,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
       await queue.enqueue(
         SyncAction(
           type: 'payment.void',
-          payload: <String, dynamic>{
-            'payment_id': id,
-            'reason': trimmed,
-          },
+          payload: <String, dynamic>{'payment_id': id, 'reason': trimmed},
           createdAt: DateTime.now(),
           idempotencyKey: _uuid.v4(),
           sourceModule: 'payments',
@@ -233,8 +252,23 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
   }
 
   @override
-  Future<List<PaymentVoidRequest>> voidRequests({int page = 1, int perPage = 25}) =>
-      _remote.voidRequests(page: page, perPage: perPage);
+  Future<List<PaymentVoidRequest>> voidRequests({
+    int page = 1,
+    int perPage = 25,
+  }) => _remote.voidRequests(page: page, perPage: perPage);
+
+  @override
+  Future<List<PaymentVoidRequest>> sortedVoidRequests({
+    required int page,
+    required int perPage,
+    required String sortBy,
+    required String sortDirection,
+  }) => _remote.voidRequests(
+    page: page,
+    perPage: perPage,
+    sortBy: sortBy,
+    sortDirection: sortDirection,
+  );
 
   @override
   Future<bool> decideVoidRequest(
@@ -242,9 +276,15 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
     required bool approve,
     String? notes,
   }) async {
-    final ok = await _remote.decideVoidRequest(id, approve: approve, notes: notes);
+    final ok = await _remote.decideVoidRequest(
+      id,
+      approve: approve,
+      notes: notes,
+    );
     _record(
-      approve ? 'payment.void_request_approved' : 'payment.void_request_rejected',
+      approve
+          ? 'payment.void_request_approved'
+          : 'payment.void_request_rejected',
       entityType: 'Payment',
       entityId: id,
       after: <String, dynamic>{

@@ -17,6 +17,7 @@ class Meter {
     this.installedAt,
     this.removedAt,
     this.isPathMatch = false,
+    this.createdAt,
   });
 
   final int id;
@@ -36,6 +37,7 @@ class Meter {
   final DateTime? installedAt;
   final DateTime? removedAt;
   final bool isPathMatch;
+  final DateTime? createdAt;
 
   bool get isActive => status == 'active';
   double get outstandingBalance => balance < 0 ? -balance : 0;
@@ -58,6 +60,7 @@ class Meter {
     DateTime? installedAt,
     DateTime? removedAt,
     bool? isPathMatch,
+    DateTime? createdAt,
   }) {
     return Meter(
       id: id ?? this.id,
@@ -67,7 +70,8 @@ class Meter {
       squareId: squareId ?? this.squareId,
       subscriberName: subscriberName ?? this.subscriberName,
       squareName: squareName ?? this.squareName,
-      subscriptionStartDate: subscriptionStartDate ?? this.subscriptionStartDate,
+      subscriptionStartDate:
+          subscriptionStartDate ?? this.subscriptionStartDate,
       tenantName: tenantName ?? this.tenantName,
       tenantPhone: tenantPhone ?? this.tenantPhone,
       status: status ?? this.status,
@@ -77,6 +81,7 @@ class Meter {
       installedAt: installedAt ?? this.installedAt,
       removedAt: removedAt ?? this.removedAt,
       isPathMatch: isPathMatch ?? this.isPathMatch,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -90,18 +95,22 @@ class Meter {
       uniqueCode: (json['unique_code'] ?? json['meter_code'] ?? '').toString(),
       pathNumber: _asInt(json['path_number']),
       subscriberId: _asInt(json['subscriber_id'] ?? subscriber?['id']),
-      squareId: _asInt(json['square_id'] ?? subscriber?['square_id'] ?? square?['id']),
+      squareId: _asInt(
+        json['square_id'] ?? subscriber?['square_id'] ?? square?['id'],
+      ),
       subscriberName: _asString(json['subscriber_name'] ?? subscriber?['name']),
       squareName: _asString(json['square_name'] ?? square?['name']),
       subscriptionStartDate: _asDate(
-        json['subscription_start_date'] ?? subscriber?['subscription_start_date'],
+        json['subscription_start_date'] ??
+            subscriber?['subscription_start_date'],
       ),
       tenantName: _asString(json['tenant_name']),
       tenantPhone: _asString(json['tenant_phone']),
       status: (json['status'] ?? 'active').toString(),
       balance: _asDouble(json['balance']) ?? 0,
       initialReading: _asDouble(json['initial_reading']) ?? 0,
-      lastReading: _asDouble(
+      lastReading:
+          _asDouble(
             json['last_reading_value'] ??
                 lastReadingMap?['current_reading'] ??
                 (lastReadingJson is num ? lastReadingJson : null),
@@ -110,28 +119,30 @@ class Meter {
       installedAt: _asDate(json['installed_at']),
       removedAt: _asDate(json['removed_at']),
       isPathMatch: json['is_path_match'] == true || json['is_path_match'] == 1,
+      createdAt: _asDate(json['created_at']),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'unique_code': uniqueCode,
-        'path_number': pathNumber,
-        'subscriber_id': subscriberId,
-        'square_id': squareId,
-        'subscriber_name': subscriberName,
-        'square_name': squareName,
-        'subscription_start_date': _dateString(subscriptionStartDate),
-        'tenant_name': tenantName,
-        'tenant_phone': tenantPhone,
-        'status': status,
-        'balance': balance,
-        'initial_reading': initialReading,
-        'last_reading_value': lastReading,
-        'installed_at': _dateString(installedAt),
-        'removed_at': _dateString(removedAt),
-        'is_path_match': isPathMatch,
-      };
+    'id': id,
+    'unique_code': uniqueCode,
+    'path_number': pathNumber,
+    'subscriber_id': subscriberId,
+    'square_id': squareId,
+    'subscriber_name': subscriberName,
+    'square_name': squareName,
+    'subscription_start_date': _dateString(subscriptionStartDate),
+    'tenant_name': tenantName,
+    'tenant_phone': tenantPhone,
+    'status': status,
+    'balance': balance,
+    'initial_reading': initialReading,
+    'last_reading_value': lastReading,
+    'installed_at': _dateString(installedAt),
+    'removed_at': _dateString(removedAt),
+    'is_path_match': isPathMatch,
+    'created_at': createdAt?.toIso8601String(),
+  };
 }
 
 class MeterDraft {
@@ -152,13 +163,13 @@ class MeterDraft {
   final String status;
 
   Map<String, dynamic> toJson() => {
-        'unique_code': uniqueCode.trim(),
-        'subscriber_id': subscriberId,
-        'path_number': pathNumber,
-        'tenant_name': _emptyToNull(tenantName),
-        'tenant_phone': _emptyToNull(tenantPhone),
-        'status': status,
-      };
+    'unique_code': uniqueCode.trim(),
+    'subscriber_id': subscriberId,
+    'path_number': pathNumber,
+    'tenant_name': _emptyToNull(tenantName),
+    'tenant_phone': _emptyToNull(tenantPhone),
+    'status': status,
+  };
 }
 
 class SquareOption {
@@ -169,10 +180,10 @@ class SquareOption {
   final String? description;
 
   factory SquareOption.fromJson(Map<String, dynamic> json) => SquareOption(
-        id: _asInt(json['id'] ?? json['server_id']) ?? 0,
-        name: (json['name'] ?? '').toString(),
-        description: _asString(json['description']),
-      );
+    id: _asInt(json['id'] ?? json['server_id']) ?? 0,
+    name: (json['name'] ?? '').toString(),
+    description: _asString(json['description']),
+  );
 }
 
 class SubscriberOption {
@@ -207,8 +218,8 @@ class SubscriberOption {
       phone: _asString(json['phone']),
       status: (json['status'] ?? 'active').toString(),
       subscriptionStartDate: _asDate(json['subscription_start_date']),
-      meterCount: _asInt(json['meters_count']) ??
-          (meters is List ? meters.length : 0),
+      meterCount:
+          _asInt(json['meters_count']) ?? (meters is List ? meters.length : 0),
     );
   }
 }
@@ -235,7 +246,8 @@ double? _asDouble(Object? value) {
 DateTime? _asDate(Object? value) =>
     value == null ? null : DateTime.tryParse(value.toString());
 
-String? _dateString(DateTime? value) => value?.toIso8601String().split('T').first;
+String? _dateString(DateTime? value) =>
+    value?.toIso8601String().split('T').first;
 
 String? _emptyToNull(String? value) {
   final trimmed = value?.trim();

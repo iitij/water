@@ -2,11 +2,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
 import '../../data/models/tariff_model.dart';
+import '../../domain/repositories/paginated_tariffs_repository.dart';
 import '../../domain/repositories/tariffs_repository.dart';
 
 enum TariffsLoadStatus { idle, loading, ready, failure }
 
 class TariffsState {
+  static const _unchangedBusy = Object();
   const TariffsState({
     this.tariffs = const <TariffModel>[],
     this.activePrice,
@@ -18,6 +20,12 @@ class TariffsState {
     this.busyId,
     this.selectionMode = false,
     this.selectedIds = const <int>{},
+    this.page = 1,
+    this.pageSize = 25,
+    this.sortBy = 'start_date',
+    this.sortDirection = 'desc',
+    this.lastPage,
+    this.totalCount,
   });
 
   final List<TariffModel> tariffs;
@@ -34,11 +42,22 @@ class TariffsState {
   /// وضع التحديد المتعدد لعمليات التعرفة الجماعية (استعادة/حذف نهائي).
   final bool selectionMode;
   final Set<int> selectedIds;
+  final int page;
+  final int pageSize;
+  final String sortBy;
+  final String sortDirection;
+  final int? lastPage;
+  final int? totalCount;
+  bool get hasPreviousPage => page > 1;
+  bool get hasNextPage =>
+      lastPage != null ? page < lastPage! : tariffs.length == pageSize;
 
   bool get isLoading => status == TariffsLoadStatus.loading;
 
-  bool get canBulkRestore => selectionMode && selectedIds.isNotEmpty && showsTrashed;
-  bool get canBulkForceDelete => selectionMode && selectedIds.isNotEmpty && showsTrashed;
+  bool get canBulkRestore =>
+      selectionMode && selectedIds.isNotEmpty && showsTrashed;
+  bool get canBulkForceDelete =>
+      selectionMode && selectedIds.isNotEmpty && showsTrashed;
 
   bool isSelected(int id) => selectedIds.contains(id);
   bool get showsTrashed => trashFilter != TariffsTrashFilter.without;
@@ -51,10 +70,9 @@ class TariffsState {
 
   TariffModel? get activeTariff {
     final now = DateTime.now();
-    final candidates = tariffs
-        .where((t) => !t.isTrashed && t.isEffectiveOn(now))
-        .toList()
-      ..sort((a, b) => b.id.compareTo(a.id));
+    final candidates =
+        tariffs.where((t) => !t.isTrashed && t.isEffectiveOn(now)).toList()
+          ..sort((a, b) => b.id.compareTo(a.id));
     return candidates.isEmpty ? null : candidates.first;
   }
 
@@ -67,64 +85,165 @@ class TariffsState {
     String? errorMessage,
     bool clearError = false,
     bool? saving,
-    int? busyId,
+    Object? busyId = _unchangedBusy,
     bool? selectionMode,
     Set<int>? selectedIds,
-  }) =>
-      TariffsState(
-        tariffs: tariffs ?? this.tariffs,
-        activePrice: activePrice ?? this.activePrice,
-        trashFilter: trashFilter ?? this.trashFilter,
-        search: search ?? this.search,
-        status: status ?? this.status,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-        saving: saving ?? this.saving,
-        busyId: busyId ?? this.busyId,
-        selectionMode: selectionMode ?? this.selectionMode,
-        selectedIds: selectedIds ?? this.selectedIds,
-      );
+    int? page,
+    int? pageSize,
+    String? sortBy,
+    String? sortDirection,
+    int? lastPage,
+    int? totalCount,
+  }) => TariffsState(
+    tariffs: tariffs ?? this.tariffs,
+    activePrice: activePrice ?? this.activePrice,
+    trashFilter: trashFilter ?? this.trashFilter,
+    search: search ?? this.search,
+    status: status ?? this.status,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    saving: saving ?? this.saving,
+    busyId: identical(busyId, _unchangedBusy) ? this.busyId : busyId as int?,
+    selectionMode: selectionMode ?? this.selectionMode,
+    selectedIds: selectedIds ?? this.selectedIds,
+    page: page ?? this.page,
+    pageSize: pageSize ?? this.pageSize,
+    sortBy: sortBy ?? this.sortBy,
+    sortDirection: sortDirection ?? this.sortDirection,
+    lastPage: lastPage ?? this.lastPage,
+    totalCount: totalCount ?? this.totalCount,
+  );
 }
 
 /// `TariffsCubit` — إدارة شرائح التسعيرة (`SCR-21`) مع `TrashedFilter`/`Restore`/`ForceDelete`.
 class TariffsCubit extends Cubit<TariffsState> {
   TariffsCubit({required TariffsRepository repository})
-      : _repository = repository,
-        super(const TariffsState());
+    : _repository = repository,
+      super(const TariffsState());
 
   final TariffsRepository _repository;
+  int _loadGeneration = 0;
 
   Future<void> load({bool refresh = false}) async {
     if (!refresh && state.tariffs.isNotEmpty) return;
+    final generation = ++_loadGeneration;
+    final query = state;
     emit(state.copyWith(status: TariffsLoadStatus.loading, clearError: true));
     try {
+      final repository = _repository;
+      if (repository is PaginatedTariffsRepository) {
+        final result = await (repository as PaginatedTariffsRepository)
+            .listPage(
+              trash: query.trashFilter,
+              search: query.search,
+              page: query.page,
+              pageSize: query.pageSize,
+              sortBy: query.sortBy,
+              sortDirection: query.sortDirection,
+            );
+        if (isClosed || generation != _loadGeneration) return;
+        if (result.tariffs.isEmpty && query.page > result.lastPage) {
+          emit(state.copyWith(page: result.lastPage));
+          await load(refresh: true);
+          return;
+        }
+        emit(
+          state.copyWith(
+            tariffs: result.tariffs,
+            activePrice: result.activePrice,
+            page: result.currentPage,
+            lastPage: result.lastPage,
+            totalCount: result.total,
+            status: TariffsLoadStatus.ready,
+            busyId: null,
+          ),
+        );
+        return;
+      }
       final tariffs = await _repository.list(
-        trash: state.trashFilter,
-        search: state.search.isEmpty ? null : state.search,
+        trash: query.trashFilter,
+        search: query.search.isEmpty ? null : query.search,
       );
       final activePrice = await _repository.activePrice();
-      emit(state.copyWith(
-        tariffs: tariffs,
-        activePrice: activePrice,
-        status: TariffsLoadStatus.ready,
-      ));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          tariffs: tariffs,
+          activePrice: activePrice,
+          status: TariffsLoadStatus.ready,
+        ),
+      );
     } on AppFailure catch (failure) {
-      emit(state.copyWith(status: TariffsLoadStatus.failure, errorMessage: failure.message));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: TariffsLoadStatus.failure,
+          errorMessage: failure.message,
+        ),
+      );
     } catch (error) {
-      emit(state.copyWith(status: TariffsLoadStatus.failure, errorMessage: '$error'));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: TariffsLoadStatus.failure,
+          errorMessage: '$error',
+        ),
+      );
     }
   }
 
   Future<void> setTrashFilter(TariffsTrashFilter filter) async {
-    emit(state.copyWith(
-      trashFilter: filter,
-      tariffs: const <TariffModel>[],
-      selectedIds: const <int>{},
-      selectionMode: false,
-    ));
+    emit(
+      state.copyWith(
+        trashFilter: filter,
+        page: 1,
+        tariffs: const <TariffModel>[],
+        selectedIds: const <int>{},
+        selectionMode: false,
+      ),
+    );
     await load(refresh: true);
   }
 
-  void search(String value) => emit(state.copyWith(search: value));
+  Future<void> search(String value) async {
+    if (value == state.search) return;
+    emit(state.copyWith(search: value, page: 1, selectedIds: const <int>{}));
+    if (_repository is PaginatedTariffsRepository) await load(refresh: true);
+  }
+
+  Future<void> setPresentation({
+    required int pageSize,
+    required String sortBy,
+    required String sortDirection,
+  }) async {
+    emit(
+      state.copyWith(
+        page: 1,
+        pageSize: pageSize,
+        sortBy: sortBy,
+        sortDirection: sortDirection,
+        selectedIds: const <int>{},
+        selectionMode: false,
+      ),
+    );
+    await load(refresh: true);
+  }
+
+  Future<void> goToPage(int page) async {
+    if (state.isLoading ||
+        page < 1 ||
+        page == state.page ||
+        (state.lastPage != null && page > state.lastPage!)) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        page: page,
+        selectedIds: const <int>{},
+        selectionMode: false,
+      ),
+    );
+    await load(refresh: true);
+  }
 
   Future<bool> save(TariffModel tariff, {bool isNew = true}) async {
     emit(state.copyWith(saving: true, clearError: true));
@@ -148,10 +267,12 @@ class TariffsCubit extends Cubit<TariffsState> {
   /// فتح/إغلاق وضع التحديد، ويُغلق تلقائياً عند تبديل فلتر السلة.
   void toggleSelectionMode({bool? enabled}) {
     final next = enabled ?? !state.selectionMode;
-    emit(state.copyWith(
-      selectionMode: next,
-      selectedIds: next ? state.selectedIds : const <int>{},
-    ));
+    emit(
+      state.copyWith(
+        selectionMode: next,
+        selectedIds: next ? state.selectedIds : const <int>{},
+      ),
+    );
   }
 
   void toggleSelected(int id) {
@@ -202,7 +323,8 @@ class TariffsCubit extends Cubit<TariffsState> {
 
   Future<bool> restore(int id) => _run(id, () => _repository.restore(id));
 
-  Future<bool> forceDelete(int id) => _run(id, () => _repository.forceDelete(id));
+  Future<bool> forceDelete(int id) =>
+      _run(id, () => _repository.forceDelete(id));
 
   Future<bool> _run(int id, Future<void> Function() action) async {
     emit(state.copyWith(busyId: id, clearError: true));

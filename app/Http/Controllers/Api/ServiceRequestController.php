@@ -21,6 +21,7 @@ class ServiceRequestController extends ApiController
         if ($request->filled('from_date')) $query->whereDate('service_date', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('service_date', '<=', $request->query('to_date'));
         $total = (clone $query)->sum('amount');
+        $this->applySorting($query, $request, self::LIST_SORTS['service_requests']);
         $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
             'data' => $page->items(),

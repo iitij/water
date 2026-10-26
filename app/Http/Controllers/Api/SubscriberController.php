@@ -51,6 +51,7 @@ class SubscriberController extends ApiController
             $query->where('status', $request->query('status'));
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['subscribers']);
         $subscribers = $query->paginate($this->perPage($request))->through(fn (Subscriber $subscriber) => $this->subscriberListItem($subscriber));
 
         return $subscribers->appends($request->query());

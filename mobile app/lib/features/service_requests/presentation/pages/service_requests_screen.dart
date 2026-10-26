@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/fouad/api_client.dart' show friendlyError;
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -349,7 +354,19 @@ class _ServiceRequestsView extends StatelessWidget {
               ),
             if (state.loading) const LinearProgressIndicator(),
             Expanded(
-              child: state.requests.isEmpty && !state.loading
+              child: ListPresentation<ServiceRequest>(
+                items: state.requests,
+                initialSettings: const ListPresentationSettings(sortBy: 'id'),
+                sortValues: {
+                  'id': (label: ListOptionsStrings.id, value: (request) => request.id),
+                  'subscriber': (label: ListOptionsStrings.subscriber, value: (request) => request.subscriberName ?? ''),
+                  'amount': (label: ListOptionsStrings.amount, value: (request) => request.amount),
+                  'date': (label: ListOptionsStrings.date, value: (request) => request.serviceDate),
+                  'status': (label: ListOptionsStrings.status, value: (request) => request.status.index),
+                },
+                fields: const {'date': ListOptionsStrings.date, 'invoice': ListOptionsStrings.invoice,
+                  'notes': ListOptionsStrings.notes},
+                builder: (context, requests, options) => requests.isEmpty && !state.loading
                   ? const Center(
                       child: AdminEmptyView(
                         title: 'لا توجد طلبات وايت مطابقة',
@@ -358,9 +375,9 @@ class _ServiceRequestsView extends StatelessWidget {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.only(top: 10, bottom: 24),
-                      itemCount: state.requests.length,
+                      itemCount: requests.length,
                       itemBuilder: (_, i) {
-                        final r = state.requests[i];
+                        final r = requests[i];
                         final checked = state.selectedIds.contains(r.id);
                         return Padding(
                           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
@@ -374,7 +391,7 @@ class _ServiceRequestsView extends StatelessWidget {
                                   : null,
                               borderRadius: BorderRadius.circular(AppRadius.xl),
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(options.compact ? 8 : 12),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -406,8 +423,8 @@ class _ServiceRequestsView extends StatelessWidget {
                                               ),
                                               const Gap(2),
                                               Text(
-                                                '${r.serviceDate} • ${CurrencyFormatter.format(r.amount)}'
-                                                '${r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}',
+                                                '${options.isVisible('date') ? r.serviceDate : ''} • ${CurrencyFormatter.format(r.amount)}'
+                                                '${options.isVisible('invoice') && r.invoiceNumber != null ? ' • فاتورة: ${r.invoiceNumber}' : ''}',
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: Theme.of(context).textTheme.labelSmall,
@@ -480,13 +497,19 @@ class _ServiceRequestsView extends StatelessWidget {
                                                 const PopupMenuItem(value: 'complete', child: Text('إنجاز الطلب')),
                                               if (r.canInvoice && can('Update:ServiceRequest'))
                                                 const PopupMenuItem(value: 'invoice', child: Text('إصدار فاتورة')),
-                                              if (r.canEdit && can('Delete:ServiceRequest'))
+                                              if (r.canDelete && can('Delete:ServiceRequest'))
                                                 const PopupMenuItem(value: 'delete', child: Text('حذف الطلب')),
                                             ],
                                           ),
                                       ],
                                     ),
-                                    if (r.hasNote && r.notes != null && r.notes!.isNotEmpty) ...[
+                                    if (options.isVisible('invoice') && r.invoiceId != null && can('View:Invoice'))
+                                      TextButton.icon(
+                                        onPressed: () => context.push('${RouteNames.invoices}/${r.invoiceId}'),
+                                        icon: const Icon(Icons.receipt_long_outlined),
+                                        label: Text(AppStrings.of(context).openLinkedInvoice),
+                                      ),
+                                    if (options.isVisible('notes') && r.hasNote && r.notes != null && r.notes!.isNotEmpty) ...[
                                       const Gap(8),
                                       Text(
                                         r.notes!,
@@ -503,6 +526,7 @@ class _ServiceRequestsView extends StatelessWidget {
                         );
                       },
                     ),
+              ),
             ),
           ]),
         );

@@ -74,21 +74,25 @@ class SubscriptionFeesCubit extends Cubit<SubscriptionFeesState> {
 
   void clearSelection() => emit(state.copyWith(selectedIds: const {}));
 
-  Future<void> create({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) async {
+  Future<bool> create({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) async {
     try {
       await _repo.createFee(subscriberId: subscriberId, meterId: meterId, amount: amount, status: status, notes: notes);
       await load();
+      return true;
     } catch (e) {
       emit(state.copyWith(error: friendlyError(e)));
+      return false;
     }
   }
 
-  Future<void> update(SubscriptionFee fee) async {
+  Future<bool> update(SubscriptionFee fee) async {
     try {
       await _repo.updateFee(fee);
       await load();
+      return true;
     } catch (e) {
       emit(state.copyWith(error: friendlyError(e)));
+      return false;
     }
   }
 

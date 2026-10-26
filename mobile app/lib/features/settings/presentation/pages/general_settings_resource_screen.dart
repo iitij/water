@@ -3,10 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
@@ -137,19 +140,30 @@ class _GeneralSettingsView extends StatelessWidget {
         icon: Icons.settings_outlined,
       );
     }
-    return RefreshIndicator(
+    final strings = AppStrings.of(context);
+    return ListPresentation<GeneralSetting>(items: items,
+      sortValues: {
+        'label': (label: strings.settingLabel, value: (setting) => setting.label),
+        'id': (label: ListOptionsStrings.id, value: (setting) => setting.id),
+        'key': (label: strings.settingKey, value: (setting) => setting.key),
+        'type': (label: ListOptionsStrings.type, value: (setting) => setting.type),
+        'created_at': (label: ListOptionsStrings.createdAt, value: (setting) => setting.createdAt),
+        'updated_at': (label: ListOptionsStrings.updatedAt, value: (setting) => setting.updatedAt),
+      }, fields: {'key': strings.settingKey, 'value': strings.settingValue,
+        'created_at': ListOptionsStrings.createdAt, 'updated_at': ListOptionsStrings.updatedAt},
+      builder: (context, pageItems, options) => RefreshIndicator(
       onRefresh: () => context.read<GeneralSettingsCubit>().load(),
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-        itemCount: items.length,
+        itemCount: pageItems.length,
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          final item = items[index];
+          final item = pageItems[index];
           final canDelete = can(AdminPermissions.deleteSettings);
           final isDeleting = state.deletingIds.contains(item.id);
           return AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: options.compact ? 8 : 12),
             child: Row(
               children: [
                 if (canDelete) ...[
@@ -178,14 +192,20 @@ class _GeneralSettingsView extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 3),
-                      LtrText(item.key, style: Theme.of(context).textTheme.labelSmall),
+                      if (options.isVisible('key')) LtrText(item.key, style: Theme.of(context).textTheme.labelSmall),
                       const SizedBox(height: 4),
-                      Text(
+                      if (options.isVisible('value')) Text(
                         item.type == 'image' ? (item.imagePath ?? 'لا توجد صورة') : item.value,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                      if (options.isVisible('created_at') && item.createdAt != null)
+                        Text('${ListOptionsStrings.createdAt}: ${AdminFormat.dateTime(item.createdAt)}',
+                          style: Theme.of(context).textTheme.labelSmall),
+                      if (options.isVisible('updated_at') && item.updatedAt != null)
+                        Text('${ListOptionsStrings.updatedAt}: ${AdminFormat.dateTime(item.updatedAt)}',
+                          style: Theme.of(context).textTheme.labelSmall),
                     ],
                   ),
                 ),
@@ -210,7 +230,7 @@ class _GeneralSettingsView extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 
   Future<void> _openEditor(BuildContext context, [GeneralSetting? item]) async {

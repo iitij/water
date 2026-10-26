@@ -3,11 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/error/failures.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
+import '../../domain/repositories/paginated_payments_repository.dart';
 import '../../domain/repositories/payments_repository.dart';
 
 enum PaymentsLoadStatus { idle, loading, ready, refreshing, failure }
 
 class PaymentsState {
+  static const _unchangedBusy = Object();
   const PaymentsState({
     this.query = const PaymentQuery(),
     this.payments = const <PaymentModel>[],
@@ -15,6 +17,8 @@ class PaymentsState {
     this.errorMessage,
     this.busyId,
     this.selectedIds = const <int>{},
+    this.lastPage,
+    this.totalCount,
   });
 
   final PaymentQuery query;
@@ -23,9 +27,17 @@ class PaymentsState {
   final String? errorMessage;
   final int? busyId;
   final Set<int> selectedIds;
+  final int? lastPage;
+  final int? totalCount;
+
+  bool get hasPreviousPage => query.page > 1;
+  bool get hasNextPage => lastPage != null
+      ? query.page < lastPage!
+      : payments.length == (query.limit ?? 25);
 
   bool get isLoading =>
-      status == PaymentsLoadStatus.loading || status == PaymentsLoadStatus.refreshing;
+      status == PaymentsLoadStatus.loading ||
+      status == PaymentsLoadStatus.refreshing;
   bool get isEmpty => !isLoading && payments.isEmpty && errorMessage == null;
 
   double get totalSum => payments.fold<double>(0, (sum, p) => sum + p.amount);
@@ -40,55 +52,124 @@ class PaymentsState {
     PaymentsLoadStatus? status,
     String? errorMessage,
     bool clearError = false,
-    int? busyId,
+    Object? busyId = _unchangedBusy,
     Set<int>? selectedIds,
-  }) =>
-      PaymentsState(
-        query: query ?? this.query,
-        payments: payments ?? this.payments,
-        status: status ?? this.status,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-        busyId: busyId ?? this.busyId,
-        selectedIds: selectedIds ?? this.selectedIds,
-      );
+    int? lastPage,
+    int? totalCount,
+  }) => PaymentsState(
+    query: query ?? this.query,
+    payments: payments ?? this.payments,
+    status: status ?? this.status,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    busyId: identical(busyId, _unchangedBusy) ? this.busyId : busyId as int?,
+    selectedIds: selectedIds ?? this.selectedIds,
+    lastPage: lastPage ?? this.lastPage,
+    totalCount: totalCount ?? this.totalCount,
+  );
 }
 
 /// `PaymentsCubit` — سجل سندات القبض (`SCR-17`) مع الفلترة والتعديل والحذف.
 class PaymentsCubit extends Cubit<PaymentsState> {
-  PaymentsCubit({required PaymentsRepository repository, PaymentQuery? initialQuery})
-      : _repository = repository,
-        super(PaymentsState(query: initialQuery ?? const PaymentQuery()));
+  PaymentsCubit({
+    required PaymentsRepository repository,
+    PaymentQuery? initialQuery,
+  }) : _repository = repository,
+       super(PaymentsState(query: initialQuery ?? const PaymentQuery()));
 
   final PaymentsRepository _repository;
   String? _lastSignature;
+  int _loadGeneration = 0;
 
   Future<void> load({bool refresh = false}) async {
-    final signature = state.query.signature;
-    if (!refresh && signature == _lastSignature && state.payments.isNotEmpty) return;
+    final query = state.query;
+    final signature = query.signature;
+    if (!refresh && signature == _lastSignature && state.payments.isNotEmpty) {
+      return;
+    }
+    final generation = ++_loadGeneration;
 
-    emit(state.copyWith(
-      status: state.payments.isEmpty ? PaymentsLoadStatus.loading : PaymentsLoadStatus.refreshing,
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(
+        status: state.payments.isEmpty
+            ? PaymentsLoadStatus.loading
+            : PaymentsLoadStatus.refreshing,
+        clearError: true,
+      ),
+    );
 
     try {
-      final payments = await _repository.list(state.query);
+      final paginated = _repository;
+      if (paginated is PaginatedPaymentsRepository) {
+        final page = await (paginated as PaginatedPaymentsRepository).listPage(
+          query,
+        );
+        if (isClosed || generation != _loadGeneration) return;
+        if (page.payments.isEmpty && query.page > page.lastPage) {
+          emit(state.copyWith(query: query.copyWith(page: page.lastPage)));
+          await load(refresh: true);
+          return;
+        }
+        _lastSignature = signature;
+        emit(
+          state.copyWith(
+            payments: page.payments,
+            query: query.copyWith(page: page.currentPage),
+            lastPage: page.lastPage,
+            totalCount: page.total,
+            status: PaymentsLoadStatus.ready,
+          ),
+        );
+        return;
+      }
+      final payments = await _repository.list(query);
+      if (isClosed || generation != _loadGeneration) return;
       _lastSignature = signature;
-      emit(state.copyWith(payments: payments, status: PaymentsLoadStatus.ready));
+      emit(
+        state.copyWith(payments: payments, status: PaymentsLoadStatus.ready),
+      );
     } on AppFailure catch (failure) {
-      emit(state.copyWith(status: PaymentsLoadStatus.failure, errorMessage: failure.message));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: PaymentsLoadStatus.failure,
+          errorMessage: failure.message,
+        ),
+      );
     } catch (error) {
-      emit(state.copyWith(status: PaymentsLoadStatus.failure, errorMessage: '$error'));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: PaymentsLoadStatus.failure,
+          errorMessage: '$error',
+        ),
+      );
     }
   }
 
   Future<void> search(String value) async {
-    emit(state.copyWith(query: state.query.copyWith(search: value)));
+    emit(
+      state.copyWith(
+        query: state.query.copyWith(search: value, page: 1),
+        selectedIds: const {},
+      ),
+    );
     await load(refresh: true);
   }
 
   Future<void> applyFilters(PaymentQuery query) async {
-    emit(state.copyWith(query: query));
+    emit(state.copyWith(query: query.copyWith(page: 1), selectedIds: const {}));
+    await load(refresh: true);
+  }
+
+  Future<void> goToPage(int page) async {
+    if (page < 1 || state.isLoading || page == state.query.page) return;
+    if (state.lastPage != null && page > state.lastPage!) return;
+    emit(
+      state.copyWith(
+        query: state.query.copyWith(page: page),
+        selectedIds: const {},
+      ),
+    );
     await load(refresh: true);
   }
 
@@ -96,11 +177,14 @@ class PaymentsCubit extends Cubit<PaymentsState> {
     emit(state.copyWith(busyId: id, clearError: true));
     try {
       await _repository.delete(id);
-      emit(state.copyWith(
-        payments: state.payments.where((p) => p.id != id).toList(),
-        selectedIds: state.selectedIds.where((s) => s != id).toSet(),
-        busyId: null,
-      ));
+      emit(
+        state.copyWith(
+          payments: state.payments.where((p) => p.id != id).toList(),
+          selectedIds: state.selectedIds.where((s) => s != id).toSet(),
+          busyId: null,
+        ),
+      );
+      if (_repository is PaginatedPaymentsRepository) await load(refresh: true);
       return true;
     } on AppFailure catch (failure) {
       emit(state.copyWith(busyId: null, errorMessage: failure.message));
@@ -137,11 +221,19 @@ class PaymentsCubit extends Cubit<PaymentsState> {
 
   /// يعيد تحميل سند واحد بعد التعديل/الدفع ودمجه في القائمة.
   Future<void> upsert(PaymentModel payment) async {
+    if (_repository is PaginatedPaymentsRepository) {
+      await load(refresh: true);
+      return;
+    }
     final exists = state.payments.any((p) => p.id == payment.id);
-    emit(state.copyWith(
-      payments: exists
-          ? state.payments.map((p) => p.id == payment.id ? payment : p).toList()
-          : <PaymentModel>[payment, ...state.payments],
-    ));
+    emit(
+      state.copyWith(
+        payments: exists
+            ? state.payments
+                  .map((p) => p.id == payment.id ? payment : p)
+                  .toList()
+            : <PaymentModel>[payment, ...state.payments],
+      ),
+    );
   }
 }

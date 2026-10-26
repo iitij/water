@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -37,6 +38,7 @@ class InvoiceCard extends StatelessWidget {
     this.onPrintThermal,
     this.busy = false,
     this.showCheckbox = false,
+    this.hiddenFields = const <String>{},
   });
 
   final InvoiceModel invoice;
@@ -57,9 +59,14 @@ class InvoiceCard extends StatelessWidget {
   final bool thermalEnabled;
   final bool busy;
   final bool showCheckbox;
+  final Set<String> hiddenFields;
+  bool _visible(String field) => !hiddenFields.contains(field);
 
   bool get _hasActions =>
-      onCollect != null || onPrint != null || onWhatsapp != null || onPrintThermal != null;
+      onCollect != null ||
+      onPrint != null ||
+      onWhatsapp != null ||
+      onPrintThermal != null;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +79,9 @@ class InvoiceCard extends StatelessWidget {
     return AppCard(
       padding: EdgeInsets.zero,
       onTap: onTap,
-      borderColor: invoice.isPathMatch ? scheme.primary.withValues(alpha: .35) : null,
+      borderColor: invoice.isPathMatch
+          ? scheme.primary.withValues(alpha: .35)
+          : null,
       child: Padding(
         padding: EdgeInsets.all(dense ? 12 : 14),
         child: Column(
@@ -112,7 +121,9 @@ class InvoiceCard extends StatelessWidget {
                         children: <Widget>[
                           Flexible(
                             child: LtrNumberText(
-                              invoice.billNumber.isEmpty ? '—' : invoice.billNumber,
+                              invoice.billNumber.isEmpty
+                                  ? '—'
+                                  : invoice.billNumber,
                               style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
@@ -160,7 +171,10 @@ class InvoiceCard extends StatelessWidget {
                             visualDensity: VisualDensity.compact,
                             tooltip: 'خيارات الفاتورة',
                             padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                            constraints: const BoxConstraints.tightFor(
+                              width: 30,
+                              height: 30,
+                            ),
                             icon: Icon(
                               Icons.more_horiz_rounded,
                               size: 19,
@@ -182,30 +196,34 @@ class InvoiceCard extends StatelessWidget {
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
-                if (_locationText.isNotEmpty)
+                if (_visible('location') && _locationText.isNotEmpty)
                   _QuietMeta(
                     icon: Icons.location_on_outlined,
                     text: _locationText,
                     highlight: invoice.isPathMatch,
                   ),
-                _QuietMeta(
-                  icon: Icons.event_outlined,
-                  text: DateFormat.day(invoice.billDate),
-                  ltr: true,
-                ),
-                _QuietMeta(
-                  icon: Icons.date_range_outlined,
-                  text:
-                      '${DateFormat.day(invoice.periodStart)} ← ${DateFormat.day(invoice.periodEnd)}',
-                  ltr: true,
-                ),
+                if (_visible('date'))
+                  _QuietMeta(
+                    icon: Icons.event_outlined,
+                    text: DateFormat.day(invoice.billDate),
+                    ltr: true,
+                  ),
+                if (_visible('period'))
+                  _QuietMeta(
+                    icon: Icons.date_range_outlined,
+                    text:
+                        '${DateFormat.day(invoice.periodStart)} ← ${DateFormat.day(invoice.periodEnd)}',
+                    ltr: true,
+                  ),
                 if (invoice.previousBalance > 0)
                   _QuietMeta(
                     icon: Icons.warning_amber_rounded,
-                    text: 'متأخرات ${CurrencyFormatter.amount(invoice.previousBalance)}',
+                    text:
+                        'متأخرات ${CurrencyFormatter.amount(invoice.previousBalance)}',
                     tone: AppColors.warning,
                   ),
-                if ((invoice.subscriber?.phone ?? '').isNotEmpty)
+                if (_visible('phone') &&
+                    (invoice.subscriber?.phone ?? '').isNotEmpty)
                   _QuietMeta(
                     icon: Icons.call_outlined,
                     text: invoice.subscriber!.phone!,
@@ -248,7 +266,9 @@ class InvoiceCard extends StatelessWidget {
                                   Flexible(
                                     child: LtrNumberText(
                                       remainingLabel.replaceAll(
-                                          ' ${CurrencyFormatter.currencyLabel}', ''),
+                                        ' ${CurrencyFormatter.currencyLabel}',
+                                        '',
+                                      ),
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.w600,
@@ -264,7 +284,10 @@ class InvoiceCard extends StatelessWidget {
                                   const SizedBox(width: 4),
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 3),
-                                    child: Text('ر.ي', style: theme.textTheme.labelSmall),
+                                    child: Text(
+                                      'ر.ي',
+                                      style: theme.textTheme.labelSmall,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -279,7 +302,10 @@ class InvoiceCard extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 3,
-                    child: _MiniAmount(label: 'قيمة الفاتورة', value: invoice.totalAmount),
+                    child: _MiniAmount(
+                      label: 'قيمة الفاتورة',
+                      value: invoice.totalAmount,
+                    ),
                   ),
                   Expanded(
                     flex: 3,
@@ -315,8 +341,10 @@ class InvoiceCard extends StatelessWidget {
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             minimumSize: const Size(0, 38),
-                            textStyle:
-                                const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           icon: const Icon(Icons.payments_rounded, size: 16),
                           label: Text(
@@ -327,11 +355,24 @@ class InvoiceCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                   ],
-                  if (onPrint != null) _IconAction(icon: Icons.picture_as_pdf_outlined, tooltip: 'سند PDF', onPressed: busy ? null : onPrint),
+                  if (onPrint != null)
+                    _IconAction(
+                      icon: Icons.picture_as_pdf_outlined,
+                      tooltip: 'سند PDF',
+                      onPressed: busy ? null : onPrint,
+                    ),
                   if (onPrintThermal != null && thermalEnabled)
-                    _IconAction(icon: Icons.print_outlined, tooltip: 'طباعة حرارية', onPressed: busy ? null : onPrintThermal),
+                    _IconAction(
+                      icon: Icons.print_outlined,
+                      tooltip: 'طباعة حرارية',
+                      onPressed: busy ? null : onPrintThermal,
+                    ),
                   if (onWhatsapp != null && whatsappEnabled)
-                    _IconAction(icon: Icons.chat_bubble_outline_rounded, tooltip: 'إرسال واتساب', onPressed: busy ? null : onWhatsapp),
+                    _IconAction(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      tooltip: 'إرسال واتساب',
+                      onPressed: busy ? null : onWhatsapp,
+                    ),
                 ],
               ),
             ],
@@ -352,18 +393,18 @@ class InvoiceCard extends StatelessWidget {
   }
 
   static String _typeLabel(String wire) => switch (wire) {
-        'meter' => 'عداد',
-        'subscription' => 'اشتراك',
-        'tanker' => 'وايت',
-        _ => wire,
-      };
+    'meter' => 'عداد',
+    'subscription' => 'اشتراك',
+    'tanker' => 'وايت',
+    _ => wire,
+  };
 
   static IconData _typeIcon(String wire) => switch (wire) {
-        'meter' => Icons.speed_rounded,
-        'subscription' => Icons.autorenew_rounded,
-        'tanker' => Icons.local_shipping_outlined,
-        _ => Icons.receipt_long_rounded,
-      };
+    'meter' => Icons.speed_rounded,
+    'subscription' => Icons.autorenew_rounded,
+    'tanker' => Icons.local_shipping_outlined,
+    _ => Icons.receipt_long_rounded,
+  };
 }
 
 /// عنصر معلومات صامت — أيقونة + نص فقط، بلا إطار ولا خلفية.
@@ -396,7 +437,10 @@ class _QuietMeta extends StatelessWidget {
       height: 1.3,
     );
     final label = ltr
-        ? Directionality(textDirection: TextDirection.ltr, child: Text(text, style: style))
+        ? Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(text, style: style),
+          )
         : Text(text, style: style);
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -443,7 +487,11 @@ class _MiniAmount extends StatelessWidget {
 }
 
 class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.tooltip, required this.onPressed});
+  const _IconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -474,12 +522,14 @@ class InvoicesSummaryBar extends StatelessWidget {
     required this.openCount,
     required this.overdueCount,
     required this.totalDue,
+    this.pageOnly = false,
   });
 
   final int count;
   final int openCount;
   final int overdueCount;
   final double totalDue;
+  final bool pageOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -498,9 +548,13 @@ class InvoicesSummaryBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'إجمالي المستحق',
-                  style: TextStyle(color: AppColors.onPanelMuted, fontSize: 10.5, height: 1.3),
+                Text(
+                  pageOnly ? ListOptionsStrings.pageTotal : 'إجمالي المستحق',
+                  style: const TextStyle(
+                    color: AppColors.onPanelMuted,
+                    fontSize: 10.5,
+                    height: 1.3,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 LtrNumberText(
@@ -523,7 +577,15 @@ class InvoicesSummaryBar extends StatelessWidget {
             color: Colors.white.withValues(alpha: .12),
             margin: const EdgeInsets.symmetric(horizontal: 10),
           ),
-          Expanded(flex: 5, child: _Strip(count: 'الفواتير', value: '$count', open: openCount, overdue: overdueCount)),
+          Expanded(
+            flex: 5,
+            child: _Strip(
+              count: pageOnly ? ListOptionsStrings.pageCount : 'الفواتير',
+              value: '$count',
+              open: openCount,
+              overdue: overdueCount,
+            ),
+          ),
         ],
       ),
     );
@@ -531,7 +593,12 @@ class InvoicesSummaryBar extends StatelessWidget {
 }
 
 class _Strip extends StatelessWidget {
-  const _Strip({required this.count, required this.value, required this.open, required this.overdue});
+  const _Strip({
+    required this.count,
+    required this.value,
+    required this.open,
+    required this.overdue,
+  });
 
   final String count;
   final String value;
@@ -540,7 +607,11 @@ class _Strip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const label = TextStyle(color: AppColors.onPanelMuted, fontSize: 10, height: 1.2);
+    const label = TextStyle(
+      color: AppColors.onPanelMuted,
+      fontSize: 10,
+      height: 1.2,
+    );
     const number = TextStyle(
       color: AppColors.onPanelSoft,
       fontSize: 13,
@@ -553,12 +624,18 @@ class _Strip extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: <Widget>[Text(count, style: label), Text(value, style: number)],
+          children: <Widget>[
+            Text(count, style: label),
+            Text(value, style: number),
+          ],
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: <Widget>[const Text('مفتوحة', style: label), Text('$open', style: number)],
+          children: <Widget>[
+            const Text('مفتوحة', style: label),
+            Text('$open', style: number),
+          ],
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,7 +645,9 @@ class _Strip extends StatelessWidget {
             Text(
               '$overdue',
               style: overdue > 0
-                  ? number.copyWith(color: AppSemantic.resolve(context, AppColors.danger))
+                  ? number.copyWith(
+                      color: AppSemantic.resolve(context, AppColors.danger),
+                    )
                   : number,
             ),
           ],
@@ -581,7 +660,8 @@ class _Strip extends StatelessWidget {
 /// أداة عرض «هل الفاتورة قابلة للتحصيل من هذه الشاشة؟» — مطابقة لشرط
 /// `collect_payment` في `InvoiceResource` (مفتوحة + الأحدث).
 bool canCollectInvoice(InvoiceModel invoice, List<InvoiceModel> siblings) =>
-    invoice.status.isOpenForCollection && InvoiceAccounting.isLatestInvoice(invoice, siblings);
+    invoice.status.isOpenForCollection &&
+    InvoiceAccounting.isLatestInvoice(invoice, siblings);
 
 /// نص متبقي الفاتورة كما يعرضه Filament (`-` للفواتير القديمة).
 String remainingLabelFor(InvoiceModel invoice, List<InvoiceModel> siblings) {

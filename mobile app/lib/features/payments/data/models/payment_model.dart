@@ -101,13 +101,19 @@ class PaymentModel extends Equatable {
     final invoice = JsonUtils.asMap(json['invoice']);
     final user = JsonUtils.asMap(json['user']);
 
-    final tenantName = meter == null ? null : JsonUtils.asStringOrNull(meter['tenant_name']);
+    final tenantName = meter == null
+        ? null
+        : JsonUtils.asStringOrNull(meter['tenant_name']);
     final beneficiary = (tenantName?.trim().isNotEmpty ?? false)
         ? '${tenantName!.trim()} (مستأجر)'
         : JsonUtils.asStringOrNull(subscriber?['name']);
 
-    final meterCode = meter == null ? null : JsonUtils.asStringOrNull(meter['unique_code']);
-    final meterPath = meter == null ? null : JsonUtils.asIntOrNull(meter['path_number']);
+    final meterCode = meter == null
+        ? null
+        : JsonUtils.asStringOrNull(meter['unique_code']);
+    final meterPath = meter == null
+        ? null
+        : JsonUtils.asIntOrNull(meter['path_number']);
 
     return PaymentModel(
       id: JsonUtils.asInt(json['id']),
@@ -126,7 +132,8 @@ class PaymentModel extends Equatable {
       deletedAt: JsonUtils.asDate(json['deleted_at']),
       subscriberName: JsonUtils.asStringOrNull(subscriber?['name']),
       beneficiaryName: beneficiary,
-      subscriberPhone: JsonUtils.asStringOrNull(subscriber?['phone']) ??
+      subscriberPhone:
+          JsonUtils.asStringOrNull(subscriber?['phone']) ??
           JsonUtils.asStringOrNull(meter?['tenant_phone']),
       meterLabel: meterCode == null
           ? null
@@ -144,35 +151,35 @@ class PaymentModel extends Equatable {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'subscriber_id': subscriberId,
-        'meter_id': meterId,
-        'invoice_id': invoiceId,
-        'receipt_number': receiptNumber,
-        'amount': amount,
-        'payment_date': DateFormat.dateTime(paymentDate),
-        'payment_method': method.wire,
-        'reference_number': referenceNumber,
-        'reason': reason,
-        'notes': notes,
-        'voided_at': DateFormat.dateTime(voidedAt),
-        'void_reason': voidReason,
-        'cash_session_id': cashSessionId,
-        'whatsapp_sent_at': DateFormat.dateTime(whatsappSentAt),
-        'whatsapp_sent_via': whatsappSentVia,
-      };
+    'id': id,
+    'subscriber_id': subscriberId,
+    'meter_id': meterId,
+    'invoice_id': invoiceId,
+    'receipt_number': receiptNumber,
+    'amount': amount,
+    'payment_date': DateFormat.dateTime(paymentDate),
+    'payment_method': method.wire,
+    'reference_number': referenceNumber,
+    'reason': reason,
+    'notes': notes,
+    'voided_at': DateFormat.dateTime(voidedAt),
+    'void_reason': voidReason,
+    'cash_session_id': cashSessionId,
+    'whatsapp_sent_at': DateFormat.dateTime(whatsappSentAt),
+    'whatsapp_sent_via': whatsappSentVia,
+  };
 
   /// جسم `PUT /api/payments/{id}` — نفس حقول `PaymentResource::form`.
   Map<String, dynamic> toUpdatePayload() => <String, dynamic>{
-        'subscriber_id': subscriberId,
-        'invoice_id': invoiceId,
-        'amount': amount,
-        'payment_date': DateFormat.dateTime(paymentDate),
-        'payment_method': method.wire,
-        'reference_number': referenceNumber,
-        'reason': reason,
-        'notes': notes,
-      };
+    'subscriber_id': subscriberId,
+    'invoice_id': invoiceId,
+    'amount': amount,
+    'payment_date': DateFormat.dateTime(paymentDate),
+    'payment_method': method.wire,
+    'reference_number': referenceNumber,
+    'reason': reason,
+    'notes': notes,
+  };
 
   /// جسم `POST /api/payments` (§2.3-50).
   static Map<String, dynamic> createPayload({
@@ -186,34 +193,34 @@ class PaymentModel extends Equatable {
     String? reason,
     String? notes,
     String? syncUuid,
-  }) =>
-      <String, dynamic>{
-        'subscriber_id': subscriberId,
-        if (invoiceId != null) 'invoice_id': invoiceId,
-        if (meterId != null) 'meter_id': meterId,
-        'amount': amount,
-        'payment_date': DateFormat.dateTime(paymentDate ?? DateTime.now()),
-        'payment_method': method.wire,
-        if (method.requiresReference) 'reference_number': referenceNumber,
-        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
-        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-        if (syncUuid != null && syncUuid.trim().isNotEmpty) 'sync_uuid': syncUuid.trim(),
-      };
+  }) => <String, dynamic>{
+    'subscriber_id': subscriberId,
+    if (invoiceId != null) 'invoice_id': invoiceId,
+    if (meterId != null) 'meter_id': meterId,
+    'amount': amount,
+    'payment_date': DateFormat.dateTime(paymentDate ?? DateTime.now()),
+    'payment_method': method.wire,
+    if (method.requiresReference) 'reference_number': referenceNumber,
+    if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    if (syncUuid != null && syncUuid.trim().isNotEmpty)
+      'sync_uuid': syncUuid.trim(),
+  };
 
   @override
   List<Object?> get props => <Object?>[
-        id,
-        receiptNumber,
-        amount,
-        method,
-        referenceNumber,
-        reason,
-        invoiceId,
-        voidedAt,
-        cashSessionId,
-        whatsappSentAt,
-        whatsappSentVia,
-      ];
+    id,
+    receiptNumber,
+    amount,
+    method,
+    referenceNumber,
+    reason,
+    invoiceId,
+    voidedAt,
+    cashSessionId,
+    whatsappSentAt,
+    whatsappSentVia,
+  ];
 }
 
 /// `receipt_data` التي ترجعها نقطة التحصيل — تُعرض في شاشة النجاح الفورية.
@@ -274,29 +281,31 @@ class ReceiptDataModel extends Equatable {
   }
 
   /// بناءResult مماثل من نموذج الدفع عند الرجوع من `POST /api/payments`.
-  factory ReceiptDataModel.fromPayment(PaymentModel payment, {String? pdfUrl}) =>
-      ReceiptDataModel(
-        receiptNumber: payment.receiptNumber,
-        amount: payment.amount,
-        date: payment.createdAt ?? DateFormat.dateTime(DateTime.now()),
-        paymentMethod: payment.method.label,
-        subscriberName: payment.displayName,
-        subscriberPhone: payment.subscriberPhone,
-        invoiceRemaining: 0,
-        outstandingBalance: 0,
-        creditBalance: 0,
-        collector: payment.collectorName ?? 'إدارة المشروع',
-        pdfUrl: pdfUrl,
-      );
+  factory ReceiptDataModel.fromPayment(
+    PaymentModel payment, {
+    String? pdfUrl,
+  }) => ReceiptDataModel(
+    receiptNumber: payment.receiptNumber,
+    amount: payment.amount,
+    date: payment.createdAt ?? DateFormat.dateTime(DateTime.now()),
+    paymentMethod: payment.method.label,
+    subscriberName: payment.displayName,
+    subscriberPhone: payment.subscriberPhone,
+    invoiceRemaining: 0,
+    outstandingBalance: 0,
+    creditBalance: 0,
+    collector: payment.collectorName ?? 'إدارة المشروع',
+    pdfUrl: pdfUrl,
+  );
 
   @override
   List<Object?> get props => <Object?>[
-        receiptNumber,
-        amount,
-        invoiceRemaining,
-        outstandingBalance,
-        creditBalance,
-      ];
+    receiptNumber,
+    amount,
+    invoiceRemaining,
+    outstandingBalance,
+    creditBalance,
+  ];
 }
 
 /// فلاتر قائمة سندات القبض (§2.3-48).
@@ -309,6 +318,9 @@ class PaymentQuery extends Equatable {
     this.fromDate,
     this.toDate,
     this.limit,
+    this.page = 1,
+    this.sortBy = 'payment_date',
+    this.sortDirection = 'desc',
   });
 
   final String search;
@@ -318,25 +330,36 @@ class PaymentQuery extends Equatable {
   final DateTime? fromDate;
   final DateTime? toDate;
   final int? limit;
+  final int page;
+  final String sortBy;
+  final String sortDirection;
 
   Map<String, dynamic> toQueryMap() => <String, dynamic>{
-        if (search.trim().isNotEmpty) 'query': search.trim(),
-        if (search.trim().isNotEmpty) 'search': search.trim(),
-        if (method != null) 'payment_method': method,
-        if (subscriberId != null) 'subscriber_id': subscriberId,
-        if (invoiceId != null) 'invoice_id': invoiceId,
-        if (fromDate != null) 'from_date': DateFormat.day(fromDate),
-        if (toDate != null) 'to_date': DateFormat.day(toDate),
-        if (limit != null) 'per_page': limit,
-      };
+    if (search.trim().isNotEmpty) 'query': search.trim(),
+    if (search.trim().isNotEmpty) 'search': search.trim(),
+    if (method != null) 'payment_method': method,
+    if (subscriberId != null) 'subscriber_id': subscriberId,
+    if (invoiceId != null) 'invoice_id': invoiceId,
+    if (fromDate != null) 'from_date': DateFormat.day(fromDate),
+    if (toDate != null) 'to_date': DateFormat.day(toDate),
+    if (limit != null) 'per_page': limit,
+    'page': page,
+    'sort_by': sortBy,
+    'sort_direction': sortDirection,
+  };
 
   String get signature => <String>[
-        search,
-        '$method',
-        '$subscriberId',
-        '$fromDate',
-        '$toDate',
-      ].join('§');
+    search,
+    '$method',
+    '$subscriberId',
+    '$fromDate',
+    '$toDate',
+    '$invoiceId',
+    '$limit',
+    '$page',
+    sortBy,
+    sortDirection,
+  ].join('§');
 
   PaymentQuery copyWith({
     String? search,
@@ -344,21 +367,37 @@ class PaymentQuery extends Equatable {
     int? subscriberId,
     DateTime? fromDate,
     DateTime? toDate,
+    int? limit,
+    int? page,
+    String? sortBy,
+    String? sortDirection,
     bool clearFilters = false,
-  }) =>
-      PaymentQuery(
-        search: search ?? this.search,
-        method: clearFilters ? null : (method ?? this.method),
-        subscriberId: clearFilters ? null : (subscriberId ?? this.subscriberId),
-        invoiceId: invoiceId,
-        fromDate: clearFilters ? null : (fromDate ?? this.fromDate),
-        toDate: clearFilters ? null : (toDate ?? this.toDate),
-        limit: limit,
-      );
+  }) => PaymentQuery(
+    search: search ?? this.search,
+    method: clearFilters ? null : (method ?? this.method),
+    subscriberId: clearFilters ? null : (subscriberId ?? this.subscriberId),
+    invoiceId: invoiceId,
+    fromDate: clearFilters ? null : (fromDate ?? this.fromDate),
+    toDate: clearFilters ? null : (toDate ?? this.toDate),
+    limit: limit ?? this.limit,
+    page: page ?? this.page,
+    sortBy: sortBy ?? this.sortBy,
+    sortDirection: sortDirection ?? this.sortDirection,
+  );
 
   @override
-  List<Object?> get props =>
-      <Object?>[search, method, subscriberId, invoiceId, fromDate, toDate];
+  List<Object?> get props => <Object?>[
+    search,
+    method,
+    subscriberId,
+    invoiceId,
+    fromDate,
+    toDate,
+    limit,
+    page,
+    sortBy,
+    sortDirection,
+  ];
 }
 
 /// نتيجة طلب إلغاء سند: قد يُلغى فوراً، أو ينتظر اعتماد مشرف إذا تجاوز الحد
@@ -420,13 +459,13 @@ class PaymentVoidRequest extends Equatable {
 
   @override
   List<Object?> get props => <Object?>[
-        id,
-        receiptNumber,
-        amount,
-        subscriber,
-        reason,
-        requestedBy,
-        requestedAt,
-        paymentDate,
-      ];
+    id,
+    receiptNumber,
+    amount,
+    subscriber,
+    reason,
+    requestedBy,
+    requestedAt,
+    paymentDate,
+  ];
 }

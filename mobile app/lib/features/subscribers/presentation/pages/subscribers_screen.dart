@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/list_options_strings.dart';
+import '../../../../core/l10n/subscriber_experience_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -14,6 +16,7 @@ import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/widgets/barcode_scanner_screen.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
@@ -33,7 +36,8 @@ part '../widgets/subscribers_filter_sheet.dart';
 
 /// منافذ التكامل مع أكرم (Dev 3): تحصيل سريع + بطاقات فواتير/مدفوعات.
 /// الافتراضي عند الدمج يفتح `CollectPaymentSheet.show(context, ...)` الخاص بـ Dev 3.
-typedef CollectPaymentLauncher = Future<void> Function(BuildContext context, Subscriber subscriber);
+typedef CollectPaymentLauncher =
+    Future<void> Function(BuildContext context, Subscriber subscriber);
 
 bool _hasSubscribersCubits(BuildContext context) {
   try {
@@ -51,7 +55,8 @@ Future<bool> launchDefaultSubscriberPayment(
   Subscriber subscriber, {
   Future<String> Function(double amount)? fallbackCollect,
 }) async {
-  final canUseFinanceSheet = GetIt.I.isRegistered<PaymentsRepository>() ||
+  final canUseFinanceSheet =
+      GetIt.I.isRegistered<PaymentsRepository>() ||
       GetIt.I.isRegistered<DioClient>();
   if (canUseFinanceSheet) {
     return CollectPaymentSheet.show(
@@ -77,9 +82,7 @@ Future<bool> launchDefaultSubscriberPayment(
       content: TextField(
         controller: amountCtrl,
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          labelText: 'المبلغ (ريال)',
-        ),
+        decoration: const InputDecoration(labelText: 'المبلغ (ريال)'),
       ),
       actions: [
         TextButton(
@@ -94,8 +97,10 @@ Future<bool> launchDefaultSubscriberPayment(
             if (fallbackCollect != null) {
               receipt = await fallbackCollect(amount);
             } else {
-              final res = await FouadModule.deps.subscribers
-                  .collectPayment(subscriber.id, amount: amount);
+              final res = await FouadModule.deps.subscribers.collectPayment(
+                subscriber.id,
+                amount: amount,
+              );
               receipt =
                   (res['payment'] as Map?)?['receipt_number']?.toString() ?? '';
             }
@@ -157,7 +162,10 @@ class _SubscribersView extends StatelessWidget {
   final void Function(Subscriber subscriber)? onOpen360;
   final CollectPaymentLauncher? onCollectPayment;
 
-  Future<void> _handleOpen360(BuildContext context, Subscriber subscriber) async {
+  Future<void> _handleOpen360(
+    BuildContext context,
+    Subscriber subscriber,
+  ) async {
     if (onOpen360 != null) {
       onOpen360!(subscriber);
       return;
@@ -180,7 +188,8 @@ class _SubscribersView extends StatelessWidget {
           child: MultiBlocProvider(
             providers: [
               BlocProvider<Subscriber360Cubit>(
-                create: (_) => Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
+                create: (_) =>
+                    Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
               ),
               BlocProvider<SubscriptionFeesCubit>(
                 create: (_) => SubscriptionFeesCubit(deps.fees)
@@ -204,7 +213,10 @@ class _SubscribersView extends StatelessWidget {
     if (context.mounted) await cubit.load();
   }
 
-  Future<void> _handleOpenForm(BuildContext context, {Subscriber? existing}) async {
+  Future<void> _handleOpenForm(
+    BuildContext context, {
+    Subscriber? existing,
+  }) async {
     final cubit = context.read<SubscribersCubit>();
     bool? saved;
     final router = GoRouter.maybeOf(context);
@@ -240,18 +252,23 @@ class _SubscribersView extends StatelessWidget {
     }
   }
 
-  Future<void> _handleDelete(BuildContext context, Subscriber subscriber) async {
+  Future<void> _handleDelete(
+    BuildContext context,
+    Subscriber subscriber,
+  ) async {
     final confirmed = await confirmAction(
       context,
       'حذف المشترك',
       'هل تريد حذف المشترك «${subscriber.name}»؟ لا يمكن حذف مشترك مرتبط بعدادات أو حركات مالية.',
     );
     if (!confirmed || !context.mounted) return;
-    final ok = await context.read<SubscribersCubit>().deleteSubscriber(subscriber.id);
+    final ok = await context.read<SubscribersCubit>().deleteSubscriber(
+      subscriber.id,
+    );
     if (ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حذف المشترك بنجاح')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم حذف المشترك بنجاح')));
     }
   }
 
@@ -264,20 +281,24 @@ class _SubscribersView extends StatelessWidget {
     if (!confirmed || !context.mounted) return;
     final deleted = await context.read<SubscribersCubit>().bulkDelete();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حذف $deleted مشترك بنجاح')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('تم حذف $deleted مشترك بنجاح')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<SubscribersCubit, SubscribersState>(
-      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listenWhen: (prev, curr) =>
+          curr.error != null && prev.error != curr.error,
       listener: (context, state) {
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.error!), backgroundColor: AppColors.danger),
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
+            ),
           );
         }
       },
@@ -347,170 +368,195 @@ class _SubscribersView extends StatelessWidget {
       (sum, s) => sum + s.netBalance,
     );
 
-    return Column(children: [
-      const SizedBox(height: AppSpacing.xs),
-      AppFilterBar(
-        query: state.query,
-        hint: 'بحث بالاسم / الهاتف / كود العداد',
-        activeCount: activeCount,
-        onOpenFilters: () => _openFilters(context, state, cubit),
-        onChanged: cubit.search,
-        trailing: IconButton(
-          tooltip: 'مسح باركود المشترك',
-          icon: const Icon(Icons.qr_code_scanner_rounded),
-          onPressed: () async {
-            final code = await BarcodeScannerScreen.scan(
-              context,
-              title: 'مسح باركود المشترك',
-              hint: 'وجّه الكاميرا إلى بطاقة المشترك أو باركود العداد.',
-            );
-            if (code != null && context.mounted) cubit.search(code);
-          },
-        ),
-      ),
-      AppFilterChips(
-        children: <Widget>[
-          AppFilterChip(
-            label: 'الكل',
-            selected: state.status == null,
-            onTap: () => cubit.filterStatus(null),
+    return Column(
+      children: [
+        const SizedBox(height: AppSpacing.xs),
+        AppFilterBar(
+          query: state.query,
+          hint: 'بحث بالاسم / الهاتف / كود العداد',
+          activeCount: activeCount,
+          onOpenFilters: () => _openFilters(context, state, cubit),
+          onChanged: cubit.search,
+          trailing: IconButton(
+            tooltip: 'مسح باركود المشترك',
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            onPressed: () async {
+              final code = await BarcodeScannerScreen.scan(
+                context,
+                title: 'مسح باركود المشترك',
+                hint: 'وجّه الكاميرا إلى بطاقة المشترك أو باركود العداد.',
+              );
+              if (code != null && context.mounted) cubit.search(code);
+            },
           ),
-          for (final status in SubscriberStatus.values)
+        ),
+        AppFilterChips(
+          children: <Widget>[
             AppFilterChip(
-              label: status.label,
-              selected: state.status == status,
-              onTap: () => cubit.filterStatus(
-                state.status == status ? null : status,
+              label: 'الكل',
+              selected: state.status == null,
+              onTap: () => cubit.filterStatus(null),
+            ),
+            for (final status in SubscriberStatus.values)
+              AppFilterChip(
+                label: status.label,
+                selected: state.status == status,
+                onTap: () =>
+                    cubit.filterStatus(state.status == status ? null : status),
               ),
-            ),
-        ],
-      ),
-      AppActiveFilters(
-        filters: <Widget>[
-          if (squareName != null)
-            AppFilterChip(
-              label: squareName,
-              icon: Icons.grid_view_rounded,
-              selected: true,
-              onRemove: () => cubit.filterSquare(null),
-            ),
-          if (state.status != null)
-            AppFilterChip(
-              label: 'الحالة · ${state.status!.label}',
-              icon: Icons.verified_user_outlined,
-              selected: true,
-              onRemove: () => cubit.filterStatus(null),
-            ),
-        ],
-        onClearAll: activeCount == 0
-            ? null
-            : () {
-                cubit.filterSquare(null);
-                cubit.filterStatus(null);
-              },
-      ),
-      Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
-        child: AppStatStrip(
-          items: [
-            AppStatItem(
-              label: 'عدد المشتركين',
-              value: '${state.subscribers.length}',
-              icon: Icons.people_outline_rounded,
-              color: theme.colorScheme.primary,
-            ),
-            AppStatItem(
-              label: 'نشط',
-              value: '${state.subscribers.where((s) => s.status == SubscriberStatus.active).length}',
-              icon: Icons.check_circle_outline_rounded,
-              color: AppColors.success,
-            ),
-            AppStatItem(
-              label: 'الرصيد الصافي الإجمالي',
-              value: CurrencyFormatter.format(netBalanceTotal),
-              icon: Icons.account_balance_wallet_outlined,
-              color: netBalanceTotal < 0 ? AppColors.danger : AppColors.success,
-            ),
           ],
         ),
-      ),
-      if (state.selectedIds.isNotEmpty)
+        AppActiveFilters(
+          filters: <Widget>[
+            if (squareName != null)
+              AppFilterChip(
+                label: squareName,
+                icon: Icons.grid_view_rounded,
+                selected: true,
+                onRemove: () => cubit.filterSquare(null),
+              ),
+            if (state.status != null)
+              AppFilterChip(
+                label: 'الحالة · ${state.status!.label}',
+                icon: Icons.verified_user_outlined,
+                selected: true,
+                onRemove: () => cubit.filterStatus(null),
+              ),
+          ],
+          onClearAll: activeCount == 0
+              ? null
+              : () {
+                  cubit.filterSquare(null);
+                  cubit.filterStatus(null);
+                },
+        ),
         Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
-          child: Container(
-            padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
-            decoration: BoxDecoration(
-              color: AppColors.accentSoft,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.checklist, size: 18, color: theme.colorScheme.primary),
-                const Gap(8),
-                Expanded(
-                  child: Text(
-                    'تم تحديد ${state.selectedIds.length} مشترك',
-                    style: theme.textTheme.labelMedium,
-                  ),
-                ),
-                TextButton(
-                  onPressed: context.read<SubscribersCubit>().clearSelection,
-                  child: const Text('إلغاء'),
-                ),
-                TextButton(
-                  onPressed: () => _handleBulkDelete(context, state.selectedIds),
-                  child: const Text('حذف المحدد'),
-                ),
-              ],
-            ),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 12),
+          child: AppStatStrip(
+            items: [
+              AppStatItem(
+                label: 'عدد المشتركين',
+                value: '${state.subscribers.length}',
+                icon: Icons.people_outline_rounded,
+                color: theme.colorScheme.primary,
+              ),
+              AppStatItem(
+                label: 'نشط',
+                value:
+                    '${state.subscribers.where((s) => s.status == SubscriberStatus.active).length}',
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.success,
+              ),
+              AppStatItem(
+                label: SubscriberExperienceStrings.visibleBalance,
+                value: CurrencyFormatter.format(netBalanceTotal),
+                icon: Icons.account_balance_wallet_outlined,
+                color: netBalanceTotal < 0
+                    ? AppColors.danger
+                    : AppColors.success,
+              ),
+            ],
           ),
         ),
-      if (state.loading) const LinearProgressIndicator(),
-      Expanded(
-        child: state.subscribers.isEmpty && !state.loading
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AdminEmptyView(
-                    title: 'لا يوجد مشتركون مطابقون',
-                    message: activeCount == 0
-                        ? 'أضف مشتركاً جديداً لتبدأ.'
-                        : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
-                    icon: activeCount == 0
-                        ? Icons.people_outline_rounded
-                        : Icons.filter_alt_off_rounded,
-                  ),
-                  if (activeCount != 0)
-                    TextButton.icon(
-                      onPressed: () {
-                        cubit.filterSquare(null);
-                        cubit.filterStatus(null);
-                        cubit.search('');
-                      },
-                      icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                      label: const Text('مسح الفلاتر'),
-                    ),
-                ],
-              )
-            : ListView.builder(
-                itemCount: state.subscribers.length,
-                itemBuilder: (_, i) {
-                  final sub = state.subscribers[i];
-                  return _SubscriberCard(
-                    subscriber: sub,
-                    selected: state.selectedIds.contains(sub.id),
-                    onToggleSelect: () => context.read<SubscribersCubit>().toggleSelect(sub.id),
-                    onTap: () => context.read<SubscribersCubit>().select(sub),
-                    onOpen360: (s) => _handleOpen360(context, s),
-                    onEdit: (s) => _handleOpenForm(context, existing: s),
-                    onDelete: (s) => _handleDelete(context, s),
-                    onCollectPayment: onCollectPayment,
-                  );
-                },
+        if (state.selectedIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+            child: Container(
+              padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+              decoration: BoxDecoration(
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: AppColors.border),
               ),
-      ),
-    ]);
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.checklist,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const Gap(8),
+                  Expanded(
+                    child: Text(
+                      'تم تحديد ${state.selectedIds.length} مشترك',
+                      style: theme.textTheme.labelMedium,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: context.read<SubscribersCubit>().clearSelection,
+                    child: const Text('إلغاء'),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        _handleBulkDelete(context, state.selectedIds),
+                    child: const Text('حذف المحدد'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (state.loading) const LinearProgressIndicator(),
+        Expanded(
+          child: ListPresentation<Subscriber>(
+            items: state.subscribers,
+            initialSettings: const ListPresentationSettings(sortBy: 'name', descending: false),
+            sortValues: {
+              'name': (label: ListOptionsStrings.name, value: (subscriber) => subscriber.name),
+              'id': (label: ListOptionsStrings.id, value: (subscriber) => subscriber.id),
+              'subscription_start_date': (label: ListOptionsStrings.date, value: (subscriber) => subscriber.subscriptionStartDate ?? ''),
+              'square_name': (label: ListOptionsStrings.square, value: (subscriber) => subscriber.squareName ?? ''),
+              'balance': (label: ListOptionsStrings.balance, value: (subscriber) => subscriber.netBalance),
+              'meters_count': (label: ListOptionsStrings.meters, value: (subscriber) => subscriber.metersCount),
+              'status': (label: ListOptionsStrings.status, value: (subscriber) => subscriber.status.index),
+            },
+            fields: const {'phone': ListOptionsStrings.phone, 'square': ListOptionsStrings.square,
+              'meters': ListOptionsStrings.meters, 'status': ListOptionsStrings.status, 'balance': ListOptionsStrings.balance},
+            builder: (context, subscribers, options) => subscribers.isEmpty && !state.loading
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AdminEmptyView(
+                      title: 'لا يوجد مشتركون مطابقون',
+                      message: activeCount == 0
+                          ? 'أضف مشتركاً جديداً لتبدأ.'
+                          : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
+                      icon: activeCount == 0
+                          ? Icons.people_outline_rounded
+                          : Icons.filter_alt_off_rounded,
+                    ),
+                    if (activeCount != 0)
+                      TextButton.icon(
+                        onPressed: () {
+                          cubit.filterSquare(null);
+                          cubit.filterStatus(null);
+                          cubit.search('');
+                        },
+                        icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                        label: const Text('مسح الفلاتر'),
+                      ),
+                  ],
+                )
+              : ListView.builder(
+                  itemCount: subscribers.length,
+                  itemBuilder: (_, i) {
+                    final sub = subscribers[i];
+                    return _SubscriberCard(
+                      subscriber: sub,
+                      presentation: options,
+                      selected: state.selectedIds.contains(sub.id),
+                      onToggleSelect: () =>
+                          context.read<SubscribersCubit>().toggleSelect(sub.id),
+                      onTap: () => context.read<SubscribersCubit>().select(sub),
+                      onOpen360: (s) => _handleOpen360(context, s),
+                      onEdit: (s) => _handleOpenForm(context, existing: s),
+                      onDelete: (s) => _handleDelete(context, s),
+                      onCollectPayment: onCollectPayment,
+                    );
+                  },
+                ),
+          ),
+        ),
+      ],
+    );
   }
 }
-

@@ -4,6 +4,7 @@ import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../models/collect_payment_models.dart';
 import '../models/payment_model.dart';
+import '../models/payments_page.dart';
 
 /// مصدر بيانات سندات القبض (§2.3 المجموعة 8) + مسار التحصيل السريع من الفاتورة.
 class PaymentsRemoteDataSource {
@@ -20,18 +21,30 @@ class PaymentsRemoteDataSource {
     return JsonUtils.unwrapList(response).map(PaymentModel.fromJson).toList();
   }
 
+  Future<PaymentsPage> listPage(PaymentQuery query) async {
+    final response = await _client.getRaw(
+      FinanceEndpoints.payments,
+      query: query.toQueryMap(),
+    );
+    return PaymentsPage.fromJson(response);
+  }
+
   /// #49 `GET /api/payments/{id}`
   Future<PaymentModel> byId(int id) async {
     final response = await _client.getRaw(FinanceEndpoints.payment(id));
     final map = JsonUtils.asMap(response);
     if (map == null) throw const NotFoundFailure('سند القبض غير موجود.');
-    final data = JsonUtils.asMap(map['payment']) ?? JsonUtils.asMap(map['data']) ?? map;
+    final data =
+        JsonUtils.asMap(map['payment']) ?? JsonUtils.asMap(map['data']) ?? map;
     return PaymentModel.fromJson(data);
   }
 
   /// #50 `POST /api/payments` — سند قبض عام (قد يكون بلا فاتورة → توزيع FIFO).
   Future<CollectPaymentOutcome> create(Map<String, dynamic> payload) async {
-    final response = await _client.post(FinanceEndpoints.payments, body: payload);
+    final response = await _client.post(
+      FinanceEndpoints.payments,
+      body: payload,
+    );
     return _parseOutcome(response);
   }
 
@@ -49,10 +62,14 @@ class PaymentsRemoteDataSource {
 
   /// #51 `PUT /api/payments/{id}` — يعيد توزيع الفواتير في الخادم.
   Future<PaymentModel> update(int id, Map<String, dynamic> payload) async {
-    final response = await _client.put(FinanceEndpoints.payment(id), body: payload);
+    final response = await _client.put(
+      FinanceEndpoints.payment(id),
+      body: payload,
+    );
     final map = JsonUtils.asMap(response);
     if (map == null) return byId(id);
-    final data = JsonUtils.asMap(map['payment']) ?? JsonUtils.asMap(map['data']) ?? map;
+    final data =
+        JsonUtils.asMap(map['payment']) ?? JsonUtils.asMap(map['data']) ?? map;
     return PaymentModel.fromJson(data);
   }
 
@@ -70,7 +87,10 @@ class PaymentsRemoteDataSource {
   ///
   /// الخادم يحذف حركات دفتر الأستاذ ويعيد احتساب الفواتير والأرصدة، ويحفظ
   /// السبب والمُنفّذ في سجل التدقيق.
-  Future<VoidPaymentOutcome> voidPayment(int id, {required String reason}) async {
+  Future<VoidPaymentOutcome> voidPayment(
+    int id, {
+    required String reason,
+  }) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(
@@ -84,18 +104,31 @@ class PaymentsRemoteDataSource {
     );
     final map = JsonUtils.asMap(response);
     final pending = map?['pending_approval'] == true;
-    final data = JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
+    final data =
+        JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
     final payment = data == null ? await byId(id) : PaymentModel.fromJson(data);
     return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
   }
 
   /// `GET /api/payments/void-requests` — طلبات الإلغاء بانتظار اعتماد المشرف.
-  Future<List<PaymentVoidRequest>> voidRequests({int page = 1, int perPage = 25}) async {
+  Future<List<PaymentVoidRequest>> voidRequests({
+    int page = 1,
+    int perPage = 25,
+    String? sortBy,
+    String? sortDirection,
+  }) async {
     final response = await _client.getRaw(
       FinanceEndpoints.paymentsVoidRequests,
-      query: <String, dynamic>{'page': page, 'per_page': perPage},
+      query: <String, dynamic>{
+        'page': page,
+        'per_page': perPage,
+        if (sortBy != null) 'sort_by': sortBy,
+        if (sortDirection != null) 'sort_direction': sortDirection,
+      },
     );
-    return JsonUtils.unwrapList(response).map(PaymentVoidRequest.fromJson).toList();
+    return JsonUtils.unwrapList(
+      response,
+    ).map(PaymentVoidRequest.fromJson).toList();
   }
 
   /// `POST /api/payments/{id}/void-decision` — قرار المشرف في طلب الإلغاء.
@@ -113,8 +146,7 @@ class PaymentsRemoteDataSource {
     );
     final map = JsonUtils.asMap(response);
     // الخادم يعيد {message, payment, receipt_data} بعد تنفيذ القرار.
-    return map != null &&
-        (map['payment'] != null || map['message'] != null);
+    return map != null && (map['payment'] != null || map['message'] != null);
   }
 
   /// #52 `POST /api/payments/bulk-delete`
@@ -126,7 +158,10 @@ class PaymentsRemoteDataSource {
     final map = JsonUtils.asMap(response);
     if (map == null) return ids.length;
     final count = JsonUtils.asIntOrNull(
-      map['deleted_count'] ?? map['deleted'] ?? map['processed'] ?? map['count'],
+      map['deleted_count'] ??
+          map['deleted'] ??
+          map['processed'] ??
+          map['count'],
     );
     return count ?? ids.length;
   }
@@ -147,7 +182,9 @@ class PaymentsRemoteDataSource {
       receiptData: ReceiptDataModel.fromPaymentJson(map),
       message: JsonUtils.asStringOrNull(map['message']),
       invoiceStatus: status,
-      invoiceTotalAmount: JsonUtils.asDoubleOrNull(invoiceJson?['total_amount']),
+      invoiceTotalAmount: JsonUtils.asDoubleOrNull(
+        invoiceJson?['total_amount'],
+      ),
       invoiceAmountPaid: JsonUtils.asDoubleOrNull(invoiceJson?['amount_paid']),
     );
   }

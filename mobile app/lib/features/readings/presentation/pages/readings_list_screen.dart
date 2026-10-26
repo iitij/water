@@ -7,12 +7,14 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../../core/widgets/status_badge.dart';
@@ -213,135 +215,196 @@ class _ReadingsListView extends StatelessWidget {
             }
           },
           builder: (context, state) {
-            return RefreshIndicator(
-              onRefresh: cubit.load,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        _filters(context, state, cubit),
-                        Padding(
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                            16,
-                            6,
-                            16,
-                            10,
+            final defaultPositions = {
+              for (var index = 0; index < state.readings.length; index++)
+                state.readings[index]: index,
+            };
+            return ListPresentation<Reading>(
+              items: state.readings,
+              initialSettings: const ListPresentationSettings(
+                sortBy: 'default',
+                descending: false,
+              ),
+              sortValues: {
+                'default': (
+                  label: ListOptionsStrings.reset,
+                  value: (reading) => defaultPositions[reading],
+                ),
+                'id': (
+                  label: ListOptionsStrings.id,
+                  value: (reading) => reading.id,
+                ),
+                'meter_code': (
+                  label: ListOptionsStrings.meter,
+                  value: (reading) => reading.meterCode,
+                ),
+                'subscriber_name': (
+                  label: ListOptionsStrings.subscriber,
+                  value: (reading) => reading.subscriberName,
+                ),
+                'reading_date': (
+                  label: ListOptionsStrings.readingDate,
+                  value: (reading) => reading.readingDate,
+                ),
+                'actual_reading_date': (
+                  label: ListOptionsStrings.actualReadingDate,
+                  value: (reading) => reading.actualReadingDate,
+                ),
+                'previous_reading': (
+                  label: ListOptionsStrings.previousReading,
+                  value: (reading) => reading.previousReading,
+                ),
+                'current_reading': (
+                  label: ListOptionsStrings.currentReading,
+                  value: (reading) => reading.currentReading,
+                ),
+                'consumption_units': (
+                  label: ListOptionsStrings.consumption,
+                  value: (reading) => reading.consumptionUnits,
+                ),
+              },
+              fields: const {
+                'subscriber': ListOptionsStrings.subscriber,
+                'status': ListOptionsStrings.status,
+                'previous_reading': ListOptionsStrings.previousReading,
+                'current_reading': ListOptionsStrings.currentReading,
+                'consumption': ListOptionsStrings.consumption,
+                'reading_date': ListOptionsStrings.readingDate,
+                'actual_reading_date': ListOptionsStrings.actualReadingDate,
+                'period': ListOptionsStrings.period,
+                'photo': ListOptionsStrings.photo,
+              },
+              builder: (context, visible, settings) => RefreshIndicator(
+                onRefresh: cubit.load,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          _filters(context, state, cubit),
+                          Padding(
+                            padding: const EdgeInsetsDirectional.fromSTEB(
+                              16,
+                              6,
+                              16,
+                              10,
+                            ),
+                            child: AppStatStrip(
+                              items: [
+                                AppStatItem(
+                                  label: 'القراءات الظاهرة',
+                                  value: '${state.readings.length}',
+                                  icon: Icons.speed_rounded,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                AppStatItem(
+                                  label: 'مفوترة',
+                                  value:
+                                      '${state.readings.where((r) => r.isInvoiced).length}',
+                                  icon: Icons.receipt_long_outlined,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                                AppStatItem(
+                                  label: 'غير مفوترة',
+                                  value:
+                                      '${state.readings.where((r) => !r.isInvoiced).length}',
+                                  icon: Icons.pending_actions_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
                           ),
-                          child: AppStatStrip(
-                            items: [
-                              AppStatItem(
-                                label: 'القراءات الظاهرة',
-                                value: '${state.readings.length}',
-                                icon: Icons.speed_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              AppStatItem(
-                                label: 'مفوترة',
-                                value:
-                                    '${state.readings.where((r) => r.isInvoiced).length}',
-                                icon: Icons.receipt_long_outlined,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                              AppStatItem(
-                                label: 'غير مفوترة',
-                                value:
-                                    '${state.readings.where((r) => !r.isInvoiced).length}',
-                                icon: Icons.pending_actions_rounded,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (state.status == ReadingsLoadStatus.loading &&
-                      state.readings.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (state.status == ReadingsLoadStatus.failure &&
-                      state.readings.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: EmptyStateWidget(
-                        icon: Icons.cloud_off_rounded,
-                        title: 'تعذر تحميل القراءات',
-                        message:
-                            state.errorMessage ??
-                            'تحقق من الاتصال ثم أعد المحاولة.',
-                        action: TextButton.icon(
-                          onPressed: cubit.load,
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('إعادة المحاولة'),
-                        ),
-                      ),
-                    )
-                  else if (state.readings.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: EmptyStateWidget(
-                        icon: Icons.speed_rounded,
-                        title: state.query.isEmpty && state.squareFilter == null
-                            ? 'لا توجد قراءات بعد'
-                            : 'لا نتائج مطابقة',
-                        message:
-                            state.query.isEmpty && state.squareFilter == null
-                            ? 'سجّل أول قراءة لعداد من زر الإضافة.'
-                            : 'جرّب تعديل البحث أو إزالة بعض الفلاتر.',
-                        action:
-                            state.query.isEmpty && state.squareFilter == null
-                            ? null
-                            : TextButton(
-                                onPressed: cubit.clearAllFilters,
-                                child: const Text('مسح الفلاتر'),
-                              ),
-                      ),
-                    )
-                  else
-                    SliverList.builder(
-                      itemCount: state.readings.length,
-                      itemBuilder: (context, index) => _ReadingCard(
-                        reading: state.readings[index],
-                        selected: state.selectedKeys.contains(
-                          state.readings[index].selectionKey,
-                        ),
-                        selectionMode: state.isSelecting,
-                        onTap: () =>
-                            cubit.toggleSelection(state.readings[index]),
-                        onLongPress: () =>
-                            cubit.toggleSelection(state.readings[index]),
-                        onPreviewPhoto: state.readings[index].hasPhoto
-                            ? () => _previewReadingPhoto(
-                                context,
-                                state.readings[index],
-                              )
-                            : null,
-                        onEdit: state.readings[index].isInvoiced
-                            ? null
-                            : () => _editReading(
-                                context,
-                                state.readings[index],
-                                cubit,
-                              ),
-                        onDelete: state.readings[index].isInvoiced
-                            ? null
-                            : () => _confirmDelete(
-                                context,
-                                state.readings[index],
-                                cubit,
-                              ),
+                        ],
                       ),
                     ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 88)),
-                ],
+                    if (state.status == ReadingsLoadStatus.loading &&
+                        state.readings.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (state.status == ReadingsLoadStatus.failure &&
+                        state.readings.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateWidget(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'تعذر تحميل القراءات',
+                          message:
+                              state.errorMessage ??
+                              'تحقق من الاتصال ثم أعد المحاولة.',
+                          action: TextButton.icon(
+                            onPressed: cubit.load,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('إعادة المحاولة'),
+                          ),
+                        ),
+                      )
+                    else if (state.readings.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateWidget(
+                          icon: Icons.speed_rounded,
+                          title:
+                              state.query.isEmpty && state.squareFilter == null
+                              ? 'لا توجد قراءات بعد'
+                              : 'لا نتائج مطابقة',
+                          message:
+                              state.query.isEmpty && state.squareFilter == null
+                              ? 'سجّل أول قراءة لعداد من زر الإضافة.'
+                              : 'جرّب تعديل البحث أو إزالة بعض الفلاتر.',
+                          action:
+                              state.query.isEmpty && state.squareFilter == null
+                              ? null
+                              : TextButton(
+                                  onPressed: cubit.clearAllFilters,
+                                  child: const Text('مسح الفلاتر'),
+                                ),
+                        ),
+                      )
+                    else
+                      SliverList.builder(
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) => _ReadingCard(
+                          reading: visible[index],
+                          presentation: settings,
+                          selected: state.selectedKeys.contains(
+                            visible[index].selectionKey,
+                          ),
+                          selectionMode: state.isSelecting,
+                          onTap: () => cubit.toggleSelection(visible[index]),
+                          onLongPress: () =>
+                              cubit.toggleSelection(visible[index]),
+                          onPreviewPhoto: visible[index].hasPhoto
+                              ? () => _previewReadingPhoto(
+                                  context,
+                                  visible[index],
+                                )
+                              : null,
+                          onEdit: visible[index].isInvoiced
+                              ? null
+                              : () => _editReading(
+                                  context,
+                                  visible[index],
+                                  cubit,
+                                ),
+                          onDelete: visible[index].isInvoiced
+                              ? null
+                              : () => _confirmDelete(
+                                  context,
+                                  visible[index],
+                                  cubit,
+                                ),
+                        ),
+                      ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 88)),
+                  ],
+                ),
               ),
             );
           },

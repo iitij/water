@@ -7,6 +7,7 @@ enum FinanceLoadStatus { idle, loading, ready, refreshing, failure }
 
 /// حالة قائمة الفواتير (`SCR-14`) والمحصل السريع (`SCR-13`).
 class InvoicesState extends Equatable {
+  static const _unchangedBusy = Object();
   const InvoicesState({
     this.query = const InvoiceQuery(),
     this.invoices = const <InvoiceModel>[],
@@ -16,6 +17,8 @@ class InvoicesState extends Equatable {
     this.selectedIds = const <int>{},
     this.busyInvoiceId,
     this.bulkRunning = false,
+    this.lastPage,
+    this.totalCount,
   });
 
   final InvoiceQuery query;
@@ -30,18 +33,23 @@ class InvoicesState extends Equatable {
   /// الفاتورة التي يُنفَّذ عليها إجراء فردي (إعادة احتساب/حذف) لتعطيل أزرارها.
   final int? busyInvoiceId;
   final bool bulkRunning;
+  final int? lastPage;
+  final int? totalCount;
+  bool get hasPreviousPage => query.page > 1;
+  bool get hasNextPage => lastPage != null
+      ? query.page < lastPage!
+      : invoices.length == (query.limit ?? 25);
 
   bool get isLoading =>
-      status == FinanceLoadStatus.loading || status == FinanceLoadStatus.refreshing;
+      status == FinanceLoadStatus.loading ||
+      status == FinanceLoadStatus.refreshing;
   bool get hasData => invoices.isNotEmpty;
   bool get isEmpty => !isLoading && invoices.isEmpty && errorMessage == null;
   bool get isSelectingMode => selectedIds.isNotEmpty;
 
   /// إجمالي المستحق المعروض (`Σ total_amount + previous_balance`).
-  double get totalDueSum => invoices.fold<double>(
-        0,
-        (sum, i) => sum + i.totalDue,
-      );
+  double get totalDueSum =>
+      invoices.fold<double>(0, (sum, i) => sum + i.totalDue);
 
   /// إجمالي المتبقي الفعلي (يُحسب تراكمياً لكل فاتورة على حدة لتفادي المضاعفة).
   double get openRemainingSum {
@@ -56,7 +64,8 @@ class InvoicesState extends Equatable {
   int get openCount =>
       invoices.where((i) => i.status.isOpenForCollection).length;
 
-  int get overdueCount => invoices.where((i) => i.status.wire == 'overdue').length;
+  int get overdueCount =>
+      invoices.where((i) => i.status.wire == 'overdue').length;
 
   /// يُمكّن الفلاتر من معرفة الفترات المتاحة بدون شبكة زائدة.
   List<InvoiceModel> invoicesOf(int subscriberId) =>
@@ -70,29 +79,36 @@ class InvoicesState extends Equatable {
     String? errorMessage,
     bool clearError = false,
     Set<int>? selectedIds,
-    int? busyInvoiceId,
+    Object? busyInvoiceId = _unchangedBusy,
     bool? bulkRunning,
-  }) =>
-      InvoicesState(
-        query: query ?? this.query,
-        invoices: invoices ?? this.invoices,
-        billingPeriods: billingPeriods ?? this.billingPeriods,
-        status: status ?? this.status,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-        selectedIds: selectedIds ?? this.selectedIds,
-        busyInvoiceId: busyInvoiceId ?? this.busyInvoiceId,
-        bulkRunning: bulkRunning ?? this.bulkRunning,
-      );
+    int? lastPage,
+    int? totalCount,
+  }) => InvoicesState(
+    query: query ?? this.query,
+    invoices: invoices ?? this.invoices,
+    billingPeriods: billingPeriods ?? this.billingPeriods,
+    status: status ?? this.status,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    selectedIds: selectedIds ?? this.selectedIds,
+    busyInvoiceId: identical(busyInvoiceId, _unchangedBusy)
+        ? this.busyInvoiceId
+        : busyInvoiceId as int?,
+    bulkRunning: bulkRunning ?? this.bulkRunning,
+    lastPage: lastPage ?? this.lastPage,
+    totalCount: totalCount ?? this.totalCount,
+  );
 
   @override
   List<Object?> get props => <Object?>[
-        query,
-        invoices,
-        billingPeriods,
-        status,
-        errorMessage,
-        selectedIds,
-        busyInvoiceId,
-        bulkRunning,
-      ];
+    query,
+    invoices,
+    billingPeriods,
+    status,
+    errorMessage,
+    selectedIds,
+    busyInvoiceId,
+    bulkRunning,
+    lastPage,
+    totalCount,
+  ];
 }

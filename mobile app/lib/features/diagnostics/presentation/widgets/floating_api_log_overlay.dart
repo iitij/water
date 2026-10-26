@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection_container.dart';
@@ -11,10 +12,7 @@ import '../../../../core/ui/app_tokens.dart';
 ///
 /// عند النقر عليه، يفتح شاشة سجلات الـ API مباشرة من أي مكان في التطبيق.
 class FloatingApiLogOverlay extends StatefulWidget {
-  const FloatingApiLogOverlay({
-    super.key,
-    required this.child,
-  });
+  const FloatingApiLogOverlay({super.key, required this.child});
 
   final Widget child;
 
@@ -26,10 +24,13 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
   final ApiLogManager _logManager = getIt<ApiLogManager>();
 
   Offset _position = const Offset(16, 120);
+  late bool _visible;
+  bool _updateScheduled = false;
 
   @override
   void initState() {
     super.initState();
+    _visible = _logManager.showFloatingPill;
     _logManager.addListener(_onUpdated);
   }
 
@@ -40,7 +41,21 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
   }
 
   void _onUpdated() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final visible = _logManager.showFloatingPill;
+    if (!visible && !_visible) return;
+    _visible = visible;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (_updateScheduled) return;
+      _updateScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updateScheduled = false;
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   @override
@@ -72,7 +87,10 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
             child: Material(
               color: Colors.transparent,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: hasErrors
                       ? AppColors.danger
@@ -87,7 +105,9 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                     Icon(
                       hasErrors
                           ? Icons.error_outline_rounded
-                          : (hasSlow ? Icons.speed_rounded : Icons.sync_alt_rounded),
+                          : (hasSlow
+                                ? Icons.speed_rounded
+                                : Icons.sync_alt_rounded),
                       size: 14,
                       color: AppColors.onPanel,
                     ),
@@ -103,7 +123,10 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                     if (hasErrors) ...<Widget>[
                       const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.circular(AppRadius.xs),

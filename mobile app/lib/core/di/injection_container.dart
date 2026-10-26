@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -61,17 +62,20 @@ Future<void> configureDependencies({String? appVersion}) async {
       'system/error-reports',
       data: <String, dynamic>{
         'reports': reports
-            .map((report) => <String, dynamic>{
-                  'message': report.message,
-                  'context': <String, dynamic>{
-                    if (report.context != null) 'name': report.context,
-                    if (report.statusCode != null) 'status_code': report.statusCode,
-                    if (report.endpoint != null) 'endpoint': report.endpoint,
-                    'fatal': report.fatal,
-                  },
-                  'occurred_at': report.occurredAt.toIso8601String(),
-                  'app_version': appVersion ?? AppConfig.appVersion,
-                })
+            .map(
+              (report) => <String, dynamic>{
+                'message': report.message,
+                'context': <String, dynamic>{
+                  if (report.context != null) 'name': report.context,
+                  if (report.statusCode != null)
+                    'status_code': report.statusCode,
+                  if (report.endpoint != null) 'endpoint': report.endpoint,
+                  'fatal': report.fatal,
+                },
+                'occurred_at': report.occurredAt.toIso8601String(),
+                'app_version': appVersion ?? AppConfig.appVersion,
+              },
+            )
             .toList(growable: false),
       },
     ),
@@ -125,7 +129,9 @@ Future<void> configureDependencies({String? appVersion}) async {
   // S7-08: نسخة احتياطية محلية لبيانات الميدان (تكتب داخل مستندات التطبيق).
   // S7-09: تذكيرات محلية — تُسجّل مرة واحدة، والجدولة تُعاد في bootstrap.
   getIt.registerLazySingleton<ReminderScheduler>(FlutterReminderScheduler.new);
-  getIt.registerLazySingleton<ReminderPreferencesStore>(SharedPrefsReminderStore.new);
+  getIt.registerLazySingleton<ReminderPreferencesStore>(
+    SharedPrefsReminderStore.new,
+  );
   getIt.registerSingleton<LocalBackupService>(
     LocalBackupService(
       store: DatabaseFieldDataStore(fieldModule.database),
@@ -135,11 +141,17 @@ Future<void> configureDependencies({String? appVersion}) async {
   );
   getIt.registerSingleton<MetersRepository>(fieldModule.metersRepository);
   getIt.registerSingleton<ReadingsRepository>(fieldModule.readingsRepository);
-  getIt.registerSingleton<OfflinePackDownloader>(fieldModule.offlinePackDownloader);
-  getIt.registerSingleton<ReadingInvoiceActionsService>(fieldModule.invoiceActions);
+  getIt.registerSingleton<OfflinePackDownloader>(
+    fieldModule.offlinePackDownloader,
+  );
+  getIt.registerSingleton<ReadingInvoiceActionsService>(
+    fieldModule.invoiceActions,
+  );
 
   // Unified Drift/SQLite Offline Sync Queue (migrates any legacy SharedPreferences items).
-  final queueRepository = DriftSyncQueueRepository(database: fieldModule.database);
+  final queueRepository = DriftSyncQueueRepository(
+    database: fieldModule.database,
+  );
   final cachedUser = await secureStorage.readCachedUser();
   await queueRepository.migrateLegacyQueuesIfNeeded(
     fallbackOwnerUserId: cachedUser?['id']?.toString(),
@@ -155,13 +167,52 @@ Future<void> configureDependencies({String? appVersion}) async {
 
   // سجل التدقيق المحلي (S4-05): يُسجّل أحداث الميدان الحسّاسة محلياً ثم
   // يرفعها مجمّعة إلى `POST /audit-events` — الفاعل يحدده الخادم من التوكن.
+  String? auditScope() {
+    final userId = session.user?['id']?.toString();
+    if (!session.isAuthenticated || userId == null || userId.isEmpty) {
+      return null;
+    }
+    return jsonEncode([dioClient.dio.options.baseUrl, userId]);
+  }
+
   final auditLog = AuditLogService(
     store: SharedPreferencesAuditStore(),
-    upload: (events) => dioClient.dio.post<dynamic>(
-      ApiEndpoints.auditEvents,
-      data: <String, dynamic>{'events': events},
-    ),
+    scopeProvider: auditScope,
+    scopedStoreFactory: (scope) => SharedPreferencesAuditStore(scopeKey: scope),
+    upload: (events) async {
+      final scope = auditScope();
+      final sessionToken = session.token;
+      final baseUrl = dioClient.dio.options.baseUrl;
+      final token = await secureStorage.readAccessToken();
+      if (scope == null ||
+          scope != auditScope() ||
+          sessionToken != session.token ||
+          token == null ||
+          token.isEmpty) {
+        throw StateError('تغيرت الجلسة؛ سيبقى سجل التدقيق محفوظاً لحسابه.');
+      }
+      // Pin both destination and credential. Auth refresh must never retry this
+      // account's payload with a different user's newly stored token.
+      final response = await dioClient.dio.post<dynamic>(
+        Uri.parse(baseUrl).resolve(ApiEndpoints.auditEvents).toString(),
+        data: <String, dynamic>{'events': events},
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          extra: {'skipAuth': true, 'skipRefresh': true},
+          followRedirects: false,
+          // A late 401 from a previous account must not expire a new session.
+          validateStatus: (status) =>
+              status == 401 ||
+              (status != null && status >= 200 && status < 300),
+        ),
+      );
+      if (response.statusCode == 401) {
+        throw StateError('تعذّر اعتماد رفع سجل التدقيق؛ أعد تسجيل الدخول.');
+      }
+    },
   );
+  session.addListener(auditLog.sessionChanged);
+  session.addSessionClearedListener(auditLog.sessionChanged);
   getIt.registerSingleton<AuditLogService>(auditLog);
 
   // مزامنة بيانات الميدان المحلية (أعطال القراءة + زيارات الجولة) — كانت
@@ -172,9 +223,7 @@ Future<void> configureDependencies({String? appVersion}) async {
     visitStore: SharedPreferencesRouteVisitStore(),
   );
   getIt.registerSingleton<FieldDataSyncService>(fieldDataSync);
-  getIt.registerSingleton<RouteVisitStore>(
-    SharedPreferencesRouteVisitStore(),
-  );
+  getIt.registerSingleton<RouteVisitStore>(SharedPreferencesRouteVisitStore());
 
   // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
   FinanceModule.ensure();
@@ -218,8 +267,12 @@ Future<void> configureDependencies({String? appVersion}) async {
     DashboardLocalDataSource(),
   );
   final rbacRepository = RbacRepositoryImpl(RbacRemoteDataSource(adminApi));
-  final exportRepository = ExportRepositoryImpl(ExportRemoteDataSource(adminApi));
-  final devicesRepository = DevicesRepositoryImpl(DevicesRemoteDataSource(adminApi));
+  final exportRepository = ExportRepositoryImpl(
+    ExportRemoteDataSource(adminApi),
+  );
+  final devicesRepository = DevicesRepositoryImpl(
+    DevicesRemoteDataSource(adminApi),
+  );
   final excelService = ExcelExportService.platform(exportRepository);
 
   getIt.registerSingleton<AdminApiClient>(adminApi);

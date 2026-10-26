@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:water_project/features/audit/data/audit_event_store.dart';
@@ -9,6 +12,197 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('AuditLogService', () {
+    test('معرّفات UUID فريدة ولا تضيع أحداث التسجيل المتزامن الكثيف', () async {
+      final store = InMemoryAuditStore();
+      final sent = <Map<String, dynamic>>[];
+      final service = AuditLogService(
+        store: store,
+        batchSize: 31,
+        upload: (events) async => sent.addAll(events),
+      );
+      addTearDown(service.dispose);
+
+      final events = await Future.wait(
+        List.generate(500, (index) => service.record('reading.saved.$index')),
+      );
+
+      expect(events.whereType<LocalAuditEvent>().length, 500);
+      expect(events.map((event) => event!.id).toSet().length, 500);
+      expect(
+        events.first!.id,
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      );
+      expect(service.pendingCount, 500);
+      expect(await service.flush(), 500);
+      expect(sent.map((event) => event['event']).toSet().length, 500);
+      expect(await store.pending(), isEmpty);
+    });
+
+    test(
+      'record أثناء upload يبقى محفوظاً ويُرفع دون أن يحذفه snapshot قديم',
+      () async {
+        final store = InMemoryAuditStore();
+        final started = Completer<void>(), release = Completer<void>();
+        final sent = <String>[];
+        final service = AuditLogService(
+          store: store,
+          upload: (events) async {
+            sent.addAll(events.map((event) => event['event'] as String));
+            if (!started.isCompleted) {
+              started.complete();
+              await release.future;
+            }
+          },
+        );
+        addTearDown(service.dispose);
+        await service.record('payment.first');
+        final flushing = service.flush();
+        await started.future;
+        await service.record('payment.during_upload');
+        expect((await store.pending()).length, 2);
+        release.complete();
+
+        expect(await flushing, 2);
+        expect(sent, ['payment.first', 'payment.during_upload']);
+        expect(await store.pending(), isEmpty);
+      },
+    );
+
+    test(
+      'تبديل الحساب أثناء الرفع يوقف الدفعات التالية ويحفظ سجل كل حساب',
+      () async {
+        String? scope = 'server-a/user-a';
+        final stores = <String, InMemoryAuditStore>{};
+        final started = Completer<void>(), release = Completer<void>();
+        final sent = <String>[];
+        final service = AuditLogService(
+          store: InMemoryAuditStore(),
+          batchSize: 1,
+          scopeProvider: () => scope,
+          scopedStoreFactory: (key) =>
+              stores.putIfAbsent(key, InMemoryAuditStore.new),
+          upload: (events) async {
+            sent.add(events.single['event'] as String);
+            if (!started.isCompleted) {
+              started.complete();
+              await release.future;
+            }
+          },
+        );
+        addTearDown(service.dispose);
+        await service.record('a.first');
+        await service.record('a.second');
+        final flushing = service.flush();
+        await started.future;
+        scope = 'server-a/user-b';
+        service.sessionChanged();
+        expect(service.pendingCount, 0);
+        await service.record('b.first');
+        release.complete();
+
+        expect(await flushing, 1);
+        expect(sent, ['a.first']);
+        expect(service.pendingCount, 1);
+        expect(
+          (await stores['server-a/user-a']!.pending()).single.event,
+          'a.second',
+        );
+        expect(await service.flush(), 1);
+        expect(sent, ['a.first', 'b.first']);
+        scope = 'server-a/user-a';
+        service.sessionChanged();
+        expect(await service.refreshPendingCount(), 1);
+        expect(await service.flush(), 1);
+        expect(sent.last, 'a.second');
+      },
+    );
+
+    test('الخادم جزء من النطاق حتى لو تطابق رقم المستخدم', () async {
+      var scope = jsonEncode(['https://a.example/api/', '7']);
+      final stores = <String, InMemoryAuditStore>{};
+      final sent = <String>[];
+      final service = AuditLogService(
+        store: InMemoryAuditStore(),
+        scopeProvider: () => scope,
+        scopedStoreFactory: (key) =>
+            stores.putIfAbsent(key, InMemoryAuditStore.new),
+        upload: (events) async =>
+            sent.addAll(events.map((event) => event['event'] as String)),
+      );
+      addTearDown(service.dispose);
+      await service.record('server_a.event');
+      scope = jsonEncode(['https://b.example/api/', '7']);
+      service.sessionChanged();
+      expect(await service.refreshPendingCount(), 0);
+      await service.record('server_b.event');
+      expect(await service.flush(), 1);
+      expect(sent, ['server_b.event']);
+      expect(
+        (await stores[jsonEncode(['https://a.example/api/', '7'])]!.pending())
+            .single
+            .event,
+        'server_a.event',
+      );
+    });
+
+    test(
+      'سجل SharedPreferences القديم محجور ولا يُنسب إلى أول حساب يسجل الدخول',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final legacy = SharedPreferencesAuditStore();
+        await legacy.save([_event('legacy-without-owner')]);
+        String? scope;
+        final sent = <Map<String, dynamic>>[];
+        final service = AuditLogService(
+          store: legacy,
+          scopeProvider: () => scope,
+          scopedStoreFactory: (key) =>
+              SharedPreferencesAuditStore(scopeKey: key),
+          upload: (events) async => sent.addAll(events),
+        );
+        addTearDown(service.dispose);
+        expect(await service.record('anonymous.event'), isNull);
+        expect(await service.flush(), 0);
+        scope = jsonEncode(['https://a.example/api/', '7']);
+        service.sessionChanged();
+        expect(await service.refreshPendingCount(), 0);
+        await service.record('owned.event');
+        expect(await service.flush(), 1);
+        expect(sent.single['event'], 'owned.event');
+        expect(sent.single.containsKey('actor_user_id'), isFalse);
+        expect(sent.single.containsKey('owner_user_id'), isFalse);
+        expect(sent.single.containsKey('scope'), isFalse);
+        expect((await legacy.pending()).single.id, 'legacy-without-owner');
+        scope = null;
+        service.sessionChanged();
+        expect(await service.refreshPendingCount(), 0);
+        expect(await service.record('signed_out.event'), isNull);
+      },
+    );
+
+    test(
+      'record يضيف لنسخة مستقلة ويحفظ الأحداث الموجودة في snapshot غير قابل للتعديل',
+      () async {
+        final existing = _event('existing');
+        final store = InMemoryAuditStore([existing]);
+        final snapshot = await store.pending();
+        final service = AuditLogService(store: store, upload: (_) async {});
+        addTearDown(service.dispose);
+
+        final recorded = await service.record('cash_session.closed');
+
+        expect(recorded, isNotNull);
+        expect(snapshot, [existing]);
+        expect(await store.pending(), [existing, recorded]);
+        expect(service.pendingCount, 2);
+        expect(service.lastError, isNull);
+      },
+    );
+
     test('record يحفظ الحدث محلياً قبل أي اتصال', () async {
       final store = InMemoryAuditStore();
       final sent = <List<Map<String, dynamic>>>[];
@@ -17,8 +211,16 @@ void main() {
         upload: (events) async => sent.add(events),
       );
 
-      await service.record('cash_session.opened', entityType: 'CashSession', entityId: 7);
-      await service.record('cash_session.closed', entityType: 'CashSession', entityId: 7);
+      await service.record(
+        'cash_session.opened',
+        entityType: 'CashSession',
+        entityId: 7,
+      );
+      await service.record(
+        'cash_session.closed',
+        entityType: 'CashSession',
+        entityId: 7,
+      );
 
       expect(service.pendingCount, 2);
       expect(sent, isEmpty, reason: 'التسجيل لا يرفع شيئاً من تلقاء نفسه');
@@ -170,10 +372,10 @@ void main() {
 }
 
 LocalAuditEvent _event(String id) => LocalAuditEvent(
-      id: id,
-      event: 'cash_session.opened',
-      occurredAt: DateTime(2026, 10, 24, 9),
-    );
+  id: id,
+  event: 'cash_session.opened',
+  occurredAt: DateTime(2026, 10, 24, 9),
+);
 
 class _FailingStore implements AuditEventStore {
   @override

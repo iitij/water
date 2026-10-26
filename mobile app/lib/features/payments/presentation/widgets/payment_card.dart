@@ -23,12 +23,16 @@ class PaymentCard extends StatelessWidget {
     this.onTap,
     this.dense = false,
     this.showAccountScope = true,
+    this.hiddenFields = const {},
   });
 
   final PaymentModel payment;
   final VoidCallback? onTap;
   final bool dense;
   final bool showAccountScope;
+  final Set<String> hiddenFields;
+
+  bool _visible(String field) => !hiddenFields.contains(field);
 
   @override
   Widget build(BuildContext context) {
@@ -96,20 +100,22 @@ class PaymentCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                _methodIcon(payment.method),
-                                size: 12,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                _methodLabel(payment.method),
-                                style: TextStyle(
-                                  fontSize: 11,
+                              if (_visible('method')) ...[
+                                const SizedBox(width: 6),
+                                Icon(
+                                  _methodIcon(payment.method),
+                                  size: 12,
                                   color: scheme.onSurfaceVariant,
                                 ),
-                              ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  _methodLabel(payment.method),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],
@@ -123,7 +129,9 @@ class PaymentCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         letterSpacing: -.3,
                         color: AppSemantic.resolve(context, AppColors.success),
-                        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
                       ),
                     ),
                   ],
@@ -134,37 +142,46 @@ class PaymentCard extends StatelessWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
-                    _QuietMeta(
-                      icon: Icons.event_outlined,
-                      text: DateFormat.day(payment.paymentDate),
-                      ltr: true,
-                    ),
-                    if (payment.invoiceBillNumber != null)
+                    if (_visible('date'))
+                      _QuietMeta(
+                        icon: Icons.event_outlined,
+                        text: DateFormat.day(payment.paymentDate),
+                        ltr: true,
+                      ),
+                    if (_visible('invoice') &&
+                        payment.invoiceBillNumber != null)
                       _QuietMeta(
                         icon: Icons.receipt_long_outlined,
                         text: payment.invoiceBillNumber!,
                       ),
-                    if (showAccountScope)
+                    if (showAccountScope && _visible('account'))
                       _QuietMeta(
                         icon: payment.affectsMeterAccount
                             ? Icons.speed_outlined
                             : Icons.person_outline,
-                        text: payment.affectsMeterAccount ? 'حساب العداد' : 'حساب المشترك',
-                        tone: payment.affectsMeterAccount ? AppColors.info : null,
+                        text: payment.affectsMeterAccount
+                            ? 'حساب العداد'
+                            : 'حساب المشترك',
+                        tone: payment.affectsMeterAccount
+                            ? AppColors.info
+                            : null,
                       ),
-                    if (payment.referenceNumber != null &&
+                    if (_visible('reference') &&
+                        payment.referenceNumber != null &&
                         payment.referenceNumber!.isNotEmpty)
                       _QuietMeta(
                         icon: Icons.tag_outlined,
                         text: payment.referenceNumber!,
                         ltr: true,
                       ),
-                    if (payment.collectorName != null && payment.collectorName!.isNotEmpty)
+                    if (_visible('collector') &&
+                        payment.collectorName != null &&
+                        payment.collectorName!.isNotEmpty)
                       _QuietMeta(
                         icon: Icons.badge_outlined,
                         text: payment.collectorName!,
                       ),
-                    if (payment.whatsappSent)
+                    if (_visible('whatsapp') && payment.whatsappSent)
                       const _QuietMeta(
                         icon: Icons.chat_bubble_outline,
                         text: 'أُرسل واتساب',
@@ -187,8 +204,9 @@ class PaymentCard extends StatelessWidget {
   }
 
   static String _methodLabel(Object? method) {
-    final methodStr =
-        method is PaymentMethod ? method.wire : (method?.toString() ?? '');
+    final methodStr = method is PaymentMethod
+        ? method.wire
+        : (method?.toString() ?? '');
     return switch (methodStr) {
       'cash' => 'نقداً',
       'bank_transfer' => 'تحويل بنكي',
@@ -199,8 +217,9 @@ class PaymentCard extends StatelessWidget {
   }
 
   static IconData _methodIcon(Object? method) {
-    final methodStr =
-        method is PaymentMethod ? method.wire : (method?.toString() ?? '');
+    final methodStr = method is PaymentMethod
+        ? method.wire
+        : (method?.toString() ?? '');
     return switch (methodStr) {
       'cash' => Icons.payments_outlined,
       'bank_transfer' => Icons.account_balance_outlined,
@@ -213,7 +232,12 @@ class PaymentCard extends StatelessWidget {
 
 /// عنصر معلومات صامت — أيقونة + نص بلا إطار.
 class _QuietMeta extends StatelessWidget {
-  const _QuietMeta({required this.icon, required this.text, this.tone, this.ltr = false});
+  const _QuietMeta({
+    required this.icon,
+    required this.text,
+    this.tone,
+    this.ltr = false,
+  });
 
   final IconData icon;
   final String text;
@@ -237,7 +261,10 @@ class _QuietMeta extends StatelessWidget {
         Icon(icon, size: 13, color: color),
         const SizedBox(width: 4),
         if (ltr)
-          Directionality(textDirection: TextDirection.ltr, child: Text(text, style: style))
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(text, style: style),
+          )
         else
           Text(text, style: style),
       ],

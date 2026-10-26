@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../../../../core/network/paginated_collection.dart';
 
 import '../../../admin_shared/data/admin_api_client.dart';
 import '../../../admin_shared/data/admin_api_endpoints.dart';
@@ -163,7 +164,9 @@ class SettingsRemoteDataSource {
   }
 
   Future<List<GeneralSettingModel>> getGeneralSettings() async {
-    final response = await _api.get(AdminApiEndpoints.settingsItems);
+    final response = await collectPaginatedCollection((page) =>
+      _api.get(AdminApiEndpoints.settingsItems, query: {'page': page}),
+      collectionKeys: const ['settings', 'items']);
     return adminList(response, const ['settings', 'items'])
         .map(GeneralSettingModel.fromJson)
         .toList(growable: false);

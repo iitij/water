@@ -87,20 +87,26 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
   }
 
   Future<void> _openSession() async {
-    final opening = double.tryParse(_openingController.text.replaceAll(',', '')) ?? 0;
+    final opening =
+        double.tryParse(_openingController.text.replaceAll(',', '')) ?? 0;
     if (opening < 0) {
       setState(() => _error = 'مبلغ الافتتاح لا يكون سالباً.');
       return;
     }
     await _run(() => _service.open(openingAmount: opening));
     if (!mounted || _service.isOpen == false) return;
-    AppFeedback.success(context, 'تم فتح صندوق المحصّل. يمكنك الآن تسجيل التحصيل.');
+    AppFeedback.success(
+      context,
+      'تم فتح صندوق المحصّل. يمكنك الآن تسجيل التحصيل.',
+    );
   }
 
   Future<void> _closeSession() async {
     final session = _service.current;
     if (session == null) return;
-    final counted = double.tryParse(_countedController.text.replaceAll(',', ''));
+    final counted = double.tryParse(
+      _countedController.text.replaceAll(',', ''),
+    );
     if (counted == null || counted < 0) {
       setState(() => _error = 'أدخل المبلغ النقدي المعدود فعلياً.');
       return;
@@ -111,8 +117,10 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
     final notes = _notesController.text.trim();
 
     if (variance.abs() >= 10 && notes.length < 10) {
-      setState(() => _error =
-          'الفرق ${variance.toStringAsFixed(2)} يتطلب تفسيراً مكتوباً (10 أحرف على الأقل).');
+      setState(
+        () => _error =
+            'الفرق ${variance.toStringAsFixed(2)} يتطلب تفسيراً مكتوباً (10 أحرف على الأقل).',
+      );
       return;
     }
 
@@ -127,8 +135,8 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
         variance.abs() < 0.01
             ? 'لا يوجد فرق.'
             : variance < 0
-                ? 'عجز: ${CurrencyFormatter.amount(variance.abs())}'
-                : 'زيادة: ${CurrencyFormatter.amount(variance)}',
+            ? 'عجز: ${CurrencyFormatter.amount(variance.abs())}'
+            : 'زيادة: ${CurrencyFormatter.amount(variance)}',
       ],
     );
     if (!confirmed) return;
@@ -164,9 +172,9 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
                 Text(
                   'صندوق المحصّل',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppColors.onPanel,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppColors.onPanel,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const Gap(6),
                 Text(
@@ -174,9 +182,9 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
                       ? 'الصندوق مفتوح — كل سند قبض تسجله اليوم يُحتسب في هذا الصندوق.'
                       : 'افتح صندوقاً قبل التحصيل ليُطابق النقد المسلَّم مع السندات.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.onPanelSoft,
-                        height: 1.6,
-                      ),
+                    color: AppColors.onPanelSoft,
+                    height: 1.6,
+                  ),
                 ),
                 if (session != null) ...<Widget>[
                   const Gap(AppSpacing.md),
@@ -238,9 +246,14 @@ class _OpenForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text('فتح صندوق جديد', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'فتح صندوق جديد',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const Gap(4),
-          const Text('المبلغ الافتتاحي هو النقد الموجود معك قبل أول سند (عهدة فكّة).'),
+          const Text(
+            'المبلغ الافتتاحي هو النقد الموجود معك قبل أول سند (عهدة فكّة).',
+          ),
           const Gap(AppSpacing.md),
           AppNumericField(
             controller: controller,
@@ -272,15 +285,31 @@ class _HeroFigures extends StatelessWidget {
     final open = session.isOpen;
     final List<_HeroCell> cells = open
         ? <_HeroCell>[
-            _HeroCell('الافتتاحي', CurrencyFormatter.amount(session.openingAmount)),
-            _HeroCell('المتوقع من السندات', CurrencyFormatter.amount(session.expectedAmount),
-                hero: true),
+            _HeroCell(
+              'الافتتاحي',
+              CurrencyFormatter.amount(session.openingAmount),
+            ),
+            _HeroCell(
+              'المتوقع من السندات',
+              CurrencyFormatter.amount(session.expectedAmount),
+              hero: true,
+            ),
             _HeroCell('عدد السندات', '${session.receipts}'),
           ]
         : <_HeroCell>[
-            _HeroCell('المتوقع', CurrencyFormatter.amount(session.expectedAmount)),
-            _HeroCell('المعدود', CurrencyFormatter.amount(session.countedAmount ?? 0)),
-            _HeroCell('الفرق', CurrencyFormatter.amount(session.varianceAmount ?? 0), hero: true),
+            _HeroCell(
+              'المتوقع',
+              CurrencyFormatter.amount(session.expectedAmount),
+            ),
+            _HeroCell(
+              'المعدود',
+              CurrencyFormatter.amount(session.countedAmount ?? 0),
+            ),
+            _HeroCell(
+              'الفرق',
+              CurrencyFormatter.amount(session.varianceAmount ?? 0),
+              hero: true,
+            ),
           ];
 
     return Row(
@@ -316,7 +345,9 @@ class _HeroFigures extends StatelessWidget {
                     fontSize: cells[index].hero ? 16 : 13,
                     height: 1.2,
                     letterSpacing: -.3,
-                    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
                   ),
                 ),
               ],
@@ -374,8 +405,15 @@ class _OpenSessionCard extends StatelessWidget {
               ),
               const Gap(AppSpacing.md),
               _AmountRow(label: 'الافتتاحي', value: session.openingAmount),
-              _AmountRow(label: 'المتوقع من السندات', value: session.expectedAmount),
-              _AmountRow(label: 'عدد السندات', value: session.receipts.toDouble(), money: false),
+              _AmountRow(
+                label: 'المتوقع من السندات',
+                value: session.expectedAmount,
+              ),
+              _AmountRow(
+                label: 'عدد السندات',
+                value: session.receipts.toDouble(),
+                money: false,
+              ),
               if (session.voidedReceipts > 0)
                 _AmountRow(
                   label: 'سندات ملغاة (مستثناة)',
@@ -405,9 +443,14 @@ class _OpenSessionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text('إغلاق الصندوق', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'إغلاق الصندوق',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const Gap(4),
-              const Text('عُدّ النقد فعلياً؛ الفرق يُحسب تلقائياً ويُسجَّل في سجل التدقيق.'),
+              const Text(
+                'عُدّ النقد فعلياً؛ الفرق يُحسب تلقائياً ويُسجَّل في سجل التدقيق.',
+              ),
               const Gap(AppSpacing.md),
               AppNumericField(
                 controller: countedController,
@@ -463,11 +506,11 @@ class _ClosedSummaryCard extends StatelessWidget {
             variance.abs() < 0.01
                 ? 'الصندوق مطابق تماماً.'
                 : variance < 0
-                    ? 'يوجد عجز بمقدار ${CurrencyFormatter.amount(variance.abs())}.'
-                    : 'توجد زيادة بمقدار ${CurrencyFormatter.amount(variance)}.',
+                ? 'يوجد عجز بمقدار ${CurrencyFormatter.amount(variance.abs())}.'
+                : 'توجد زيادة بمقدار ${CurrencyFormatter.amount(variance)}.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: variance.abs() < 0.01 ? null : AppColors.danger,
-                ),
+              color: variance.abs() < 0.01 ? null : AppColors.danger,
+            ),
           ),
           if ((session.closingNotes ?? '').isNotEmpty) ...<Widget>[
             const Gap(AppSpacing.sm),
@@ -487,7 +530,11 @@ class _ClosedSummaryCard extends StatelessWidget {
 }
 
 class _AmountRow extends StatelessWidget {
-  const _AmountRow({required this.label, required this.value, this.money = true});
+  const _AmountRow({
+    required this.label,
+    required this.value,
+    this.money = true,
+  });
 
   final String label;
   final double value;
@@ -499,13 +546,14 @@ class _AmountRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: <Widget>[
-          Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+          Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          ),
           LtrNumberText(
             money ? CurrencyFormatter.amount(value) : value.toStringAsFixed(0),
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontFeatures: const <FontFeature>[FontFeature.tabularFigures()]),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),

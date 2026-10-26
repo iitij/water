@@ -1,15 +1,15 @@
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
@@ -105,16 +105,25 @@ class _UsersView extends StatelessWidget {
     }
     final users = state.visibleUsers;
     if (users.isEmpty) return const AdminEmptyView(title: 'لا توجد حسابات مطابقة', icon: Icons.group_outlined);
-    return ListView.separated(
+    return ListPresentation<SystemUser>(items: users,
+      sortValues: {
+        'name': (label: ListOptionsStrings.name, value: (user) => user.name),
+        'id': (label: ListOptionsStrings.id, value: (user) => user.id),
+        'email': (label: ListOptionsStrings.email, value: (user) => user.email),
+        'created_at': (label: ListOptionsStrings.createdAt, value: (user) => user.createdAt),
+      },
+      fields: const {'email': ListOptionsStrings.email, 'roles': ListOptionsStrings.roles,
+        'created_at': ListOptionsStrings.createdAt},
+      builder: (context, pageUsers, options) => ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-      itemCount: users.length,
+      itemCount: pageUsers.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final user = users[index];
+        final user = pageUsers[index];
         final isCurrent = user.id == currentUserId;
         final deleting = state.deletingIds.contains(user.id);
         return AdminCard(
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+          padding: EdgeInsetsDirectional.fromSTEB(12, options.compact ? 6 : 10, 12, options.compact ? 6 : 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -140,16 +149,16 @@ class _UsersView extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
-                    LtrText(user.email, style: Theme.of(context).textTheme.bodySmall),
+                    if (options.isVisible('email')) LtrText(user.email, style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 5,
                       runSpacing: 5,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        for (final role in user.roles)
+                        for (final role in options.isVisible('roles') ? user.roles : <String>[])
                           AdminStatusBadge(label: _roleName(role), color: _roleColor(role)),
-                        Text(
+                        if (options.isVisible('created_at')) Text(
                           'أضيف ${AdminFormat.date(user.createdAt)}',
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
@@ -188,7 +197,7 @@ class _UsersView extends StatelessWidget {
           ),
         );
       },
-    );
+    ));
   }
 
   Future<void> _openUserEditor(BuildContext context, UsersState state, [SystemUser? user]) async {

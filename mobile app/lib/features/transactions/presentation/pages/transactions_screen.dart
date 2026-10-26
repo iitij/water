@@ -4,11 +4,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/ledger_transaction.dart';
 import '../cubit/transactions_cubit.dart';
@@ -27,11 +29,11 @@ class TransactionsScreen extends StatelessWidget {
   const TransactionsScreen({super.key});
 
   static Color typeColor(String type) => switch (type) {
-        'payment' || 'credit' => AppColors.success,
-        'invoice' || 'debit' => AppColors.danger,
-        'adjustment' => AppColors.warning,
-        _ => AppColors.neutral,
-      };
+    'payment' || 'credit' => AppColors.success,
+    'invoice' || 'debit' => AppColors.danger,
+    'adjustment' => AppColors.warning,
+    _ => AppColors.neutral,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +61,10 @@ class TransactionsScreen extends StatelessWidget {
 class _TransactionsView extends StatelessWidget {
   const _TransactionsView();
 
-  Future<void> _pickSubscriber(BuildContext context, TransactionsState state) async {
+  Future<void> _pickSubscriber(
+    BuildContext context,
+    TransactionsState state,
+  ) async {
     final cubit = context.read<TransactionsCubit>();
     var query = '';
     final picked = await showModalBottomSheet<int?>(
@@ -106,7 +111,8 @@ class _TransactionsView extends StatelessWidget {
                           return _SubscriberOptionRow(
                             icon: Icons.person_outline,
                             title: s.name,
-                            subtitle: '${s.squareName ?? ''} • ${s.phone ?? ''}',
+                            subtitle:
+                                '${s.squareName ?? ''} • ${s.phone ?? ''}',
                             selected: state.subscriberId == s.id,
                             onTap: () => Navigator.pop(sheetCtx, s.id),
                           );
@@ -126,7 +132,10 @@ class _TransactionsView extends StatelessWidget {
     await cubit.filterSubscriber(picked == -1 ? null : picked);
   }
 
-  Future<void> _pickDateRange(BuildContext context, TransactionsState state) async {
+  Future<void> _pickDateRange(
+    BuildContext context,
+    TransactionsState state,
+  ) async {
     final cubit = context.read<TransactionsCubit>();
     final initial = state.fromDate ?? DateTime.now();
     final from = await showDatePicker(
@@ -156,15 +165,16 @@ class _TransactionsView extends StatelessWidget {
         final selectedSub = state.subscriberId == null
             ? null
             : state.subscribers.cast<Subscriber?>().firstWhere(
-                  (s) => s?.id == state.subscriberId,
-                  orElse: () => null,
-                );
+                (s) => s?.id == state.subscriberId,
+                orElse: () => null,
+              );
         final subscriberChipLabel = state.subscriberId == null
             ? 'كل المشتركين'
             : (selectedSub?.name ?? 'مشترك #${state.subscriberId}');
 
         final meterOptions = state.visibleMeters;
-        final validMeterValue = state.meterId == null ||
+        final validMeterValue =
+            state.meterId == null ||
                 state.meterId == 'general' ||
                 meterOptions.any((m) => '${m.id}' == state.meterId)
             ? state.meterId
@@ -180,91 +190,173 @@ class _TransactionsView extends StatelessWidget {
               onPressed: context.read<TransactionsCubit>().load,
             ),
           ],
-          child: Column(children: [
-            AppFilterBar(
-              query: state.search,
-              hint: 'بحث باسم المشترك أو البيان أو كود العداد...',
-              onChanged: context.read<TransactionsCubit>().search,
-              padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 4),
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(children: [
-                AppFilterChip(
-                  label: subscriberChipLabel,
-                  icon: Icons.person_search_rounded,
-                  selected: state.subscriberId != null,
-                  onTap: () => _pickSubscriber(context, state),
-                  onRemove: state.subscriberId == null
-                      ? null
-                      : () => context.read<TransactionsCubit>().filterSubscriber(null),
+          child: Column(
+            children: [
+              AppFilterBar(
+                query: state.search,
+                hint: 'بحث باسم المشترك أو البيان أو كود العداد...',
+                onChanged: context.read<TransactionsCubit>().search,
+                padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 4),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
                 ),
-                const SizedBox(width: 12),
-                AppFilterDropdown<String>(
-                  value: validMeterValue,
-                  hint: 'كل الحسابات / العدادات',
-                  icon: Icons.water_damage_outlined,
-                  items: [
-                    const DropdownMenuItem<String>(value: null, child: Text('كل الحسابات')),
-                    const DropdownMenuItem<String>(value: 'general', child: Text('الحساب العام (بدون عداد)')),
-                    for (final m in meterOptions)
-                      DropdownMenuItem<String>(
-                        value: '${m.id}',
-                        child: Text(m.label),
-                      ),
-                  ],
-                  onChanged: context.read<TransactionsCubit>().filterMeter,
-                ),
-                const SizedBox(width: 12),
-                AppFilterChip(
-                  label: state.fromDate == null
-                      ? 'كل الفترات'
-                      : '${TransactionsScreen._shortDate(state.fromDate!)} ← ${TransactionsScreen._shortDate(state.toDate ?? DateTime.now())}',
-                  icon: Icons.date_range_rounded,
-                  selected: state.fromDate != null,
-                  onTap: () => _pickDateRange(context, state),
-                  onRemove: state.fromDate == null
-                      ? null
-                      : () => context.read<TransactionsCubit>().filterDateRange(null, null),
-                ),
-                const SizedBox(width: 12),
-                AppFilterDropdown<String>(
-                  value: state.type,
-                  hint: 'كل أنواع القيود',
-                  icon: Icons.category_outlined,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('كل أنواع القيود')),
-                    DropdownMenuItem(value: 'payment', child: Text('سند قبض (دائن)')),
-                    DropdownMenuItem(value: 'invoice', child: Text('فاتورة (مدين)')),
-                    DropdownMenuItem(value: 'adjustment', child: Text('تسوية')),
-                  ],
-                  onChanged: context.read<TransactionsCubit>().filterType,
-                ),
-              ]),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: SumBar(items: [
-                (label: 'إجمالي الدائن المعروض', value: state.totalCredit, color: AppColors.success),
-                (label: 'إجمالي المدين المعروض', value: state.totalDebit, color: AppColors.danger),
-              ]),
-            ),
-            if (state.loading) const LinearProgressIndicator(),
-            Expanded(
-              child: state.transactions.isEmpty && !state.loading
-                  ? const EmptyState(message: 'لا توجد حركات مالية مطابقة', icon: Icons.account_balance)
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                      itemCount: state.transactions.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (_, i) {
-                        final t = state.transactions[i];
-                        return _LedgerRow(transaction: t);
-                      },
+                child: Row(
+                  children: [
+                    AppFilterChip(
+                      label: subscriberChipLabel,
+                      icon: Icons.person_search_rounded,
+                      selected: state.subscriberId != null,
+                      onTap: () => _pickSubscriber(context, state),
+                      onRemove: state.subscriberId == null
+                          ? null
+                          : () => context
+                                .read<TransactionsCubit>()
+                                .filterSubscriber(null),
                     ),
-            ),
-          ]),
+                    const SizedBox(width: 12),
+                    AppFilterDropdown<String>(
+                      value: validMeterValue,
+                      hint: 'كل الحسابات / العدادات',
+                      icon: Icons.water_damage_outlined,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('كل الحسابات'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'general',
+                          child: Text('الحساب العام (بدون عداد)'),
+                        ),
+                        for (final m in meterOptions)
+                          DropdownMenuItem<String>(
+                            value: '${m.id}',
+                            child: Text(m.label),
+                          ),
+                      ],
+                      onChanged: context.read<TransactionsCubit>().filterMeter,
+                    ),
+                    const SizedBox(width: 12),
+                    AppFilterChip(
+                      label: state.fromDate == null
+                          ? 'كل الفترات'
+                          : '${TransactionsScreen._shortDate(state.fromDate!)} ← ${TransactionsScreen._shortDate(state.toDate ?? DateTime.now())}',
+                      icon: Icons.date_range_rounded,
+                      selected: state.fromDate != null,
+                      onTap: () => _pickDateRange(context, state),
+                      onRemove: state.fromDate == null
+                          ? null
+                          : () => context
+                                .read<TransactionsCubit>()
+                                .filterDateRange(null, null),
+                    ),
+                    const SizedBox(width: 12),
+                    AppFilterDropdown<String>(
+                      value: state.type,
+                      hint: 'كل أنواع القيود',
+                      icon: Icons.category_outlined,
+                      items: const [
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text('كل أنواع القيود'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'payment',
+                          child: Text('سند قبض (دائن)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'invoice',
+                          child: Text('فاتورة (مدين)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'adjustment',
+                          child: Text('تسوية'),
+                        ),
+                      ],
+                      onChanged: context.read<TransactionsCubit>().filterType,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SumBar(
+                  items: [
+                    (
+                      label: 'إجمالي الدائن المعروض',
+                      value: state.totalCredit,
+                      color: AppColors.success,
+                    ),
+                    (
+                      label: 'إجمالي المدين المعروض',
+                      value: state.totalDebit,
+                      color: AppColors.danger,
+                    ),
+                  ],
+                ),
+              ),
+              if (state.loading) const LinearProgressIndicator(),
+              Expanded(
+                child: ListPresentation<LedgerTransaction>(
+                  items: state.transactions,
+                  initialSettings: const ListPresentationSettings(
+                    sortBy: 'created_at',
+                  ),
+                  sortValues: {
+                    'created_at': (
+                      label: ListOptionsStrings.date,
+                      value: (transaction) => transaction.createdAt ?? '',
+                    ),
+                    'id': (
+                      label: ListOptionsStrings.id,
+                      value: (transaction) => transaction.id,
+                    ),
+                    'amount': (
+                      label: ListOptionsStrings.amount,
+                      value: (transaction) => transaction.amount,
+                    ),
+                    'type': (
+                      label: ListOptionsStrings.type,
+                      value: (transaction) => transaction.type,
+                    ),
+                    'subscriber_name': (
+                      label: ListOptionsStrings.subscriber,
+                      value: (transaction) => transaction.subscriberName ?? '',
+                    ),
+                  },
+                  fields: const {
+                    'description': ListOptionsStrings.description,
+                    'date': ListOptionsStrings.date,
+                    'account': ListOptionsStrings.account,
+                    'reference': ListOptionsStrings.reference,
+                    'type': ListOptionsStrings.type,
+                  },
+                  builder: (context, transactions, options) =>
+                      transactions.isEmpty && !state.loading
+                      ? const EmptyState(
+                          message: 'لا توجد حركات مالية مطابقة',
+                          icon: Icons.account_balance,
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                          itemCount: transactions.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
+                          itemBuilder: (_, i) {
+                            final t = transactions[i];
+                            return _LedgerRow(
+                              transaction: t,
+                              presentation: options,
+                            );
+                          },
+                        ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -272,9 +364,13 @@ class _TransactionsView extends StatelessWidget {
 }
 
 class _LedgerRow extends StatelessWidget {
-  const _LedgerRow({required this.transaction});
+  const _LedgerRow({
+    required this.transaction,
+    this.presentation = const ListPresentationSettings(),
+  });
 
   final LedgerTransaction transaction;
+  final ListPresentationSettings presentation;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +378,12 @@ class _LedgerRow extends StatelessWidget {
     final t = transaction;
     final tone = TransactionsScreen.typeColor(t.type);
     return AppCard(
-      padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+      padding: EdgeInsetsDirectional.fromSTEB(
+        12,
+        presentation.compact ? 6 : 10,
+        12,
+        presentation.compact ? 6 : 10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -293,16 +394,16 @@ class _LedgerRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${t.subscriberName ?? ''} • ${t.description ?? ''}',
+                  '${t.subscriberName ?? ''}${presentation.isVisible('description') ? ' • ${t.description ?? ''}' : ''}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${TransactionsScreen._fmtDate(t.createdAt)} • '
-                  '${t.meterId == null ? 'الحساب العام' : 'عداد رقم: ${t.meterId}'}'
-                  '${t.referenceType != null ? ' • مرجع: ${t.referenceType!.split('\\').last.split('.').last}#${t.referenceId}' : ''}',
+                  '${presentation.isVisible('date') ? TransactionsScreen._fmtDate(t.createdAt) : ''}'
+                  '${presentation.isVisible('account') ? ' • ${t.meterId == null ? 'الحساب العام' : 'عداد رقم: ${t.meterId}'}' : ''}'
+                  '${presentation.isVisible('reference') && t.referenceType != null ? ' • مرجع: ${t.referenceType!.split('\\').last.split('.').last}#${t.referenceId}' : ''}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -317,7 +418,8 @@ class _LedgerRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              StatusBadge(label: t.typeLabel, color: tone),
+              if (presentation.isVisible('type'))
+                StatusBadge(label: t.typeLabel, color: tone),
               const SizedBox(height: 4),
               BalanceText(t.amount, fontSize: 13),
             ],
@@ -355,7 +457,11 @@ class _SubscriberOptionRow extends StatelessWidget {
         padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 4, 8),
         child: Row(
           children: [
-            AppGlyph(icon: icon, tone: selected ? scheme.primary : AppColors.neutral, size: 36),
+            AppGlyph(
+              icon: icon,
+              tone: selected ? scheme.primary : AppColors.neutral,
+              size: 36,
+            ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(

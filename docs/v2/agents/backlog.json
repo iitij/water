@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-10-24",
+  "updated_at": "2026-10-26",
   "branch": "arena/9da3be61-water",
   "status_values": [
    "todo",
@@ -12,7 +12,21 @@
    "partial"
   ],
   "note": "done = الكود مكتوب؛ الإثبات التشغيلي مطلوب في evidence (أمر تشغيل أو اختبار يمرّ). لا تُرقَّى بطاقة إلى done بلا تنفيذ فعلي.",
-  "verification": "لم تُشغَّل أي اختبارات: بيئة العمل بلا PHP/Flutter/Docker. صحّة الصياغة فقط مُتحقَّق منها (tree-sitter + JSON). المستخدم يشغّل الاختبارات على جهازه."
+  "verification": "تحقق محلي 2026-10-26 أثناء تعديلات متزامنة: PHPUnit 43 اختباراً ناجحاً؛ Flutter 359 نجاحاً و15 فشلاً/تحميل؛ analyze سجل 44 مشكلة. لا قبول جهاز أو مالك. التفاصيل في docs/v2/qa/OWNER_AUDIT_2026-10-26.json؛ لم نرق الحالات التاريخية تلقائياً.",
+  "owner_completion_plan": {
+   "path": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "task_prefix": "OWN-",
+   "baseline_before_plan": {
+    "total": 57,
+    "statuses": {
+     "partial": 14,
+     "done": 41,
+     "todo": 1,
+     "blocked": 1
+    }
+   },
+   "note": "16 بطاقة تخطيط جديدة لا تغيّر نسبة الإنجاز السابقة آلياً؛ التنفيذ والتحقق وقبول المالك أبعاد مستقلة."
+  }
  },
  "tasks": [
   {
@@ -641,6 +655,370 @@
    "definition_of_done": "الشاشة خالية من علامات تعارض Git وتحذف سجلات الخادم عبر مسار API النسبي",
    "status": "done",
    "evidence": "إزالة علامات التعارض؛ DELETE يستخدم system/api-logs للحفاظ على بادئة /api/ في baseUrl؛ dart analyze lib/features/diagnostics/presentation/api_logs_screen.dart بلا أخطاء؛ flutter test --no-pub --concurrency=1 test/core/diagnostics/api_log_manager_test.dart نجح (7 اختبارات)"
-  }
- ]
+  },
+  {
+   "id": "OWN-01",
+   "sprint": "OWNER",
+   "agent": "A1",
+   "subagent": "sprint-planner",
+   "task": "تثبيت نسخة العمل وإغلاق فشل التحليل والاختبارات عبر المالكين",
+   "files": "docs/v2/qa/**",
+   "definition_of_done": "مرجع ثابت؛ Flutter analyze وFlutter test والخادم تمر؛ كل إصلاح مصدر يحال لمالكه مع اختبار منع تراجع",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 1,
+   "depends_on": [],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-02",
+   "sprint": "OWNER",
+   "agent": "A1",
+   "subagent": "sprint-planner",
+   "task": "مصفوفة كل إجراءات الويب المطلوبة مقابل الموبايل",
+   "files": "docs/v2/qa/**",
+   "definition_of_done": "لكل حقل وإجراء وفلاتر وصلاحية وتصدير مستخدم: شاشة وAPI ومالك واختبار قبول؛ توثيق غير المنطبق بسبب",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-01"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-03",
+   "sprint": "OWNER",
+   "agent": "A3",
+   "subagent": "owner-completion",
+   "task": "خادم مستمر آمن مستقل عن لابتوب المالك ونسخ واسترجاع",
+   "files": "docker/**",
+   "definition_of_done": "دخول من شبكة هاتف خارجية عبر HTTPS وشهادة صالحة؛ نسخة خادم واسترجاع معزول ناجحان وخطة مراقبة وتراجع",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 3,
+   "depends_on": [],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-04",
+   "sprint": "OWNER",
+   "agent": "A7",
+   "subagent": "owner-completion",
+   "task": "سياسة صندوق واضحة عند الغياب والإغلاق والانقطاع",
+   "files": "mobile app/lib/features/cash_sessions/**, app/Services/CashSessionService.php, app/Services/PaymentService.php",
+   "definition_of_done": "حالات غير معروف وبلا صندوق ومغلق ومفتوح منفصلة؛ الاختبارات تثبت سياسة التحصيل وربط السند أونلاين وأوفلاين وعدم تجاوز الخادم",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-01"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-05",
+   "sprint": "OWNER",
+   "agent": "A6",
+   "subagent": "owner-completion",
+   "task": "حماية نقل ملكية العداد لحين القرار المحاسبي ثم تنفيذ العقد",
+   "files": "app/Http/Controllers/Api/MeterController.php, app/Services/**",
+   "definition_of_done": "منع النقل غير المحسوم على الخادم؛ قرار موثق للرصيد والتاريخ؛ اختبار صلاحية وعزل وحفظ تاريخ؛ طلب تعديل نموذج الموبايل من A8",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-01"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-06",
+   "sprint": "OWNER",
+   "agent": "A5",
+   "subagent": "owner-completion",
+   "task": "استعادة محلية آمنة وهوية المشروع وحماية العمليات الأحدث",
+   "files": "mobile app/lib/core/database/**",
+   "definition_of_done": "اختبار استعادة نسخة أقدم وأخرى لمشروع أو حساب مختلف دون فقد المعلقات أو إعادة سند؛ معاينة وتراجع واختبار فشل منتصف الاستعادة؛ تنسيق طبقة backup مع مالكها",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 3,
+   "depends_on": [
+    "OWN-01"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-07",
+   "sprint": "OWNER",
+   "agent": "A9",
+   "subagent": "owner-completion",
+   "task": "رئيسية المالك وأسماء وحالات مفهومة وعمر الأرقام",
+   "files": "mobile app/lib/core/ui/**, mobile app/lib/core/l10n/**, mobile app/lib/features/home/**",
+   "definition_of_done": "أسئلة الأموال والموافقات والمهام واضحة؛ كل رقم يحمل فترة وآخر تحديث ويفتح تفاصيله؛ بيانات cache موسومة؛ RTL وخط كبير واسترجاع الخطأ مثبتة",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-02"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-08",
+   "sprint": "OWNER",
+   "agent": "A8",
+   "subagent": "owner-completion",
+   "task": "رحلة توصيل مشترك مع العداد والافتتاحي والتعرفة والرسوم",
+   "files": "mobile app/lib/features/subscribers/**, mobile app/lib/features/meters/**, mobile app/lib/features/readings/**",
+   "definition_of_done": "مسار مترابط بحفظ مرحلي واستكمال بعد الفشل دون تكرار؛ الاختبار يثبت الربط والأرصدة؛ تكامل الرسوم عبر A7",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 3,
+   "depends_on": [
+    "OWN-02",
+    "OWN-05"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-09",
+   "sprint": "OWNER",
+   "agent": "A7",
+   "subagent": "owner-completion",
+   "task": "رحلة الفوترة والتحصيل واعتماد حساب المحصلين من الهاتف",
+   "files": "mobile app/lib/features/cash_sessions/**, mobile app/lib/features/payments/**",
+   "definition_of_done": "المالك يصل لمراجعة الصناديق ويعتمد ويرفض؛ تحصيل جزئي وزائد وإلغاء يعيد الأرصدة؛ توجيه الراوتر عبر مالكه؛ نماذج ومشاركة مفهومة",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 3,
+   "depends_on": [
+    "OWN-02",
+    "OWN-04"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-10",
+   "sprint": "OWNER",
+   "agent": "A2",
+   "subagent": "owner-completion",
+   "task": "تجهيز دخول المالك وربط المشروع وحماية البيانات والجهاز",
+   "files": "mobile app/lib/core/auth/**, mobile app/lib/core/security/**, mobile app/lib/core/network/token*",
+   "definition_of_done": "أول تشغيل لا يحتاج IP أو API؛ جلسة وتجديد وإبطال جهاز وعزل حساب مثبتة؛ قرار تشفير وتفعيل وفشل آمن وترحيل مقيس بالتنسيق مع A5 وA3؛ إعداد الخادم عبر مالكه",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 3,
+   "depends_on": [
+    "OWN-01"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-11",
+   "sprint": "OWNER",
+   "agent": "A4",
+   "subagent": "owner-completion",
+   "task": "حدود أوفلاين صادقة واختبار فقد الرد وإعادة التشغيل",
+   "files": "mobile app/lib/core/sync/**, mobile app/lib/features/offline_sync/**",
+   "definition_of_done": "مصفوفة عمليات محلي/يتطلب اتصال؛ المستخدم يميز محفوظ محلياً ومؤكد ومرفوض؛ لا فقد أو تكرار عند وصول الطلب وضياع الرد أو قتل التطبيق وتبديل الحساب",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-04",
+    "OWN-06"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-12",
+   "sprint": "OWNER",
+   "agent": "A9",
+   "subagent": "owner-completion",
+   "task": "إكمال وصول المالك لسجل التغييرات والخدمات الإدارية الناقصة",
+   "files": "mobile app/lib/features/navigation/**, mobile app/lib/core/ui/**",
+   "definition_of_done": "مدخل من غيّر ماذا بصلاحية ومرشحات وربط للسجل؛ كل فجوة في مصفوفة OWN-02 لها بطاقة مالك مستقلة؛ يوفّر A6 العقد ويكتب مالك الوحدة شاشتها",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-02"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-13",
+   "sprint": "OWNER",
+   "agent": "A10",
+   "subagent": "owner-completion",
+   "task": "دورة مالية متكاملة على خادم اختبار وهاتف وطابعة المالك",
+   "files": "mobile app/test/**, tests/**, mobile app/integration_test/scenarios/**",
+   "definition_of_done": "قراءة ثم فاتورة ثم تحصيل ثم إلغاء وتسوية: تطابق حتى أصغر وحدة نقدية؛ ضغط مزدوج وضياع رد وصلاحيات؛ طباعة PDF وحراري وكاميرا وواتساب مثبتة على الجهاز",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 3,
+   "depends_on": [
+    "OWN-03",
+    "OWN-07",
+    "OWN-08",
+    "OWN-09",
+    "OWN-10",
+    "OWN-11",
+    "OWN-12"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-14",
+   "sprint": "OWNER",
+   "agent": "A1",
+   "subagent": "sprint-planner",
+   "task": "قبول صاحب المشروع نفسه من الجوال دون الويب",
+   "files": "docs/v2/qa/**",
+   "definition_of_done": "المالك يكمل المهام الأساسية بعد تعريف قصير دون توجيه للأزرار؛ نتائج وزمن وتعثر موثقة؛ جميع الوظائف المطلوبة مقبولة وكل P0/P1 مغلق بدليل",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-13"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-15",
+   "sprint": "OWNER",
+   "agent": "A3",
+   "subagent": "owner-completion",
+   "task": "إصدار Android إنتاجي وتحديث مجرب وبوابات CI",
+   "files": "mobile app/android/**, .github/**, docker/**",
+   "definition_of_done": "توقيع دائم محفوظ خارج Git؛ الإنتاج يمنع debug signing؛ تثبيت نظيف وتحديث يحفظ البيانات؛ analyze/tests وguard في CI؛ خادم ونسخة محددان وخطة رجوع",
+   "status": "todo",
+   "priority": "P0",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-14"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "OWN-16",
+   "sprint": "OWNER",
+   "agent": "A1",
+   "subagent": "sprint-planner",
+   "task": "تسليم وتشغيل مراقب ودعم واضح",
+   "files": "docs/v2/guides/**, docs/v2/support/**, docs/v2/qa/**",
+   "definition_of_done": "دليل قصير مصور من النسخة المسلمة، جهة دعم وقناة مفعلة، خمسة أيام تشغيل مراقب ومطابقة يومية دون إدخال مزدوج؛ قرارات Windows وPlay موثقة منفصلة",
+   "status": "todo",
+   "priority": "P1",
+   "estimate_work_days": 2,
+   "depends_on": [
+    "OWN-15"
+   ],
+   "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+   "evidence": "لم يبدأ التنفيذ؛ بطاقة تخطيط فقط. دليل التدقيق: docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+   "verification_status": "not_verified",
+   "owner_acceptance": "not_tested",
+   "coordination": "يلتزم كل وكيل بملكيته في AGENTS.md؛ أي ملف خارجها يحال لصاحبه، والتوثيق عبر A1."
+  },
+  {
+   "id": "UX-20261026",
+   "sprint": "S9",
+   "agent": "A9 + A8 + A10",
+   "subagent": "water_ux + water_subscribers + water_field",
+   "task": "إعادة تصميم الشاشات المصورة بهوية بحرية ومبالغ واضحة وأقسام مشترك ظاهرة وقارئ ميداني مبسط",
+   "files": "mobile app/lib/core/{theme,ui,l10n}/**, mobile app/lib/core/navigation/sub_page.dart, mobile app/lib/features/subscribers/presentation/**, mobile app/lib/features/readings/presentation/pages/field_reader_screen.dart, mobile app/lib/features/meters/presentation/widgets/meter_card_widget.dart, mobile app/test/ui/water_experience_test.dart",
+   "definition_of_done": "اختبارات RTL للمقاسات 320/390/1024 وتكبير الخط والوضعين؛ التحقق من التنقل والتحصيل والقراءة وعدم تغير الحسابات؛ مراجعة صور Flutter الفعلية",
+   "status": "done",
+   "evidence": "flutter test --no-pub --concurrency=1 test/ui/water_experience_test.dart test/features/subscribers/statement_pdf_test.dart test/home/workspace_views_test.dart test/fouad_logic_test.dart --dart-define=WRITE_REDESIGN_PREVIEWS=true --reporter expanded: 31 passed; التحليل المحدد No issues found; صور Flutter راجعت بصرياً؛ docs/v2/UI_REDESIGN_20261026_AR.md. لا قبول جهاز أو خادم حي.",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "integration_repairs": "A1: subscriber_form_screen.dart يستخدم subscriber.id المحفوظ؛ payments_cubit.dart cast لقدرة pagination بعد is؛ ListOptionsStrings.recordNumber؛ إزالة مفاتيح ترجمة مكررة أثناء التزامن."
+  },
+  {
+   "id": "PDF-20261026",
+   "sprint": "S9",
+   "agent": "A7 + A10",
+   "subagent": "water_subscribers",
+   "task": "إصلاح المربعات بدل العربية في كشف الحساب وتضمين الخطوط المحلية ودعم عدة صفحات",
+   "files": "mobile app/lib/features/subscribers/presentation/widgets/statement_pdf_service.dart, mobile app/test/features/subscribers/statement_pdf_test.dart",
+   "definition_of_done": "توليد كشف فارغ وكشف120 حركة بخط عربي مضمّن ومراجعة الصفحات بصرياً",
+   "status": "done",
+   "evidence": "اختبارا statement_pdf_test.dart نجحا ضمن تشغيل31 اختباراً؛ كشف فارغ صفحة واحدة و120 حركة8 صفحات؛ تضمين FontFile2 وToUnicode؛ render Poppler ومراجعة الأولى والأخيرة والفارغ؛ pypdf أكد الرأس والتاريخ والخطوط في الصفحات8؛ docs/v2/UI_REDESIGN_20261026_AR.md. المشاركة والطابعة الفعلية لم تختبرا.",
+   "verification_status": "local_tests_and_visual_review_passed",
+   "owner_acceptance": "not_tested"
+  },
+{
+  "id": "FIX-INVOICE-FREEZE-20261026",
+  "sprint": "S9",
+  "agent": "A1 + A9 + A10",
+  "subagent": "ui_investigation",
+  "task": "إصلاح تكرار تسجيل أخطاء الواجهة وتعليق فتح الفواتير ونموذج فاتورة العداد",
+  "files": "mobile app/lib/core/diagnostics/api_log_manager.dart, mobile app/lib/features/diagnostics/presentation/widgets/floating_api_log_overlay.dart, mobile app/lib/features/invoices/presentation/sheets/invoice_generate_sheet_body.dart, mobile app/test/core/diagnostics/**, mobile app/test/features/invoices/invoice_generation_sheet_test.dart, mobile app/test/ui/**",
+  "status": "done",
+  "evidence": "قبل الإصلاح: اختبار إعادة دخول مسجل الأخطاء استدعى المستمع 8 مرات بدل 1؛ اختبار نموذج العداد فشل بسبب ListTile تحت ColoredBox. بعد الإصلاح: flutter test --no-pub --concurrency=1 test/core/diagnostics/api_log_manager_test.dart test/core/diagnostics/floating_api_log_overlay_test.dart test/features/invoices/invoice_generation_sheet_test.dart test/ui/app_amount_layout_test.dart test/ui/water_experience_test.dart: 27 passed. flutter analyze --no-pub للملفات الستة الأساسية المتغيرة: No issues found. docs/v2/qa/INVOICE_FREEZE_20261026.md",
+  "verification_status": "local_regression_tests_passed",
+  "owner_acceptance": "not_tested"
+}
+]
 }

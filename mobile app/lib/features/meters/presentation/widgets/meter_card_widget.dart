@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/l10n/field_experience_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/widgets/finance_badges.dart';
 import '../../data/models/meter.dart';
 
-/// بطاقة عداد — تصميم v3:
-///  - اسم المشترك أولاً وكود العداد سطر ثانوي هادئ.
-///  - سطر معلومات واحد بلا إطارات (المربع · آخر قراءة · الرصيد).
-///  - زر «تسجيل قراءة» أساسي + قائمة خيارات (تعديل/حذف) بدل أيقونات متناثرة.
+/// Meter identity, reading and account balance remain separate scan targets.
 class MeterCardWidget extends StatelessWidget {
   const MeterCardWidget({
     required this.meter,
@@ -21,6 +21,9 @@ class MeterCardWidget extends StatelessWidget {
     this.selected = false,
     this.selectionMode = false,
     this.onSelectChanged,
+    this.presentation = const ListPresentationSettings(
+      hiddenFields: {'created_at'},
+    ),
     super.key,
   });
 
@@ -33,18 +36,19 @@ class MeterCardWidget extends StatelessWidget {
   final bool selected;
   final bool selectionMode;
   final ValueChanged<bool?>? onSelectChanged;
+  final ListPresentationSettings presentation;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final hasMenu = onEdit != null || onDelete != null;
-
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 12),
       child: AppCard(
         padding: EdgeInsets.zero,
-        borderColor: selected ? colorScheme.primary.withValues(alpha: .45) : null,
-        color: selected ? colorScheme.primary.withValues(alpha: .04) : null,
+        borderColor: selected ? scheme.primary : null,
+        color: selected ? scheme.primaryContainer : null,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.xl),
           onTap: selectionMode && onSelectChanged != null
@@ -52,186 +56,184 @@ class MeterCardWidget extends StatelessWidget {
               : onTap,
           onLongPress: onLongPress,
           child: Padding(
-            padding: const EdgeInsets.all(13),
+            padding: EdgeInsets.all(presentation.compact ? 10 : 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── الترويسة: المشترك + الحالة ──
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (onSelectChanged != null) ...[
-                      SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: Checkbox(value: selected, onChanged: onSelectChanged),
+                    if (onSelectChanged != null)
+                      Checkbox(
+                        value: selected,
+                        semanticLabel: FieldExperienceStrings.selectMeter,
+                        onChanged: onSelectChanged,
+                      )
+                    else
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.water_drop_outlined,
+                          color: scheme.onPrimaryContainer,
+                          size: 23,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            meter.subscriberName?.isNotEmpty == true
-                                ? meter.subscriberName!
-                                : 'مشترك غير محدد',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              height: 1.3,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Flexible(
-                                child: LtrNumberText(
-                                  meter.uniqueCode,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: .3,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
+                          if (presentation.isVisible('subscriber'))
+                            Text(
+                              meter.subscriberName?.isNotEmpty == true
+                                  ? meter.subscriberName!
+                                  : FieldExperienceStrings.unknownSubscriber,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
                               ),
-                              if (meter.pathNumber != null) ...[
-                                const SizedBox(width: 6),
-                                Icon(
-                                  Icons.alt_route_rounded,
-                                  size: 12,
-                                  color: meter.isPathMatch
-                                      ? colorScheme.primary
-                                      : colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 3),
+                            ),
+                          const SizedBox(height: 4),
+                          if (presentation.isVisible('code'))
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
                                 Text(
-                                  'مسار ${meter.pathNumber}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight:
-                                        meter.isPathMatch ? FontWeight.w600 : FontWeight.w500,
-                                    color: meter.isPathMatch
-                                        ? colorScheme.primary
-                                        : colorScheme.onSurfaceVariant,
+                                  FieldExperienceStrings.meterCode,
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                                LtrNumberText(
+                                  meter.uniqueCode,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: scheme.onSurface,
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
+                            ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    _StatusDot(isActive: meter.isActive),
+                    if (hasMenu)
+                      PopupMenuButton<String>(
+                        tooltip: FieldExperienceStrings.meterOptions,
+                        onSelected: (value) {
+                          if (value == 'edit') onEdit?.call();
+                          if (value == 'delete') onDelete?.call();
+                        },
+                        itemBuilder: (_) => [
+                          if (onEdit != null)
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text(FieldExperienceStrings.editMeter),
+                            ),
+                          if (onDelete != null)
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text(
+                                FieldExperienceStrings.deleteMeter,
+                                style: TextStyle(color: scheme.error),
+                              ),
+                            ),
+                        ],
+                      ),
                   ],
                 ),
-                if (meter.tenantName?.isNotEmpty == true) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'المستأجر: ${meter.tenantName}',
-                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-                  ),
-                ],
-                const SizedBox(height: 10),
-
-                // ── سطر المعلومات الصامت ──
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,
-                  runSpacing: 4,
+                  runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (meter.squareName?.isNotEmpty == true)
-                      _QuietMeta(
+                    if (presentation.isVisible('status'))
+                      _MeterStatus(isActive: meter.isActive),
+                    if (presentation.isVisible('square') &&
+                        meter.squareName?.isNotEmpty == true)
+                      _MeterLocation(
                         icon: Icons.location_on_outlined,
-                        text: meter.squareName!,
+                        label: meter.squareName!,
                       ),
-                    _QuietMeta(
-                      icon: Icons.speed_outlined,
-                      text: 'آخر قراءة ${_number(meter.lastReading)}',
-                      ltr: true,
-                    ),
-                    _QuietMeta(
-                      icon: Icons.account_balance_wallet_outlined,
-                      text: 'الرصيد ${_number(meter.balance)} ريال',
-                      ltr: true,
-                      tone: meter.balance < 0 ? AppColors.danger : AppColors.success,
-                    ),
+                    if (presentation.isVisible('path') &&
+                        meter.pathNumber != null)
+                      _MeterLocation(
+                        icon: Icons.alt_route_rounded,
+                        label: FieldExperienceStrings.path,
+                        number: '${meter.pathNumber}',
+                        highlighted: meter.isPathMatch,
+                      ),
                   ],
                 ),
-
-                // ── الإجراءات ──
-                if (onRecordReading != null || hasMenu) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      if (onRecordReading != null)
-                        Expanded(
-                          child: SizedBox(
-                            height: 36,
-                            child: FilledButton.tonalIcon(
-                              onPressed: onRecordReading,
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                minimumSize: const Size(0, 36),
-                                textStyle: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              icon: const Icon(Icons.add_chart_outlined, size: 16),
-                              label: const Text('تسجيل قراءة'),
+                if (presentation.isVisible('tenant') &&
+                    meter.tenantName?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    FieldExperienceStrings.tenantName(meter.tenantName!),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                if (presentation.isVisible('last_reading') ||
+                    presentation.isVisible('balance'))
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (presentation.isVisible('last_reading'))
+                          Expanded(
+                            child: _MeterFigure(
+                              label: FieldExperienceStrings.lastReading,
+                              value: _number(meter.lastReading),
+                              prominent: true,
                             ),
                           ),
-                        )
-                      else
-                        const Spacer(),
-                      if (hasMenu) ...[
-                        const SizedBox(width: 4),
-                        PopupMenuButton<String>(
-                          tooltip: 'خيارات العداد',
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.lg),
+                        if (presentation.isVisible('last_reading') &&
+                            presentation.isVisible('balance'))
+                          const SizedBox(width: 16),
+                        if (presentation.isVisible('balance'))
+                          Expanded(
+                            child: _MeterFigure(
+                              label: FieldExperienceStrings.balance,
+                              value: _number(meter.balance),
+                              unit: FieldExperienceStrings.currency,
+                              color: meter.balance < 0 ? scheme.error : null,
+                            ),
                           ),
-                          onSelected: (value) {
-                            if (value == 'edit') onEdit?.call();
-                            if (value == 'delete') onDelete?.call();
-                          },
-                          itemBuilder: (context) => [
-                            if (onEdit != null)
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit_outlined, size: 18),
-                                    SizedBox(width: 10),
-                                    Text('تعديل العداد'),
-                                  ],
-                                ),
-                              ),
-                            if (onDelete != null)
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
-                                    SizedBox(width: 10),
-                                    Text('حذف العداد', style: TextStyle(color: AppColors.danger)),
-                                  ],
-                                ),
-                              ),
-                          ],
-                          icon: Icon(
-                            Icons.more_vert_rounded,
-                            size: 20,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
                       ],
-                    ],
+                    ),
+                  ),
+                if (presentation.isVisible('created_at') &&
+                    meter.createdAt != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${ListOptionsStrings.createdAt}: ${DateFormat('yyyy-MM-dd HH:mm', 'en').format(meter.createdAt!)}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                if (onRecordReading != null) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: onRecordReading,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_chart_rounded, size: 20),
+                    label: const Text(FieldExperienceStrings.recordReading),
                   ),
                 ],
               ],
@@ -242,79 +244,119 @@ class MeterCardWidget extends StatelessWidget {
     );
   }
 
-  static String _number(num value) => value.toStringAsFixed(
-        value % 1 == 0 ? 0 : 2,
-      );
+  static String _number(num value) =>
+      NumberFormat('#,##0.##', 'en').format(value);
 }
 
-/// حالة العداد كنقطة ملوّنة + كلمة — بلا صندوق مُحيّط.
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.isActive});
-
-  final bool isActive;
+class _MeterFigure extends StatelessWidget {
+  const _MeterFigure({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.color,
+    this.prominent = false,
+  });
+  final String label;
+  final String value;
+  final String? unit;
+  final Color? color;
+  final bool prominent;
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? AppColors.success : AppColors.neutral;
-    final resolved = AppSemantic.resolve(context, color);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTint.soft(color, context),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: resolved, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            isActive ? 'نشط' : 'غير نشط',
-            style: TextStyle(
-              color: resolved,
-              fontSize: 10.5,
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: theme.textTheme.labelSmall),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: LtrNumberText(
+            value,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontSize: prominent ? 25 : 21,
+              fontWeight: FontWeight.w700,
               height: 1.2,
-              fontWeight: FontWeight.w600,
+              color: color ?? theme.colorScheme.onSurface,
             ),
           ),
-        ],
-      ),
+        ),
+        if (unit != null) Text(unit!, style: theme.textTheme.labelSmall),
+      ],
     );
   }
 }
 
-/// عنصر معلومات صامت — أيقونة + نص بلا إطار.
-class _QuietMeta extends StatelessWidget {
-  const _QuietMeta({required this.icon, required this.text, this.tone, this.ltr = false});
-
-  final IconData icon;
-  final String text;
-  final Color? tone;
-  final bool ltr;
+class _MeterStatus extends StatelessWidget {
+  const _MeterStatus({required this.isActive});
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        tone == null ? Theme.of(context).colorScheme.onSurfaceVariant : AppSemantic.resolve(context, tone!);
-    final style = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w500,
-      color: color,
-      height: 1.3,
-    );
+    final scheme = Theme.of(context).colorScheme;
+    final color = isActive ? scheme.primary : scheme.onSurfaceVariant;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: color),
+        Icon(
+          isActive
+              ? Icons.check_circle_outline_rounded
+              : Icons.pause_circle_outline,
+          color: color,
+          size: 15,
+        ),
         const SizedBox(width: 4),
-        if (ltr)
-          Directionality(textDirection: TextDirection.ltr, child: Text(text, style: style))
-        else
-          Text(text, style: style),
+        Text(
+          isActive
+              ? FieldExperienceStrings.active
+              : FieldExperienceStrings.inactive,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+        ),
+      ],
+    );
+  }
+}
+
+class _MeterLocation extends StatelessWidget {
+  const _MeterLocation({
+    required this.icon,
+    required this.label,
+    this.number,
+    this.highlighted = false,
+  });
+  final IconData icon;
+  final String label;
+  final String? number;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = highlighted ? scheme.primary : scheme.onSurfaceVariant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ),
+        if (number != null) ...[
+          const SizedBox(width: 4),
+          LtrNumberText(
+            number!,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: color),
+          ),
+        ],
       ],
     );
   }

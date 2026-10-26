@@ -22,11 +22,11 @@ enum CashSessionState {
   }
 
   String get arabicLabel => switch (this) {
-        CashSessionState.open => 'مفتوح',
-        CashSessionState.closed => 'مغلق — بانتظار الاعتماد',
-        CashSessionState.approved => 'معتمد',
-        CashSessionState.rejected => 'مرفوض',
-      };
+    CashSessionState.open => 'مفتوح',
+    CashSessionState.closed => 'مغلق — بانتظار الاعتماد',
+    CashSessionState.approved => 'معتمد',
+    CashSessionState.rejected => 'مرفوض',
+  };
 }
 
 /// صندوق المحصّل اليومي: مبالغ متوقعة مقابل معدودة وفرق مُفسَّر.
@@ -95,7 +95,8 @@ class CashSession extends Equatable {
     return CashSession(
       id: id,
       state: CashSessionState.parse(map['state']),
-      sessionDate: DateTime.tryParse(map['session_date']?.toString() ?? '') ??
+      sessionDate:
+          DateTime.tryParse(map['session_date']?.toString() ?? '') ??
           DateTime.now(),
       openingAmount: _toDouble(map['opening_amount']),
       expectedAmount: _toDouble(map['expected_amount']),
@@ -105,9 +106,13 @@ class CashSession extends Equatable {
       voidedReceipts: _toInt(map['voided_receipts']) ?? 0,
       byMethod: (map['by_method'] is List)
           ? (map['by_method'] as List)
-              .whereType<Map>()
-              .map((row) => CashSessionMethodTotal.fromMap(Map<String, dynamic>.from(row)))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map(
+                  (row) => CashSessionMethodTotal.fromMap(
+                    Map<String, dynamic>.from(row),
+                  ),
+                )
+                .toList(growable: false)
           : const <CashSessionMethodTotal>[],
       collector: _nullableString(map['collector']),
       square: _nullableString(map['square']),
@@ -130,8 +135,8 @@ class CashSession extends Equatable {
     final verdict = variance.abs() < 0.01
         ? 'مطابق'
         : variance < 0
-            ? 'عجز ${variance.abs().toStringAsFixed(2)}'
-            : 'زيادة ${variance.toStringAsFixed(2)}';
+        ? 'عجز ${variance.abs().toStringAsFixed(2)}'
+        : 'زيادة ${variance.toStringAsFixed(2)}';
     return '${state.arabicLabel} — $verdict';
   }
 
@@ -156,20 +161,20 @@ class CashSession extends Equatable {
 
   @override
   List<Object?> get props => <Object?>[
-        id,
-        state,
-        sessionDate,
-        openingAmount,
-        expectedAmount,
-        countedAmount,
-        varianceAmount,
-        receipts,
-        voidedReceipts,
-        collector,
-        square,
-        closedAt,
-        approvedAt,
-      ];
+    id,
+    state,
+    sessionDate,
+    openingAmount,
+    expectedAmount,
+    countedAmount,
+    varianceAmount,
+    receipts,
+    voidedReceipts,
+    collector,
+    square,
+    closedAt,
+    approvedAt,
+  ];
 }
 
 class CashSessionMethodTotal extends Equatable {
@@ -185,18 +190,21 @@ class CashSessionMethodTotal extends Equatable {
 
   factory CashSessionMethodTotal.fromMap(Map<String, dynamic> map) =>
       CashSessionMethodTotal(
-        method: map['payment_method']?.toString() ?? map['method']?.toString() ?? '',
+        method:
+            map['payment_method']?.toString() ??
+            map['method']?.toString() ??
+            '',
         receipts: CashSession._toInt(map['receipts']) ?? 0,
         total: CashSession._toDouble(map['total']),
       );
 
   String get arabicLabel => switch (method) {
-        'cash' => 'نقداً',
-        'bank_transfer' => 'حوالة بنكية',
-        'mobile_wallet' => 'محفظة إلكترونية',
-        'card' => 'بطاقة',
-        _ => method.isEmpty ? 'غير محدد' : method,
-      };
+    'cash' => 'نقداً',
+    'bank_transfer' => 'حوالة بنكية',
+    'mobile_wallet' => 'محفظة إلكترونية',
+    'card' => 'بطاقة',
+    _ => method.isEmpty ? 'غير محدد' : method,
+  };
 
   @override
   List<Object?> get props => <Object?>[method, receipts, total];

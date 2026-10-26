@@ -47,6 +47,7 @@ class TransactionController extends ApiController
                     ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%"));
             });
         }
+        $this->applySorting($query, $request, self::LIST_SORTS['transactions']);
         if ($request->filled('per_page')) {
             return $query->paginate($this->perPage($request))->appends($request->query());
         }

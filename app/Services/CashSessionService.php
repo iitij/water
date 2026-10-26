@@ -128,13 +128,30 @@ class CashSessionService
         User $approver,
         ?string $notes = null,
     ): CashSession {
-        if ($session->state === CashSession::STATE_OPEN) {
+        $notes = $notes === null ? null : trim($notes);
+        if (! $approve && mb_strlen($notes ?? '') < 10) {
             throw ValidationException::withMessages([
-                'state' => ['أغلق الصندوق قبل اعتماده.'],
+                'notes' => ['اكتب سبب الرفض بوضوح (10 أحرف على الأقل).'],
+            ]);
+        }
+        if (mb_strlen($notes ?? '') > 1000) {
+            throw ValidationException::withMessages([
+                'notes' => ['ملاحظات القرار لا تتجاوز 1000 حرف.'],
             ]);
         }
 
         return DB::transaction(function () use ($session, $approve, $approver, $notes) {
+            // Read and check the state under the same row lock as the decision.
+            // A stale web form or a retried mobile request must not reverse a
+            // decision already made by another supervisor.
+            $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
+            if ($session->isOpen()) {
+                throw ValidationException::withMessages([
+                    'state' => ['أغلق الصندوق قبل اعتماده.'],
+                ]);
+            }
+            abort_unless($session->isClosed(), 409, 'اتُّخذ قرار لهذا الصندوق بالفعل. حدّث القائمة.');
+
             $before = $this->summary($session);
             $session->fill([
                 'state' => $approve ? CashSession::STATE_APPROVED : CashSession::STATE_REJECTED,

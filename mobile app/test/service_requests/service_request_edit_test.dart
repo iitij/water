@@ -28,14 +28,39 @@ Future<void> _open(WidgetTester tester, Future<void> Function(ServiceRequest) sa
 }
 
 void main() {
-  test('billed or paid requests are locked; notes and dates participate in equality', () {
+  test('billed requests lock financial identity while allowing metadata edits', () {
     const locked = ServiceRequest(id: 7, subscriberId: 12, amount: 5000,
       serviceDate: '2026-10-23', status: TankerStatus.completed, invoiceId: 3);
-    expect(locked.canEdit, isFalse);
+    expect(locked.canEdit, isTrue);
+    expect(locked.canEditFinancial, isFalse);
+    expect(locked.canDelete, isFalse);
     expect(locked.canInvoice, isFalse);
     const changed = ServiceRequest(id: 7, subscriberId: 12, subscriberName: 'أحمد',
       amount: 5000, serviceDate: '2026-10-23', notes: 'new');
     expect(changed, isNot(_request));
+  });
+
+  testWidgets('invoiced request keeps amount and subscriber locked while saving notes', (tester) async {
+    const request = ServiceRequest(id: 8, subscriberId: 12, amount: 5000,
+      serviceDate: '2026-10-23', status: TankerStatus.invoiced, invoiceId: 33, invoiceNumber: 'INV-33');
+    ServiceRequest? saved;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(
+      builder: (context) => TextButton(onPressed: () => ServiceRequestEditSheet.show(
+        context, request: request, onSave: (value) async { saved = value; }), child: const Text('open')),
+    ))));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextFormField);
+    expect(tester.widget<TextFormField>(fields.first).enabled, isFalse);
+    expect(find.text('تغيير المشترك'), findsNothing);
+    await tester.enterText(fields.last, 'تمت مراجعة تاريخ الخدمة');
+    await tester.ensureVisible(find.text('حفظ التعديلات'));
+    await tester.tap(find.text('حفظ التعديلات'));
+    await tester.pumpAndSettle();
+    expect(saved?.notes, 'تمت مراجعة تاريخ الخدمة');
+    expect(saved?.amount, 5000);
+    expect(saved?.subscriberId, 12);
+    expect(saved?.invoiceId, 33);
   });
 
   test('editing uses the repository update and refreshes the active filters', () async {

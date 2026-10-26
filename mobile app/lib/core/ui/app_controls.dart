@@ -33,10 +33,9 @@ class AppPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final enabled = onPressed != null && !loading;
     final radius = BorderRadius.circular(AppRadius.md);
-    final foreground = dark ? const Color(0xFF06201C) : Colors.white;
+    final foreground = scheme.onPrimary;
 
     return Opacity(
       opacity: enabled ? 1 : .45,
@@ -61,7 +60,10 @@ class AppPrimaryButton extends StatelessWidget {
                   if (loading)
                     SizedBox.square(
                       dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: foreground),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: foreground,
+                      ),
                     )
                   else if (icon != null)
                     Icon(icon, size: 18, color: foreground),
@@ -181,34 +183,41 @@ class AppIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tiny = size <= 32;
-    final button = SizedBox.square(
-      dimension: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          Positioned.fill(
-            child: Material(
-              color: tiny ? Colors.transparent : scheme.surfaceContainerHighest,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(size * .32),
-                side: tiny
-                    ? BorderSide.none
-                    : BorderSide(color: scheme.outlineVariant),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onPressed,
-                child: Icon(
-                  icon,
-                  size: size * .46,
-                  color: color ?? scheme.onSurfaceVariant,
+    final button = Semantics(
+      button: true,
+      label: tooltip,
+      enabled: onPressed != null,
+      child: SizedBox.square(
+        dimension: size < 48 ? 48 : size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned.fill(
+              child: Material(
+                color: tiny
+                    ? Colors.transparent
+                    : scheme.surfaceContainerHighest,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(size * .32),
+                  side: tiny
+                      ? BorderSide.none
+                      : BorderSide(color: scheme.outlineVariant),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onPressed,
+                  child: Icon(
+                    icon,
+                    size: size * .46,
+                    color: color ?? scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
-          ),
-          if (badge != null)
-            PositionedDirectional(top: -3, end: -3, child: badge!),
-        ],
+            if (badge != null)
+              PositionedDirectional(top: -3, end: -3, child: badge!),
+          ],
+        ),
       ),
     );
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
@@ -239,9 +248,14 @@ class AppAvatar extends StatelessWidget {
   final Color? foreground;
 
   String get _initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '؟';
-    String firstChar(String value) => value.isEmpty ? '' : value.substring(0, 1);
+    String firstChar(String value) =>
+        value.isEmpty ? '' : value.substring(0, 1);
     if (parts.length == 1) {
       final single = parts.first;
       return single.length <= 2 ? single : single.substring(0, 2);
@@ -254,8 +268,10 @@ class AppAvatar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final radius = BorderRadius.circular(size * .32);
-    final bg = background ?? (dark ? AppColors.darkAccentSoft : AppColors.accentSoft);
-    final fg = foreground ?? (dark ? AppColors.darkAccent : AppColors.accentStrong);
+    final bg =
+        background ?? (dark ? AppColors.darkAccentSoft : AppColors.accentSoft);
+    final fg =
+        foreground ?? (dark ? AppColors.darkAccent : AppColors.accentStrong);
 
     final avatar = ClipRRect(
       borderRadius: radius,
@@ -308,14 +324,14 @@ class AppAvatar extends StatelessWidget {
   }
 
   Widget _initialsText(Color color) => Text(
-        _initials,
-        style: TextStyle(
-          color: color,
-          fontSize: size * .32,
-          fontWeight: FontWeight.w600,
-          height: 1,
-        ),
-      );
+    _initials,
+    style: TextStyle(
+      color: color,
+      fontSize: size * .32,
+      fontWeight: FontWeight.w600,
+      height: 1,
+    ),
+  );
 }
 
 /// Rounded label used for statuses, roles and metadata.
@@ -343,10 +359,12 @@ class AppPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tint = color ?? scheme.primary;
+    final tint = AppSemantic.resolve(context, color ?? scheme.primary);
     final background = filled ? tint : scheme.surfaceContainerHighest;
     final foreground = filled
-        ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF06201C) : Colors.white)
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF092943)
+              : Colors.white)
         : scheme.onSurfaceVariant;
 
     final content = Container(
@@ -356,14 +374,18 @@ class AppPill extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
+        borderRadius: BorderRadius.circular(AppRadius.xs),
         border: filled ? null : Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (icon != null) ...<Widget>[
-            Icon(icon, size: dense ? 12 : 13, color: filled ? foreground : tint),
+            Icon(
+              icon,
+              size: dense ? 12 : 13,
+              color: filled ? foreground : tint,
+            ),
             const SizedBox(width: 5),
           ],
           Flexible(
@@ -393,7 +415,11 @@ class AppPill extends StatelessWidget {
 }
 
 class AppSegmentedOption<T> {
-  const AppSegmentedOption({required this.value, required this.label, this.icon});
+  const AppSegmentedOption({
+    required this.value,
+    required this.label,
+    this.icon,
+  });
 
   final T value;
   final String label;
@@ -424,52 +450,65 @@ class AppSegmentedControl<T> extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
-        children: options.map((option) {
-          final selected = option.value == value;
-          return Expanded(
-            child: InkWell(
-              onTap: () => onChanged(option.value),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: AnimatedContainer(
-                duration: AppMotion.normal,
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                decoration: BoxDecoration(
-                  color: selected ? scheme.surface : Colors.transparent,
+        children: options
+            .map((option) {
+              final selected = option.value == value;
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onChanged(option.value),
                   borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(
-                    color: selected ? scheme.outlineVariant : Colors.transparent,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    if (option.icon != null) ...<Widget>[
-                      Icon(
-                        option.icon,
-                        size: 14,
-                        color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 5),
-                    ],
-                    Flexible(
-                      child: Text(
-                        option.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                          color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                        ),
+                  child: AnimatedContainer(
+                    duration: AppMotion.normal,
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected ? scheme.surface : Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(
+                        color: selected
+                            ? scheme.outlineVariant
+                            : Colors.transparent,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        if (option.icon != null) ...<Widget>[
+                          Icon(
+                            option.icon,
+                            size: 14,
+                            color: selected
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 5),
+                        ],
+                        Flexible(
+                          child: Text(
+                            option.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: selected
+                                  ? scheme.onSurface
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        }).toList(growable: false),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }

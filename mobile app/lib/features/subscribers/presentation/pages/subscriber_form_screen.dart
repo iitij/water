@@ -1,24 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
+import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
+import '../../../meters/data/models/meter.dart';
+import '../../../meters/domain/meters_repository.dart';
+import '../../../meters/presentation/pages/meter_form_screen.dart';
 import '../../../squares/domain/entities/square.dart';
+import '../../../subscription_fees/domain/repositories/subscription_fees_repository.dart';
+import '../../../subscription_fees/presentation/widgets/setup_fee_dialog.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 
 /// SCR-06 — نموذج إضافة/تعديل مشترك (هاتف يمني +967، تاريخ بدء الاشتراك، مربع، حالة).
 class SubscriberFormScreen extends StatefulWidget {
-  const SubscriberFormScreen({super.key, this.existing, this.initialSquareId, this.repository});
+  const SubscriberFormScreen({super.key, this.existing, this.initialSquareId, this.repository,
+    this.metersRepository, this.feesRepository, this.permissions});
   final Subscriber? existing;
   final int? initialSquareId;
   final SubscribersRepository? repository;
+  final MetersRepository? metersRepository;
+  final SubscriptionFeesRepository? feesRepository;
+  final PermissionService? permissions;
 
   @override
   State<SubscriberFormScreen> createState() => _SubscriberFormScreenState();
@@ -34,6 +45,10 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
   DateTime? _startDate;
   List<Square> _squares = [];
   bool _saving = false;
+  Subscriber? _savedSubscriber;
+
+  PermissionService? get _permissions => widget.permissions ??
+      (GetIt.I.isRegistered<PermissionService>() ? GetIt.I<PermissionService>() : null);
 
   /// «حفظ وإضافة آخر» — يبقى النموذج مفتوحاً بمعبّأ مسبقاً بنفس المربع والحالة،
   /// لأن مُدخل البيانات يسجّل عشرات المشتركين في المربع نفسه الواحد تلو الآخر.
@@ -73,6 +88,12 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
       initialDate: _startDate ?? DateTime.now(),
     );
     if (picked != null) setState(() => _startDate = picked);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose(); _phone.dispose(); _address.dispose();
+    super.dispose();
   }
 
   @override
@@ -179,6 +200,14 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
               onPressed: _saving ? null : _save,
             ),
             if (widget.existing == null) ...<Widget>[
+              if (_permissions?.can('Create:Meter') == true) ...[
+                const Gap(8),
+                AppSecondaryButton(
+                  label: AppStrings.of(context).saveAndAddMeter,
+                  icon: Icons.gas_meter_outlined,
+                  onPressed: _saving ? null : _saveAndAddMeter,
+                ),
+              ],
               const Gap(8),
               AppSecondaryButton(
                 label: AppStrings.of(context).saveAndAddAnother,
@@ -199,6 +228,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
 
   /// يحفظ ثم يُفرّغ الحقول ويُبقي المربع/الحالة/التاريخ كما هي.
   Future<void> _saveAndAddAnother() async {
+    if (_saving) return;
     _keepOpen = true;
     final saved = await _save();
     if (saved && mounted) {
@@ -216,6 +246,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
 
   /// يعيد `true` عند نجاح الحفظ (يُستخدم من «حفظ وإضافة آخر»).
   Future<bool> _save() async {
+    if (_saving) return false;
     if (!_formKey.currentState!.validate()) return false;
     setState(() => _saving = true);
     final repo = _resolveRepository();
@@ -230,7 +261,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
     );
     try {
       if (widget.existing == null) {
-        await repo.createSubscriber(draft);
+        _savedSubscriber = await repo.createSubscriber(draft);
       } else {
         await repo.updateSubscriber(draft);
       }
@@ -256,5 +287,30 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
     } finally {
       _keepOpen = false;
     }
+  }
+
+  Future<void> _saveAndAddMeter() async {
+    if (_saving || _permissions?.can('Create:Meter') != true) return;
+    final meters = widget.metersRepository ?? GetIt.I<MetersRepository>();
+    _keepOpen = true;
+    if (!await _save() || !mounted) return;
+    final subscriber = _savedSubscriber!;
+    setState(() => _saving = true);
+    Meter? savedMeter;
+    await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => MeterFormScreen(
+      repository: meters, initialSubscriberId: subscriber.id,
+      onSaved: (meter) => savedMeter = meter,
+    )));
+    if (!mounted) return;
+    if (savedMeter != null && _permissions?.can('Create:SubscriptionFee') == true) {
+      final fees = widget.feesRepository ?? FouadModule.deps.fees;
+      await showDialog<bool>(context: context, barrierDismissible: false,
+        builder: (_) => SetupFeeDialog(repository: fees,
+          subscriberId: savedMeter!.subscriberId ?? subscriber.id, meterId: savedMeter!.id));
+      if (!mounted) return;
+    }
+    // Both persisted records survive cancellation; do not offer to re-create
+    // the same subscriber by leaving its populated create form behind.
+    Navigator.of(context).pop(true);
   }
 }

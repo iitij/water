@@ -41,7 +41,9 @@ class ServiceRequest extends Equatable {
   final String? notes;
 
   bool get hasNote => notes != null && notes!.trim().isNotEmpty;
-  bool get canEdit => invoiceId == null &&
+  bool get canEdit => true;
+  bool get canEditFinancial => invoiceId == null;
+  bool get canDelete => invoiceId == null &&
       (status == TankerStatus.pending || status == TankerStatus.completed);
   bool get canComplete => invoiceId == null && status == TankerStatus.pending;
   bool get canInvoice => invoiceId == null && status == TankerStatus.completed;

@@ -5,6 +5,12 @@ Testing builds of the integrated Arabic Water app. Android APKs are attached to
 
 ## What's new in this prerelease
 
+- Web/mobile parity: cash supervision and central audit, subscriber → meter →
+  subscription-fee creation, role guards and read-only matrices, actual reading
+  date, metadata edits on invoiced requests, subscription invoice settings, and
+  complete paginated lists with sort/display controls. Evidence:
+  `docs/v2/qa/MOBILE_WEB_PARITY_2026-10-26.md` at the Laravel root.
+
 - **Design system v2 (radical redesign)** — one teal accent, no decorative
   gradients, hairline cards instead of shadows, a single ink summary panel per
   page, and heavier weight replaced by a calmer 600/400 scale. Home, shell, hubs,

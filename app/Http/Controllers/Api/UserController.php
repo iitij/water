@@ -19,6 +19,7 @@ class UserController extends ApiController
         if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
             $query->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
         }
+        $this->applySorting($query, $request, self::LIST_SORTS['users']);
         return $query->paginate($this->perPage($request))->through(fn (User $user) => $this->userPayload($user))
             ->appends($request->query());
     }

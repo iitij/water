@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\CashSessionService;
 use App\Support\ArabicNumber;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Spatie\LaravelPdf\Facades\Pdf;
 
 /**
@@ -60,9 +61,20 @@ class CashSessionController extends ApiController
             $query->whereDate('session_date', '<=', $request->query('to_date'));
         }
 
-        return $query->paginate($this->perPage($request))->through(
+        $this->applySorting($query, $request, self::LIST_SORTS['cash_sessions']);
+        $page = $query->paginate($this->perPage($request))->through(
             fn (CashSession $session) => $this->sessions->summary($session),
-        )->appends($request->query());
+        )->appends($request->query())->toArray();
+
+        // Populate the web-equivalent collector filter without requiring the
+        // unrelated permission to list/manage staff accounts.
+        $collectors = User::query()->whereIn('id', CashSession::query()->select('user_id'));
+        if (! $canViewAll) {
+            $collectors->whereKey($user->id);
+        }
+        $page['filter_options']['collectors'] = $collectors->orderBy('name')->get(['id', 'name']);
+
+        return response()->json($page);
     }
 
     /** الصندوق المفتوح الحالي للمستخدم، أو null. */
@@ -137,7 +149,11 @@ class CashSessionController extends ApiController
 
         $data = $request->validate([
             'approve' => ['required', 'boolean'],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'notes' => [
+                Rule::requiredIf(fn () => ! $request->boolean('approve')),
+                'nullable', 'string', 'max:1000',
+                ...(! $request->boolean('approve') ? ['min:10'] : []),
+            ],
         ]);
 
         $session = $this->sessions->decide(

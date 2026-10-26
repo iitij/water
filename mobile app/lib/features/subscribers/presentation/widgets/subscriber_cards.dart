@@ -10,6 +10,7 @@ class _SubscriberCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onCollectPayment,
+    this.presentation = const ListPresentationSettings(),
   });
 
   final Subscriber subscriber;
@@ -20,169 +21,149 @@ class _SubscriberCard extends StatelessWidget {
   final void Function(Subscriber) onEdit;
   final void Function(Subscriber) onDelete;
   final CollectPaymentLauncher? onCollectPayment;
+  final ListPresentationSettings presentation;
 
   @override
   Widget build(BuildContext context) {
     final s = subscriber;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 12),
       child: AppCard(
         padding: EdgeInsets.zero,
-        color: selected ? scheme.primary.withValues(alpha: .04) : null,
-        borderColor: selected ? scheme.primary.withValues(alpha: .4) : null,
+        radius: 16,
+        borderColor: selected ? scheme.primary : null,
         onTap: onTap,
         child: InkWell(
-        onLongPress: onToggleSelect,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Checkbox(
-                  value: selected,
-                  onChanged: (_) => onToggleSelect(),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14.5,
-                          height: 1.3,
-                          color: scheme.onSurface,
-                        ),
+          onLongPress: onToggleSelect,
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsetsDirectional.fromSTEB(12, presentation.compact ? 8 : 14, 8, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      label: s.name,
+                      child: Checkbox(
+                        value: selected,
+                        onChanged: (_) => onToggleSelect(),
                       ),
-                      const SizedBox(height: 2),
-                      Row(
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Flexible(
-                            child: Text(
-                              '${s.squareName ?? 'بدون مربع'} · ${s.metersCount} عداد',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall,
+                          Text(
+                            s.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          if (s.phone != null) ...[
-                            const SizedBox(width: 8),
-                            Icon(Icons.call_outlined, size: 12, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 3),
+                          const Gap(5),
+                          if (presentation.isVisible('square') || presentation.isVisible('meters')) Text(
+                            '${presentation.isVisible('square') ? s.squareName ?? SubscriberExperienceStrings.noSquare : ''}'
+                            '${presentation.isVisible('meters') ? ' • ${SubscriberExperienceStrings.meterCount(s.metersCount)}' : ''}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          if (presentation.isVisible('phone') && s.phone?.isNotEmpty == true) ...[
+                            const Gap(4),
                             Directionality(
                               textDirection: TextDirection.ltr,
                               child: Text(
                                 s.phone!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: scheme.onSurfaceVariant,
-                                ),
+                                style: theme.textTheme.labelMedium,
                               ),
                             ),
                           ],
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                StatusBadge(
-                  label: s.status.label,
-                  color: switch (s.status) {
-                    SubscriberStatus.active => AppColors.success,
-                    SubscriberStatus.suspended => AppColors.warning,
-                    SubscriberStatus.inactive => AppColors.danger,
-                  },
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'خيارات المشترك',
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                  ),
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit(s);
-                    if (value == 'delete') onDelete(s);
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_outlined, size: 18),
-                          SizedBox(width: 10),
-                          Text('تعديل المشترك'),
-                        ],
-                      ),
                     ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
-                          SizedBox(width: 10),
-                          Text('حذف المشترك', style: TextStyle(color: AppColors.danger)),
-                        ],
-                      ),
+                    PopupMenuButton<String>(
+                      tooltip: SubscriberExperienceStrings.options,
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          onEdit(s);
+                        }
+                        if (value == 'delete') {
+                          onDelete(s);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Text(SubscriberExperienceStrings.edit),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(SubscriberExperienceStrings.delete),
+                        ),
+                      ],
                     ),
                   ],
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    size: 20,
-                    color: scheme.onSurfaceVariant,
-                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest.withValues(alpha: .45),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
-              child: Row(children: [
-                Text('الرصيد الصافي', style: Theme.of(context).textTheme.labelSmall),
-                const SizedBox(width: 6),
-                BalanceText(s.netBalance),
-                const Spacer(),
-                if (s.debitBalance > 0)
-                  Text(
-                    'مدين ${CurrencyFormatter.format(s.debitBalance)}',
-                    style: TextStyle(
-                      color: AppSemantic.resolve(context, AppColors.danger),
-                      fontSize: 11,
-                      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (presentation.isVisible('status')) StatusBadge(
+                      label: s.status.label,
+                      color: switch (s.status) {
+                        SubscriberStatus.active => AppColors.success,
+                        SubscriberStatus.suspended => AppColors.warning,
+                        SubscriberStatus.inactive => AppColors.danger,
+                      },
                     ),
-                  ),
-              ]),
-            ),
-            const SizedBox(height: 6),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              TextButton.icon(
-                icon: Icon(Icons.payments_rounded, size: 17, color: AppSemantic.resolve(context, AppColors.success)),
-                label: const Text('تحصيل دفعة'),
-                onPressed: () => _collect(context),
+                    if (presentation.isVisible('balance')) Text(
+                      SubscriberExperienceStrings.balance,
+                      style: theme.textTheme.labelSmall,
+                    ),
+                    if (presentation.isVisible('balance')) _SubscriberCardMoney(amount: s.netBalance),
+                  ],
+                ),
               ),
-              TextButton.icon(
-                icon: Icon(Icons.local_shipping_outlined, size: 17, color: AppSemantic.resolve(context, AppColors.info)),
-                label: const Text('طلب وايت'),
-                onPressed: () => _quickTanker(context),
+              const Gap(12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: .5),
+                  border: Border(top: BorderSide(color: scheme.outlineVariant)),
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.payments_outlined, size: 18),
+                      label: const Text(SubscriberExperienceStrings.collect),
+                      onPressed: () => _collect(context),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.folder_open_outlined, size: 18),
+                      label: const Text(SubscriberExperienceStrings.details),
+                      onPressed: () => onOpen360(s),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.local_shipping_outlined, size: 20),
+                      tooltip: SubscriberExperienceStrings.tanker,
+                      onPressed: () => _quickTanker(context),
+                    ),
+                  ],
+                ),
               ),
-              TextButton.icon(
-                icon: Icon(Icons.folder_open_rounded, size: 17, color: scheme.primary),
-                label: const Text('ملف 360°'),
-                onPressed: () => onOpen360(s),
-              ),
-            ]),
-          ]),
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -207,7 +188,9 @@ class _SubscriberCard extends StatelessWidget {
     final requestsCubit = context.read<ServiceRequestsCubit>();
     final defaultPrice = await cubit.quickTankerDefaultPrice(subscriber.id);
     if (!context.mounted) return;
-    final amountCtrl = TextEditingController(text: defaultPrice.toStringAsFixed(0));
+    final amountCtrl = TextEditingController(
+      text: defaultPrice.toStringAsFixed(0),
+    );
     final notesCtrl = TextEditingController();
     var serviceDate = DateTime.now();
     await showDialog<void>(
@@ -215,43 +198,51 @@ class _SubscriberCard extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text('طلب وايت سريع — ${subscriber.name}'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'سعر الوايت (ريال)',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'سعر الوايت (ريال)',
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            AppSettingRow(
-              icon: Icons.calendar_month_rounded,
-              color: Theme.of(ctx).colorScheme.primary,
-              title: 'تاريخ الخدمة',
-              subtitle: serviceDate.toIso8601String().substring(0, 10),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: ctx,
-                  initialDate: serviceDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2100),
-                );
-                if (picked != null) setDialogState(() => serviceDate = picked);
-              },
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'ملاحظات',
+              const SizedBox(height: 8),
+              AppSettingRow(
+                icon: Icons.calendar_month_rounded,
+                color: Theme.of(ctx).colorScheme.primary,
+                title: 'تاريخ الخدمة',
+                subtitle: serviceDate.toIso8601String().substring(0, 10),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: serviceDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setDialogState(() => serviceDate = picked);
+                  }
+                },
               ),
-            ),
-          ]),
+              const SizedBox(height: 8),
+              TextField(
+                controller: notesCtrl,
+                decoration: const InputDecoration(labelText: 'ملاحظات'),
+              ),
+            ],
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
             FilledButton(
               onPressed: () async {
-                final amount = double.tryParse(normalizeDigits(amountCtrl.text));
+                final amount = double.tryParse(
+                  normalizeDigits(amountCtrl.text),
+                );
                 if (amount == null || amount <= 0) return;
                 await requestsCubit.create(
                   subscriberId: subscriber.id,
@@ -299,10 +290,7 @@ class _SubscriberPeek extends StatelessWidget {
           children: [
             Text(subscriber.name, style: theme.textTheme.headlineSmall),
             const Gap(4),
-            Text(
-              'ملخص سريع لملف المشترك',
-              style: theme.textTheme.bodySmall,
-            ),
+            Text('ملخص سريع لملف المشترك', style: theme.textTheme.bodySmall),
             const Gap(14),
             AppCard(
               child: Column(
@@ -392,3 +380,40 @@ Future<void> _openFilters(
 }
 
 /// تصفية المشتركين — مسودة واحدة تُطبَّق مرة واحدة من تذييل الورقة.
+
+class _SubscriberCardMoney extends StatelessWidget {
+  const _SubscriberCardMoney({required this.amount});
+  final double amount;
+  @override
+  Widget build(BuildContext context) {
+    final color = amount < 0
+        ? AppSemantic.resolve(context, AppColors.danger)
+        : amount > 0
+        ? AppSemantic.resolve(context, AppColors.success)
+        : Theme.of(context).colorScheme.onSurface;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            CurrencyFormatter.format(
+              amount == 0 ? 0 : amount,
+            ).replaceAll(' ريال', ''),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 19,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        const Gap(5),
+        Text(
+          SubscriberExperienceStrings.currency,
+          style: TextStyle(color: color, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}

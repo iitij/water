@@ -230,6 +230,8 @@ class GeneralSetting extends Equatable {
     required this.type,
     this.value = '',
     this.imagePath,
+    this.createdAt,
+    this.updatedAt,
   });
 
   final int id;
@@ -238,9 +240,10 @@ class GeneralSetting extends Equatable {
   final String type;
   final String value;
   final String? imagePath;
+  final DateTime? createdAt, updatedAt;
 
   @override
-  List<Object?> get props => [id, key, label, type, value, imagePath];
+  List<Object?> get props => [id, key, label, type, value, imagePath, createdAt, updatedAt];
 }
 
 class SettingsCacheEvent extends Equatable {

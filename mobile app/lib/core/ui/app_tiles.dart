@@ -93,7 +93,10 @@ class AppModuleTile extends StatelessWidget {
                           style: theme.textTheme.titleMedium,
                         ),
                       ),
-                      if (badge != null) ...<Widget>[const SizedBox(width: 8), badge!],
+                      if (badge != null) ...<Widget>[
+                        const SizedBox(width: 8),
+                        badge!,
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -136,7 +139,9 @@ class AppModuleTile extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 3),
           Text(
@@ -178,7 +183,10 @@ class AppModuleGrid extends StatelessWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: children
-              .map((child) => SizedBox(width: width, height: tileHeight, child: child))
+              .map(
+                (child) =>
+                    SizedBox(width: width, height: tileHeight, child: child),
+              )
               .toList(growable: false),
         );
       },
@@ -328,13 +336,19 @@ class AppMetricCard extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w500),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
               if (trend != null)
                 trend!
               else
-                Icon(icon, size: 15, color: scheme.onSurfaceVariant.withValues(alpha: .65)),
+                Icon(
+                  icon,
+                  size: 15,
+                  color: scheme.onSurfaceVariant.withValues(alpha: .65),
+                ),
             ],
           ),
           Column(
@@ -370,7 +384,9 @@ class AppMetricCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 3),
                       child: Text(
                         unit!,
-                        style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w500),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -390,7 +406,11 @@ class AppMetricCard extends StatelessWidget {
           if (sparkline.length > 1)
             SizedBox(
               height: 18,
-              child: AppSparkline(values: sparkline, color: scheme.primary, height: 18),
+              child: AppSparkline(
+                values: sparkline,
+                color: scheme.primary,
+                height: 18,
+              ),
             ),
         ],
       ),
@@ -508,8 +528,14 @@ class AppNotice extends StatelessWidget {
               children: <Widget>[
                 Text(title, style: theme.textTheme.titleSmall),
                 const SizedBox(height: 2),
-                Text(message, style: theme.textTheme.bodySmall?.copyWith(height: 1.55)),
-                if (action != null) ...<Widget>[const SizedBox(height: 6), action!],
+                Text(
+                  message,
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.55),
+                ),
+                if (action != null) ...<Widget>[
+                  const SizedBox(height: 6),
+                  action!,
+                ],
               ],
             ),
           ),
@@ -565,61 +591,88 @@ class AppStatStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
+        children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 430 ? items.length : 2;
-              final width = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+              final scale = MediaQuery.textScalerOf(
+                context,
+              ).scale(1).clamp(1.0, 2.0);
+              final columns = (constraints.maxWidth / (160 * scale))
+                  .floor()
+                  .clamp(1, items.length.clamp(1, 4));
+              final width =
+                  (constraints.maxWidth - 10 * (columns - 1)) / columns;
               return Wrap(
-                spacing: 12,
-                runSpacing: 14,
-                children: items
-                    .map(
-                      (item) => SizedBox(
-                        width: width,
-                        child: Row(
-                          children: <Widget>[
-                            Icon(item.icon, size: 15, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Text(
-                                    item.value,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleSmall,
-                                  ),
-                                  Text(
-                                    item.label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(growable: false),
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (var index = 0; index < items.length; index++)
+                    SizedBox(
+                      // An odd final metric spans the row instead of leaving a hole.
+                      width:
+                          index == items.length - 1 &&
+                              items.length % columns == 1
+                          ? constraints.maxWidth
+                          : width,
+                      child: _StatCell(item: items[index]),
+                    ),
+                ],
               );
             },
           ),
-          if (description != null) ...<Widget>[
+          if (description != null) ...[
             const SizedBox(height: 12),
             const AppDivider(),
             const SizedBox(height: 10),
             Text(description!, style: theme.textTheme.bodySmall),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCell extends StatelessWidget {
+  const _StatCell({required this.item});
+  final AppStatItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tone = AppSemantic.resolve(context, item.color);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: .52),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(item.label, style: theme.textTheme.labelSmall),
+              ),
+              const SizedBox(width: 6),
+              Icon(item.icon, size: 17, color: tone),
+            ],
+          ),
+          const SizedBox(height: 9),
+          AppAmount(
+            value: item.value,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w700,
+              height: 1.25,
+            ),
+          ),
         ],
       ),
     );
@@ -646,13 +699,20 @@ class AppMetricGrid extends StatelessWidget {
     if (children.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = (constraints.maxWidth / minTileWidth).floor().clamp(1, 4).toInt();
-        final width = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        final columns = (constraints.maxWidth / minTileWidth)
+            .floor()
+            .clamp(1, 4)
+            .toInt();
+        final width =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children: children
-              .map((child) => SizedBox(width: width, height: tileHeight, child: child))
+              .map(
+                (child) =>
+                    SizedBox(width: width, height: tileHeight, child: child),
+              )
               .toList(growable: false),
         );
       },

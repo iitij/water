@@ -4,6 +4,7 @@ import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../models/invoice_model.dart';
 import '../models/invoice_query.dart';
+import '../models/invoices_page.dart';
 
 /// مصدر بيانات الفواتير عبر الـ API (Dev 3).
 ///
@@ -13,6 +14,14 @@ class InvoicesRemoteDataSource {
   const InvoicesRemoteDataSource(this._client);
 
   final FinanceApiClient _client;
+
+  Future<InvoicesPage> listPage(InvoiceQuery query) async =>
+      InvoicesPage.fromJson(
+        await _client.getRaw(
+          FinanceEndpoints.invoices,
+          query: query.toQueryMap(),
+        ),
+      );
 
   /// #33 `GET /api/invoices` — قائمة/Fلاتر/بحث ذكي.
   Future<List<InvoiceModel>> list(InvoiceQuery query) async {
@@ -41,7 +50,9 @@ class InvoicesRemoteDataSource {
     final invoices = _parseInvoices(response);
     // `InvoiceController::search` يرتّب المطابقات المسار أولاً؛ نعيد الترتيب محلياً
     // تحسباً لاختلاف إصدار الخادم.
-    invoices.sort((a, b) => (b.isPathMatch ? 1 : 0).compareTo(a.isPathMatch ? 1 : 0));
+    invoices.sort(
+      (a, b) => (b.isPathMatch ? 1 : 0).compareTo(a.isPathMatch ? 1 : 0),
+    );
     return invoices;
   }
 
@@ -49,18 +60,22 @@ class InvoicesRemoteDataSource {
   Future<InvoiceModel> byId(int id) async {
     final response = await _client.getRaw(FinanceEndpoints.invoice(id));
     final map = JsonUtils.asMap(response);
-    if (map == null) throw const NotFoundFailure('استجابة غير صالحة لتفاصيل الفاتورة.');
+    if (map == null) {
+      throw const NotFoundFailure('استجابة غير صالحة لتفاصيل الفاتورة.');
+    }
     // الخادم يغلّف التفاصيل بـ {"invoice": {...}} (InvoiceController::show) —
     // وكان التطبيق يقرأ "data" فقط فتظهر التفاصيل فارغة.
-    final data = JsonUtils.asMap(map['invoice']) ??
-        JsonUtils.asMap(map['data']);
+    final data =
+        JsonUtils.asMap(map['invoice']) ?? JsonUtils.asMap(map['data']);
     return InvoiceModel.fromJson(data ?? map);
   }
 
   /// #34 `GET /api/invoices/billing-periods` — فترات الفوترة للفلتر.
   Future<List<BillingPeriodOption>> billingPeriods() async {
     try {
-      final response = await _client.getRaw(FinanceEndpoints.invoicesBillingPeriods);
+      final response = await _client.getRaw(
+        FinanceEndpoints.invoicesBillingPeriods,
+      );
       final items = JsonUtils.unwrapList(response);
       if (items.isEmpty && response is List) {
         return response
@@ -79,7 +94,8 @@ class InvoicesRemoteDataSource {
       _mutate(() => _client.post(FinanceEndpoints.invoices, body: payload));
 
   /// #38 `POST /api/invoices/generate-meter`
-  Future<InvoiceModel> generateMeter(GenerateMeterInvoiceRequest request) => _mutate(
+  Future<InvoiceModel> generateMeter(GenerateMeterInvoiceRequest request) =>
+      _mutate(
         () => _client.post(
           FinanceEndpoints.invoicesGenerateMeter,
           body: request.toJson(),
@@ -87,16 +103,18 @@ class InvoicesRemoteDataSource {
       );
 
   /// #39 `POST /api/invoices/generate-subscription`
-  Future<InvoiceModel> generateSubscription(GenerateSubscriptionInvoiceRequest request) =>
-      _mutate(
-        () => _client.post(
-          FinanceEndpoints.invoicesGenerateSubscription,
-          body: request.toJson(),
-        ),
-      );
+  Future<InvoiceModel> generateSubscription(
+    GenerateSubscriptionInvoiceRequest request,
+  ) => _mutate(
+    () => _client.post(
+      FinanceEndpoints.invoicesGenerateSubscription,
+      body: request.toJson(),
+    ),
+  );
 
   /// #40 `POST /api/invoices/generate-tanker`
-  Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request) => _mutate(
+  Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request) =>
+      _mutate(
         () => _client.post(
           FinanceEndpoints.invoicesGenerateTanker,
           body: request.toJson(),
@@ -104,9 +122,8 @@ class InvoicesRemoteDataSource {
       );
 
   /// #41 `PUT /api/invoices/{id}` — تشغيل `Invoice::updated` (تحديث القيد + إعادة التوزيع).
-  Future<InvoiceModel> update(int id, Map<String, dynamic> payload) => _mutate(
-        () => _client.put(FinanceEndpoints.invoice(id), body: payload),
-      );
+  Future<InvoiceModel> update(int id, Map<String, dynamic> payload) =>
+      _mutate(() => _client.put(FinanceEndpoints.invoice(id), body: payload));
 
   /// #42 `DELETE /api/invoices/{id}`
   Future<void> delete(int id) async {
@@ -153,7 +170,9 @@ class InvoicesRemoteDataSource {
   /// ⚠️ `POST /api/invoices/{id}/recalculate` — مطلوب من Dev 1
   /// (يستدعي `PaymentService::recalculateInvoices($subscriber, $meterId)`).
   Future<InvoiceModel> recalculate(int id) async {
-    final response = await _client.post(FinanceEndpoints.invoiceRecalculate(id));
+    final response = await _client.post(
+      FinanceEndpoints.invoiceRecalculate(id),
+    );
     final map = JsonUtils.asMap(response);
     if (map != null) {
       final invoice = JsonUtils.asMap(map['invoice']);
@@ -171,7 +190,10 @@ class InvoicesRemoteDataSource {
     return _bulkResult(response, fallbackProcessed: ids.length);
   }
 
-  BulkActionResult _bulkResult(Object? response, {required int fallbackProcessed}) {
+  BulkActionResult _bulkResult(
+    Object? response, {
+    required int fallbackProcessed,
+  }) {
     final map = JsonUtils.asMap(response);
     if (map == null) {
       return BulkActionResult(processed: fallbackProcessed, failed: 0);

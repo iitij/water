@@ -82,6 +82,7 @@ class ReadingController extends ApiController
             }
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['readings']);
         return $query->paginate($this->perPage($request))->through(function (Reading $reading) {
             return $this->decorateReading($reading);
         })->appends($request->query());

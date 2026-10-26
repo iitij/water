@@ -21,6 +21,7 @@ class SubscriptionFeeController extends ApiController
         if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
         $total = (clone $query)->sum('amount');
         $invoiced = (clone $query)->whereIn('status', ['invoiced', 'partially_paid', 'paid'])->sum('amount');
+        $this->applySorting($query, $request, self::LIST_SORTS['subscription_fees']);
         $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
             'data' => $page->items(),

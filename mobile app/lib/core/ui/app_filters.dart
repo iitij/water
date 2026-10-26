@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/experience_strings.dart';
 import '../theme/app_colors.dart';
 import 'app_tokens.dart';
 
@@ -15,8 +16,8 @@ part 'parts/app_filter_inputs.dart';
 ///   3. [AppActiveFilters]  — what is on right now, removable, always visible.
 ///   4. [AppFilterSheet]    — every advanced field, one sheet, one apply.
 ///
-/// Rules: a chip is neutral until selected; selection is the only accent; no
-/// field is taller than 46; a sheet applies once, from its footer button.
+/// Selection is explicit; interactive controls retain a 48dp minimum target.
+/// A sheet applies its fields once, from its footer button.
 
 /// A small, quiet chip used in rails and active-filter rows.
 class AppFilterChip extends StatelessWidget {
@@ -51,70 +52,74 @@ class AppFilterChip extends StatelessWidget {
     final foreground = selected
         ? scheme.onPrimary
         : (dark ? AppColors.onPanelSoft : scheme.onSurfaceVariant);
-    final height = dense ? 30.0 : 34.0;
+    const height = 48.0;
 
-    return Material(
-      color: selected
-          ? scheme.primary
-          : (dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt),
-      shape: StadiumBorder(
-        side: BorderSide(
-          color: selected ? scheme.primary : theme.dividerColor,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected
+            ? scheme.primary
+            : (dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          side: BorderSide(
+            color: selected ? scheme.primary : theme.dividerColor,
+          ),
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onRemove ?? onTap,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: height),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: dense ? 10 : 12,
-              vertical: 6,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (icon != null) ...<Widget>[
-                  Icon(icon, size: dense ? 14 : 15, color: foreground),
-                  SizedBox(width: dense ? 4 : 6),
-                ],
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 240),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: foreground,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w500,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onRemove ?? onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: height),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: dense ? 10 : 12,
+                vertical: 6,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (icon != null) ...<Widget>[
+                    Icon(icon, size: dense ? 14 : 15, color: foreground),
+                    SizedBox(width: dense ? 4 : 6),
+                  ],
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: foreground,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                if (count != null) ...<Widget>[
-                  const SizedBox(width: 6),
-                  Text(
-                    '$count',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: selected
-                          ? scheme.onPrimary.withValues(alpha: .72)
-                          : foreground.withValues(alpha: .55),
-                      fontWeight: FontWeight.w500,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+                  if (count != null) ...<Widget>[
+                    const SizedBox(width: 6),
+                    Text(
+                      '$count',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: selected ? scheme.onPrimary : foreground,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: const <FontFeature>[
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                  if (onRemove != null) ...<Widget>[
+                    const SizedBox(width: 4),
+                    Icon(Icons.close_rounded, size: 14, color: foreground),
+                  ],
                 ],
-                if (onRemove != null) ...<Widget>[
-                  const SizedBox(width: 4),
-                  Icon(Icons.close_rounded, size: 14, color: foreground),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -161,7 +166,7 @@ class AppFilterBar extends StatefulWidget {
     super.key,
     this.controller,
     this.query,
-    this.hint = 'بحث',
+    this.hint = ExperienceStrings.search,
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
@@ -231,7 +236,7 @@ class _AppFilterBarState extends State<AppFilterBar> {
         children: <Widget>[
           Expanded(
             child: SizedBox(
-              height: 46,
+              height: 52,
               child: TextField(
                 controller: _controller,
                 autofocus: widget.autofocus,
@@ -243,8 +248,9 @@ class _AppFilterBarState extends State<AppFilterBar> {
                   hintText: widget.hint,
                   isDense: true,
                   filled: true,
-                  fillColor:
-                      dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt,
+                  fillColor: dark
+                      ? AppColors.darkSurfaceAlt
+                      : AppColors.surfaceAlt,
                   contentPadding: const EdgeInsetsDirectional.symmetric(
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
@@ -264,7 +270,7 @@ class _AppFilterBarState extends State<AppFilterBar> {
                           onPressed: widget.onClear,
                           icon: const Icon(Icons.close_rounded, size: 18),
                           color: scheme.onSurfaceVariant,
-                          tooltip: 'مسح البحث',
+                          tooltip: ExperienceStrings.clearSearch,
                           splashRadius: 18,
                         ),
                   border: OutlineInputBorder(
@@ -320,7 +326,9 @@ class _FilterButton extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: hasActive ? 'الفلاتر، $count مفعّلة' : 'الفلاتر',
+      label: hasActive
+          ? ExperienceStrings.activeFilters(count)
+          : ExperienceStrings.filters,
       child: Material(
         color: hasActive
             ? scheme.primary.withValues(alpha: dark ? .18 : .10)
@@ -337,8 +345,8 @@ class _FilterButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: SizedBox(
-            width: 46,
-            height: 46,
+            width: 52,
+            height: 52,
             child: Stack(
               alignment: Alignment.center,
               children: <Widget>[
@@ -414,7 +422,11 @@ class AppActiveFilters extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: <Widget>[
-                  for (var index = 0; index < filters.length; index++) ...<Widget>[
+                  for (
+                    var index = 0;
+                    index < filters.length;
+                    index++
+                  ) ...<Widget>[
                     if (index > 0) const SizedBox(width: AppSpacing.xs),
                     filters[index],
                   ],
@@ -427,13 +439,13 @@ class AppActiveFilters extends StatelessWidget {
             TextButton(
               onPressed: onClearAll,
               style: TextButton.styleFrom(
-                minimumSize: const Size(0, 32),
+                minimumSize: const Size(0, 48),
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 foregroundColor: theme.colorScheme.onSurfaceVariant,
                 textStyle: theme.textTheme.labelMedium,
               ),
-              child: const Text('مسح الكل'),
+              child: const Text(ExperienceStrings.clearAll),
             ),
           ],
         ],
@@ -441,4 +453,3 @@ class AppActiveFilters extends StatelessWidget {
     );
   }
 }
-

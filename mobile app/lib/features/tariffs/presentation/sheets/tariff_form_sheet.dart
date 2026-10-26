@@ -24,7 +24,10 @@ class TariffFormSheet extends StatefulWidget {
   /// `null` = إنشاء تسعيرة جديدة.
   final TariffModel? tariff;
 
-  static Future<TariffModel?> show(BuildContext context, {TariffModel? tariff}) {
+  static Future<TariffModel?> show(
+    BuildContext context, {
+    TariffModel? tariff,
+  }) {
     return showModalBottomSheet<TariffModel>(
       context: context,
       isScrollControlled: true,
@@ -43,15 +46,18 @@ class TariffFormSheet extends StatefulWidget {
 class _TariffFormSheetState extends State<TariffFormSheet> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _name =
-      TextEditingController(text: widget.tariff?.name ?? 'التسعيرة الأساسية');
+  late final TextEditingController _name = TextEditingController(
+    text: widget.tariff?.name ?? 'التسعيرة الأساسية',
+  );
   late final TextEditingController _price = TextEditingController(
     text: (widget.tariff?.unitPrice ?? 0).toString(),
   );
-  late final TextEditingController _minUsage =
-      TextEditingController(text: _num(widget.tariff?.minUsage));
-  late final TextEditingController _maxUsage =
-      TextEditingController(text: _num(widget.tariff?.maxUsage));
+  late final TextEditingController _minUsage = TextEditingController(
+    text: _num(widget.tariff?.minUsage),
+  );
+  late final TextEditingController _maxUsage = TextEditingController(
+    text: _num(widget.tariff?.maxUsage),
+  );
 
   late bool _isActive = widget.tariff?.isActive ?? true;
   late DateTime? _start = widget.tariff?.startDate;
@@ -70,7 +76,9 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
 
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
-    final initial = isStart ? (_start ?? now) : (_end ?? now.add(const Duration(days: 365)));
+    final initial = isStart
+        ? (_start ?? now)
+        : (_end ?? now.add(const Duration(days: 365)));
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -133,14 +141,17 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
               child: Row(
                 children: <Widget>[
-                  const AppGlyph(icon: Icons.sell_outlined, tone: AppColors.primary, size: 36),
+                  const AppGlyph(
+                    icon: Icons.sell_outlined,
+                    tone: AppColors.primary,
+                    size: 36,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.tariff == null ? 'تسعيرة جديدة' : 'تعديل التسعيرة',
-                      style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: Theme.of(sheetContext).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                   AppIconButton(
@@ -165,7 +176,9 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                       label: 'اسم التسعيرة',
                       required: true,
                       validator: (value) =>
-                          value == null || value.trim().isEmpty ? 'الاسم مطلوب' : null,
+                          value == null || value.trim().isEmpty
+                          ? 'الاسم مطلوب'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     AppNumericField(
@@ -173,7 +186,8 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                       label: 'سعر الوحدة',
                       prefixText: 'ريال / وحدة',
                       required: true,
-                      helperText: 'يُستخدم في فوترة الاستهلاك تلقائياً (BillingService)',
+                      helperText:
+                          'يُستخدم في فوترة الاستهلاك تلقائياً (BillingService)',
                     ),
                     const SizedBox(height: 8),
                     InkWell(
@@ -188,18 +202,28 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: <Widget>[
-                                  Text('مفعّلة', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                                  Text(
+                                    'مفعّلة',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                   SizedBox(height: 1),
                                   Text(
                                     'تسعيرة واحدة فقط تكون نشطة للسعر الافتراضي',
-                                    style: TextStyle(fontSize: 11, color: AppColors.neutral),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.neutral,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             Switch.adaptive(
                               value: _isActive,
-                              onChanged: (value) => setState(() => _isActive = value),
+                              onChanged: (value) =>
+                                  setState(() => _isActive = value),
                             ),
                           ],
                         ),
@@ -252,7 +276,9 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                     ),
                     const SizedBox(height: 18),
                     AppPrimaryButton(
-                      label: widget.tariff == null ? 'إضافة التسعيرة' : 'حفظ التعديلات',
+                      label: widget.tariff == null
+                          ? 'إضافة التسعيرة'
+                          : 'حفظ التعديلات',
                       icon: Icons.save_outlined,
                       loading: saving,
                       onPressed: saving ? null : _submit,
@@ -270,7 +296,11 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
 }
 
 class _DateChip extends StatelessWidget {
-  const _DateChip({required this.label, required this.date, required this.onTap});
+  const _DateChip({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
 
   final String label;
   final DateTime? date;
@@ -307,9 +337,13 @@ class TariffCard extends StatelessWidget {
     this.onForceDelete,
     this.selected = false,
     this.onSelectToggle,
+    this.dense = false,
+    this.showPeriod = true,
   });
 
   final TariffModel tariff;
+  final bool dense;
+  final bool showPeriod;
   final bool isActive;
   final bool busy;
   final VoidCallback? onTap;
@@ -329,12 +363,14 @@ class TariffCard extends StatelessWidget {
         padding: EdgeInsets.zero,
         onTap: onSelectToggle ?? (tariff.isTrashed ? null : onTap),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(dense ? 8 : 12),
           child: Row(
             children: <Widget>[
               if (onSelectToggle != null) ...<Widget>[
                 Icon(
-                  selected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                  selected
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
                   size: 20,
                   color: selected ? AppColors.primary : AppColors.neutral,
                 ),
@@ -352,14 +388,21 @@ class TariffCard extends StatelessWidget {
                   children: <Widget>[
                     Text(
                       tariff.name,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      '${tariff.periodLabel}'
-                      '${tariff.minUsage == null ? '' : ' • ${CurrencyFormatter.amount(tariff.minUsage)}-${CurrencyFormatter.amount(tariff.maxUsage)} وحدة'}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.neutral),
-                    ),
+                    if (showPeriod)
+                      Text(
+                        '${tariff.periodLabel}'
+                        '${tariff.minUsage == null ? '' : ' • ${CurrencyFormatter.amount(tariff.minUsage)}-${CurrencyFormatter.amount(tariff.maxUsage)} وحدة'}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.neutral,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -368,7 +411,10 @@ class TariffCard extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     CurrencyFormatter.withLabel(tariff.unitPrice),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   if (busy)
@@ -383,7 +429,10 @@ class TariffCard extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 38,
+                      ),
                       onSelected: (value) {
                         if (value == 'restore') onRestore?.call();
                         if (value == 'force') onForceDelete?.call();
@@ -412,7 +461,9 @@ class TariffCard extends StatelessWidget {
                           tariff.isActive ? 'مفعّلة' : 'غير مفعّلة',
                           style: TextStyle(
                             fontSize: 11,
-                            color: tariff.isActive ? AppColors.success : AppColors.neutral,
+                            color: tariff.isActive
+                                ? AppColors.success
+                                : AppColors.neutral,
                           ),
                         ),
                         if (onSoftDelete != null)
@@ -421,7 +472,10 @@ class TariffCard extends StatelessWidget {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(AppRadius.md),
                             ),
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
+                            constraints: const BoxConstraints(
+                              minWidth: 44,
+                              minHeight: 38,
+                            ),
                             onSelected: (value) {
                               if (value == 'trash') onSoftDelete?.call();
                             },

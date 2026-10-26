@@ -69,14 +69,13 @@ class PaymentFormScreen extends StatelessWidget {
         if (invoice != null) {
           unawaited(cubit.openForInvoice(invoice!));
         } else if (subscriber != null) {
-          unawaited(cubit.openForSubscriber(subscriber!.id, name: subscriber!.name));
+          unawaited(
+            cubit.openForSubscriber(subscriber!.id, name: subscriber!.name),
+          );
         }
         return cubit;
       },
-      child: _PaymentCreateScreen(
-        invoice: invoice,
-        subscriber: subscriber,
-      ),
+      child: _PaymentCreateScreen(invoice: invoice, subscriber: subscriber),
     );
   }
 }
@@ -111,7 +110,8 @@ class _PaymentCreateScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: _SubscriberPicker(
                   selected: subscriber,
-                  onPick: (picked) => cubit.openForSubscriber(picked.id, name: picked.name),
+                  onPick: (picked) =>
+                      cubit.openForSubscriber(picked.id, name: picked.name),
                 ),
               ),
             Expanded(
@@ -120,15 +120,19 @@ class _PaymentCreateScreen extends StatelessWidget {
                   if (invoice == null && state.subscriberId == null) {
                     return const EmptyStateWidget(
                       title: 'اختر المشترك أولاً',
-                      message: 'سيُجلب تلقائياً أحدث فاتورة غير مسددة وقيمة المستحق.',
+                      message:
+                          'سيُجلب تلقائياً أحدث فاتورة غير مسددة وقيمة المستحق.',
                       icon: Icons.person_search,
                       compact: true,
                     );
                   }
-                  return CollectPaymentForm(invoice: invoice, onSubmitted: (saved) {
-                    if (!context.mounted) return;
-                    if (saved) Navigator.of(context).pop(true);
-                  });
+                  return CollectPaymentForm(
+                    invoice: invoice,
+                    onSubmitted: (saved) {
+                      if (!context.mounted) return;
+                      if (saved) Navigator.of(context).pop(true);
+                    },
+                  );
                 },
               ),
             ),
@@ -203,7 +207,10 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
           label: 'المشترك',
           hint: 'اسم، هاتف، أو كود عداد',
           onSubmitted: (_) => _search(),
-          suffix: IconButton(icon: const Icon(Icons.search), onPressed: _search),
+          suffix: IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: _search,
+          ),
         ),
         if (widget.selected != null)
           Padding(
@@ -224,7 +231,10 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: AppColors.danger, fontSize: 12),
+            ),
           ),
         if (_results.isNotEmpty)
           Container(
@@ -245,7 +255,10 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                     setState(() => _results = const <SubscriberOption>[]);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -254,14 +267,20 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                           option.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 1),
                         Text(
                           option.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.neutral,
+                          ),
                         ),
                       ],
                     ),
@@ -288,14 +307,18 @@ class _PaymentEditScreen extends StatefulWidget {
 class _PaymentEditScreenState extends State<_PaymentEditScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _amount =
-      TextEditingController(text: widget.payment.amount.toString());
-  late final TextEditingController _reference =
-      TextEditingController(text: widget.payment.referenceNumber ?? '');
-  late final TextEditingController _reason =
-      TextEditingController(text: widget.payment.reason ?? '');
-  late final TextEditingController _notes =
-      TextEditingController(text: widget.payment.notes ?? '');
+  late final TextEditingController _amount = TextEditingController(
+    text: widget.payment.amount.toString(),
+  );
+  late final TextEditingController _reference = TextEditingController(
+    text: widget.payment.referenceNumber ?? '',
+  );
+  late final TextEditingController _reason = TextEditingController(
+    text: widget.payment.reason ?? '',
+  );
+  late final TextEditingController _notes = TextEditingController(
+    text: widget.payment.notes ?? '',
+  );
 
   late PaymentMethod _method = widget.payment.method;
   late DateTime _date = widget.payment.paymentDate ?? DateTime.now();
@@ -311,6 +334,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final parsed = double.tryParse(_amount.text.trim());
@@ -325,17 +349,17 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
 
     setState(() => _saving = true);
     try {
-      await sl<PaymentsRepository>().update(
-        widget.payment.id,
-        <String, dynamic>{
-          'amount': parsed,
-          'payment_date': DateFormat.dateTime(_date),
-          'payment_method': _method.wire,
-          if (_method.requiresReference) 'reference_number': _reference.text.trim(),
-          if (_reason.text.trim().isNotEmpty) 'reason': _reason.text.trim(),
-          if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
-        },
-      );
+      await sl<PaymentsRepository>()
+          .update(widget.payment.id, <String, dynamic>{
+            'amount': parsed,
+            'payment_date': DateFormat.dateTime(_date),
+            'payment_method': _method.wire,
+            'reference_number': _method.requiresReference
+                ? _reference.text.trim()
+                : null,
+            'reason': _reason.text.trim().isEmpty ? null : _reason.text.trim(),
+            'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+          });
       if (!mounted) return;
       AppFeedback.success(context, 'تم تحديث السند.');
       Navigator.of(context).pop(true);
@@ -364,7 +388,8 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
             final confirmed = await ConfirmDialog.show(
               context,
               title: 'حذف سند قبض',
-              message: 'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة.',
+              message:
+                  'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة.',
               confirmLabel: 'حذف',
               destructive: true,
             );
@@ -389,7 +414,8 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
             children: <Widget>[
               const InfoNotice(
                 icon: Icons.science_outlined,
-                text: 'تعديل المبلغ يُعيد الخادم على أثره توزيع الدفعات واحتساب حالة '
+                text:
+                    'تعديل المبلغ يُعيد الخادم على أثره توزيع الدفعات واحتساب حالة '
                     'الفاتورة (PaymentService::recalculateInvoices).',
               ),
               const SizedBox(height: 14),
@@ -427,7 +453,9 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                           ),
                         AppField(
                           label: 'المبلغ المسجل حالياً',
-                          value: CurrencyFormatter.withLabel(widget.payment.amount),
+                          value: CurrencyFormatter.withLabel(
+                            widget.payment.amount,
+                          ),
                           icon: Icons.payments_outlined,
                           ltr: true,
                         ),
@@ -453,7 +481,10 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                       required: true,
                     ),
                     const SizedBox(height: 12),
-                    const Text('طريقة الدفع', style: TextStyle(fontSize: 12, color: AppColors.neutral)),
+                    const Text(
+                      'طريقة الدفع',
+                      style: TextStyle(fontSize: 12, color: AppColors.neutral),
+                    ),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
@@ -477,9 +508,16 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    AppTextField(controller: _reason, label: 'البيان (وذلك مقابل)'),
+                    AppTextField(
+                      controller: _reason,
+                      label: 'البيان (وذلك مقابل)',
+                    ),
                     const SizedBox(height: 12),
-                    AppTextField(controller: _notes, label: 'ملاحظات', maxLines: 2),
+                    AppTextField(
+                      controller: _notes,
+                      label: 'ملاحظات',
+                      maxLines: 2,
+                    ),
                     const SizedBox(height: 12),
                     AppSettingRow(
                       icon: Icons.schedule_outlined,
@@ -490,9 +528,8 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                         textDirection: TextDirection.ltr,
                         child: Text(
                           DateFormat.dateTime(_date),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ),
                       onTap: () async {

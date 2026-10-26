@@ -2,17 +2,23 @@ import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_search.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../domain/repositories/invoices_repository.dart';
+import '../../domain/repositories/paginated_invoices_repository.dart';
 import '../datasources/invoices_remote_datasource.dart';
 import '../models/invoice_model.dart';
 import '../models/invoice_query.dart';
+import '../models/invoices_page.dart';
 
 /// تنفيذ المستودع. حالياً شبكة فقط؛ يُضاف `InvoicesLocalDataSource` (Drift) كطبقة
 /// Cache-First عندما يدمج Dev 2 قاعدة البيانات المحلية، عبر نفس العقد.
-class InvoicesRepositoryImpl implements InvoicesRepository {
+class InvoicesRepositoryImpl
+    implements InvoicesRepository, PaginatedInvoicesRepository {
   const InvoicesRepositoryImpl({required InvoicesRemoteDataSource remote})
-      : _remote = remote;
+    : _remote = remote;
 
   final InvoicesRemoteDataSource _remote;
+
+  @override
+  Future<InvoicesPage> listPage(InvoiceQuery query) => _remote.listPage(query);
 
   @override
   Future<List<InvoiceModel>> list(InvoiceQuery query) => _remote.list(query);
@@ -27,7 +33,8 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
   }
 
   @override
-  Future<List<BillingPeriodOption>> billingPeriods() => _remote.billingPeriods();
+  Future<List<BillingPeriodOption>> billingPeriods() =>
+      _remote.billingPeriods();
 
   @override
   Future<InvoiceModel> byId(int id) => _remote.byId(id);
@@ -46,8 +53,8 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
 
   @override
   Future<InvoiceModel> generateSubscription(
-          GenerateSubscriptionInvoiceRequest request) =>
-      _remote.generateSubscription(request);
+    GenerateSubscriptionInvoiceRequest request,
+  ) => _remote.generateSubscription(request);
 
   @override
   Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request) =>
@@ -66,7 +73,8 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
   Future<void> restore(int id) => _remote.restore(id);
 
   @override
-  Future<BulkActionResult> bulkRestore(List<int> ids) => _remote.bulkRestore(ids);
+  Future<BulkActionResult> bulkRestore(List<int> ids) =>
+      _remote.bulkRestore(ids);
 
   @override
   Future<BulkActionResult> bulkForceDelete(List<int> ids) =>
@@ -89,5 +97,6 @@ class InvoicesRepositoryImpl implements InvoicesRepository {
   String sendWhatsappPath(int id) => FinanceEndpoints.invoiceSendWhatsapp(id);
 
   @override
-  String printFallbackPath(int id) => financeAdminPrintUrl('/invoices/$id/print');
+  String printFallbackPath(int id) =>
+      financeAdminPrintUrl('/invoices/$id/print');
 }

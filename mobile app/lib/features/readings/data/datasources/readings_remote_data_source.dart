@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/network/paginated_collection.dart';
 import '../models/reading.dart';
 
 class ReadingsRemoteDataSource {
@@ -12,7 +13,9 @@ class ReadingsRemoteDataSource {
 
   Future<Map<String, dynamic>> fetchMeterPeriod(int meterId) async {
     try {
-      final response = await _dio.get<dynamic>(ApiEndpoints.meterPeriod(meterId));
+      final response = await _dio.get<dynamic>(
+        ApiEndpoints.meterPeriod(meterId),
+      );
       return _asMap(response.data);
     } on DioException catch (error) {
       if (error.response?.statusCode != 404) rethrow;
@@ -32,18 +35,23 @@ class ReadingsRemoteDataSource {
     DateTime? toDate,
     String? query,
   }) async {
-    final response = await _dio.get<dynamic>(
-      ApiEndpoints.readings,
-      queryParameters: {
-        if (isInvoiced != null) 'is_invoiced': isInvoiced ? 1 : 0,
-        if (squareId != null) 'square_id': squareId,
-        if (meterId != null) 'meter_id': meterId,
-        if (fromDate != null) 'from_date': _dateOnly(fromDate),
-        if (toDate != null) 'to_date': _dateOnly(toDate),
-        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
-      },
-    );
-    return _asList(response.data, keys: const ['readings', 'data']);
+    final collection = await collectPaginatedCollection((page) async {
+      final response = await _dio.get<dynamic>(
+        ApiEndpoints.readings,
+        queryParameters: {
+          if (isInvoiced != null) 'is_invoiced': isInvoiced ? 1 : 0,
+          if (squareId != null) 'square_id': squareId,
+          if (meterId != null) 'meter_id': meterId,
+          if (fromDate != null) 'from_date': _dateOnly(fromDate),
+          if (toDate != null) 'to_date': _dateOnly(toDate),
+          if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+          'per_page': 100,
+          'page': page,
+        },
+      );
+      return response.data;
+    }, collectionKeys: const ['readings']);
+    return _asList(collection, keys: const ['data']);
   }
 
   Future<Map<String, dynamic>> createReading(
@@ -54,7 +62,9 @@ class ReadingsRemoteDataSource {
       ..['local_id'] = clientActionId;
     final imagePath = submission.imagePath;
     final Object body;
-    if (imagePath != null && imagePath.isNotEmpty && await File(imagePath).exists()) {
+    if (imagePath != null &&
+        imagePath.isNotEmpty &&
+        await File(imagePath).exists()) {
       body = FormData.fromMap({
         ...payload,
         'image': await MultipartFile.fromFile(
@@ -77,7 +87,10 @@ class ReadingsRemoteDataSource {
     int readingId,
     Map<String, dynamic> payload,
   ) async {
-    final response = await _dio.put<dynamic>(ApiEndpoints.reading(readingId), data: payload);
+    final response = await _dio.put<dynamic>(
+      ApiEndpoints.reading(readingId),
+      data: payload,
+    );
     return _asMap(response.data);
   }
 

@@ -1,5 +1,6 @@
 import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/network/paginated_collection.dart';
 import '../../../subscribers/data/models/subscriber_model.dart';
 import '../models/square_model.dart';
 
@@ -8,9 +9,10 @@ class SquaresRemoteDatasource {
   final ApiClient _api;
 
   Future<List<SquareModel>> getSquares({String? search}) async {
-    final data = await _api.get('/squares', query: {
+    final data = await collectPaginatedCollection((page) => _api.get('/squares', query: {
       if (search != null && search.isNotEmpty) 'search': search,
-    });
+      'page': page,
+    }), collectionKeys: const ['squares']);
     return jMapList(data, const ['squares']).map(SquareModel.fromJson).toList();
   }
 

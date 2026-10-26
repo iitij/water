@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/diagnostics/api_log_manager.dart';
 import 'package:water_project/core/diagnostics/models/api_log_entry.dart';
@@ -10,6 +11,28 @@ void main() {
 
     setUp(() {
       manager = ApiLogManager(maxEntries: 5);
+    });
+
+    test('reporting a failed log listener cannot recursively notify it', () {
+      final originalHandler = FlutterError.onError;
+      var reported = 0;
+      var notified = 0;
+      FlutterError.onError = (details) {
+        reported++;
+        // Bound the regression so unfixed code fails without exhausting stack.
+        if (reported < 8) {
+          manager.logAppError('flutter_ui', details.exception);
+        }
+      };
+      addTearDown(() => FlutterError.onError = originalHandler);
+      manager.addListener(() {
+        notified++;
+        throw StateError('log listener failed');
+      });
+      manager.logAppError('invoice', StateError('original UI error'));
+      expect(notified, 1);
+      expect(reported, 1);
+      expect(manager.totalCount, 2);
     });
 
     test('records entries and maintains circular buffer limit', () {
@@ -35,49 +58,55 @@ void main() {
       expect(manager.logs.last.id, equals('id-3'));
     });
 
-    test('calculates correct metrics for errors, slow requests, and average duration', () {
-      manager.addEntry(
-        ApiLogEntry(
-          id: '1',
-          timestamp: DateTime.now(),
-          method: 'GET',
-          url: 'https://api.example.com/test1',
-          endpoint: '/test1',
-          statusCode: 200,
-          durationMs: 200,
-        ),
-      );
-      manager.addEntry(
-        ApiLogEntry(
-          id: '2',
-          timestamp: DateTime.now(),
-          method: 'POST',
-          url: 'https://api.example.com/test2',
-          endpoint: '/test2',
-          statusCode: 500,
-          durationMs: 400,
-          isError: true,
-          errorMessage: 'Server Error',
-        ),
-      );
-      manager.addEntry(
-        ApiLogEntry(
-          id: '3',
-          timestamp: DateTime.now(),
-          method: 'GET',
-          url: 'https://api.example.com/test3',
-          endpoint: '/test3',
-          statusCode: 200,
-          durationMs: 1500,
-          isSlow: true,
-        ),
-      );
+    test(
+      'calculates correct metrics for errors, slow requests, and average duration',
+      () {
+        manager.addEntry(
+          ApiLogEntry(
+            id: '1',
+            timestamp: DateTime.now(),
+            method: 'GET',
+            url: 'https://api.example.com/test1',
+            endpoint: '/test1',
+            statusCode: 200,
+            durationMs: 200,
+          ),
+        );
+        manager.addEntry(
+          ApiLogEntry(
+            id: '2',
+            timestamp: DateTime.now(),
+            method: 'POST',
+            url: 'https://api.example.com/test2',
+            endpoint: '/test2',
+            statusCode: 500,
+            durationMs: 400,
+            isError: true,
+            errorMessage: 'Server Error',
+          ),
+        );
+        manager.addEntry(
+          ApiLogEntry(
+            id: '3',
+            timestamp: DateTime.now(),
+            method: 'GET',
+            url: 'https://api.example.com/test3',
+            endpoint: '/test3',
+            statusCode: 200,
+            durationMs: 1500,
+            isSlow: true,
+          ),
+        );
 
-      expect(manager.totalCount, equals(3));
-      expect(manager.errorCount, equals(1));
-      expect(manager.slowCount, equals(1));
-      expect(manager.avgDurationMs, equals(700)); // (200 + 400 + 1500) / 3 = 700
-    });
+        expect(manager.totalCount, equals(3));
+        expect(manager.errorCount, equals(1));
+        expect(manager.slowCount, equals(1));
+        expect(
+          manager.avgDurationMs,
+          equals(700),
+        ); // (200 + 400 + 1500) / 3 = 700
+      },
+    );
 
     test('filters logs by query and type', () {
       manager.addEntry(
@@ -157,14 +186,19 @@ void main() {
         method: 'POST',
         url: 'https://api.example.com/api/readings',
         endpoint: '/api/readings',
-        requestHeaders: const <String, dynamic>{'Authorization': 'Bearer test-token'},
+        requestHeaders: const <String, dynamic>{
+          'Authorization': 'Bearer test-token',
+        },
         requestBody: const <String, dynamic>{'meter_id': 10, 'value': 250},
         statusCode: 201,
         durationMs: 180,
       );
 
       final curl = entry.toCurl();
-      expect(curl, contains('curl -X POST "https://api.example.com/api/readings"'));
+      expect(
+        curl,
+        contains('curl -X POST "https://api.example.com/api/readings"'),
+      );
       expect(curl, contains('Authorization: Bearer test-token'));
       expect(curl, contains('meter_id'));
 
@@ -222,7 +256,10 @@ void main() {
       });
 
       try {
-        await dio.post<dynamic>('/api/invoices/pay', data: <String, dynamic>{'amount': 100});
+        await dio.post<dynamic>(
+          '/api/invoices/pay',
+          data: <String, dynamic>{'amount': 100},
+        );
       } catch (_) {}
 
       expect(manager.totalCount, equals(1));

@@ -152,3 +152,117 @@ flutter build apk --release --dart-define=API_BASE_URL=https://water.example.com
 - مؤشرات المراقبة الخارجية (Sentry/… ) — الواجهة `ErrorReporter` جاهزة للتبديل.
 - إثبات تشغيل الاختبارات: يلزم تشغيل الأوامر أعلاه وتسجيل النتيجة قبل الانتقال
   إلى S2.
+
+## 6. استكمال تطابق عمليات الويب والموبايل — 2026-10-26
+
+هذا الملحق يصف تعديلات عقد API الإضافية؛ المسارات القديمة وأسماء حقولها باقية.
+تحديث حالة الاختبارات الشاملة والدليل النهائي في `docs/MOBILE_PARITY_AUDIT_AR.md`
+و`docs/v2/agents/backlog.json`؛ لا تُفهم مراجعة المصدر أو `php -l` على أنها
+اختبار على جهاز ميداني.
+
+### سجل التدقيق المركزي
+
+- `GET /api/audit-events` يقبل صلاحية لوحة الويب `audit.view` إضافة إلى
+  `ViewAny:AuditEvent` والاسم القديم `view_any_audit_event` وأدوار المدير القائمة.
+  يبقى السجل للقراءة فقط، ولا يُضاف مسار تعديل أو حذف.
+- الفلاتر: `q` يبحث في اسم الحدث واسم المستخدم؛ `event`، `source`
+  (`mobile/api/web/console/cli`)، `actor_user_id` (والاسم القديم `user_id`)،
+  `entity_type`، `entity_id`، `from_date` و`to_date`، مع `page/per_page`.
+  نطاق التاريخ يستمر على `created_at` حفاظاً على العقد السابق.
+- كل سجل يعيد الحقول السابقة ويضيف `occurred_at` و`ip_address` لعرض نفس معلومات
+  لوحة الويب. كائن `filter_options` في جذر الاستجابة يحتوي
+  `actors:[{id,name}]` و`events:[string]` و`entity_types:[string]` من السجل نفسه؛
+  لذلك لا يحتاج قارئ السجل لصلاحية إدارة المستخدمين كي يفلتر بالأسماء.
+
+### صناديق المحصّلين
+
+- `GET /api/cash-sessions` يحافظ على فلاتر `state/user_id/from_date/to_date`
+  والترقيم، ويضيف `filter_options.collectors:[{id,name}]` مستقلًا عن الفلاتر
+  الحالية. قائمة الأسماء مقيدة بنطاق الصناديق المسموح للمستخدم برؤيتها.
+- قرار `POST /api/cash-sessions/{id}/approve` يبقى
+  `{approve:boolean,notes:string?}`. الرفض يلزم سبباً بعد إزالة المسافات الطرفية
+  بطول 10 إلى 1000 حرف؛ الخطأ 422 في `notes`. ملاحظات الاعتماد اختيارية وبحد
+  1000 حرف.
+- لا يُقبل القرار إلا لصندوق `closed`، مثل زر الويب. تفحص الخدمة الحالة تحت
+  `lockForUpdate` داخل المعاملة: الصندوق المفتوح يظل 422، والصندوق الذي سبق
+  اعتماده/رفضه يرجع 409 ولا يُبدّل قراره بطلب قديم أو مكرر. حساب النقد والفرق
+  وأثر الاعتماد/الرفض المالي لم يتغيرا. راجع A7 تعديل الخدمة مالياً.
+
+### حفظ تصميم الفاتورة وصلاحية رفع الصور
+
+- `GET/POST /api/settings/invoice` أصبح يعيد ويحفظ حقول فاتورة الاشتراك
+  `sub_show_* / sub_lbl_*` و`site_favicon`؛ كانت ظاهرة في التطبيق والويب لكن
+  مرشحات البادئات في API كانت تُسقطها بصمت.
+- `POST /api/settings/upload-logo` يبقى `multipart` بالحقلين `key` و`file`.
+  صاحب `Update:InvoiceSettings` يستطيع رفع `invoice_logo/invoice_watermark/site_favicon`؛
+  صاحب `Update:ReceiptSettings` يستطيع رفع `invoice_logo/invoice_watermark/receipt_logo`.
+  لا تسمح صلاحية صفحة الفاتورة بتعديل أي مفتاح صورة عام آخر؛ صلاحية
+  `Update:Setting` القائمة تبقى لمسار الإدارة العامة.
+- أسماء صلاحيات صفحات النظام المكتوبة بصيغة snake_case تُركب من الفعل والمورد
+  منفصلين (`update_invoice_settings` و`view_any_audit_event`)؛ تُقبل الأسماء ذات
+  الشرطتين السفليتين التي ولدها الكود القديم أيضاً للتوافق.
+
+### حارس الأدوار وصلاحياته
+
+- `GET /api/roles/permissions-matrix` يضيف `guard_names:[string]` من
+  حراس `config('auth.guards')` الذين يملكون مزوّد مستخدمي المشروع، و
+  `guard_permissions:{guard:[permission-name]}` لبناء
+  حقل الحارس ومصفوفة صلاحياته في التطبيق. الإعداد الحالي يملك `web` فقط؛
+  `permission.teams=false` ولذلك لا توجد عملية فريق مخفية مطلوبة في هذه البيئة.
+  حارس Sanctum الرمزي الذي يضاف وقت التشغيل بلا مزوّد مستقل لا يُعرض كحارس
+  صلاحيات إضافي.
+- إنشاء وتعديل الدور يقبلان `guard_name` من الحراس المضبوطين فعلاً فقط، مع
+  فحص تفرد الاسم داخل الحارس وحل الصلاحيات بالاسم أو الرقم داخل الحارس المختار.
+  الصلاحية التابعة لحارس آخر تُرفض 422 وتُرجع المعاملة كاملة.
+- تغيير حارس دور مرتبط بمستخدمين يُرفض 409. إذا كان الدور غير مرتبط لكنه يملك
+  صلاحيات، يلزم إرسال `permissions` صراحة للحارس الجديد؛ لا تُنقل الصلاحيات
+  بين الحراس ولا تُحذف تلقائياً. غياب القائمة في هذه الحالة يرجع 409.
+
+### تحقق A6 المنفذ
+
+مرّت فحوص `php -l` للملفات `ApiController.php` و`AuditEventController.php`
+و`CashSessionController.php` و`SettingController.php` و`RoleController.php`
+و`CashSessionService.php` دون أخطاء صياغة. اختبارات السلوك يتولى A10 تشغيلها
+بقاعدة اختبار معزولة، وتسجل نتائجها في تقرير التطابق والـ backlog.
+
+### ترتيب القوائم وترقيمها
+
+قوائم API أدناه تقبل `sort_by` من الجدول و`sort_direction=asc|desc`.
+إذا أُرسل الحقل وحده فالاتجاه `asc`. لاختيار الترتيب الافتراضي تُحذف المعلمتان؛
+تبقى الترتيبات السابقة كما هي، مع إضافة مفتاح `id` عند الحاجة لمنع تبدّل ترتيب
+الصفوف المتساوية بين الصفحات. عند اختيار ترتيب صريح يكون `id` بالاتجاه نفسه.
+القيم الأخرى تعيد 422، ولا تُستخدم أسماء أعمدة أو تعابير SQL يرسلها العميل.
+يُطبّق الترتيب على الاستعلام المسموح كاملاً قبل `paginate`، وتبقى فلاتر الصلاحيات
+والمجاميع المحاسبية وأشكال الاستجابات القديمة كما هي.
+
+| مسار GET (بعد `/api/`) | قيم `sort_by` المسموحة |
+|---|---|
+| `subscribers` | `id,name,subscription_start_date,balance,status,created_at,square_name,meters_count` |
+| `meters` | `id,unique_code,path_number,tenant_name,status,created_at,subscriber_name,square_name` |
+| `readings` | `id,reading_date,actual_reading_date,previous_reading,current_reading,consumption_units,created_at,meter_code,subscriber_name` |
+| `invoices` و`invoices/unpaid` | `id,bill_number,bill_date,total_amount,amount_paid,status,created_at,beneficiary_name,subscriber_name,total_due` |
+| `payments` | `id,receipt_number,payment_date,amount,created_at,subscriber_name,user_name` |
+| `payments/void-requests` | `id,receipt_number,amount,void_requested_at,subscriber_name` |
+| `subscription-fees` | `id,amount,status,created_at,subscriber_name,meter_code,invoice_number` |
+| `service-requests` | `id,service_date,amount,status,created_at,subscriber_name` |
+| `squares` | `id,name,created_at,subscribers_count` |
+| `tariffs` | `id,name,unit_price,start_date,end_date,created_at,updated_at,deleted_at` |
+| `transactions` | `id,created_at,amount,type,subscriber_name` |
+| `users` | `id,name,email,email_verified_at,created_at,updated_at` |
+| `roles` | `id,name,guard_name,created_at,updated_at,permissions_count` |
+| `cash-sessions` | `id,session_date,expected_amount,counted_amount,variance_amount,closed_at,collector_name` |
+| `audit-events` | `id,event,source,created_at,occurred_at,actor_name` |
+| `settings/items` | `id,key,label,type,created_at,updated_at` |
+
+الأسماء مثل `subscriber_name` و`collector_name` تُحل إلى علاقة معروفة داخل الخادم؛
+الفرز لا يُضيف join يكرر الصفوف. `beneficiary_name` يرتب باسم المشترك كما في
+الويب، و`total_due` بمجموع `total_amount + previous_balance` للعرض دون تعديل
+الأرصدة. `occurred_at` اسم بديل لـ`created_at` في سجل التدقيق.
+يستمر `page` و`per_page` (1 إلى 100، والافتراضي 25؛ unpaid افتراضيه 50).
+`squares` و`transactions` يعيدان القائمة القديمة كاملة إذا لم يرسل `per_page`؛
+عند إرساله يعيدان paginator المعتاد. لا يعتمد العميل على فرز صفحة جزئية ليحاكي
+ترتيب كامل البيانات.
+
+مرّ `php -l` للمتحكمات الخمسة عشر المشتركة و`SettingController` و`git diff --check`.
+اختبارات ترتيب العلاقات والعدادات والمجاميع والحقول المرفوضة وثبات الصفحات
+يكتبها ويشغّلها A10 ضمن اختبار التطابق؛ نتيجة التشغيل تُسجل في تقرير التدقيق.

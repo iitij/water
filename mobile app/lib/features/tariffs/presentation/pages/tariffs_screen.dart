@@ -3,10 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/tariff_model.dart';
 import '../../domain/repositories/tariffs_repository.dart';
@@ -37,6 +39,23 @@ class _TariffsBody extends StatefulWidget {
 
 class _TariffsBodyState extends State<_TariffsBody> {
   final TextEditingController _search = TextEditingController();
+  ListPresentationSettings _presentation = const ListPresentationSettings(
+    sortBy: 'start_date',
+  );
+
+  void _applyPresentation(ListPresentationSettings value) {
+    final previous = _presentation;
+    setState(() => _presentation = value);
+    if (previous.sortBy != value.sortBy ||
+        previous.descending != value.descending ||
+        previous.pageSize != value.pageSize) {
+      context.read<TariffsCubit>().setPresentation(
+        pageSize: value.pageSize,
+        sortBy: value.sortBy,
+        sortDirection: value.descending ? 'desc' : 'asc',
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -53,9 +72,29 @@ class _TariffsBodyState extends State<_TariffsBody> {
         title: const Text('التسعيرات'),
         actions: <Widget>[
           BlocBuilder<TariffsCubit, TariffsState>(
-            builder: (context, state) => state.showsTrashed && state.visible.isNotEmpty
+            builder: (context, state) => IgnorePointer(
+              ignoring: state.isLoading,
+              child: ListPresentationControls(
+                settings: _presentation,
+                sortOptions: const {
+                  'start_date': ListOptionsStrings.startDate,
+                  'end_date': ListOptionsStrings.endDate,
+                  'name': ListOptionsStrings.name,
+                  'unit_price': ListOptionsStrings.unitPrice,
+                  'id': ListOptionsStrings.id,
+                },
+                fields: const {'period': ListOptionsStrings.period},
+                onChanged: _applyPresentation,
+              ),
+            ),
+          ),
+          BlocBuilder<TariffsCubit, TariffsState>(
+            builder: (context, state) =>
+                state.showsTrashed && state.visible.isNotEmpty
                 ? IconButton(
-                    tooltip: state.selectionMode ? 'إنهاء التحديد' : 'تحديد متعدد',
+                    tooltip: state.selectionMode
+                        ? 'إنهاء التحديد'
+                        : 'تحديد متعدد',
                     onPressed: () => cubit.toggleSelectionMode(),
                     icon: Icon(
                       state.selectionMode
@@ -115,8 +154,34 @@ class _TariffsBodyState extends State<_TariffsBody> {
                     onRestore: () => _bulkRestore(cubit),
                     onForceDelete: () => _bulkForceDelete(cubit),
                   ),
-                Expanded(
-                  child: _buildList(context, cubit, state, tariffs),
+                Expanded(child: _buildList(context, cubit, state, tariffs)),
+                SafeArea(
+                  top: false,
+                  child: Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '${ListOptionsStrings.page} ${state.page}${state.lastPage == null ? '' : ' / ${state.lastPage}'}',
+                      ),
+                      if (state.totalCount != null)
+                        Text(
+                          '${ListOptionsStrings.allRecords}: ${state.totalCount}',
+                        ),
+                      TextButton(
+                        onPressed: !state.isLoading && state.hasPreviousPage
+                            ? () => cubit.goToPage(state.page - 1)
+                            : null,
+                        child: const Text(ListOptionsStrings.previous),
+                      ),
+                      TextButton(
+                        onPressed: !state.isLoading && state.hasNextPage
+                            ? () => cubit.goToPage(state.page + 1)
+                            : null,
+                        child: const Text(ListOptionsStrings.next),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             );
@@ -168,6 +233,8 @@ class _TariffsBodyState extends State<_TariffsBody> {
           final tariff = tariffs[index];
           return TariffCard(
             tariff: tariff,
+            dense: _presentation.compact,
+            showPeriod: _presentation.isVisible('period'),
             isActive: state.activeTariff?.id == tariff.id,
             busy: state.busyId == tariff.id,
             selected: state.isSelected(tariff.id),
@@ -179,7 +246,9 @@ class _TariffsBodyState extends State<_TariffsBody> {
                 ? () => _softDelete(cubit, tariff)
                 : null,
             onRestore: tariff.isTrashed ? () => _restore(cubit, tariff) : null,
-            onForceDelete: tariff.isTrashed ? () => _forceDelete(cubit, tariff) : null,
+            onForceDelete: tariff.isTrashed
+                ? () => _forceDelete(cubit, tariff)
+                : null,
           );
         },
       ),
@@ -190,8 +259,12 @@ class _TariffsBodyState extends State<_TariffsBody> {
     final confirmed = await ConfirmDialog.show(
       context,
       title: 'حذف التسعيرة (سلة المحذوفات)',
-      message: 'ستُنقل التسعيرة إلى سلة المحذوفات ويمكن استعادتها لاحقاً. الفواتير السابقة لن تتأثر.',
-      details: <String>[tariff.name, CurrencyFormatter.withLabel(tariff.unitPrice)],
+      message:
+          'ستُنقل التسعيرة إلى سلة المحذوفات ويمكن استعادتها لاحقاً. الفواتير السابقة لن تتأثر.',
+      details: <String>[
+        tariff.name,
+        CurrencyFormatter.withLabel(tariff.unitPrice),
+      ],
       confirmLabel: 'حذف',
       destructive: true,
     );
@@ -200,9 +273,15 @@ class _TariffsBodyState extends State<_TariffsBody> {
     final ok = await cubit.softDelete(tariff.id);
     if (!mounted) return;
     if (ok) {
-      AppFeedback.success(context, 'تم نقل «${tariff.name}» إلى سلة المحذوفات.');
+      AppFeedback.success(
+        context,
+        'تم نقل «${tariff.name}» إلى سلة المحذوفات.',
+      );
     } else {
-      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر حذف التسعيرة.');
+      AppFeedback.error(
+        context,
+        cubit.state.errorMessage ?? 'تعذّر حذف التسعيرة.',
+      );
     }
   }
 
@@ -212,7 +291,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
     if (ok) {
       AppFeedback.success(context, 'تمت استعادة «${tariff.name}».');
     } else {
-      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة.');
+      AppFeedback.error(
+        context,
+        cubit.state.errorMessage ?? 'تعذّرت الاستعادة.',
+      );
     }
   }
 
@@ -232,7 +314,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
     if (restored > 0) {
       AppFeedback.success(context, 'تمت استعادة $restored تسعيرة.');
     } else {
-      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.');
+      AppFeedback.error(
+        context,
+        cubit.state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.',
+      );
     }
   }
 
@@ -253,7 +338,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
     if (deleted > 0) {
       AppFeedback.success(context, 'تم حذف $deleted تسعيرة نهائياً.');
     } else {
-      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف النهائي الجماعي.');
+      AppFeedback.error(
+        context,
+        cubit.state.errorMessage ?? 'تعذّر الحذف النهائي الجماعي.',
+      );
     }
   }
 
@@ -262,7 +350,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
       context,
       title: 'حذف نهائي للتسعيرة',
       message: 'لا يمكن التراجع عن الحذف النهائي. الفواتير السابقة لا تتأثر.',
-      details: <String>[tariff.name, CurrencyFormatter.withLabel(tariff.unitPrice)],
+      details: <String>[
+        tariff.name,
+        CurrencyFormatter.withLabel(tariff.unitPrice),
+      ],
       confirmLabel: 'حذف نهائي',
       destructive: true,
     );
@@ -273,7 +364,10 @@ class _TariffsBodyState extends State<_TariffsBody> {
     if (ok) {
       AppFeedback.success(context, 'تم حذف «${tariff.name}» نهائياً.');
     } else {
-      AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف النهائي.');
+      AppFeedback.error(
+        context,
+        cubit.state.errorMessage ?? 'تعذّر الحذف النهائي.',
+      );
     }
   }
 }
@@ -303,13 +397,19 @@ class _ActivePriceHeader extends StatelessWidget {
               color: Colors.white.withValues(alpha: .08),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
-            child: const Icon(Icons.bolt_rounded, color: AppColors.onPanelSoft, size: 18),
+            child: const Icon(
+              Icons.bolt_rounded,
+              color: AppColors.onPanelSoft,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'السعر النشط المستخدم في الفوترة',
-              style: theme.textTheme.labelSmall?.copyWith(color: AppColors.onPanelMuted),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppColors.onPanelMuted,
+              ),
             ),
           ),
           Text(
@@ -329,7 +429,6 @@ class _ActivePriceHeader extends StatelessWidget {
     );
   }
 }
-
 
 /// شريط العمليات الجماعية: عدّاد + تحديد الكل + استعادة/حذف نهائي.
 ///
@@ -369,7 +468,9 @@ class _BulkBar extends StatelessWidget {
           Expanded(
             child: Text(
               count == 0 ? 'حدّد تسعيرات للعمليات الجماعية' : 'المحدّد: $count',
-              style: theme.textTheme.labelMedium?.copyWith(color: AppColors.inkSoft),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.inkSoft,
+              ),
             ),
           ),
           TextButton(

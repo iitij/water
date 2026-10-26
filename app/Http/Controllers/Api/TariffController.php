@@ -28,8 +28,9 @@ class TariffController extends ApiController
         }
         // الهيكل الجديد: المُصفّح في المستوى الأعلى (data/meta/links) ليقرأه
         // تطبيق الهاتف مباشرة عبر unwrapList، مع إبقاء active_price متاحاً.
-        $paginator = $query->orderByDesc('start_date')->orderByDesc('id')
-            ->paginate($this->perPage($request))->appends($request->query());
+        $query->orderByDesc('start_date')->orderByDesc('id');
+        $this->applySorting($query, $request, self::LIST_SORTS['tariffs']);
+        $paginator = $query->paginate($this->perPage($request))->appends($request->query());
 
         return response()->json(array_merge(
             $paginator->toArray(),

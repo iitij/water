@@ -94,6 +94,7 @@ class InvoiceController extends ApiController
             }
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['invoices']);
         return $query->paginate($this->perPage($request))->through(fn (Invoice $invoice) => $this->decorate($invoice))
             ->appends($request->query());
     }
@@ -112,6 +113,7 @@ class InvoiceController extends ApiController
             return $this->search($request);
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['invoices']);
         return $query->paginate($this->perPage($request, 50))->through(fn (Invoice $invoice) => $this->decorate($invoice))
             ->appends($request->query());
     }

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_feedback.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
+import '../../domain/repositories/sorted_void_requests_repository.dart';
 
 /// ورقة «طلبات الإلغاء المعلّقة» للمشرف (خطة 2.0 — الفصل 5.3).
 ///
@@ -17,20 +22,22 @@ class VoidRequestsSheet extends StatefulWidget {
   final PaymentsRepository repository;
 
   /// يفتح الورقة ويعيد عدد الطلبات المتبقية بعد الإغلاق (لتحديث الشارة).
-  static Future<int?> show(BuildContext context, PaymentsRepository repository) =>
-      showModalBottomSheet<int>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => FractionallySizedBox(
-          heightFactor: .92,
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-            child: VoidRequestsSheet(repository: repository),
-          ),
-        ),
-      );
+  static Future<int?> show(
+    BuildContext context,
+    PaymentsRepository repository,
+  ) => showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => FractionallySizedBox(
+      heightFactor: .92,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        child: VoidRequestsSheet(repository: repository),
+      ),
+    ),
+  );
 
   @override
   State<VoidRequestsSheet> createState() => _VoidRequestsSheetState();
@@ -40,6 +47,23 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
   List<PaymentVoidRequest>? _requests;
   String? _error;
   final Set<int> _busy = <int>{};
+  int _page = 1;
+  bool _hasNext = false;
+  bool _loading = false;
+  ListPresentationSettings _presentation = const ListPresentationSettings(
+    sortBy: 'void_requested_at',
+  );
+
+  void _applyPresentation(ListPresentationSettings settings) {
+    if (_loading || _busy.isNotEmpty) return;
+    final previous = _presentation;
+    setState(() => _presentation = settings);
+    if (previous.sortBy != settings.sortBy ||
+        previous.descending != settings.descending ||
+        previous.pageSize != settings.pageSize) {
+      _load();
+    }
+  }
 
   @override
   void initState() {
@@ -47,27 +71,56 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({int page = 1}) async {
+    if (_loading) return;
     final hadError = _error != null;
     setState(() {
       _error = null;
+      _loading = true;
       // بعد خطأ سابق نُظهر مؤشر التحميل من جديد.
       if (hadError) _requests = null;
     });
     try {
-      final requests = await widget.repository.voidRequests(perPage: 100);
+      final repository = widget.repository;
+      final requests = repository is SortedVoidRequestsRepository
+          ? await (repository as SortedVoidRequestsRepository)
+                .sortedVoidRequests(
+                  page: page,
+                  perPage: _presentation.pageSize,
+                  sortBy: _presentation.sortBy,
+                  sortDirection: _presentation.descending ? 'desc' : 'asc',
+                )
+          : await repository.voidRequests(
+              page: page,
+              perPage: _presentation.pageSize,
+            );
       if (!mounted) return;
-      setState(() => _requests = requests);
+      // The repository returns rows only, without paginator metadata. A full
+      // page allows probing the next page; an empty probe retains this page.
+      setState(() {
+        if (requests.isEmpty && page > _page && _requests?.isNotEmpty == true) {
+          _hasNext = false;
+        } else {
+          _requests = requests;
+          _page = page;
+          _hasNext = requests.length == _presentation.pageSize;
+        }
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _error = _humanize(error);
-        _requests = <PaymentVoidRequest>[];
       });
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _decide(PaymentVoidRequest request, {required bool approve}) async {
+  Future<void> _decide(
+    PaymentVoidRequest request, {
+    required bool approve,
+  }) async {
+    if (_busy.contains(request.id) || _loading) return;
     final notesController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -108,6 +161,8 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
         ],
       ),
     );
+    final notes = notesController.text;
+    notesController.dispose();
     if (confirmed != true || !mounted) return;
 
     setState(() => _busy.add(request.id));
@@ -115,16 +170,21 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
       await widget.repository.decideVoidRequest(
         request.id,
         approve: approve,
-        notes: notesController.text,
+        notes: notes,
       );
       if (!mounted) return;
       AppFeedback.success(
         context,
-        approve ? 'تم اعتماد الإلغاء وإعادة احتساب الأرصدة.' : 'تم رفض الطلب وبقي السند صالحاً.',
+        approve
+            ? 'تم اعتماد الإلغاء وإعادة احتساب الأرصدة.'
+            : 'تم رفض الطلب وبقي السند صالحاً.',
       );
       await _load();
       if (!mounted) return;
-      Navigator.pop(context, (_requests ?? const <PaymentVoidRequest>[]).length);
+      Navigator.pop(
+        context,
+        (_requests ?? const <PaymentVoidRequest>[]).length,
+      );
     } catch (error) {
       if (!mounted) return;
       AppFeedback.error(context, _humanize(error));
@@ -141,21 +201,71 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
       appBar: AppBar(
         title: const Text('طلبات الإلغاء المعلّقة'),
         actions: <Widget>[
+          if (widget.repository is SortedVoidRequestsRepository)
+            IgnorePointer(
+              ignoring: _loading || _busy.isNotEmpty,
+              child: ListPresentationControls(
+                settings: _presentation,
+                sortOptions: const {
+                  'void_requested_at': ListOptionsStrings.date,
+                  'receipt_number': ListOptionsStrings.receiptNumber,
+                  'amount': ListOptionsStrings.amount,
+                  'subscriber_name': ListOptionsStrings.subscriber,
+                  'id': ListOptionsStrings.id,
+                },
+                fields: const {
+                  'date': ListOptionsStrings.date,
+                  'collector': ListOptionsStrings.collector,
+                },
+                onChanged: _applyPresentation,
+              ),
+            ),
           IconButton(
             tooltip: 'تحديث',
-            onPressed: _load,
+            onPressed: _loading || _busy.isNotEmpty
+                ? null
+                : () => _load(page: _page),
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: _buildBody(requests),
+      body: Column(
+        children: [
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null && requests?.isNotEmpty == true)
+            Padding(padding: const EdgeInsets.all(12), child: Text(_error!)),
+          Expanded(child: _buildBody(requests)),
+          if (requests != null && requests.isNotEmpty)
+            SafeArea(
+              top: false,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                children: [
+                  TextButton(
+                    onPressed: _loading || _busy.isNotEmpty || _page <= 1
+                        ? null
+                        : () => _load(page: _page - 1),
+                    child: Text(AppStrings.of(context).cashReviewPrevious),
+                  ),
+                  Text('$_page'),
+                  TextButton(
+                    onPressed: _loading || _busy.isNotEmpty || !_hasNext
+                        ? null
+                        : () => _load(page: _page + 1),
+                    child: Text(AppStrings.of(context).cashReviewNext),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  String _humanize(Object error) => error
-      .toString()
-      .replaceFirst(RegExp(r'^[A-Za-z]+Failure:\s*'), '')
-      .trim();
+  String _humanize(Object error) =>
+      error is AppFailure ? error.message : AppStrings.of(context).unknownError;
 
   Widget _buildBody(List<PaymentVoidRequest>? requests) {
     if (requests == null && _error == null) {
@@ -182,7 +292,7 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(page: _page),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: requests.length,
@@ -193,7 +303,7 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
           return Card(
             margin: EdgeInsets.zero,
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(_presentation.compact ? 8 : 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -215,7 +325,8 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
                   ),
                   if (request.subscriber != null)
                     Text('المشترك: ${request.subscriber}'),
-                  if (request.reason != null && request.reason!.trim().isNotEmpty)
+                  if (request.reason != null &&
+                      request.reason!.trim().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
@@ -226,8 +337,11 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
                   const SizedBox(height: 4),
                   Text(
                     <String>[
-                      if (request.requestedBy != null) 'طَلبها: ${request.requestedBy}',
-                      if (request.requestedAt != null)
+                      if (_presentation.isVisible('collector') &&
+                          request.requestedBy != null)
+                        'طَلبها: ${request.requestedBy}',
+                      if (_presentation.isVisible('date') &&
+                          request.requestedAt != null)
                         'في ${request.requestedAt!.toIso8601String().substring(0, 16).replaceAll("T", " ")}',
                     ].join(' • '),
                     style: Theme.of(context).textTheme.bodySmall,
@@ -237,7 +351,9 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
                     children: <Widget>[
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: busy ? null : () => _decide(request, approve: false),
+                          onPressed: busy || _loading
+                              ? null
+                              : () => _decide(request, approve: false),
                           icon: const Icon(Icons.close),
                           label: const Text('رفض'),
                         ),
@@ -248,7 +364,9 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.danger,
                           ),
-                          onPressed: busy ? null : () => _decide(request, approve: true),
+                          onPressed: busy || _loading
+                              ? null
+                              : () => _decide(request, approve: true),
                           icon: const Icon(Icons.check),
                           label: const Text('اعتماد الإلغاء'),
                         ),

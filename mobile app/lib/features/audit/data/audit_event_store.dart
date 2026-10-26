@@ -17,12 +17,22 @@ abstract interface class AuditEventStore {
 /// تنفيذ الإنتاج: يحتفظ بآخر [maxEvents] حدثاً فقط لمنع تضخّم التخزين على
 /// جهاز ميداني قد يبقى بلا شبكة أسبوعاً.
 class SharedPreferencesAuditStore implements AuditEventStore {
-  SharedPreferencesAuditStore({SharedPreferences? prefs, this.maxEvents = 300})
-      : _prefs = prefs;
+  SharedPreferencesAuditStore({
+    SharedPreferences? prefs,
+    this.maxEvents = 300,
+    this.scopeKey,
+  }) : _prefs = prefs;
 
   static const String storageKey = 'audit.pending.events';
 
   final int maxEvents;
+
+  /// Null preserves the legacy key for explicit inspection; production always
+  /// uses an authenticated server/user scope and never adopts legacy events.
+  final String? scopeKey;
+  String get _key => scopeKey == null
+      ? storageKey
+      : '$storageKey.v2.${base64UrlEncode(utf8.encode(scopeKey!))}';
   SharedPreferences? _prefs;
 
   Future<SharedPreferences> get _store async =>
@@ -30,14 +40,16 @@ class SharedPreferencesAuditStore implements AuditEventStore {
 
   @override
   Future<List<LocalAuditEvent>> pending() async {
-    final raw = (await _store).getString(storageKey);
+    final raw = (await _store).getString(_key);
     if (raw == null || raw.isEmpty) return <LocalAuditEvent>[];
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return <LocalAuditEvent>[];
       return decoded
           .whereType<Map<Object?, Object?>>()
-          .map((row) => LocalAuditEvent.fromJson(Map<String, dynamic>.from(row)))
+          .map(
+            (row) => LocalAuditEvent.fromJson(Map<String, dynamic>.from(row)),
+          )
           .where((event) => event.event.isNotEmpty)
           .toList(growable: true);
     } on FormatException {
@@ -52,8 +64,10 @@ class SharedPreferencesAuditStore implements AuditEventStore {
         ? events
         : events.sublist(events.length - maxEvents);
     await (await _store).setString(
-      storageKey,
-      jsonEncode(bounded.map((event) => event.toJson()).toList(growable: false)),
+      _key,
+      jsonEncode(
+        bounded.map((event) => event.toJson()).toList(growable: false),
+      ),
     );
   }
 }
@@ -61,7 +75,9 @@ class SharedPreferencesAuditStore implements AuditEventStore {
 /// تنفيذ في الذاكرة للاختبارات وحدها.
 class InMemoryAuditStore implements AuditEventStore {
   InMemoryAuditStore([List<LocalAuditEvent>? initial])
-      : _events = List<LocalAuditEvent>.from(initial ?? const <LocalAuditEvent>[]);
+    : _events = List<LocalAuditEvent>.from(
+        initial ?? const <LocalAuditEvent>[],
+      );
 
   List<LocalAuditEvent> _events;
   int saveCount = 0;

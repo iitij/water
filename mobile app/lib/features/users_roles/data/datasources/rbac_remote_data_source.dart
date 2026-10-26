@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../../../../core/network/paginated_collection.dart';
 
 import '../../../admin_shared/data/admin_api_client.dart';
 import '../../../admin_shared/data/admin_api_endpoints.dart';
@@ -12,17 +13,18 @@ class RbacRemoteDataSource {
   final AdminApiClient _api;
 
   Future<List<SystemUserModel>> getUsers({String? role}) async {
-    final response = await _api.get(
+    final response = await collectPaginatedCollection((page) => _api.get(
       AdminApiEndpoints.users,
-      query: {if (role != null && role.isNotEmpty) 'role': role},
-    );
+      query: {if (role != null && role.isNotEmpty) 'role': role, 'page': page},
+    ), collectionKeys: const ['users']);
     return adminList(response, const ['users'])
         .map(SystemUserModel.fromJson)
         .toList(growable: false);
   }
 
   Future<List<RoleModel>> getRoles() async {
-    final response = await _api.get(AdminApiEndpoints.roles);
+    final response = await collectPaginatedCollection((page) =>
+      _api.get(AdminApiEndpoints.roles, query: {'page': page}), collectionKeys: const ['roles']);
     return adminList(response, const ['roles'])
         .map(RoleModel.fromJson)
         .toList(growable: false);

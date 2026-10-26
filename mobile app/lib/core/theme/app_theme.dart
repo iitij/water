@@ -19,31 +19,44 @@ abstract final class AppTheme {
   static ThemeData get light => _build(Brightness.light);
   static ThemeData get dark => _build(Brightness.dark);
 
-  static bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
 
   static ColorScheme _scheme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
     return ColorScheme(
       brightness: brightness,
       primary: dark ? AppColors.darkAccent : AppColors.accent,
-      onPrimary: dark ? const Color(0xFF06201C) : AppColors.onAccent,
+      onPrimary: dark ? const Color(0xFF092943) : AppColors.onAccent,
       primaryContainer: dark ? AppColors.darkAccentSoft : AppColors.accentSoft,
       onPrimaryContainer: dark ? AppColors.darkAccent : AppColors.accentStrong,
       secondary: dark ? AppColors.darkAccent : AppColors.accent,
-      onSecondary: dark ? const Color(0xFF06201C) : AppColors.onAccent,
-      secondaryContainer: dark ? AppColors.darkAccentSoft : AppColors.accentSoft,
-      onSecondaryContainer: dark ? AppColors.darkAccent : AppColors.accentStrong,
+      onSecondary: dark ? const Color(0xFF092943) : AppColors.onAccent,
+      secondaryContainer: dark
+          ? AppColors.darkAccentSoft
+          : AppColors.accentSoft,
+      onSecondaryContainer: dark
+          ? AppColors.darkAccent
+          : AppColors.accentStrong,
       tertiary: dark ? const Color(0xFFE0B052) : AppColors.warning,
       onTertiary: dark ? const Color(0xFF2B1C00) : Colors.white,
-      tertiaryContainer: dark ? const Color(0xFF3A2A08) : const Color(0xFFFBF0DC),
-      onTertiaryContainer: dark ? const Color(0xFFF4D9A3) : const Color(0xFF6B3F00),
+      tertiaryContainer: dark
+          ? const Color(0xFF3A2A08)
+          : const Color(0xFFFBF0DC),
+      onTertiaryContainer: dark
+          ? const Color(0xFFF4D9A3)
+          : const Color(0xFF6B3F00),
       error: dark ? const Color(0xFFF08A95) : AppColors.danger,
       onError: dark ? const Color(0xFF3B0A10) : Colors.white,
       errorContainer: dark ? const Color(0xFF43151B) : const Color(0xFFFBEAEC),
-      onErrorContainer: dark ? const Color(0xFFF8C6CC) : const Color(0xFF7D1A25),
+      onErrorContainer: dark
+          ? const Color(0xFFF8C6CC)
+          : const Color(0xFF7D1A25),
       surface: dark ? AppColors.darkSurface : AppColors.surface,
       onSurface: dark ? AppColors.darkInk : AppColors.ink,
-      surfaceContainerHighest: dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt,
+      surfaceContainerHighest: dark
+          ? AppColors.darkSurfaceAlt
+          : AppColors.surfaceAlt,
       onSurfaceVariant: dark ? AppColors.darkMuted : AppColors.muted,
       outline: dark ? AppColors.darkBorderStrong : AppColors.borderStrong,
       outlineVariant: dark ? AppColors.darkBorder : AppColors.border,
@@ -62,7 +75,8 @@ abstract final class AppTheme {
     final muted = scheme.onSurfaceVariant;
     final fieldFill = dark ? AppColors.darkSurfaceAlt : AppColors.surface;
 
-    OutlineInputBorder border(Color color, {double width = 1}) => OutlineInputBorder(
+    OutlineInputBorder border(Color color, {double width = 1}) =>
+        OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: color, width: width),
         );
@@ -91,10 +105,14 @@ abstract final class AppTheme {
         contentPadding: const EdgeInsetsDirectional.fromSTEB(14, 15, 14, 15),
         hintStyle: TextStyle(
           fontFamily: AppTypography.fontFamily,
-          color: muted.withValues(alpha: .85),
+          color: muted,
           fontSize: 13.5,
         ),
-        labelStyle: TextStyle(fontFamily: AppTypography.fontFamily, color: muted, fontSize: 13.5),
+        labelStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          color: muted,
+          fontSize: 13.5,
+        ),
         floatingLabelStyle: TextStyle(
           fontFamily: AppTypography.fontFamily,
           color: scheme.primary,
@@ -109,7 +127,11 @@ abstract final class AppTheme {
         focusedBorder: border(scheme.primary, width: 1.4),
         errorBorder: border(scheme.error),
         focusedErrorBorder: border(scheme.error, width: 1.4),
-        errorStyle: TextStyle(fontFamily: AppTypography.fontFamily, color: scheme.error, fontSize: 11.5),
+        errorStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          color: scheme.error,
+          fontSize: 11.5,
+        ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
@@ -118,16 +140,16 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: AppTypography.textTheme(brightness).titleLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
-        ),
+        titleTextStyle: AppTypography.textTheme(brightness).titleLarge
+            ?.copyWith(fontWeight: FontWeight.w600, color: scheme.onSurface),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 13.5,
@@ -142,7 +164,9 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           foregroundColor: scheme.onSurface,
           side: BorderSide(color: scheme.outlineVariant),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 13.5,
@@ -154,7 +178,9 @@ abstract final class AppTheme {
         style: TextButton.styleFrom(
           foregroundColor: scheme.primary,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           textStyle: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 12.5,
@@ -165,7 +191,9 @@ abstract final class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStatePropertyAll<Color>(scheme.onSurface),
-          overlayColor: WidgetStatePropertyAll<Color>(scheme.primary.withValues(alpha: .07)),
+          overlayColor: WidgetStatePropertyAll<Color>(
+            scheme.primary.withValues(alpha: .07),
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -181,7 +209,11 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
       ),
-      dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 1, space: 1),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant,
+        thickness: 1,
+        space: 1,
+      ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: scheme.primary,
         linearTrackColor: scheme.primary.withValues(alpha: .1),
@@ -220,9 +252,9 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(18),
           side: BorderSide(color: scheme.outlineVariant),
         ),
-        titleTextStyle: AppTypography.textTheme(brightness).titleLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
+        titleTextStyle: AppTypography.textTheme(
+          brightness,
+        ).titleLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
@@ -255,8 +287,12 @@ abstract final class AppTheme {
           (states) => TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 11,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
-            color: states.contains(WidgetState.selected) ? scheme.primary : muted,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? scheme.primary
+                : muted,
           ),
         ),
       ),
@@ -341,14 +377,11 @@ class AppThemeController extends ChangeNotifier {
   Future<void> _persist() async {
     try {
       final preferences = await SharedPreferences.getInstance();
-      await preferences.setString(
-        preferenceKey,
-        switch (_mode) {
-          ThemeMode.light => 'light',
-          ThemeMode.dark => 'dark',
-          ThemeMode.system => 'system',
-        },
-      );
+      await preferences.setString(preferenceKey, switch (_mode) {
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+        ThemeMode.system => 'system',
+      });
     } catch (_) {
       // Ignore storage failures.
     }

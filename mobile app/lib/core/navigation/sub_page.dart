@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../l10n/experience_strings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../ui/app_controls.dart';
@@ -26,56 +27,77 @@ class SubPageScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final stackedActions =
+        MediaQuery.sizeOf(context).width < 430 && actions.length > 2;
     return Scaffold(
       body: Column(
         children: <Widget>[
           Container(
-            color: theme.scaffoldBackgroundColor,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+              ),
+            ),
             child: SafeArea(
               bottom: false,
               child: Padding(
                 padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 16, 10),
-                child: Row(
-                  children: <Widget>[
-                    AppIconButton(
-                      icon: Icons.arrow_forward_rounded,
-                      tooltip: 'رجوع',
-                      size: 38,
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/home');
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: <Widget>[
+                        AppIconButton(
+                          icon: Icons.arrow_forward_rounded,
+                          tooltip: ExperienceStrings.back,
+                          size: 48,
+                          onPressed: () {
+                            if (context.canPop()) {
+                              context.pop();
+                            } else {
+                              context.go('/home');
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (subtitle != null) ...<Widget>[
+                                const SizedBox(height: 1),
+                                Text(
+                                  subtitle!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                              ],
+                            ],
                           ),
-                          if (subtitle != null) ...<Widget>[
-                            const SizedBox(height: 1),
-                            Text(
-                              subtitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelSmall,
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                        if (!stackedActions) ...actions,
+                      ],
                     ),
-                    ...actions,
+                    if (stackedActions) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: actions,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -109,7 +131,9 @@ class HeroMetaChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: Colors.white.withValues(alpha: onDark ? .18 : .16, ), ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: onDark ? .18 : .16),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -151,7 +175,10 @@ class HeroActions extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               primary,
-              if (secondary != null) ...<Widget>[const SizedBox(height: 9), secondary!],
+              if (secondary != null) ...<Widget>[
+                const SizedBox(height: 9),
+                secondary!,
+              ],
             ],
           );
         }
@@ -169,7 +196,11 @@ class HeroActions extends StatelessWidget {
 
 /// Label used above hero titles.
 class HeroEyebrow extends StatelessWidget {
-  const HeroEyebrow({super.key, required this.label, this.color = AppColors.secondary});
+  const HeroEyebrow({
+    super.key,
+    required this.label,
+    this.color = AppColors.secondary,
+  });
 
   final String label;
   final Color color;
@@ -216,7 +247,10 @@ class HeroCopy extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (eyebrow != null) ...<Widget>[HeroEyebrow(label: eyebrow!), const SizedBox(height: 8)],
+        if (eyebrow != null) ...<Widget>[
+          HeroEyebrow(label: eyebrow!),
+          const SizedBox(height: 8),
+        ],
         Text(
           title,
           style: theme.textTheme.headlineMedium?.copyWith(
@@ -284,9 +318,8 @@ class AppLoader extends StatelessWidget {
 
 /// Re-exported palette shim so pages can use brand accents without a second
 /// theme import.
-Color brandAccent(BuildContext context) => AppTheme.isDark(context)
-    ? AppColors.accentOnPanel
-    : AppColors.primary;
+Color brandAccent(BuildContext context) =>
+    AppTheme.isDark(context) ? AppColors.accentOnPanel : AppColors.primary;
 
 /// Solid accent button used inside the ink summary panel.
 class HeroButton extends StatelessWidget {
@@ -382,7 +415,9 @@ class HeroGhostButton extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,
-              border: Border.all(color: AppColors.onPanel.withValues(alpha: .18)),
+              border: Border.all(
+                color: AppColors.onPanel.withValues(alpha: .18),
+              ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(

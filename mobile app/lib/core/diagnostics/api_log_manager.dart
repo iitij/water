@@ -23,6 +23,21 @@ class ApiLogManager extends ChangeNotifier {
       StreamController<ApiLogEntry>.broadcast();
 
   bool _showFloatingPill = false;
+  bool _notifying = false;
+
+  /// A listener failure is reported through FlutterError, whose app handler
+  /// writes back to this manager. Keep that entry without notifying the failing
+  /// listener recursively and exhausting the UI isolate's stack.
+  @override
+  void notifyListeners() {
+    if (_notifying) return;
+    _notifying = true;
+    try {
+      super.notifyListeners();
+    } finally {
+      _notifying = false;
+    }
+  }
 
   /// هل يظهر الزر العائم لسجلات الـ API فوق الشاشات للمتابعة اللحظية؟
   /// معطّل افتراضياً — أداة تشخيص للمطوّر تُفعَّل من شاشة التشخيص فقط،

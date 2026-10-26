@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/field_experience_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
 import '../../../readings/domain/readings_repository.dart';
@@ -156,169 +159,246 @@ class _MetersListView extends StatelessWidget {
             }
           },
           builder: (context, state) {
-            return RefreshIndicator(
-              onRefresh: cubit.load,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        _filters(context, state, cubit),
-                        Padding(
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                            16,
-                            8,
-                            16,
-                            8,
-                          ),
-                          child: AppStatStrip(
-                            items: [
-                              AppStatItem(
-                                label: 'إجمالي النتائج',
-                                value: '${state.meters.length}',
-                                icon: Icons.speed_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              AppStatItem(
-                                label: 'نشطة',
-                                value:
-                                    '${state.meters.where((m) => m.status.toLowerCase() == 'active').length}',
-                                icon: Icons.check_circle_outline_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              AppStatItem(
-                                label: 'غير نشطة',
-                                value:
-                                    '${state.meters.where((m) => m.status.toLowerCase() != 'active').length}',
-                                icon: Icons.pause_circle_outline_rounded,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (state.isSelecting)
+            final defaultPositions = {
+              for (var index = 0; index < state.meters.length; index++)
+                state.meters[index]: index,
+            };
+            return ListPresentation<Meter>(
+              items: state.meters,
+              initialSettings: const ListPresentationSettings(
+                sortBy: 'default',
+                descending: false,
+                hiddenFields: {'created_at'},
+              ),
+              sortValues: {
+                'default': (
+                  label: ListOptionsStrings.reset,
+                  value: (meter) => defaultPositions[meter],
+                ),
+                'id': (
+                  label: ListOptionsStrings.id,
+                  value: (meter) => meter.id,
+                ),
+                'unique_code': (
+                  label: FieldExperienceStrings.meterCode,
+                  value: (meter) => meter.uniqueCode.toLowerCase(),
+                ),
+                'path_number': (
+                  label: FieldExperienceStrings.path,
+                  value: (meter) => meter.pathNumber,
+                ),
+                'subscriber_name': (
+                  label: ListOptionsStrings.subscriber,
+                  value: (meter) => meter.subscriberName,
+                ),
+                'square_name': (
+                  label: ListOptionsStrings.square,
+                  value: (meter) => meter.squareName,
+                ),
+                'tenant_name': (
+                  label: FieldExperienceStrings.tenant,
+                  value: (meter) => meter.tenantName,
+                ),
+                'status': (
+                  label: ListOptionsStrings.status,
+                  value: (meter) => meter.status,
+                ),
+                'balance': (
+                  label: ListOptionsStrings.balance,
+                  value: (meter) => meter.balance,
+                ),
+                'last_reading': (
+                  label: FieldExperienceStrings.lastReading,
+                  value: (meter) => meter.lastReading,
+                ),
+                'created_at': (
+                  label: ListOptionsStrings.createdAt,
+                  value: (meter) => meter.createdAt,
+                ),
+              },
+              fields: const {
+                'subscriber': ListOptionsStrings.subscriber,
+                'code': FieldExperienceStrings.meterCode,
+                'square': ListOptionsStrings.square,
+                'path': FieldExperienceStrings.path,
+                'tenant': FieldExperienceStrings.tenant,
+                'status': ListOptionsStrings.status,
+                'last_reading': FieldExperienceStrings.lastReading,
+                'balance': ListOptionsStrings.balance,
+                'created_at': ListOptionsStrings.createdAt,
+              },
+              builder: (context, visible, settings) => RefreshIndicator(
+                onRefresh: cubit.load,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
                     SliverToBoxAdapter(
-                      child: MaterialBanner(
-                        content: Text('محدد ${state.selectedIds.length} عداد'),
-                        actions: [
-                          TextButton(
-                            onPressed: state.isMutating
-                                ? null
-                                : cubit.selectAllVisible,
-                            child: const Text('تحديد كل الظاهر'),
-                          ),
-                          TextButton(
-                            onPressed: state.isMutating
-                                ? null
-                                : cubit.clearSelection,
-                            child: const Text('إلغاء'),
-                          ),
-                          FilledButton.tonalIcon(
-                            onPressed: state.isMutating
-                                ? null
-                                : () => _confirmBulkDelete(
-                                    context,
-                                    cubit,
-                                    state.selectedIds.length,
-                                  ),
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.redAccent,
+                      child: Column(
+                        children: [
+                          _filters(context, state, cubit),
+                          Padding(
+                            padding: const EdgeInsetsDirectional.fromSTEB(
+                              16,
+                              8,
+                              16,
+                              8,
                             ),
-                            label: const Text('حذف المحدد'),
+                            child: AppStatStrip(
+                              items: [
+                                AppStatItem(
+                                  label: 'إجمالي النتائج',
+                                  value: '${state.meters.length}',
+                                  icon: Icons.speed_rounded,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                AppStatItem(
+                                  label: 'نشطة',
+                                  value:
+                                      '${state.meters.where((m) => m.status.toLowerCase() == 'active').length}',
+                                  icon: Icons.check_circle_outline_rounded,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                AppStatItem(
+                                  label: 'غير نشطة',
+                                  value:
+                                      '${state.meters.where((m) => m.status.toLowerCase() != 'active').length}',
+                                  icon: Icons.pause_circle_outline_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  if (state.status == MetersLoadStatus.loading &&
-                      state.meters.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (state.status == MetersLoadStatus.failure &&
-                      state.meters.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: EmptyStateWidget(
-                        icon: Icons.wifi_off_outlined,
-                        title: 'تعذر تحميل العدادات',
-                        message:
-                            state.errorMessage ??
-                            'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
-                        action: TextButton.icon(
-                          onPressed: cubit.load,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('إعادة المحاولة'),
+                    if (state.isSelecting)
+                      SliverToBoxAdapter(
+                        child: MaterialBanner(
+                          content: Text(
+                            'محدد ${state.selectedIds.length} عداد',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: state.isMutating
+                                  ? null
+                                  : cubit.selectAllVisible,
+                              child: const Text('تحديد كل الظاهر'),
+                            ),
+                            TextButton(
+                              onPressed: state.isMutating
+                                  ? null
+                                  : cubit.clearSelection,
+                              child: const Text('إلغاء'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: state.isMutating
+                                  ? null
+                                  : () => _confirmBulkDelete(
+                                      context,
+                                      cubit,
+                                      state.selectedIds.length,
+                                    ),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                              ),
+                              label: const Text('حذف المحدد'),
+                            ),
+                          ],
                         ),
                       ),
-                    )
-                  else if (state.meters.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: EmptyStateWidget(
-                        icon: Icons.filter_alt_off_rounded,
-                        title: 'لا توجد عدادات مطابقة',
-                        message:
-                            'غيّر البحث أو أزل الفلاتر، أو أضف عداداً جديداً.',
-                        action: TextButton.icon(
-                          onPressed: () {
-                            cubit.setQuery('');
-                            cubit.setSquareFilter(null);
-                            cubit.setStatusFilter(null);
-                          },
-                          icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                          label: const Text('مسح الفلاتر'),
+                    if (state.status == MetersLoadStatus.loading &&
+                        state.meters.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (state.status == MetersLoadStatus.failure &&
+                        state.meters.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateWidget(
+                          icon: Icons.wifi_off_outlined,
+                          title: 'تعذر تحميل العدادات',
+                          message:
+                              state.errorMessage ??
+                              'تحقق من اتصال الإنترنت ثم أعد المحاولة.',
+                          action: TextButton.icon(
+                            onPressed: cubit.load,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('إعادة المحاولة'),
+                          ),
                         ),
-                      ),
-                    )
-                  else
-                    SliverLayoutBuilder(
-                      builder: (context, constraints) {
-                        final width = constraints.crossAxisExtent;
-                        final columns = width >= 1000
-                            ? 3
-                            : (width >= 650 ? 2 : 1);
-                        if (columns == 1) {
+                      )
+                    else if (state.meters.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateWidget(
+                          icon: Icons.filter_alt_off_rounded,
+                          title: 'لا توجد عدادات مطابقة',
+                          message:
+                              'غيّر البحث أو أزل الفلاتر، أو أضف عداداً جديداً.',
+                          action: TextButton.icon(
+                            onPressed: () {
+                              cubit.setQuery('');
+                              cubit.setSquareFilter(null);
+                              cubit.setStatusFilter(null);
+                            },
+                            icon: const Icon(
+                              Icons.restart_alt_rounded,
+                              size: 18,
+                            ),
+                            label: const Text('مسح الفلاتر'),
+                          ),
+                        ),
+                      )
+                    else
+                      SliverLayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.crossAxisExtent;
+                          final columns = width >= 1000
+                              ? 3
+                              : (width >= 650 ? 2 : 1);
+                          if (columns == 1) {
+                            return SliverList.builder(
+                              itemCount: visible.length,
+                              itemBuilder: (context, index) => _meterCard(
+                                context,
+                                state,
+                                cubit,
+                                visible[index],
+                                settings,
+                              ),
+                            );
+                          }
                           return SliverList.builder(
-                            itemCount: state.meters.length,
-                            itemBuilder: (context, index) => _meterCard(
-                              context,
-                              state,
-                              cubit,
-                              state.meters[index],
+                            itemCount: (visible.length / columns).ceil(),
+                            itemBuilder: (context, row) => Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (var column = 0; column < columns; column++)
+                                  Expanded(
+                                    child:
+                                        row * columns + column < visible.length
+                                        ? _meterCard(
+                                            context,
+                                            state,
+                                            cubit,
+                                            visible[row * columns + column],
+                                            settings,
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
+                              ],
                             ),
                           );
-                        }
-                        return SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 92),
-                          sliver: SliverGrid.builder(
-                            itemCount: state.meters.length,
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: columns,
-                                  crossAxisSpacing: 4,
-                                  mainAxisSpacing: 4,
-                                  mainAxisExtent: 245,
-                                ),
-                            itemBuilder: (context, index) => _meterCard(
-                              context,
-                              state,
-                              cubit,
-                              state.meters[index],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 88)),
-                ],
+                        },
+                      ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 88)),
+                  ],
+                ),
               ),
             );
           },
@@ -407,9 +487,11 @@ class _MetersListView extends StatelessWidget {
     MetersState state,
     MetersCubit cubit,
     Meter meter,
+    ListPresentationSettings settings,
   ) {
     return MeterCardWidget(
       meter: meter,
+      presentation: settings,
       selected: state.selectedIds.contains(meter.id),
       selectionMode: state.isSelecting,
       onSelectChanged: (_) => cubit.toggleSelection(meter.id),

@@ -76,7 +76,8 @@ class RoleModel extends Role {
 }
 
 class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
-  const ShieldPermissionCatalogModel({required super.groups});
+  const ShieldPermissionCatalogModel({required super.groups,
+    super.guardNames, super.guardPermissions});
 
   factory ShieldPermissionCatalogModel.fromJson(dynamic value) {
     final root = adminDataMap(value);
@@ -121,9 +122,21 @@ class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
         }
       }
     }
-    return groups.isEmpty
-        ? ShieldPermissionCatalogModel(groups: standardShieldPermissionCatalog().groups)
-        : ShieldPermissionCatalogModel(groups: groups);
+    final guardNames = root['guard_names'] is List
+        ? (root['guard_names'] as List).map((dynamic value) => value.toString()).toList()
+        : const <String>['web'];
+    final rawGuards = adminMap(root['guard_permissions']);
+    final guardPermissions = <String, List<String>>{
+      for (final entry in rawGuards.entries)
+        entry.key: entry.value is List
+          ? (entry.value as List).map((dynamic value) => value.toString()).toList()
+          : <String>[],
+    };
+    return ShieldPermissionCatalogModel(
+      groups: groups.isEmpty ? standardShieldPermissionCatalog().groups : groups,
+      guardNames: guardNames.isEmpty ? const ['web'] : guardNames,
+      guardPermissions: guardPermissions,
+    );
   }
 
   static List<ShieldPermission> _permissions(dynamic value) {

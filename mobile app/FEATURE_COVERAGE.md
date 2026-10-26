@@ -46,7 +46,7 @@ data replace the native workflows.
   exposed in the list UI: subscriber, amount, date, pending/completed status and
   notes. Arabic amounts are normalized, invalid amounts rejected, saves are
   single-flight, and server errors stay in the form for correction/retry.
-  Invoiced/paid requests are locked. Request actions now use a compact menu
+  Invoiced/paid requests lock financial identity while allowing date/status/notes edits. Request actions now use a compact menu
   instead of an overflowing row of controls; edit/complete/delete/create actions
   are individually permission-filtered.
 
@@ -79,6 +79,8 @@ Action-by-action acceptance against a running Laravel instance remains required.
 | Users and roles/Shield | المستخدمون; الأدوار والصلاحيات |
 | EditProfilePage | الملف الشخصي / account tab |
 | Offline queue (mobile-specific) | المزامنة |
+| Cash-session supervision | مراجعة الصناديق; independent view/decision grants |
+| Central audit events | سجل التدقيق; filters and before/after details |
 
 ## Remaining parity and release gates
 
@@ -94,11 +96,13 @@ Do not call the app “all Laravel functions verified” until these are complet
   roles bulk delete (S-ROL-01), discard-for-failed sync items (ch 26.2),
   meter form «حفظ وإضافة عداد آخر», and subscription-fee dialog
   «حفظ وإضافة أخرى» — the Filament create-and-create-another chains.
-- Deliberately deferred (need product/owner decision, not silent enablement):
-  tariff bulk restore/force-delete, and meter-owner transfer — the mobile meter
-  form intentionally disables owner changes even though the current API accepts
-  `subscriber_id` updates. Review balance/history isolation before enabling
-  financial ownership changes.
+- Tariff bulk restore/force-delete and meter-owner selection already exist in
+  this checkout. The deferred-status description was stale. Financial acceptance
+  of ownership transfer remains a device/backend check.
+- The 2026-10-26 parity change adds subscriber → meter → fee creation, role
+  guards and read-only matrix viewing, subscription-invoice setting persistence,
+  cash supervision, central audit browsing, actual reading date, complete
+  paginated collections and shared sort/page-size/field display controls.
 - Consolidate the shared auth queue, field SQLite queue and finance queue.
   The home summary intentionally reports **only `SyncQueueManager`**, not all
   three stores. Network availability does not prove server reachability; the UI
@@ -130,6 +134,6 @@ flutter test test/home test/service_requests
 flutter test
 ```
 
-The workspace used for this change has no Flutter/Dart or PHP runtime. A
-Tree-sitter syntax parse and `git diff --check` were performed; these do **not**
-replace compilation, Flutter tests, backend integration or device testing.
+Flutter/Dart and PHP are available in the 2026-10-26 Windows workspace. Actual
+commands and results are recorded in `docs/v2/qa/MOBILE_WEB_PARITY_2026-10-26.md`
+at the Laravel root. Automated checks do not replace physical-device acceptance.

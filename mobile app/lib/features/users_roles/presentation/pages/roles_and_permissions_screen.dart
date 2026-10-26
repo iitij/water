@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../admin_shared/presentation/theme/admin_palette.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
@@ -114,14 +117,24 @@ class _RolesView extends StatelessWidget {
             onDelete: () => _confirmBulkDelete(context, selectionCount),
           ),
         Expanded(
-          child: RefreshIndicator(
+          child: ListPresentation<Role>(items: state.roles,
+            sortValues: {
+              'name': (label: ListOptionsStrings.name, value: (role) => role.name),
+              'id': (label: ListOptionsStrings.id, value: (role) => role.id),
+              'guard_name': (label: ListOptionsStrings.guard, value: (role) => role.guardName),
+              'permissions_count': (label: ListOptionsStrings.permissions, value: (role) => role.effectivePermissionsCount),
+              'updated_at': (label: ListOptionsStrings.updatedAt, value: (role) => role.updatedAt),
+            },
+            fields: const {'guard': ListOptionsStrings.guard, 'permissions': ListOptionsStrings.permissions,
+              'updated_at': ListOptionsStrings.updatedAt},
+            builder: (context, roles, options) => RefreshIndicator(
             onRefresh: () => context.read<RolesCubit>().load(),
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
-              itemCount: state.roles.length,
+              itemCount: roles.length,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final role = state.roles[index];
+                final role = roles[index];
                 final checked = state.selectedIds.contains(role.id);
                 final deleting = state.deletingIds.contains(role.id);
                 return GestureDetector(
@@ -129,7 +142,7 @@ class _RolesView extends StatelessWidget {
                       ? () => context.read<RolesCubit>().toggleSelect(role)
                       : null,
                   child: AdminCard(
-                    padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+                    padding: EdgeInsetsDirectional.fromSTEB(12, options.compact ? 6 : 10, 12, options.compact ? 6 : 10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -163,12 +176,12 @@ class _RolesView extends StatelessWidget {
                               runSpacing: 6,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                AdminStatusBadge(label: role.guardName, color: AdminPalette.warning),
-                                Text(
+                                if (options.isVisible('guard')) AdminStatusBadge(label: role.guardName, color: AdminPalette.warning),
+                                if (options.isVisible('permissions')) Text(
                                   '${role.effectivePermissionsCount} صلاحية',
                                   style: Theme.of(context).textTheme.labelSmall,
                                 ),
-                                Text(
+                                if (options.isVisible('updated_at')) Text(
                                   'آخر تحديث ${AdminFormat.dateTime(role.updatedAt)}',
                                   style: Theme.of(context).textTheme.labelSmall,
                                 ),
@@ -178,14 +191,16 @@ class _RolesView extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      if (can(AdminPermissions.updateRoles))
+                      if (can(AdminPermissions.updateRoles) || can('View:Role') || can(AdminPermissions.viewRoles))
                         AppIconButton(
                           key: ValueKey('edit-role-${role.id}'),
-                          tooltip: role.isSuperAdmin ? 'عرض المصفوفة المحمية' : 'تعديل المصفوفة',
+                          tooltip: role.isSuperAdmin || !can(AdminPermissions.updateRoles)
+                              ? AppStrings.of(context).roleViewMatrix : 'تعديل المصفوفة',
                           onPressed: state.catalog == null
                               ? null
                               : () => _openEditor(context, state.catalog!, role),
-                          icon: role.isSuperAdmin ? Icons.visibility_outlined : Icons.edit_outlined,
+                          icon: role.isSuperAdmin || !can(AdminPermissions.updateRoles)
+                              ? Icons.visibility_outlined : Icons.edit_outlined,
                           size: 38,
                         ),
                       if (can(AdminPermissions.deleteRoles)) ...[
@@ -211,6 +226,7 @@ class _RolesView extends StatelessWidget {
                 );
               },
             ),
+          ),
           ),
         ),
       ],
@@ -243,6 +259,7 @@ class _RolesView extends StatelessWidget {
           role: role,
           catalog: catalog,
           onSave: cubit.save,
+          readOnly: role.id == 0 ? !can(AdminPermissions.createRoles) : !can(AdminPermissions.updateRoles),
         ),
       ),
     );

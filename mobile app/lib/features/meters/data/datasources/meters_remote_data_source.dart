@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/network/paginated_collection.dart';
 
 class MetersRemoteDataSource {
   const MetersRemoteDataSource(this._dio);
@@ -18,51 +19,77 @@ class MetersRemoteDataSource {
       if (status != null && status.isNotEmpty) 'status': status,
     };
 
-    Response<dynamic> response;
-    try {
-      response = await _dio.get<dynamic>(ApiEndpoints.meters, queryParameters: parameters);
-    } on DioException catch (error) {
-      // The current Laravel branch exposes `/meters/search`; the master API
-      // contract adds `/meters`. Keep the module usable against either version.
-      if (error.response?.statusCode != 404) rethrow;
-      response = await _dio.get<dynamic>(
-        ApiEndpoints.meterSearch,
-        queryParameters: {
-          if (query.trim().isNotEmpty) 'query': query.trim(),
-          if (squareId != null) 'square_id': squareId,
-        },
-      );
-    }
-
-    return _extractList(response.data, keys: const ['meters', 'data']);
+    final collection = await collectPaginatedCollection((page) async {
+      Response<dynamic> response;
+      try {
+        response = await _dio.get<dynamic>(
+          ApiEndpoints.meters,
+          queryParameters: {...parameters, 'per_page': 100, 'page': page},
+        );
+      } on DioException catch (error) {
+        // The current Laravel branch exposes `/meters/search`; the master API
+        // contract adds `/meters`. Keep the module usable against either version.
+        if (error.response?.statusCode != 404) rethrow;
+        response = await _dio.get<dynamic>(
+          ApiEndpoints.meterSearch,
+          queryParameters: {
+            ...parameters,
+            if (query.trim().isNotEmpty) 'query': query.trim(),
+            'per_page': 100,
+            'page': page,
+          },
+        );
+      }
+      return response.data;
+    }, collectionKeys: const ['meters']);
+    return _extractList(collection, keys: const ['data']);
   }
 
   Future<List<Map<String, dynamic>>> searchMeters({
     required String query,
     int? squareId,
   }) async {
-    final response = await _dio.get<dynamic>(
-      ApiEndpoints.meterSearch,
-      queryParameters: {
-        if (query.trim().isNotEmpty) 'query': query.trim(),
-        if (squareId != null) 'square_id': squareId,
-      },
-    );
-    return _extractList(response.data, keys: const ['meters', 'data']);
+    final collection = await collectPaginatedCollection((page) async {
+      final response = await _dio.get<dynamic>(
+        ApiEndpoints.meterSearch,
+        queryParameters: {
+          if (query.trim().isNotEmpty) 'query': query.trim(),
+          if (squareId != null) 'square_id': squareId,
+          'per_page': 100,
+          'page': page,
+        },
+      );
+      return response.data;
+    }, collectionKeys: const ['meters']);
+    return _extractList(collection, keys: const ['data']);
   }
 
   Future<List<Map<String, dynamic>>> fetchSquares() async {
-    final response = await _dio.get<dynamic>(ApiEndpoints.squares);
-    return _extractList(response.data, keys: const ['squares', 'data']);
+    final collection = await collectPaginatedCollection(
+      (page) async => (await _dio.get<dynamic>(
+        ApiEndpoints.squares,
+        queryParameters: {'per_page': 100, 'page': page},
+      )).data,
+      collectionKeys: const ['squares'],
+    );
+    return _extractList(collection, keys: const ['data']);
   }
 
   Future<List<Map<String, dynamic>>> fetchSubscribers() async {
-    final response = await _dio.get<dynamic>(ApiEndpoints.subscribers);
-    return _extractList(response.data, keys: const ['subscribers', 'data']);
+    final collection = await collectPaginatedCollection(
+      (page) async => (await _dio.get<dynamic>(
+        ApiEndpoints.subscribers,
+        queryParameters: {'per_page': 100, 'page': page},
+      )).data,
+      collectionKeys: const ['subscribers'],
+    );
+    return _extractList(collection, keys: const ['data']);
   }
 
   Future<Map<String, dynamic>> fetchSubscriber(int subscriberId) async {
-    final response = await _dio.get<dynamic>('${ApiEndpoints.subscribers}/$subscriberId');
+    final response = await _dio.get<dynamic>(
+      '${ApiEndpoints.subscribers}/$subscriberId',
+    );
     return _extractObject(response.data, keys: const ['subscriber', 'data']);
   }
 
@@ -72,7 +99,10 @@ class MetersRemoteDataSource {
   }) async {
     final response = meterId == null
         ? await _dio.post<dynamic>(ApiEndpoints.meters, data: payload)
-        : await _dio.put<dynamic>('${ApiEndpoints.meters}/$meterId', data: payload);
+        : await _dio.put<dynamic>(
+            '${ApiEndpoints.meters}/$meterId',
+            data: payload,
+          );
     return _extractObject(response.data, keys: const ['meter', 'data']);
   }
 

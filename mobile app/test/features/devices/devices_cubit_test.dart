@@ -6,25 +6,31 @@ import 'package:water_project/features/devices/devices.dart';
 /// الحماية الأهم: لا يُبطل المستخدم الجهاز الذي بيده، وترتيب القائمة يضع
 /// النشط أولاً حتى لا يبحث المشرف تحت الأجهزة المُبطلة.
 class _FakeDevicesRepository implements DevicesRepository {
-  _FakeDevicesRepository({this.devices = const <DeviceRecord>[], this.failRevoke = false});
+  _FakeDevicesRepository({
+    this.devices = const <DeviceRecord>[],
+    this.failRevoke = false,
+  });
 
   List<DeviceRecord> devices;
   final bool failRevoke;
   final List<int> revokedIds = <int>[];
 
   @override
-  Future<List<DeviceRecord>> getDevices({String? currentDeviceUuid}) async => devices
-      .map((device) => DeviceRecord(
-            id: device.id,
-            deviceUuid: device.deviceUuid,
-            name: device.name,
-            platform: device.platform,
-            appVersion: device.appVersion,
-            lastSeenAt: device.lastSeenAt,
-            revokedAt: device.revokedAt,
-            isCurrent: device.deviceUuid == currentDeviceUuid,
-          ))
-      .toList(growable: false);
+  Future<List<DeviceRecord>> getDevices({String? currentDeviceUuid}) async =>
+      devices
+          .map(
+            (device) => DeviceRecord(
+              id: device.id,
+              deviceUuid: device.deviceUuid,
+              name: device.name,
+              platform: device.platform,
+              appVersion: device.appVersion,
+              lastSeenAt: device.lastSeenAt,
+              revokedAt: device.revokedAt,
+              isCurrent: device.deviceUuid == currentDeviceUuid,
+            ),
+          )
+          .toList(growable: false);
 
   @override
   Future<void> revoke(int id) async {
@@ -40,17 +46,44 @@ DeviceRecord _device(
   String? platform = 'android',
   DateTime? lastSeen,
   DateTime? revokedAt,
-}) =>
-    DeviceRecord(
-      id: id,
-      deviceUuid: uuid.isEmpty ? 'uuid-$id' : uuid,
-      name: name,
-      platform: platform,
-      lastSeenAt: lastSeen,
-      revokedAt: revokedAt,
-    );
+}) => DeviceRecord(
+  id: id,
+  deviceUuid: uuid.isEmpty ? 'uuid-$id' : uuid,
+  name: name,
+  platform: platform,
+  lastSeenAt: lastSeen,
+  revokedAt: revokedAt,
+);
 
 void main() {
+  group('DevicesState', () {
+    test(
+      'clearMessages يمحو الرسائل القديمة ويحافظ على الرسالة الجديدة الصريحة',
+      () {
+        const previous = DevicesState(
+          errorMessage: 'خطأ قديم',
+          successMessage: 'نجاح قديم',
+        );
+
+        final failure = previous.copyWith(
+          clearMessages: true,
+          errorMessage: 'سبب الرفض الجديد',
+        );
+        expect(failure.errorMessage, 'سبب الرفض الجديد');
+        expect(failure.successMessage, isNull);
+
+        final success = previous.copyWith(
+          clearMessages: true,
+          successMessage: 'نجاح جديد',
+        );
+        expect(success.errorMessage, isNull);
+        expect(success.successMessage, 'نجاح جديد');
+        expect(previous.copyWith(clearMessages: true).errorMessage, isNull);
+        expect(previous.copyWith(clearMessages: true).successMessage, isNull);
+      },
+    );
+  });
+
   group('DeviceRecord', () {
     test('displayName يتدرّج: الاسم ثم المنصّة ثم آخر 6 من المعرّف', () {
       expect(_device(1, name: 'جوال المحصّل').displayName, 'جوال المحصّل');
@@ -81,7 +114,10 @@ void main() {
     });
 
     test('asRevoked يحفظ الهوية ويضيف وقت الإبطال', () {
-      final revoked = _device(3, name: 'لوحي').asRevoked(DateTime(2026, 10, 24));
+      final revoked = _device(
+        3,
+        name: 'لوحي',
+      ).asRevoked(DateTime(2026, 10, 24));
       expect(revoked.id, 3);
       expect(revoked.name, 'لوحي');
       expect(revoked.isRevoked, isTrue);
@@ -90,7 +126,11 @@ void main() {
     test('sortDevices: النشطة أولاً ثم الأحدث ظهوراً', () {
       final sorted = sortDevices(<DeviceRecord>[
         _device(1, lastSeen: DateTime(2026, 10, 1)),
-        _device(2, revokedAt: DateTime(2026, 10, 23), lastSeen: DateTime(2026, 10, 23)),
+        _device(
+          2,
+          revokedAt: DateTime(2026, 10, 23),
+          lastSeen: DateTime(2026, 10, 23),
+        ),
         _device(3, lastSeen: DateTime(2026, 10, 20)),
       ]);
       expect(sorted.map((device) => device.id), <int>[3, 1, 2]);
@@ -100,10 +140,12 @@ void main() {
   group('DevicesCubit', () {
     test('load يوسم الجهاز الحالي ويفصل النشطة عن المُبطلة', () async {
       final cubit = DevicesCubit(
-        repository: _FakeDevicesRepository(devices: <DeviceRecord>[
-          _device(1, uuid: 'me'),
-          _device(2, revokedAt: DateTime(2026, 10, 20)),
-        ]),
+        repository: _FakeDevicesRepository(
+          devices: <DeviceRecord>[
+            _device(1, uuid: 'me'),
+            _device(2, revokedAt: DateTime(2026, 10, 20)),
+          ],
+        ),
         currentUuidLoader: () async => 'me',
       );
       await cubit.load();
@@ -115,8 +157,13 @@ void main() {
     });
 
     test('لا يُبطل الجهاز الحالي ويشرح السبب', () async {
-      final repository = _FakeDevicesRepository(devices: <DeviceRecord>[_device(1, uuid: 'me')]);
-      final cubit = DevicesCubit(repository: repository, currentDeviceUuid: 'me');
+      final repository = _FakeDevicesRepository(
+        devices: <DeviceRecord>[_device(1, uuid: 'me')],
+      );
+      final cubit = DevicesCubit(
+        repository: repository,
+        currentDeviceUuid: 'me',
+      );
       await cubit.load();
 
       final ok = await cubit.revoke(cubit.state.devices.single);
@@ -127,11 +174,16 @@ void main() {
     });
 
     test('إبطال جهاز آخر يُحدّث القائمة ويُصدر رسالة نجاح', () async {
-      final repository = _FakeDevicesRepository(devices: <DeviceRecord>[
-        _device(1, uuid: 'me'),
-        _device(2, name: 'جوال مفقود'),
-      ]);
-      final cubit = DevicesCubit(repository: repository, currentDeviceUuid: 'me');
+      final repository = _FakeDevicesRepository(
+        devices: <DeviceRecord>[
+          _device(1, uuid: 'me'),
+          _device(2, name: 'جوال مفقود'),
+        ],
+      );
+      final cubit = DevicesCubit(
+        repository: repository,
+        currentDeviceUuid: 'me',
+      );
       await cubit.load();
 
       final target = cubit.state.devices.firstWhere((device) => device.id == 2);
@@ -150,7 +202,10 @@ void main() {
         devices: <DeviceRecord>[_device(2)],
         failRevoke: true,
       );
-      final cubit = DevicesCubit(repository: repository, currentDeviceUuid: 'me');
+      final cubit = DevicesCubit(
+        repository: repository,
+        currentDeviceUuid: 'me',
+      );
       await cubit.load();
 
       final ok = await cubit.revoke(cubit.state.devices.single);
@@ -162,10 +217,13 @@ void main() {
     });
 
     test('إبطال جهاز مُبطل سابقاً لا يرسل طلباً', () async {
-      final repository = _FakeDevicesRepository(devices: <DeviceRecord>[
-        _device(2, revokedAt: DateTime(2026, 10, 1)),
-      ]);
-      final cubit = DevicesCubit(repository: repository, currentDeviceUuid: 'me');
+      final repository = _FakeDevicesRepository(
+        devices: <DeviceRecord>[_device(2, revokedAt: DateTime(2026, 10, 1))],
+      );
+      final cubit = DevicesCubit(
+        repository: repository,
+        currentDeviceUuid: 'me',
+      );
       await cubit.load();
 
       expect(await cubit.revoke(cubit.state.devices.single), isFalse);

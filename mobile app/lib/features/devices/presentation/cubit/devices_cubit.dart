@@ -26,8 +26,10 @@ class DevicesState extends Equatable {
   final String? successMessage;
   final String? currentDeviceUuid;
 
-  List<DeviceRecord> get active => devices.where((device) => !device.isRevoked).toList(growable: false);
-  List<DeviceRecord> get revoked => devices.where((device) => device.isRevoked).toList(growable: false);
+  List<DeviceRecord> get active =>
+      devices.where((device) => !device.isRevoked).toList(growable: false);
+  List<DeviceRecord> get revoked =>
+      devices.where((device) => device.isRevoked).toList(growable: false);
 
   DevicesState copyWith({
     DevicesStatus? status,
@@ -38,19 +40,25 @@ class DevicesState extends Equatable {
     String? currentDeviceUuid,
     bool clearRevoking = false,
     bool clearMessages = false,
-  }) =>
-      DevicesState(
-        status: status ?? this.status,
-        devices: devices ?? this.devices,
-        revokingId: clearRevoking ? null : revokingId ?? this.revokingId,
-        errorMessage: clearMessages ? null : errorMessage ?? this.errorMessage,
-        successMessage: clearMessages ? null : successMessage ?? this.successMessage,
-        currentDeviceUuid: currentDeviceUuid ?? this.currentDeviceUuid,
-      );
+  }) => DevicesState(
+    status: status ?? this.status,
+    devices: devices ?? this.devices,
+    revokingId: clearRevoking ? null : revokingId ?? this.revokingId,
+    errorMessage: errorMessage ?? (clearMessages ? null : this.errorMessage),
+    successMessage:
+        successMessage ?? (clearMessages ? null : this.successMessage),
+    currentDeviceUuid: currentDeviceUuid ?? this.currentDeviceUuid,
+  );
 
   @override
-  List<Object?> get props =>
-      <Object?>[status, devices, revokingId, errorMessage, successMessage, currentDeviceUuid];
+  List<Object?> get props => <Object?>[
+    status,
+    devices,
+    revokingId,
+    errorMessage,
+    successMessage,
+    currentDeviceUuid,
+  ];
 }
 
 /// إدارة أجهزة الحساب (S7-07).
@@ -63,10 +71,11 @@ class DevicesCubit extends Cubit<DevicesState> {
     required DevicesRepository repository,
     this.currentDeviceUuid,
     Future<String?> Function()? currentUuidLoader,
-  })  : _repository = repository,
-        _loadCurrentUuid = currentUuidLoader ??
-            (currentDeviceUuid == null ? () => DeviceIdentity().id() : null),
-        super(DevicesState(currentDeviceUuid: currentDeviceUuid));
+  }) : _repository = repository,
+       _loadCurrentUuid =
+           currentUuidLoader ??
+           (currentDeviceUuid == null ? () => DeviceIdentity().id() : null),
+       super(DevicesState(currentDeviceUuid: currentDeviceUuid));
 
   final DevicesRepository _repository;
   final String? currentDeviceUuid;
@@ -80,9 +89,19 @@ class DevicesCubit extends Cubit<DevicesState> {
         emit(state.copyWith(currentDeviceUuid: uuid));
       }
       final devices = await _repository.getDevices(currentDeviceUuid: uuid);
-      emit(state.copyWith(status: DevicesStatus.success, devices: sortDevices(devices)));
+      emit(
+        state.copyWith(
+          status: DevicesStatus.success,
+          devices: sortDevices(devices),
+        ),
+      );
     } catch (error) {
-      emit(state.copyWith(status: DevicesStatus.failure, errorMessage: _messageFor(error)));
+      emit(
+        state.copyWith(
+          status: DevicesStatus.failure,
+          errorMessage: _messageFor(error),
+        ),
+      );
     }
   }
 
@@ -100,12 +119,14 @@ class DevicesCubit extends Cubit<DevicesState> {
 
   Future<bool> revoke(DeviceRecord device) async {
     if (!canRevoke(device)) {
-      emit(state.copyWith(
-        clearMessages: true,
-        errorMessage: device.isCurrent
-            ? 'هذا هو الجهاز الذي تستخدمه الآن. لا يمكن إبطاله من داخله.'
-            : 'الجهاز مُبطل بالفعل.',
-      ));
+      emit(
+        state.copyWith(
+          clearMessages: true,
+          errorMessage: device.isCurrent
+              ? 'هذا هو الجهاز الذي تستخدمه الآن. لا يمكن إبطاله من داخله.'
+              : 'الجهاز مُبطل بالفعل.',
+        ),
+      );
       return false;
     }
 
@@ -113,16 +134,24 @@ class DevicesCubit extends Cubit<DevicesState> {
     try {
       await _repository.revoke(device.id);
       final updated = state.devices
-          .map((item) => item.id == device.id ? item.asRevoked(DateTime.now()) : item)
+          .map(
+            (item) =>
+                item.id == device.id ? item.asRevoked(DateTime.now()) : item,
+          )
           .toList(growable: false);
-      emit(state.copyWith(
-        devices: sortDevices(updated),
-        clearRevoking: true,
-        successMessage: 'أُبطل الجهاز «${device.displayName}» ولن يستطيع الدخول بعد الآن.',
-      ));
+      emit(
+        state.copyWith(
+          devices: sortDevices(updated),
+          clearRevoking: true,
+          successMessage:
+              'أُبطل الجهاز «${device.displayName}» ولن يستطيع الدخول بعد الآن.',
+        ),
+      );
       return true;
     } catch (error) {
-      emit(state.copyWith(clearRevoking: true, errorMessage: _messageFor(error)));
+      emit(
+        state.copyWith(clearRevoking: true, errorMessage: _messageFor(error)),
+      );
       return false;
     }
   }

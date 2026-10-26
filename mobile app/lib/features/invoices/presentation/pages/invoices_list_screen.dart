@@ -4,8 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
@@ -26,16 +28,16 @@ class InvoicesListScreen extends StatefulWidget {
   final InvoiceQuery? initialQuery;
 
   static Widget create({InvoiceQuery? initialQuery}) => MultiBlocProvider(
-        providers: [
-          BlocProvider<InvoicesCubit>(
-            create: (_) => InvoicesCubit(
-              repository: sl<InvoicesRepository>(),
-              initialQuery: initialQuery ?? const InvoiceQuery(),
-            )..load(),
-          ),
-        ],
-        child: const InvoicesListScreen(),
-      );
+    providers: [
+      BlocProvider<InvoicesCubit>(
+        create: (_) => InvoicesCubit(
+          repository: sl<InvoicesRepository>(),
+          initialQuery: initialQuery ?? const InvoiceQuery(),
+        )..load(),
+      ),
+    ],
+    child: const InvoicesListScreen(),
+  );
 
   @override
   State<InvoicesListScreen> createState() => _InvoicesListScreenState();
@@ -43,6 +45,37 @@ class InvoicesListScreen extends StatefulWidget {
 
 class _InvoicesListScreenState extends State<InvoicesListScreen> {
   final TextEditingController _search = TextEditingController();
+  ListPresentationSettings _presentation = const ListPresentationSettings(
+    sortBy: 'bill_date',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final query = context.read<InvoicesCubit>().state.query;
+    _presentation = ListPresentationSettings(
+      sortBy: query.sortBy,
+      descending: query.sortDirection == 'desc',
+      pageSize: query.limit ?? 25,
+    );
+  }
+
+  void _applyPresentation(ListPresentationSettings value) {
+    final before = _presentation;
+    setState(() => _presentation = value);
+    if (before.sortBy != value.sortBy ||
+        before.descending != value.descending ||
+        before.pageSize != value.pageSize) {
+      final cubit = context.read<InvoicesCubit>();
+      cubit.applyFilters(
+        cubit.state.query.copyWith(
+          sortBy: value.sortBy,
+          sortDirection: value.descending ? 'desc' : 'asc',
+          limit: value.pageSize,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -57,15 +90,43 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
         title: const Text('الفواتير'),
         actions: <Widget>[
           BlocBuilder<InvoicesCubit, InvoicesState>(
+            builder: (context, state) => IgnorePointer(
+              ignoring: state.isLoading,
+              child: ListPresentationControls(
+                settings: _presentation,
+                sortOptions: const {
+                  'bill_date': ListOptionsStrings.date,
+                  'bill_number': ListOptionsStrings.billNumber,
+                  'subscriber_name': ListOptionsStrings.subscriber,
+                  'total_due': ListOptionsStrings.amount,
+                  'status': ListOptionsStrings.status,
+                  'id': ListOptionsStrings.id,
+                },
+                fields: const {
+                  'location': ListOptionsStrings.location,
+                  'date': ListOptionsStrings.date,
+                  'period': ListOptionsStrings.period,
+                  'phone': ListOptionsStrings.phone,
+                },
+                onChanged: _applyPresentation,
+              ),
+            ),
+          ),
+          BlocBuilder<InvoicesCubit, InvoicesState>(
             buildWhen: (prev, curr) =>
-                prev.selectedIds != curr.selectedIds || prev.invoices.length != curr.invoices.length,
+                prev.selectedIds != curr.selectedIds ||
+                prev.invoices.length != curr.invoices.length,
             builder: (context, state) {
               if (state.invoices.isEmpty) return const SizedBox.shrink();
               final cubit = context.read<InvoicesCubit>();
               return IconButton(
                 tooltip: state.isSelectingMode ? 'إلغاء التحديد' : 'تحديد الكل',
-                onPressed: state.isSelectingMode ? cubit.clearSelection : cubit.selectAll,
-                icon: Icon(state.isSelectingMode ? Icons.deselect : Icons.select_all),
+                onPressed: state.isSelectingMode
+                    ? cubit.clearSelection
+                    : cubit.selectAll,
+                icon: Icon(
+                  state.isSelectingMode ? Icons.deselect : Icons.select_all,
+                ),
               );
             },
           ),
@@ -151,7 +212,8 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                     ),
                   if (state.query.billingPeriod != null)
                     AppFilterChip(
-                      label: 'الفترة · ${_periodLabel(state, state.query.billingPeriod!)}',
+                      label:
+                          'الفترة · ${_periodLabel(state, state.query.billingPeriod!)}',
                       selected: true,
                       onRemove: () => cubit.applyFilters(
                         state.query.copyWith(clearBillingPeriod: true),
@@ -176,10 +238,17 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                 ],
                 onClearAll: () {
                   _search.clear();
-                  cubit.applyFilters(const InvoiceQuery());
+                  cubit.applyFilters(
+                    InvoiceQuery(
+                      sortBy: _presentation.sortBy,
+                      sortDirection: _presentation.descending ? 'desc' : 'asc',
+                      limit: _presentation.pageSize,
+                    ),
+                  );
                 },
               ),
               InvoicesSummaryBar(
+                pageOnly: true,
                 count: state.invoices.length,
                 openCount: state.openCount,
                 overdueCount: state.overdueCount,
@@ -188,6 +257,34 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
               if (state.isSelectingMode)
                 _BulkActionsBar(cubit: cubit, state: state),
               Expanded(child: _buildBody(context, cubit, state)),
+              SafeArea(
+                top: false,
+                child: Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      '${ListOptionsStrings.page} ${state.query.page}${state.lastPage == null ? '' : ' / ${state.lastPage}'}',
+                    ),
+                    if (state.totalCount != null)
+                      Text(
+                        '${ListOptionsStrings.allRecords}: ${state.totalCount}',
+                      ),
+                    TextButton(
+                      onPressed: !state.isLoading && state.hasPreviousPage
+                          ? () => cubit.goToPage(state.query.page - 1)
+                          : null,
+                      child: const Text(ListOptionsStrings.previous),
+                    ),
+                    TextButton(
+                      onPressed: !state.isLoading && state.hasNextPage
+                          ? () => cubit.goToPage(state.query.page + 1)
+                          : null,
+                      child: const Text(ListOptionsStrings.next),
+                    ),
+                  ],
+                ),
+              ),
             ],
           );
         },
@@ -195,12 +292,19 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     );
   }
 
-  Widget _buildBody(BuildContext context, InvoicesCubit cubit, InvoicesState state) {
+  Widget _buildBody(
+    BuildContext context,
+    InvoicesCubit cubit,
+    InvoicesState state,
+  ) {
     if (state.status == FinanceLoadStatus.loading) {
       return const SkeletonList(count: 6);
     }
     if (state.errorMessage != null && !state.hasData) {
-      return ErrorStateWidget(message: state.errorMessage!, onRetry: cubit.load);
+      return ErrorStateWidget(
+        message: state.errorMessage!,
+        onRetry: cubit.load,
+      );
     }
     if (state.isEmpty) {
       return const EmptyStateWidget(
@@ -214,7 +318,12 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     return RefreshIndicator(
       onRefresh: () => cubit.load(refresh: true),
       child: context.useMasterDetail
-          ? _MasterDetailList(cubit: cubit, state: state, invoices: list)
+          ? _MasterDetailList(
+              cubit: cubit,
+              state: state,
+              invoices: list,
+              presentation: _presentation,
+            )
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
               itemCount: list.length,
@@ -227,12 +336,17 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                   cubit: cubit,
                   child: InvoiceCard(
                     invoice: invoice,
+                    dense: _presentation.compact,
+                    hiddenFields: _presentation.hiddenFields,
                     remainingLabel: remainingLabelFor(invoice, list),
                     showCheckbox: true,
                     selected: state.selectedIds.contains(invoice.id),
                     onToggleSelect: () => cubit.toggleSelection(invoice.id),
-                    onMoreActions: () =>
-                        showInvoiceActionSheet(context, invoice: invoice, cubit: cubit),
+                    onMoreActions: () => showInvoiceActionSheet(
+                      context,
+                      invoice: invoice,
+                      cubit: cubit,
+                    ),
                     onTap: () async {
                       await Navigator.of(context).push<void>(
                         MaterialPageRoute<void>(
@@ -263,7 +377,13 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
       context,
       query: state.query,
       billingPeriods: state.billingPeriods,
-      onSubmit: (query) => cubit.applyFilters(query),
+      onSubmit: (query) => cubit.applyFilters(
+        query.copyWith(
+          sortBy: _presentation.sortBy,
+          sortDirection: _presentation.descending ? 'desc' : 'asc',
+          limit: _presentation.pageSize,
+        ),
+      ),
     );
   }
 
@@ -299,10 +419,10 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
   }
 
   static String? _trashedLabel(String trashed) => switch (trashed) {
-        'with' => 'مع المحذوف',
-        'only' => 'المحذوف فقط',
-        _ => null,
-      };
+    'with' => 'مع المحذوف',
+    'only' => 'المحذوف فقط',
+    _ => null,
+  };
 }
 
 /// شريط الإجراءات الجماعية: `bulk-recalculate` + `bulk-restore` + `bulk-delete` + `bulk-force-delete`.
@@ -314,9 +434,12 @@ class _BulkActionsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedInvoices =
-        state.invoices.where((i) => state.selectedIds.contains(i.id)).toList();
-    final hasDeleted = selectedInvoices.any((i) => i.isDeleted) || state.query.trashed == 'only';
+    final selectedInvoices = state.invoices
+        .where((i) => state.selectedIds.contains(i.id))
+        .toList();
+    final hasDeleted =
+        selectedInvoices.any((i) => i.isDeleted) ||
+        state.query.trashed == 'only';
     final hasActive = selectedInvoices.any((i) => !i.isDeleted);
 
     return Material(
@@ -330,12 +453,18 @@ class _BulkActionsBar extends StatelessWidget {
             children: <Widget>[
               Text(
                 '${state.selectedIds.length} محدد',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: state.bulkRunning ? null : cubit.selectAll,
-                child: const Text('تحديد الكل', style: TextStyle(color: Colors.white70)),
+                child: const Text(
+                  'تحديد الكل',
+                  style: TextStyle(color: Colors.white70),
+                ),
               ),
               if (state.bulkRunning)
                 const Padding(
@@ -353,7 +482,11 @@ class _BulkActionsBar extends StatelessWidget {
                 if (hasActive)
                   TextButton.icon(
                     onPressed: () => _bulkRecalculate(context),
-                    icon: const Icon(Icons.refresh, size: 18, color: Colors.white),
+                    icon: const Icon(
+                      Icons.refresh,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                     label: const Text(
                       'إعادة احتساب',
                       style: TextStyle(color: Colors.white),
@@ -362,8 +495,11 @@ class _BulkActionsBar extends StatelessWidget {
                 if (hasDeleted)
                   TextButton.icon(
                     onPressed: () => _bulkRestore(context),
-                    icon: const Icon(Icons.restore_from_trash_outlined,
-                        size: 18, color: AppColors.onPanelSoft),
+                    icon: const Icon(
+                      Icons.restore_from_trash_outlined,
+                      size: 18,
+                      color: AppColors.onPanelSoft,
+                    ),
                     label: const Text(
                       'استعادة',
                       style: TextStyle(color: AppColors.onPanelSoft),
@@ -372,8 +508,11 @@ class _BulkActionsBar extends StatelessWidget {
                 if (hasActive)
                   TextButton.icon(
                     onPressed: () => _bulkDelete(context),
-                    icon: const Icon(Icons.delete_outline,
-                        size: 18, color: AppColors.onPanelSoft),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: AppColors.onPanelSoft,
+                    ),
                     label: const Text(
                       'حذف ناعم',
                       style: TextStyle(color: AppColors.onPanelSoft),
@@ -381,8 +520,11 @@ class _BulkActionsBar extends StatelessWidget {
                   ),
                 TextButton.icon(
                   onPressed: () => _bulkForceDelete(context),
-                  icon: const Icon(Icons.delete_forever_outlined,
-                      size: 18, color: AppColors.onPanelSoft),
+                  icon: const Icon(
+                    Icons.delete_forever_outlined,
+                    size: 18,
+                    color: AppColors.onPanelSoft,
+                  ),
                   label: const Text(
                     'حذف نهائي',
                     style: TextStyle(color: AppColors.onPanelSoft),
@@ -400,7 +542,8 @@ class _BulkActionsBar extends StatelessWidget {
     final ok = await ConfirmDialog.show(
       context,
       title: 'إعادة احتساب جماعية',
-      message: 'سيُعاد توزيع الدفعات على ${state.selectedIds.length} فاتورة '
+      message:
+          'سيُعاد توزيع الدفعات على ${state.selectedIds.length} فاتورة '
           'داخل نفس الحسابات المعزولة (FIFO).',
       confirmLabel: 'إعادة الاحتساب',
     );
@@ -408,7 +551,10 @@ class _BulkActionsBar extends StatelessWidget {
     final result = await cubit.bulkRecalculate();
     if (!context.mounted) return;
     if (result == null) {
-      AppFeedback.error(context, state.errorMessage ?? 'تعذّرت إعادة الاحتساب.');
+      AppFeedback.error(
+        context,
+        state.errorMessage ?? 'تعذّرت إعادة الاحتساب.',
+      );
       return;
     }
     AppFeedback.success(
@@ -422,17 +568,24 @@ class _BulkActionsBar extends StatelessWidget {
     final ok = await ConfirmDialog.show(
       context,
       title: 'استعادة جماعية للفواتير',
-      message: 'ستُستعاد الفواتير المحددة (${state.selectedIds.length}) من سلة المحذوفات ويُعاد احتساب أرصدة حساباتها.',
+      message:
+          'ستُستعاد الفواتير المحددة (${state.selectedIds.length}) من سلة المحذوفات ويُعاد احتساب أرصدة حساباتها.',
       confirmLabel: 'استعادة',
     );
     if (!ok) return;
     final result = await cubit.bulkRestore();
     if (!context.mounted) return;
     if (result == null) {
-      AppFeedback.error(context, state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.');
+      AppFeedback.error(
+        context,
+        state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.',
+      );
       return;
     }
-    AppFeedback.success(context, 'تمت استعادة ${result.processed} فاتورة بنجاح.');
+    AppFeedback.success(
+      context,
+      'تمت استعادة ${result.processed} فاتورة بنجاح.',
+    );
   }
 
   Future<void> _bulkDelete(BuildContext context) async {
@@ -461,7 +614,8 @@ class _BulkActionsBar extends StatelessWidget {
     final ok = await ConfirmDialog.show(
       context,
       title: 'حذف نهائي جماعي للفواتير',
-      message: 'تحذير: سيُحذف ${state.selectedIds.length} فاتورة نهائياً من قاعدة البيانات ولا يمكن التراجع!',
+      message:
+          'تحذير: سيُحذف ${state.selectedIds.length} فاتورة نهائياً من قاعدة البيانات ولا يمكن التراجع!',
       confirmLabel: 'حذف نهائي',
       destructive: true,
     );
@@ -482,11 +636,13 @@ class _MasterDetailList extends StatefulWidget {
     required this.cubit,
     required this.state,
     required this.invoices,
+    required this.presentation,
   });
 
   final InvoicesCubit cubit;
   final InvoicesState state;
   final List<InvoiceModel> invoices;
+  final ListPresentationSettings presentation;
 
   @override
   State<_MasterDetailList> createState() => _MasterDetailListState();
@@ -497,15 +653,46 @@ class _MasterDetailListState extends State<_MasterDetailList> {
 
   @override
   Widget build(BuildContext context) {
-    final selected = widget.invoices.where((i) => i.id == _selectedId).toList();
-    final invoice = selected.isEmpty ? null : selected.first;
+    final invoice = widget.invoices.where((i) => i.id == _selectedId).firstOrNull;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          flex: 5,
-          child: ListView.separated(
+    return LayoutBuilder(builder: (context, constraints) {
+      final compact = constraints.maxWidth < 1100;
+      if (compact) {
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+          itemCount: widget.invoices.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final item = widget.invoices[index];
+            return InvoiceCardActions(
+              invoice: item,
+              siblings: widget.invoices,
+              cubit: widget.cubit,
+              child: InvoiceCard(
+                invoice: item,
+                dense: widget.presentation.compact,
+                hiddenFields: widget.presentation.hiddenFields,
+                remainingLabel: remainingLabelFor(item, widget.invoices),
+                showCheckbox: true,
+                selected: widget.state.selectedIds.contains(item.id),
+                onToggleSelect: () => widget.cubit.toggleSelection(item.id),
+                onMoreActions: () => showInvoiceActionSheet(
+                  context,
+                  invoice: item,
+                  cubit: widget.cubit,
+                ),
+                onTap: () => setState(() => _selectedId = item.id),
+              ),
+            );
+          },
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            flex: constraints.maxWidth >= 1450 ? 4 : 5,
+            child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 12, 6, 96),
             itemCount: widget.invoices.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -519,7 +706,8 @@ class _MasterDetailListState extends State<_MasterDetailList> {
                   onTap: () => setState(() => _selectedId = item.id),
                   child: InvoiceCard(
                     invoice: item,
-                    dense: true,
+                    dense: widget.presentation.compact,
+                    hiddenFields: widget.presentation.hiddenFields,
                     remainingLabel: remainingLabelFor(item, widget.invoices),
                     showCheckbox: true,
                     selected: widget.state.selectedIds.contains(item.id),
@@ -537,7 +725,7 @@ class _MasterDetailListState extends State<_MasterDetailList> {
         ),
         const VerticalDivider(width: 1),
         Expanded(
-          flex: 6,
+          flex: constraints.maxWidth >= 1450 ? 6 : 5,
           child: invoice == null
               ? const EmptyStateWidget(
                   title: 'اختر فاتورة لعرض تفاصيلها',
@@ -547,7 +735,8 @@ class _MasterDetailListState extends State<_MasterDetailList> {
               : InvoiceDetailPanel(invoice: invoice, cubit: widget.cubit),
         ),
       ],
-    );
+      );
+    });
   }
 }
 

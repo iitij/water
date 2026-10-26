@@ -1,0 +1,76 @@
+{
+  "date_local": "2026-10-26",
+  "timezone": "Asia/Aden",
+  "recorded_at_utc": "2026-10-26T01:00:32.630252+00:00",
+  "scope": "Local working tree audit during concurrent source edits; not a fixed release or device acceptance.",
+  "baseline_backlog": {
+    "total": 57,
+    "statuses": {
+      "partial": 14,
+      "done": 41,
+      "todo": 1,
+      "blocked": 1
+    },
+    "meaning": "Historical task labels, not verified product completeness."
+  },
+  "flutter_analyze": {
+    "command": "flutter analyze --no-pub",
+    "cwd": "mobile app",
+    "exit_code": 1,
+    "issues": 44,
+    "observed_examples": [
+      "cash_session_review_screen.dart: missing AppStrings cashReview getters, missing AppNotice, incompatible AppButton arguments",
+      "statement_pdf_test.dart: undefined StatementPdfService.buildStatement"
+    ],
+    "note": "Observed before additional concurrent edits; rerun after integration."
+  },
+  "flutter_test": {
+    "command": "flutter test --no-pub --concurrency=1 --reporter expanded",
+    "cwd": "mobile app",
+    "exit_code": 1,
+    "passed": 359,
+    "failures_or_load_errors": 15,
+    "summary": "02:02 +359 -15: Some tests failed.",
+    "failure_entries": [
+      "00:34 +165 -1: C:/Users/msi/Desktop/water-main/mobile app/test/features/audit/audit_log_service_test.dart: AuditLogService record يحفظ الحدث محلياً قبل أي اتصال [E]",
+      "00:34 +165 -2: C:/Users/msi/Desktop/water-main/mobile app/test/features/audit/audit_log_service_test.dart: AuditLogService flush يرسل دفعات بحجم batchSize ويحذف ما رُفع فقط [E]",
+      "00:34 +165 -3: C:/Users/msi/Desktop/water-main/mobile app/test/features/audit/audit_log_service_test.dart: AuditLogService فشل الرفع يُبقي الأحداث كما هي ويُسجّل السبب [E]",
+      "00:34 +165 -4: C:/Users/msi/Desktop/water-main/mobile app/test/features/audit/audit_log_service_test.dart: AuditLogService الحمولة المرسلة للخادم لا تحمل المعرّف المحلي ولا الفاعل [E]",
+      "00:39 +195 -5: C:/Users/msi/Desktop/water-main/mobile app/test/features/devices/devices_cubit_test.dart: DevicesCubit لا يُبطل الجهاز الحالي ويشرح السبب [E]",
+      "00:39 +197 -6: C:/Users/msi/Desktop/water-main/mobile app/test/features/devices/devices_cubit_test.dart: DevicesCubit إبطال جهاز مُبطل سابقاً لا يرسل طلباً [E]",
+      "00:42 +207 -7: C:/Users/msi/Desktop/water-main/mobile app/test/features/invoices/invoice_loading_test.dart: billing period diagnostic text encodes dates without changing API value [E]",
+      "00:42 +207 -8: C:/Users/msi/Desktop/water-main/mobile app/test/features/invoices/invoice_loading_test.dart: successful invoice load remains ready when the app observer logs the state [E]",
+      "00:52 +249 -9: C:/Users/msi/Desktop/water-main/mobile app/test/features/payments/daily_receipts_exporter_test.dart: buildCsv يقتبس القيم التي تحتوي فاصلة أو علامة اقتباس [E]",
+      "00:58 +277 -10: loading C:/Users/msi/Desktop/water-main/mobile app/test/features/subscribers/statement_pdf_test.dart [E]",
+      "01:04 +277 -11: loading C:/Users/msi/Desktop/water-main/mobile app/test/fouad_logic_test.dart [E]",
+      "01:10 +294 -12: loading C:/Users/msi/Desktop/water-main/mobile app/test/home/workspace_routes_test.dart [E]",
+      "01:28 +319 -13: loading C:/Users/msi/Desktop/water-main/mobile app/test/service_requests/service_request_edit_test.dart [E]",
+      "01:50 +337 -14: loading C:/Users/msi/Desktop/water-main/mobile app/test/ui/water_experience_test.dart [E]",
+      "01:58 +338 -15: C:/Users/msi/Desktop/water-main/mobile app/test/users_roles/role_matrix_editor_test.dart: super_admin matrix is read-only [E]"
+    ],
+    "note": "Includes transient compilation/loading failures in files concurrently edited, plus assertion failures; do not classify all 15 as confirmed product defects."
+  },
+  "phpunit": {
+    "command": "php -d extension=pdo_sqlite -d extension=sqlite3 vendor/phpunit/phpunit/phpunit",
+    "cwd": ".",
+    "exit_code": 0,
+    "tool_output": {
+      "tool": "phpunit",
+      "result": "passed",
+      "tests": 43,
+      "passed": 43,
+      "assertions": 310,
+      "duration_ms": 56222
+    },
+    "database": "SQLite test configuration, in memory",
+    "note": "Extensions enabled only for this command. No live financial acceptance or device test."
+  },
+  "not_executed": [
+    "Physical Android device acceptance",
+    "Production hosting verification",
+    "Production signing and update installation",
+    "Printer/camera/WhatsApp device acceptance",
+    "Owner usability acceptance"
+  ],
+  "plan": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md"
+}

@@ -44,6 +44,7 @@ class MeterController extends ApiController
             }
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['meters']);
         return $query->paginate($this->perPage($request))->appends($request->query());
     }
 

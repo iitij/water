@@ -145,7 +145,7 @@ class _GenerateSheetBody extends StatelessWidget {
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.92,
-      builder: (sheetContext, controller) => ColoredBox(
+      builder: (sheetContext, controller) => Material(
         color: Theme.of(sheetContext).scaffoldBackgroundColor,
         child: Column(
           children: <Widget>[

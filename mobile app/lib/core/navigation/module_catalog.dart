@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../features/audit/presentation/audit_events_screen.dart';
+import '../../features/cash_sessions/domain/cash_session_review_permissions.dart';
 
+import '../l10n/app_strings.dart';
 import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
@@ -63,6 +66,8 @@ class AppModule {
   final bool adminOnly;
 
   bool isVisible(PermissionService permissions) {
+    if (id == 'cash_review') return CashSessionReviewPermissions.canView(permissions);
+    if (id == 'audit_events') return AuditEventsScreen.canView(permissions);
     if (permissions.isAdmin) return true;
     if (adminOnly) return false;
     if (requiredPermissions.isEmpty) return true;
@@ -75,6 +80,20 @@ abstract final class ModuleCatalog {
   const ModuleCatalog._();
 
   static const List<AppModule> modules = <AppModule>[
+    AppModule(
+      id: 'cash_review', group: AppModuleGroup.admin,
+      title: AppStringsParity.cashReviewTitle, subtitle: AppStringsParity.cashReviewSubtitle,
+      icon: Icons.fact_check_outlined, color: AppColors.success,
+      route: RouteNames.cashSessionReview,
+      requiredPermissions: ['cash_sessions.approve', 'Approve:CashSession', 'ViewAny:CashSession'],
+    ),
+    AppModule(
+      id: 'audit_events', group: AppModuleGroup.admin,
+      title: AppStringsParity.auditTitle, subtitle: AppStringsParity.auditSubtitle,
+      icon: Icons.policy_outlined, color: AppColors.info,
+      route: RouteNames.auditEvents,
+      requiredPermissions: ['audit.view', 'ViewAny:AuditEvent'],
+    ),
     // ── Field operations ───────────────────────────────────────────────────
     AppModule(
       id: 'field_reader',

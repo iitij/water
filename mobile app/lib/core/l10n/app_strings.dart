@@ -17,10 +17,12 @@ abstract final class AppStringsDefaults {
   static const String networkError =
       'تعذر الاتصال بالخادم — تحقق من الشبكة أو جرّب الوضع أوفلاين.';
   static const String timeoutError = 'انتهت مهلة الاتصال بالخادم.';
-  static const String unauthorizedError = 'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.';
+  static const String unauthorizedError =
+      'انتهت الجلسة، يرجى تسجيل الدخول مجدداً.';
   static const String forbiddenError = 'لا تملك صلاحية تنفيذ هذه العملية.';
   static const String notFoundError = 'السجل غير موجود أو تم حذفه.';
   static const String errorTitle = 'تعذّر تحميل البيانات';
+  static const String invalidResponse = 'وصلت بيانات غير مكتملة من الخادم. أعد المحاولة.';
   static const String conflictError =
       'العملية متعارضة مع حالة السجل الحالية. أعد التحميل ثم حاول.';
   static const String serverError = 'حدث خطأ في الخادم. حاول بعد قليل.';
@@ -139,6 +141,14 @@ class AppStrings {
   final String actionShare;
   final String actionDelete;
 
+  // Cash session review copy shared with approval and pagination surfaces.
+  String get cashReviewLoadError => language == AppLanguage.en
+      ? 'Could not load cash sessions. Try again.'
+      : 'تعذر تحميل الصناديق. أعد المحاولة.';
+  String get cashReviewDecisionError => language == AppLanguage.en
+      ? 'Could not save the decision. Refresh and try again.'
+      : 'تعذر حفظ القرار. حدّث القائمة وأعد المحاولة.';
+
   static const AppStrings ar = AppStrings._(
     language: AppLanguage.ar,
     appTitle: 'مشروع المياه',
@@ -208,16 +218,19 @@ class AppStrings {
     subscribersSubtitle: 'Files, squares and requests',
     moreTitle: 'More',
     moreSubtitle: 'Reports, settings and account',
-    networkError: 'Cannot reach the server — check the network or work offline.',
+    networkError:
+        'Cannot reach the server — check the network or work offline.',
     timeoutError: 'The server took too long to respond.',
     unauthorizedError: 'Your session expired. Please sign in again.',
     forbiddenError: 'You do not have permission to do this.',
     notFoundError: 'The record no longer exists.',
     errorTitle: 'Could not load data',
-    conflictError: 'This conflicts with the current record. Reload and try again.',
+    conflictError:
+        'This conflicts with the current record. Reload and try again.',
     serverError: 'Server error. Please try again shortly.',
     unknownError: 'The operation failed. Check the data or the connection.',
-    offlineBanner: 'Working offline — changes will sync when the network returns.',
+    offlineBanner:
+        'Working offline — changes will sync when the network returns.',
     retry: 'Retry',
     cancel: 'Cancel',
     save: 'Save',
@@ -260,4 +273,100 @@ class AppStrings {
     if (statusCode >= 500) return serverError;
     return unknownError;
   }
+
+  // Operational parity screens share these stable keys with their catalogs.
+  String get auditTitle => AppStringsParity.auditTitle;
+  String get auditSubtitle => AppStringsParity.auditSubtitle;
+  String get auditEmpty => 'لا توجد أحداث مطابقة للفلاتر.';
+  String get auditSearch => 'ابحث في الأحداث والكيانات';
+  String get auditEvent => 'نوع الحدث';
+  String get auditSource => 'المصدر';
+  String get auditActor => 'المستخدم';
+  String get auditEntity => 'نوع السجل';
+  String get auditEntityId => 'رقم السجل';
+  String get auditOccurredAt => 'وقت الحدث';
+  String get auditDevice => 'الجهاز';
+  String get auditIp => 'عنوان الشبكة';
+  String get auditBefore => 'قبل التغيير';
+  String get auditAfter => 'بعد التغيير';
+  String get auditAll => 'الكل';
+  String get auditDetails => 'تفاصيل حدث التدقيق';
+  String get auditSystem => 'النظام';
+  String get auditNoValue => 'لا توجد بيانات';
+  String get settingKey => 'المفتاح';
+  String get settingValue => 'القيمة';
+  String get settingLabel => 'اسم الإعداد';
+  String auditSourceLabel(String? source) => switch (source) {
+    'mobile' => 'التطبيق', 'api' => 'واجهة الربط', 'web' => 'لوحة الويب',
+    'console' => 'مهام النظام', _ => source ?? auditSystem,
+  };
+  String get saveAndAddMeter => 'حفظ وإضافة عداد';
+  String get setupAddFee => 'إضافة رسوم اشتراك للعداد';
+  String get setupFeeAmount => 'رسوم الاشتراك (ريال)';
+  String get setupFeeNotes => 'ملاحظات رسوم الاشتراك';
+  String get setupSkipFee => 'إنهاء دون رسوم';
+  String get setupFeeSaved => 'تم حفظ رسوم الاشتراك.';
+  String get setupSubscriberSaved => 'تم حفظ المشترك؛ أكمل إضافة العداد.';
+  String get setupMeterCancelled =>
+      'المشترك محفوظ. يمكنك إضافة عداده لاحقاً من ملفه.';
+  String get setupAmountInvalid => 'أدخل مبلغاً صحيحاً أكبر من صفر.';
+  String get serviceFinancialLocked =>
+      'المبلغ والمشترك ثابتان لارتباط الطلب بفاتورة؛ يمكنك تعديل التاريخ والحالة والملاحظات.';
+  String get serviceChangeSubscriber => 'تغيير المشترك';
+  String get serviceCloseSubscriber => 'إغلاق اختيار المشترك';
+  String get openLinkedInvoice => 'عرض الفاتورة المرتبطة';
+  String get cashReviewTitle => AppStringsParity.cashReviewTitle;
+  String get cashReviewSubtitle => AppStringsParity.cashReviewSubtitle;
+  String get cashReviewAllStates => 'كل الحالات';
+  String get cashReviewApplyFilters => 'تطبيق الفلاتر';
+  String get cashReviewApprovalNotes => 'ملاحظات الاعتماد (اختياري)';
+  String get cashReviewApprove => 'اعتماد الصندوق';
+  String get cashReviewApproved => 'تم اعتماد الصندوق.';
+  String get cashReviewClearDate => 'مسح التاريخ';
+  String get cashReviewClosingNotes => 'ملاحظات الإغلاق';
+  String get cashReviewCollectorId => 'رقم المحصّل';
+  String get cashReviewCounted => 'المبلغ المعدود';
+  String get cashReviewDetails => 'تفاصيل الصندوق';
+  String get cashReviewEmpty => 'لا توجد صناديق مطابقة للفلاتر.';
+  String get cashReviewExpected => 'المبلغ المتوقع';
+  String get cashReviewFromDate => 'من تاريخ';
+  String get cashReviewInvalidCollector => 'أدخل رقم محصّل صحيحاً.';
+  String get cashReviewInvalidDates =>
+      'تاريخ البداية يجب ألا يتجاوز تاريخ النهاية.';
+  String get cashReviewNext => 'التالي';
+  String get cashReviewPrevious => 'السابق';
+  String get cashReviewReasonRequired => 'اكتب سبب الرفض (10 أحرف على الأقل).';
+  String get cashReviewRefresh => 'تحديث';
+  String get cashReviewReject => 'رفض الصندوق';
+  String get cashReviewRejected => 'تم رفض الصندوق.';
+  String get cashReviewRejectionReason => 'سبب الرفض';
+  String get cashReviewReport => 'تقرير الصندوق';
+  String get cashReviewResetFilters => 'مسح الفلاتر';
+  String get cashReviewState => 'الحالة';
+  String get cashReviewToDate => 'إلى تاريخ';
+  String get cashReviewVariance => 'الفرق النقدي';
+  String get cashReviewPage => 'الصفحة';
+  String get cashReviewTotal => 'الإجمالي';
+  String get cashReviewDecisionFailed => 'تعذر حفظ قرار الصندوق. أعد المحاولة.';
+  String get cashReviewCollector => 'المحصّل';
+  String get cashReviewAllCollectors => 'كل المحصّلين';
+  String get feeChangeSubscriber => 'تغيير مشترك رسوم الاشتراك';
+  String get roleGuard => 'نطاق المصادقة';
+  String get roleReadOnly => 'المصفوفة للعرض فقط';
+  String get roleViewMatrix => 'عرض مصفوفة الصلاحيات';
+  String get roleGuardChangeTitle => 'تغيير نطاق المصادقة';
+  String get roleGuardChangeMessage => 'ستُزال الصلاحيات غير المتاحة في النطاق الجديد من الاختيار. راجع المصفوفة قبل الحفظ. الدور المرتبط بمستخدمين لا يقبل تغيير نطاقه.';
+  String get roleGuardConfirm => 'تغيير النطاق ومراجعة الصلاحيات';
+  String get readingActualDateLabel => 'تاريخ إدخال القراءة الفعلي';
+  String get readingActualDateHelp => 'اختر اليوم الذي تمت فيه قراءة العداد؛ فترة الاستهلاك تبقى كما حددها النظام.';
+  String get readingActualDateChange => 'تغيير تاريخ القراءة';
+}
+
+/// Const labels allow the permission-aware navigation inventories to stay const.
+abstract final class AppStringsParity {
+  static const auditTitle = 'سجل التدقيق المركزي';
+  static const auditSubtitle = 'أحداث النظام والمستخدمون والتغييرات';
+  static const cashReviewTitle = 'مراجعة صناديق المحصّلين';
+  static const cashReviewSubtitle =
+      'راجع النقد والتقارير واعتمد الصناديق أو ارفضها';
 }

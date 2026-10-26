@@ -1,11 +1,35 @@
+import '../../domain/repositories/paginated_tariffs_repository.dart';
 import '../../domain/repositories/tariffs_repository.dart';
 import '../datasources/tariffs_remote_datasource.dart';
 import '../models/tariff_model.dart';
+import '../models/tariffs_page.dart';
 
-class TariffsRepositoryImpl implements TariffsRepository {
+class TariffsRepositoryImpl
+    implements TariffsRepository, PaginatedTariffsRepository {
   const TariffsRepositoryImpl(this._remote);
 
   final TariffsRemoteDataSource _remote;
+
+  @override
+  Future<TariffsPage> listPage({
+    TariffsTrashFilter trash = TariffsTrashFilter.without,
+    String? search,
+    int page = 1,
+    int pageSize = 25,
+    String sortBy = 'start_date',
+    String sortDirection = 'desc',
+  }) async {
+    final result = await _remote.listPage(
+      trash: trash,
+      search: search,
+      page: page,
+      pageSize: pageSize,
+      sortBy: sortBy,
+      sortDirection: sortDirection,
+    );
+    _cachedActivePrice = result.activePrice;
+    return result;
+  }
 
   /// كاش خفيف للسعر النشط كي تُقرأ منه شاشات كثيرة دون ضغط على الخادم.
   static double? _cachedActivePrice;

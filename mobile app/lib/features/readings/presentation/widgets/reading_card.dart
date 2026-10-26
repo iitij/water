@@ -12,6 +12,7 @@ class _ReadingCard extends StatelessWidget {
     this.onPreviewPhoto,
     this.onEdit,
     this.onDelete,
+    this.presentation = const ListPresentationSettings(),
   });
 
   final Reading reading;
@@ -22,6 +23,7 @@ class _ReadingCard extends StatelessWidget {
   final VoidCallback? onPreviewPhoto;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final ListPresentationSettings presentation;
 
   @override
   Widget build(BuildContext context) {
@@ -29,20 +31,23 @@ class _ReadingCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final actualDate = reading.actualReadingDate;
     final hasActions =
-        !selectionMode && (onPreviewPhoto != null || onEdit != null || onDelete != null);
+        !selectionMode &&
+        (onPreviewPhoto != null || onEdit != null || onDelete != null);
 
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
       child: AppCard(
         padding: EdgeInsets.zero,
         borderColor: selected ? scheme.primary.withValues(alpha: .45) : null,
-        color: selected ? scheme.primary.withValues(alpha: .04) : scheme.surface,
+        color: selected
+            ? scheme.primary.withValues(alpha: .04)
+            : scheme.surface,
         onTap: selectionMode ? onTap : null,
         child: InkWell(
           onLongPress: onLongPress,
           borderRadius: BorderRadius.circular(AppRadius.xl),
           child: Padding(
-            padding: const EdgeInsets.all(13),
+            padding: EdgeInsets.all(presentation.compact ? 8 : 13),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
@@ -73,13 +78,14 @@ class _ReadingCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            '${reading.subscriberName ?? 'مشترك'}'
-                            '${reading.tenantName == null ? '' : ' · ${reading.tenantName}'}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall,
-                          ),
+                          if (presentation.isVisible('subscriber'))
+                            Text(
+                              '${reading.subscriberName ?? 'مشترك'}'
+                              '${reading.tenantName == null ? '' : ' · ${reading.tenantName}'}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
                         ],
                       ),
                     ),
@@ -87,10 +93,11 @@ class _ReadingCard extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: <Widget>[
-                        StatusBadge(
-                          status: reading.isInvoiced ? 'success' : 'warning',
-                          label: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة',
-                        ),
+                        if (presentation.isVisible('status'))
+                          StatusBadge(
+                            status: reading.isInvoiced ? 'success' : 'warning',
+                            label: reading.isInvoiced ? 'مفوترة' : 'غير مفوترة',
+                          ),
                         if (!reading.isSynced)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
@@ -106,34 +113,42 @@ class _ReadingCard extends StatelessWidget {
                 const SizedBox(height: 11),
                 Row(
                   children: <Widget>[
-                    Expanded(
-                      child: _ReadingStat(
-                        label: 'السابقة',
-                        value: _number(reading.previousReading),
-                        muted: true,
+                    if (presentation.isVisible('previous_reading'))
+                      Expanded(
+                        child: _ReadingStat(
+                          label: 'السابقة',
+                          value: _number(reading.previousReading),
+                          muted: true,
+                        ),
                       ),
-                    ),
-                    _Arrow(context: context),
-                    Expanded(
-                      child: _ReadingStat(
-                        label: 'الحالية',
-                        value: _number(reading.currentReading),
+                    if (presentation.isVisible('previous_reading') &&
+                        presentation.isVisible('current_reading'))
+                      _Arrow(context: context),
+                    if (presentation.isVisible('current_reading'))
+                      Expanded(
+                        child: _ReadingStat(
+                          label: 'الحالية',
+                          value: _number(reading.currentReading),
+                        ),
                       ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 30,
-                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                      color: scheme.outlineVariant,
-                    ),
-                    Expanded(
-                      child: _ReadingStat(
-                        label: 'الاستهلاك',
-                        value: _number(reading.consumptionUnits),
-                        unit: 'وحدة',
-                        accent: true,
+                    if (presentation.isVisible('consumption') &&
+                        (presentation.isVisible('previous_reading') ||
+                            presentation.isVisible('current_reading')))
+                      Container(
+                        width: 1,
+                        height: 30,
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
+                        color: scheme.outlineVariant,
                       ),
-                    ),
+                    if (presentation.isVisible('consumption'))
+                      Expanded(
+                        child: _ReadingStat(
+                          label: 'الاستهلاك',
+                          value: _number(reading.consumptionUnits),
+                          unit: 'وحدة',
+                          accent: true,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -142,17 +157,31 @@ class _ReadingCard extends StatelessWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
-                    _QuietMeta(
-                      icon: Icons.event_rounded,
-                      label: _date(actualDate ?? reading.readingDate),
-                      ltr: true,
-                    ),
-                    _QuietMeta(
-                      icon: Icons.date_range_rounded,
-                      label: '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
-                      ltr: true,
-                    ),
-                    if (reading.hasPhoto && onPreviewPhoto != null)
+                    if (presentation.isVisible('reading_date'))
+                      _QuietMeta(
+                        icon: Icons.event_rounded,
+                        label:
+                            '${ListOptionsStrings.readingDate}: ${_date(reading.readingDate)}',
+                        ltr: false,
+                      ),
+                    if (presentation.isVisible('actual_reading_date') &&
+                        actualDate != null)
+                      _QuietMeta(
+                        icon: Icons.event_rounded,
+                        label:
+                            '${ListOptionsStrings.actualReadingDate}: ${_date(actualDate)}',
+                        ltr: false,
+                      ),
+                    if (presentation.isVisible('period'))
+                      _QuietMeta(
+                        icon: Icons.date_range_rounded,
+                        label:
+                            '${_date(reading.periodStart)} — ${_date(reading.periodEnd)}',
+                        ltr: true,
+                      ),
+                    if (presentation.isVisible('photo') &&
+                        reading.hasPhoto &&
+                        onPreviewPhoto != null)
                       _ReadingTag(
                         icon: Icons.photo_camera_rounded,
                         label: 'صورة',
@@ -165,7 +194,9 @@ class _ReadingCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     reading.syncError!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.error,
+                    ),
                   ),
                 ],
                 if (hasActions) ...<Widget>[
@@ -212,13 +243,13 @@ class _Arrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext _) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Icon(
-          Icons.arrow_back_rounded,
-          size: 13,
-          color: Theme.of(context).colorScheme.outline,
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: Icon(
+      Icons.arrow_back_rounded,
+      size: 13,
+      color: Theme.of(context).colorScheme.outline,
+    ),
+  );
 }
 
 class _ReadingStat extends StatelessWidget {
@@ -261,14 +292,19 @@ class _ReadingStat extends StatelessWidget {
                   color: accent
                       ? scheme.primary
                       : (muted ? scheme.onSurfaceVariant : scheme.onSurface),
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
                 ),
               ),
             ),
             if (unit != null)
               Padding(
                 padding: const EdgeInsets.only(right: 0, bottom: 1),
-                child: Text(' $unit', style: theme.textTheme.labelSmall?.copyWith(fontSize: 9.5)),
+                child: Text(
+                  ' $unit',
+                  style: theme.textTheme.labelSmall?.copyWith(fontSize: 9.5),
+                ),
               ),
           ],
         ),
@@ -302,7 +338,12 @@ class _ReadingTag extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: FontWeight.w500, color: color),
+          style: TextStyle(
+            fontSize: 10.5,
+            height: 1.2,
+            fontWeight: FontWeight.w500,
+            color: color,
+          ),
         ),
       ],
     );
@@ -311,7 +352,9 @@ class _ReadingTag extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(
-          color: tinted ? scheme.primary.withValues(alpha: .28) : scheme.outlineVariant,
+          color: tinted
+              ? scheme.primary.withValues(alpha: .28)
+              : scheme.outlineVariant,
         ),
       ),
       child: content,
@@ -357,11 +400,7 @@ class _CardAction extends StatelessWidget {
 
 /// عنصر معلومات صامت — أيقونة + نص بلا إطار (بديل الحبّات المُحيّطة).
 class _QuietMeta extends StatelessWidget {
-  const _QuietMeta({
-    required this.icon,
-    required this.label,
-    this.ltr = false,
-  });
+  const _QuietMeta({required this.icon, required this.label, this.ltr = false});
 
   final IconData icon;
   final String label;
@@ -393,7 +432,6 @@ class _QuietMeta extends StatelessWidget {
     );
   }
 }
-
 
 String _date(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-'

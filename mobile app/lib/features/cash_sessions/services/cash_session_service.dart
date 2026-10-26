@@ -6,6 +6,7 @@ import '../../../core/error/failures.dart';
 import '../../audit/services/audit_log_service.dart';
 import '../data/cash_session_api.dart';
 import '../domain/cash_session.dart';
+import '../domain/cash_session_page.dart';
 
 /// يُرمى عند محاولة تحصيل نقدي دون صندوق مفتوح.
 ///
@@ -29,8 +30,8 @@ class CashSessionRequiredException implements Exception {
 /// الأوفلاين لأن الخادم سيرفضه لاحقاً إن كان غير صحيح، مع تنبيه واضح.
 class CashSessionService extends ChangeNotifier {
   CashSessionService({required CashSessionApi api, AuditLogService? audit})
-      : _api = api,
-        _audit = audit;
+    : _api = api,
+      _audit = audit;
 
   static const String noSessionMessage =
       'افتح صندوق المحصّل أولاً قبل تسجيل أي تحصيل.';
@@ -50,6 +51,14 @@ class CashSessionService extends ChangeNotifier {
   bool get hasLoaded => _loaded;
   bool get isLoading => _loading;
   AppFailure? get lastError => _lastError;
+
+  /// Review queries must not replace the collector's currently open session.
+  Future<CashSessionPage> list({
+    CashSessionFilters filters = const CashSessionFilters(),
+    int page = 1,
+  }) => _api.list(filters: filters, page: page);
+
+  Future<CashSession> byId(int id) => _api.byId(id);
 
   /// هل يجوز تسجيل تحصيل الآن؟
   ///
@@ -102,9 +111,7 @@ class CashSessionService extends ChangeNotifier {
     _recordAudit(
       'cash_session.opened',
       session,
-      after: <String, dynamic>{
-        'opening_amount': session.openingAmount,
-      },
+      after: <String, dynamic>{'opening_amount': session.openingAmount},
     );
     notifyListeners();
     return session;
@@ -137,7 +144,11 @@ class CashSessionService extends ChangeNotifier {
     return closed;
   }
 
-  Future<CashSession> approve(int id, {required bool approve, String? notes}) async {
+  Future<CashSession> approve(
+    int id, {
+    required bool approve,
+    String? notes,
+  }) async {
     final session = await _api.approve(id, approve: approve, notes: notes);
     if (_current?.id == session.id) _current = session;
     _recordAudit(
@@ -161,7 +172,12 @@ class CashSessionService extends ChangeNotifier {
     final audit = _audit;
     if (audit == null) return;
     unawaited(() async {
-      await audit.record(event, entityType: 'CashSession', entityId: session.id, after: after);
+      await audit.record(
+        event,
+        entityType: 'CashSession',
+        entityId: session.id,
+        after: after,
+      );
       await audit.flush();
     }());
   }

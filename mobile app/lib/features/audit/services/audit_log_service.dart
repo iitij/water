@@ -1,22 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../data/audit_event_store.dart';
 import '../domain/local_audit_event.dart';
 
-/// يرفع دفعة أحداث إلى الخادم. يرمي استثناءً عند الفشل ليُبقي [AuditLogService]
-/// الأحداث في المخزن ويعيد المحاولة لاحقاً.
-typedef AuditUploader = Future<void> Function(List<Map<String, dynamic>> events);
+/// Uploads a batch under the authenticated scope; never sends an actor ID.
+typedef AuditUploader =
+    Future<void> Function(List<Map<String, dynamic>> events);
 
-/// سجل تدقيق محلي + رفع مجمّع (بطاقة S4-05).
-///
-/// المبدأ: **لا يُفقد حدث**. التسجيل لا يرمي استثناءً أبداً — الأسوأ أن يبقى
-/// الحدث في الجهاز بانتظار الشبكة، لا أن تفشل عملية التحصيل لأن السجل تعطّل.
-///
-/// ترتيب العمل:
-/// 1. `record(...)` يضيف الحدث للمخزن المحلي فوراً (قبل أي اتصال).
-/// 2. `flush()` يرسل دفعات بحجم [batchSize] ويحذف ما نجح فقط.
-/// 3. عند فشل أي دفعة يتوقف الرفع ويُبقي ما لم يُرفع (بلا تكرار: المعرّف المحلي
-///    ثابت على الحدث).
+/// Local audit writes are serialized. Network requests release the write lock,
+/// then remove only acknowledged IDs from a fresh snapshot of the same store.
 class AuditLogService extends ChangeNotifier {
   AuditLogService({
     required AuditEventStore store,
@@ -25,36 +20,80 @@ class AuditLogService extends ChangeNotifier {
     String? Function()? deviceId,
     DateTime Function()? now,
     String Function()? idGenerator,
-  })  : _store = store,
-        _upload = upload,
-        _deviceId = deviceId,
-        _now = now ?? DateTime.now,
-        _newId = idGenerator ?? _generateId,
-        assert(batchSize > 0, 'حجم الدفعة يجب أن يكون أكبر من صفر');
+    String? Function()? scopeProvider,
+    AuditEventStore Function(String scope)? scopedStoreFactory,
+  }) : _store = store,
+       _upload = upload,
+       _deviceId = deviceId,
+       _now = now ?? DateTime.now,
+       _newId = idGenerator ?? const Uuid().v4,
+       _scopeProvider = scopeProvider,
+       _scopedStoreFactory = scopedStoreFactory,
+       assert(batchSize > 0),
+       assert((scopeProvider == null) == (scopedStoreFactory == null));
 
   final AuditEventStore _store;
   final AuditUploader _upload;
   final String? Function()? _deviceId;
   final DateTime Function() _now;
   final String Function() _newId;
+  final String? Function()? _scopeProvider;
+  final AuditEventStore Function(String scope)? _scopedStoreFactory;
+  final Map<String, AuditEventStore> _scopedStores = {};
   final int batchSize;
 
+  Future<void> _storeTail = Future<void>.value();
   bool _flushing = false;
+  int _generation = 0;
   int _pending = 0;
   String? _lastError;
   DateTime? _lastFlushedAt;
 
-  /// عدد الأحداث المعلّقة كما ظهر في آخر تحميل ناجح.
   int get pendingCount => _pending;
-
-  /// آخر رسالة فشل (لشاشة التشخيص)، وتُمحى بعد أول رفع ناجح.
   String? get lastError => _lastError;
-
   DateTime? get lastFlushedAt => _lastFlushedAt;
-
   bool get isFlushing => _flushing;
 
-  /// يسجّل حدثاً محلياً. لا يرمي استثناءً مهما حدث.
+  /// Called on session changes so counters from another account disappear and
+  /// a running flush cannot dispatch its next batch under the new session.
+  void sessionChanged() {
+    _generation++;
+    _pending = 0;
+    _lastError = null;
+    _lastFlushedAt = null;
+    notifyListeners();
+  }
+
+  _AuditContext? _context() {
+    if (_scopeProvider == null) {
+      return _AuditContext(null, _store, _generation);
+    }
+    final scope = _scopeProvider.call();
+    if (scope == null || scope.isEmpty) return null;
+    final store = _scopedStores.putIfAbsent(
+      scope,
+      () => _scopedStoreFactory!(scope),
+    );
+    return _AuditContext(scope, store, _generation);
+  }
+
+  bool _isCurrent(_AuditContext context) =>
+      context.generation == _generation &&
+      (_scopeProvider == null || _scopeProvider.call() == context.scope);
+
+  Future<T> _locked<T>(Future<T> Function() operation) async {
+    final previous = _storeTail;
+    final completed = Completer<void>();
+    _storeTail = completed.future;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      completed.complete();
+    }
+  }
+
+  /// Recording is best-effort and never interrupts the financial operation.
   Future<LocalAuditEvent?> record(
     String event, {
     String? entityType,
@@ -63,24 +102,31 @@ class AuditLogService extends ChangeNotifier {
     Map<String, dynamic>? after,
   }) async {
     if (event.trim().isEmpty) return null;
-
-    final localEvent = LocalAuditEvent(
-      id: _newId(),
-      event: event.trim(),
-      occurredAt: _now(),
-      entityType: entityType,
-      entityId: entityId?.toString(),
-      before: before,
-      after: after,
-      deviceId: _deviceId?.call(),
-    );
-
     try {
-      final pending = await _store.pending();
-      pending.add(localEvent);
-      await _store.save(pending);
-      _pending = pending.length;
-      notifyListeners();
+      final context = _context();
+      if (context == null) return null;
+      final localEvent = LocalAuditEvent(
+        id: _newId(),
+        event: event.trim(),
+        occurredAt: _now(),
+        entityType: entityType,
+        entityId: entityId?.toString(),
+        before: before,
+        after: after,
+        deviceId: _deviceId?.call(),
+      );
+      final count = await _locked(() async {
+        final pending = List<LocalAuditEvent>.from(
+          await context.store.pending(),
+        );
+        pending.add(localEvent);
+        await context.store.save(pending);
+        return pending.length;
+      });
+      if (_isCurrent(context)) {
+        _pending = count;
+        notifyListeners();
+      }
       return localEvent;
     } catch (error) {
       _lastError = 'تعذّر حفظ حدث التدقيق محلياً: $error';
@@ -89,45 +135,52 @@ class AuditLogService extends ChangeNotifier {
     }
   }
 
-  /// يرفع كل المعلّق على دفعات، ويعيد عدد ما رُفع فعلاً.
-  ///
-  /// آمن للاستدعاء المتكرر (عند عودة الشبكة، عند فتح الشاشة، بعد كل عملية).
   Future<int> flush() async {
     if (_flushing) return 0;
+    final context = _context();
+    if (context == null) {
+      _pending = 0;
+      return 0;
+    }
     _flushing = true;
     notifyListeners();
-
     var uploaded = 0;
     try {
-      var pending = await _store.pending();
-      _pending = pending.length;
-
-      while (pending.isNotEmpty) {
+      while (_isCurrent(context)) {
+        final pending = await _locked(context.store.pending);
+        if (!_isCurrent(context)) break;
+        _pending = pending.length;
+        if (pending.isEmpty) break;
         final batch = pending.take(batchSize).toList(growable: false);
         try {
           await _upload(
             batch.map((event) => event.toWireJson()).toList(growable: false),
           );
         } catch (error) {
-          _lastError = 'تعذّر رفع سجل التدقيق: $error';
+          if (_isCurrent(context)) _lastError = 'تعذّر رفع سجل التدقيق: $error';
           break;
         }
-
         final sentIds = batch.map((event) => event.id).toSet();
-        pending = pending
-            .where((event) => !sentIds.contains(event.id))
-            .toList(growable: true);
+        final remaining = await _locked(() async {
+          final latest = await context.store.pending();
+          final unsent = latest
+              .where((event) => !sentIds.contains(event.id))
+              .toList();
+          await context.store.save(unsent);
+          return unsent.length;
+        });
         uploaded += batch.length;
-        _lastError = null;
-        _lastFlushedAt = _now();
-        await _store.save(pending);
-        _pending = pending.length;
+        if (_isCurrent(context)) {
+          _pending = remaining;
+          _lastError = null;
+          _lastFlushedAt = _now();
+        }
       }
-
-      _pending = pending.length;
       return uploaded;
     } catch (error) {
-      _lastError = 'تعذّر قراءة سجل التدقيق المحلي: $error';
+      if (_isCurrent(context)) {
+        _lastError = 'تعذّر قراءة سجل التدقيق المحلي: $error';
+      }
       return uploaded;
     } finally {
       _flushing = false;
@@ -135,22 +188,26 @@ class AuditLogService extends ChangeNotifier {
     }
   }
 
-  /// عدد الأحداث المعلّقة قراءةً حديثة من المخزن (بلا رفع).
   Future<int> refreshPendingCount() async {
     try {
-      final pending = await _store.pending();
-      _pending = pending.length;
+      final context = _context();
+      if (context == null) {
+        _pending = 0;
+      } else {
+        final pending = await _locked(context.store.pending);
+        if (_isCurrent(context)) _pending = pending.length;
+      }
       notifyListeners();
     } catch (error) {
       _lastError = 'تعذّر قراءة سجل التدقيق المحلي: $error';
     }
     return _pending;
   }
+}
 
-  /// معرّف بسيط فريد بما يكفي للجهاز الواحد (زمن + عشوائي).
-  static String _generateId() {
-    final micros = DateTime.now().microsecondsSinceEpoch;
-    final salt = DateTime.now().hashCode & 0xffff;
-    return '$micros-$salt';
-  }
+class _AuditContext {
+  const _AuditContext(this.scope, this.store, this.generation);
+  final String? scope;
+  final AuditEventStore store;
+  final int generation;
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/app_strings.dart';
 import '../../../core/router/route_names.dart';
 
 enum WorkspaceGroup {
@@ -24,6 +25,7 @@ class WorkspaceEntry {
     required this.route,
     required this.group,
     this.permissions = const [],
+    this.anyPermissions = const [],
     this.keywords = '',
     this.shortcut = false,
   });
@@ -34,11 +36,12 @@ class WorkspaceEntry {
   final String route;
   final WorkspaceGroup group;
   final List<String> permissions;
+  final List<String> anyPermissions;
   final String keywords;
   final bool shortcut;
 
   bool isVisible(bool Function(String) can) =>
-      permissions.every(can);
+      permissions.every(can) && (anyPermissions.isEmpty || anyPermissions.any(can));
 
   bool matches(String query) {
     final text = normalizeWorkspaceSearch('$title $description $keywords');
@@ -59,6 +62,19 @@ String normalizeWorkspaceSearch(String value) => value
 
 abstract final class WorkspaceCatalog {
   static const entries = <WorkspaceEntry>[
+    WorkspaceEntry(
+      title: AppStringsParity.cashReviewTitle, description: AppStringsParity.cashReviewSubtitle,
+      icon: Icons.fact_check_outlined, route: RouteNames.cashSessionReview,
+      group: WorkspaceGroup.management,
+      anyPermissions: ['cash_sessions.approve', 'Approve:CashSession', 'ViewAny:CashSession'],
+      keywords: 'اعتماد رفض صندوق محصل cash session review',
+    ),
+    WorkspaceEntry(
+      title: AppStringsParity.auditTitle, description: AppStringsParity.auditSubtitle,
+      icon: Icons.policy_outlined, route: RouteNames.auditEvents,
+      group: WorkspaceGroup.management, anyPermissions: ['audit.view', 'ViewAny:AuditEvent'],
+      keywords: 'تدقيق سجل احداث audit events',
+    ),
     WorkspaceEntry(
       title: 'تسجيل قراءة', description: 'ابحث عن العداد وسجّل القراءة',
       icon: Icons.speed_rounded, route: RouteNames.fieldReader,

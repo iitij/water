@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../features/admin_shared/data/admin_api_client.dart';
+import '../../features/audit/presentation/audit_events_screen.dart';
 import '../../features/auth/presentation/pages/edit_profile_screen.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/splash_screen.dart';
+import '../../features/cash_sessions/presentation/cash_session_review_screen.dart';
 import '../../features/cash_sessions/presentation/cash_session_screen.dart';
 import '../../features/dashboard/dashboard.dart';
 import '../../features/data_quality/data/data_quality_remote_data_source.dart';
@@ -165,6 +168,14 @@ class AppRouter {
               subtitle: 'فتح الصندوق، متابعة السندات، وإقفال العدّ',
               child: CashSessionScreen(),
             ),
+          ),
+          GoRoute(
+            path: RouteNames.cashSessionReview,
+            builder: (context, state) => const CashSessionReviewScreen(),
+          ),
+          GoRoute(
+            path: RouteNames.auditEvents,
+            builder: (context, state) => const AuditEventsScreen(),
           ),
           GoRoute(
             path: RouteNames.appLock,

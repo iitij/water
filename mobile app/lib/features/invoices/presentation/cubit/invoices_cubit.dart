@@ -4,7 +4,9 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_search.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/invoice_query.dart';
+import '../../data/models/invoices_page.dart';
 import '../../domain/repositories/invoices_repository.dart';
+import '../../domain/repositories/paginated_invoices_repository.dart';
 import 'invoices_state.dart';
 
 /// `InvoicesCubit` — جلب/فلترة/بحث + إجراءات جماعية على قائمة الفواتير (`SCR-14`).
@@ -12,47 +14,94 @@ import 'invoices_state.dart';
 /// الحسابات المالية ليست هنا: تُقرأ من الخادم، والمعاينة المحلية عبر
 /// `InvoiceAccounting` (اختبارها في `test/accounting/`).
 class InvoicesCubit extends Cubit<InvoicesState> {
-  InvoicesCubit({required InvoicesRepository repository, InvoiceQuery initialQuery = const InvoiceQuery()})
-      : _repository = repository,
-        super(InvoicesState(query: initialQuery));
+  InvoicesCubit({
+    required InvoicesRepository repository,
+    InvoiceQuery initialQuery = const InvoiceQuery(),
+  }) : _repository = repository,
+       super(InvoicesState(query: initialQuery));
 
   final InvoicesRepository _repository;
   String? _lastSignature;
+  int _loadGeneration = 0;
 
   Future<void> load({bool refresh = false}) async {
-    final signature = state.query.signature;
+    final query = state.query;
+    final signature = query.signature;
     if (!refresh && signature == _lastSignature && state.hasData) return;
+    final generation = ++_loadGeneration;
 
-    emit(state.copyWith(
-      status: state.hasData
-          ? FinanceLoadStatus.refreshing
-          : FinanceLoadStatus.loading,
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(
+        status: state.hasData
+            ? FinanceLoadStatus.refreshing
+            : FinanceLoadStatus.loading,
+        clearError: true,
+      ),
+    );
 
     try {
+      final repository = _repository;
+      if (repository is PaginatedInvoicesRepository) {
+        final results = await Future.wait<Object>([
+          (repository as PaginatedInvoicesRepository).listPage(query),
+          _repository.billingPeriods(),
+        ]);
+        if (isClosed || generation != _loadGeneration) return;
+        final page = results[0] as InvoicesPage;
+        if (page.invoices.isEmpty && query.page > page.lastPage) {
+          emit(state.copyWith(query: query.copyWith(page: page.lastPage)));
+          await load(refresh: true);
+          return;
+        }
+        _lastSignature = signature;
+        emit(
+          state.copyWith(
+            invoices: page.invoices,
+            billingPeriods: results[1] as List<BillingPeriodOption>,
+            query: query.copyWith(page: page.currentPage),
+            lastPage: page.lastPage,
+            totalCount: page.total,
+            status: FinanceLoadStatus.ready,
+            busyInvoiceId: null,
+            selectedIds: const <int>{},
+          ),
+        );
+        return;
+      }
       final results = await Future.wait(<Future<Object>>[
-        _repository.list(state.query),
+        _repository.list(query),
         _repository.billingPeriods(),
       ]);
+      if (isClosed || generation != _loadGeneration) return;
 
       final invoices = results[0] as List<InvoiceModel>;
       final periods = results[1] as List<BillingPeriodOption>;
 
       _lastSignature = signature;
-      emit(state.copyWith(
-        invoices: invoices,
-        billingPeriods: periods,
-        status: FinanceLoadStatus.ready,
-        selectedIds: const <int>{},
-      ));
+      emit(
+        state.copyWith(
+          invoices: invoices,
+          billingPeriods: periods,
+          status: FinanceLoadStatus.ready,
+          selectedIds: const <int>{},
+        ),
+      );
     } on AppFailure catch (failure) {
-      emit(state.copyWith(status: FinanceLoadStatus.failure, errorMessage: failure.message));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: FinanceLoadStatus.failure,
+          errorMessage: failure.message,
+        ),
+      );
     } catch (error) {
-      emit(state.copyWith(
-        status: FinanceLoadStatus.failure,
-        errorMessage: 'تعذّر جلب الفواتير: $error',
-      ));
+      if (isClosed || generation != _loadGeneration) return;
+      emit(
+        state.copyWith(
+          status: FinanceLoadStatus.failure,
+          errorMessage: 'تعذّر جلب الفواتير: $error',
+        ),
+      );
     }
   }
 
@@ -60,10 +109,20 @@ class InvoicesCubit extends Cubit<InvoicesState> {
   /// `/invoices/search` عندما يكون هناك نص بحث (سلوك `InvoiceController::search`).
   Future<void> search(String value) async {
     if (state.query.search == value) return;
-    emit(state.copyWith(query: state.query.copyWith(search: value)));
+    emit(
+      state.copyWith(
+        query: state.query.copyWith(search: value, page: 1),
+        selectedIds: const <int>{},
+      ),
+    );
+    if (_repository is PaginatedInvoicesRepository) {
+      await load(refresh: true);
+      return;
+    }
 
     final parsed = FinanceSearchQuery.parse(value);
-    final hasExtraFilters = state.query.trashed != 'without' ||
+    final hasExtraFilters =
+        state.query.trashed != 'without' ||
         state.query.invoiceType != null ||
         state.query.status != null ||
         state.query.subscriberId != null ||
@@ -81,12 +140,38 @@ class InvoicesCubit extends Cubit<InvoicesState> {
       );
       emit(state.copyWith(invoices: invoices, status: FinanceLoadStatus.ready));
     } on AppFailure catch (failure) {
-      emit(state.copyWith(status: FinanceLoadStatus.failure, errorMessage: failure.message));
+      emit(
+        state.copyWith(
+          status: FinanceLoadStatus.failure,
+          errorMessage: failure.message,
+        ),
+      );
     }
   }
 
   Future<void> applyFilters(InvoiceQuery query) async {
-    emit(state.copyWith(query: query, selectedIds: const <int>{}));
+    emit(
+      state.copyWith(
+        query: query.copyWith(page: 1),
+        selectedIds: const <int>{},
+      ),
+    );
+    await load(refresh: true);
+  }
+
+  Future<void> goToPage(int page) async {
+    if (state.isLoading ||
+        page < 1 ||
+        page == state.query.page ||
+        (state.lastPage != null && page > state.lastPage!)) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        query: state.query.copyWith(page: page),
+        selectedIds: const <int>{},
+      ),
+    );
     await load(refresh: true);
   }
 
@@ -97,8 +182,9 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(selectedIds: selected));
   }
 
-  void selectAll() =>
-      emit(state.copyWith(selectedIds: state.invoices.map((i) => i.id).toSet()));
+  void selectAll() => emit(
+    state.copyWith(selectedIds: state.invoices.map((i) => i.id).toSet()),
+  );
 
   void clearSelection() => emit(state.copyWith(selectedIds: const <int>{}));
 
@@ -122,11 +208,18 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(busyInvoiceId: id, clearError: true));
     try {
       await _repository.delete(id);
-      emit(state.copyWith(
-        invoices: state.invoices.where((i) => i.id != id).toList(),
-        selectedIds: state.selectedIds.where((s) => s != id).toSet(),
-        busyInvoiceId: null,
-      ));
+      emit(state.copyWith(busyInvoiceId: null));
+      if (_repository is PaginatedInvoicesRepository) {
+        await load(refresh: true);
+        return true;
+      }
+      emit(
+        state.copyWith(
+          invoices: state.invoices.where((i) => i.id != id).toList(),
+          selectedIds: state.selectedIds.where((s) => s != id).toSet(),
+          busyInvoiceId: null,
+        ),
+      );
       return true;
     } on AppFailure catch (failure) {
       emit(state.copyWith(busyInvoiceId: null, errorMessage: failure.message));
@@ -138,6 +231,7 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(busyInvoiceId: id, clearError: true));
     try {
       await _repository.restore(id);
+      emit(state.copyWith(busyInvoiceId: null));
       await load(refresh: true);
       return true;
     } on AppFailure catch (failure) {
@@ -150,11 +244,18 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     emit(state.copyWith(busyInvoiceId: id, clearError: true));
     try {
       await _repository.forceDelete(id);
-      emit(state.copyWith(
-        invoices: state.invoices.where((i) => i.id != id).toList(),
-        selectedIds: state.selectedIds.where((s) => s != id).toSet(),
-        busyInvoiceId: null,
-      ));
+      emit(state.copyWith(busyInvoiceId: null));
+      if (_repository is PaginatedInvoicesRepository) {
+        await load(refresh: true);
+        return true;
+      }
+      emit(
+        state.copyWith(
+          invoices: state.invoices.where((i) => i.id != id).toList(),
+          selectedIds: state.selectedIds.where((s) => s != id).toSet(),
+          busyInvoiceId: null,
+        ),
+      );
       return true;
     } on AppFailure catch (failure) {
       emit(state.copyWith(busyInvoiceId: null, errorMessage: failure.message));
@@ -167,7 +268,9 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     if (state.selectedIds.isEmpty) return null;
     emit(state.copyWith(bulkRunning: true, clearError: true));
     try {
-      final result = await _repository.bulkRecalculate(state.selectedIds.toList());
+      final result = await _repository.bulkRecalculate(
+        state.selectedIds.toList(),
+      );
       await load(refresh: true);
       emit(state.copyWith(bulkRunning: false, selectedIds: const <int>{}));
       return result;
@@ -209,7 +312,9 @@ class InvoicesCubit extends Cubit<InvoicesState> {
     if (state.selectedIds.isEmpty) return null;
     emit(state.copyWith(bulkRunning: true, clearError: true));
     try {
-      final result = await _repository.bulkForceDelete(state.selectedIds.toList());
+      final result = await _repository.bulkForceDelete(
+        state.selectedIds.toList(),
+      );
       await load(refresh: true);
       emit(state.copyWith(bulkRunning: false, selectedIds: const <int>{}));
       return result;
@@ -223,10 +328,12 @@ class InvoicesCubit extends Cubit<InvoicesState> {
   void applyLocalInvoiceUpdate(InvoiceModel invoice) {
     final exists = state.invoices.any((i) => i.id == invoice.id);
     if (!exists) return;
-    emit(state.copyWith(
-      invoices: state.invoices
-          .map((i) => i.id == invoice.id ? invoice : i)
-          .toList(growable: false),
-    ));
+    emit(
+      state.copyWith(
+        invoices: state.invoices
+            .map((i) => i.id == invoice.id ? invoice : i)
+            .toList(growable: false),
+      ),
+    );
   }
 }

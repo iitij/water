@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -102,6 +108,7 @@ class _SubscriptionFeesView extends StatelessWidget {
     if (existing != null) {
       try {
         final detail = await repo.getSubscriber360(existing.subscriberId);
+        pickedSub = detail.subscriber;
         metersForExisting = detail.summary.meterBalances;
       } catch (_) {}
     }
@@ -112,6 +119,9 @@ class _SubscriptionFeesView extends StatelessWidget {
     );
     final notesCtrl = TextEditingController(text: existing?.notes ?? '');
     var selectedStatus = existing?.status ?? FeeStatus.uninvoiced;
+    var changingSubscriber = false;
+    var saving = false;
+    String? saveError;
 
     await showDialog<void>(
       context: context,
@@ -141,10 +151,35 @@ class _SubscriptionFeesView extends StatelessWidget {
                       decoration: const InputDecoration(
                         labelText: 'المشترك',
                       ),
-                      child: Text(existing.subscriberName ?? 'مشترك #${existing.subscriberId}'),
+                      child: Text(pickedSub?.name ?? existing.subscriberName ?? 'مشترك #${existing.subscriberId}'),
+                    ),
+                    if (existing.invoiceId == null)
+                      TextButton.icon(
+                        icon: const Icon(Icons.person_search_outlined),
+                        label: Text(AppStrings.of(context).feeChangeSubscriber),
+                        onPressed: saving ? null : () => setDialogState(() => changingSubscriber = !changingSubscriber),
+                      ),
+                    if (changingSubscriber) SizedBox(
+                      height: 220,
+                      child: SubscriberMeterSelectorWidget(repository: repo, showMeterPicker: false,
+                        onSelected: (subscriber, _) async {
+                          setDialogState(() {
+                            pickedSub = subscriber; pickedMeterId = null;
+                            metersForExisting = []; changingSubscriber = false;
+                          });
+                          try {
+                            final detail = await repo.getSubscriber360(subscriber.id);
+                            if (ctx.mounted && pickedSub?.id == subscriber.id) {
+                              setDialogState(() => metersForExisting = detail.summary.meterBalances);
+                            }
+                          } catch (error) {
+                            if (ctx.mounted) setDialogState(() => saveError = '$error');
+                          }
+                        }),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<int?>(
+                      key: ValueKey('fee-meter-${pickedSub?.id}-$pickedMeterId'),
                       initialValue: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
                       decoration: const InputDecoration(
                         labelText: 'العداد',
@@ -154,7 +189,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                         for (final m in metersForExisting)
                           DropdownMenuItem<int?>(value: m.meterId, child: Text(m.title)),
                       ],
-                      onChanged: (v) => setDialogState(() => pickedMeterId = v),
+                      onChanged: saving ? null : (v) => setDialogState(() => pickedMeterId = v),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -185,24 +220,32 @@ class _SubscriptionFeesView extends StatelessWidget {
                       labelText: 'ملاحظات',
                     ),
                   ),
+                  if (saveError != null) Text(saveError!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                  if (saving) const LinearProgressIndicator(),
                 ],
               ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: saving ? null : () => Navigator.pop(ctx),
               child: const Text('إلغاء'),
             ),
             FilledButton(
-              onPressed: () async {
+              onPressed: saving ? null : () async {
                 final amount = double.tryParse(normalizeDigits(amountCtrl.text));
-                if (amount == null || amount <= 0) return;
+                if (amount == null || !amount.isFinite || amount <= 0) {
+                  setDialogState(() => saveError = AppStrings.of(ctx).setupAmountInvalid);
+                  return;
+                }
                 final notes = notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim();
+                if (existing == null && pickedSub == null) return;
+                setDialogState(() { saving = true; saveError = null; });
+                bool success;
                 if (existing == null) {
                   final sub = pickedSub;
                   if (sub == null) return;
-                  await cubit.create(
+                  success = await cubit.create(
                     subscriberId: sub.id,
                     meterId: pickedMeterId,
                     amount: amount,
@@ -210,9 +253,9 @@ class _SubscriptionFeesView extends StatelessWidget {
                     notes: notes,
                   );
                 } else {
-                  await cubit.update(SubscriptionFee(
+                  success = await cubit.update(SubscriptionFee(
                     id: existing.id,
-                    subscriberId: existing.subscriberId,
+                    subscriberId: pickedSub?.id ?? existing.subscriberId,
                     meterId: pickedMeterId,
                     amount: amount,
                     status: selectedStatus,
@@ -220,7 +263,10 @@ class _SubscriptionFeesView extends StatelessWidget {
                     notes: notes,
                   ));
                 }
-                if (ctx.mounted) Navigator.pop(ctx);
+                if (!ctx.mounted) return;
+                if (success) { Navigator.pop(ctx); } else {
+                  setDialogState(() { saving = false; saveError = cubit.state.error; });
+                }
               },
               child: const Text('حفظ'),
             ),
@@ -366,13 +412,25 @@ class _SubscriptionFeesView extends StatelessWidget {
               ),
             if (state.loading) const LinearProgressIndicator(),
             Expanded(
-              child: state.fees.isEmpty && !state.loading
+              child: ListPresentation<SubscriptionFee>(
+                items: state.fees,
+                initialSettings: const ListPresentationSettings(sortBy: 'id'),
+                sortValues: {
+                  'id': (label: ListOptionsStrings.id, value: (fee) => fee.id),
+                  'subscriber': (label: ListOptionsStrings.subscriber, value: (fee) => fee.subscriberName ?? ''),
+                  'amount': (label: ListOptionsStrings.amount, value: (fee) => fee.amount),
+                  'status': (label: ListOptionsStrings.status, value: (fee) => fee.status.index),
+                  'date': (label: ListOptionsStrings.date, value: (fee) => fee.createdAt ?? ''),
+                },
+                fields: const {'meter': ListOptionsStrings.meter, 'date': ListOptionsStrings.date,
+                  'invoice': ListOptionsStrings.invoice, 'notes': ListOptionsStrings.notes},
+                builder: (context, fees, options) => fees.isEmpty && !state.loading
                   ? const Center(child: AdminEmptyView(title: 'لا توجد رسوم اشتراك مطابقة'))
                   : ListView.builder(
                       padding: const EdgeInsets.only(top: 10, bottom: 24),
-                      itemCount: state.fees.length,
+                      itemCount: fees.length,
                       itemBuilder: (_, i) {
-                        final f = state.fees[i];
+                        final f = fees[i];
                         final checked = state.selectedIds.contains(f.id);
                         return Padding(
                           padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
@@ -384,7 +442,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                               onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
                               borderRadius: BorderRadius.circular(AppRadius.xl),
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(options.compact ? 8 : 12),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -408,8 +466,9 @@ class _SubscriptionFeesView extends StatelessWidget {
                                               ),
                                               const Gap(2),
                                               Text(
-                                                '${f.meterCode ?? 'بدون عداد'} • أُضيفت: ${f.createdAt != null && f.createdAt!.length >= 10 ? f.createdAt!.substring(0, 10) : (f.createdAt ?? '-')}'
-                                                '${f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}',
+                                                '${options.isVisible('meter') ? f.meterCode ?? 'بدون عداد' : ''}'
+                                                '${options.isVisible('date') ? ' • ${f.createdAt ?? ''}' : ''}'
+                                                '${options.isVisible('invoice') && f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}',
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: Theme.of(context).textTheme.labelSmall,
@@ -468,7 +527,14 @@ class _SubscriptionFeesView extends StatelessWidget {
                                         ),
                                       ],
                                     ),
-                                    if (f.notes != null && f.notes!.isNotEmpty) ...[
+                                    if (options.isVisible('invoice') && f.invoiceId != null && GetIt.I.isRegistered<PermissionService>() &&
+                                        GetIt.I<PermissionService>().can('View:Invoice'))
+                                      TextButton.icon(
+                                        onPressed: () => context.push('${RouteNames.invoices}/${f.invoiceId}'),
+                                        icon: const Icon(Icons.receipt_long_outlined),
+                                        label: Text(AppStrings.of(context).openLinkedInvoice),
+                                      ),
+                                    if (options.isVisible('notes') && f.notes != null && f.notes!.isNotEmpty) ...[
                                       const Gap(6),
                                       Text(
                                         f.notes!,
@@ -518,6 +584,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                         );
                       },
                     ),
+              ),
             ),
           ]),
         );

@@ -1,5 +1,6 @@
 import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/network/paginated_collection.dart';
 import '../models/subscription_fee_model.dart';
 
 class SubscriptionFeesRemoteDatasource {
@@ -7,11 +8,12 @@ class SubscriptionFeesRemoteDatasource {
   final ApiClient _api;
 
   Future<Map<String, dynamic>> getFees({String? status, int? subscriberId}) async {
-    final data = await _api.get('/subscription-fees', query: {
+    final data = await collectPaginatedCollection((page) => _api.get('/subscription-fees', query: {
       if (status != null) 'status': status,
       if (subscriberId != null) 'subscriber_id': subscriberId,
-    });
-    return data is List ? {'data': data} : jMap(data);
+      'page': page,
+    }));
+    return data;
   }
 
   SubscriptionFeeModel _one(Object? raw) {

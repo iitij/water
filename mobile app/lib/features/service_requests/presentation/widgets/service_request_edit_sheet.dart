@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/fouad/api_client.dart';
+import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -71,6 +72,8 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
         serviceDate: _date.toIso8601String().substring(0, 10),
         status: _status,
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+        invoiceId: widget.request.invoiceId,
+        invoiceNumber: widget.request.invoiceNumber,
       ));
       if (mounted) {
         setState(() => _saving = false);
@@ -120,12 +123,12 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall,
                       ),
-                      if (widget.request.canEdit) Align(
+                      if (widget.request.canEditFinancial) Align(
                         alignment: AlignmentDirectional.centerStart,
                         child: TextButton.icon(
                           onPressed: _saving ? null : () => setState(() => _changingSubscriber = !_changingSubscriber),
                           icon: const Icon(Icons.person_search_outlined, size: 18),
-                          label: Text(_changingSubscriber ? 'إغلاق اختيار المشترك' : 'تغيير المشترك'),
+                          label: Text(_changingSubscriber ? AppStrings.of(context).serviceCloseSubscriber : AppStrings.of(context).serviceChangeSubscriber),
                         ),
                       ),
                       if (_changingSubscriber && !_saving) SizedBox(
@@ -143,7 +146,7 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                       const Gap(12),
                       AppNumericField(
                         controller: _amount, label: 'المبلغ (ريال)', allowDecimal: true,
-                        enabled: !_saving && widget.request.canEdit,
+                        enabled: !_saving && widget.request.canEditFinancial,
                         validator: (value) {
                           final amount = double.tryParse(ArabicToEnglishDigitsFormatter.normalize(value ?? '').trim());
                           return amount == null || !amount.isFinite || amount <= 0 ? 'أدخل مبلغاً أكبر من صفر' : null;
@@ -179,8 +182,9 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                           color: AppColors.danger,
                         ),
                       ),
-                      if (!widget.request.canEdit) const Padding(
-                        padding: EdgeInsets.only(top: 12), child: Text('لا يمكن تعديل طلب مرتبط بفاتورة.')),
+                      if (!widget.request.canEditFinancial) Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(AppStrings.of(context).serviceFinancialLocked)),
                     ],
                   ),
                 ),

@@ -6,10 +6,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
@@ -30,12 +32,12 @@ class PaymentsListScreen extends StatelessWidget {
 
   final PaymentQuery? initialQuery;
 
-  static Widget create({PaymentQuery? initialQuery}) => BlocProvider<PaymentsCubit>(
+  static Widget create({PaymentQuery? initialQuery}) =>
+      BlocProvider<PaymentsCubit>(
         create: (_) => PaymentsCubit(
-              repository: sl<PaymentsRepository>(),
-              initialQuery: initialQuery,
-            )
-            ..load(),
+          repository: sl<PaymentsRepository>(),
+          initialQuery: initialQuery,
+        )..load(),
         child: const PaymentsListScreen(),
       );
 
@@ -43,10 +45,9 @@ class PaymentsListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider<PaymentsCubit>(
       create: (_) => PaymentsCubit(
-            repository: sl<PaymentsRepository>(),
-            initialQuery: initialQuery,
-          )
-          ..load(),
+        repository: sl<PaymentsRepository>(),
+        initialQuery: initialQuery,
+      )..load(),
       child: const _PaymentsListBody(),
     );
   }
@@ -62,6 +63,39 @@ class _PaymentsListBody extends StatefulWidget {
 class _PaymentsListBodyState extends State<_PaymentsListBody> {
   final TextEditingController _search = TextEditingController();
   bool _selecting = false;
+  late ListPresentationSettings _presentation;
+
+  @override
+  void initState() {
+    super.initState();
+    final query = context.read<PaymentsCubit>().state.query;
+    _presentation = ListPresentationSettings(
+      sortBy: query.sortBy,
+      descending: query.sortDirection == 'desc',
+      pageSize: query.limit ?? 25,
+      compact: true,
+    );
+  }
+
+  Future<void> _applyPresentation(ListPresentationSettings settings) async {
+    final reload =
+        settings.sortBy != _presentation.sortBy ||
+        settings.descending != _presentation.descending ||
+        settings.pageSize != _presentation.pageSize;
+    setState(() {
+      _presentation = settings;
+      _selecting = false;
+    });
+    if (!reload) return;
+    final cubit = context.read<PaymentsCubit>();
+    await cubit.applyFilters(
+      cubit.state.query.copyWith(
+        limit: settings.pageSize,
+        sortBy: settings.sortBy,
+        sortDirection: settings.descending ? 'desc' : 'asc',
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -114,6 +148,32 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       appBar: AppBar(
         title: Text(_selecting ? 'اختيار سندات' : 'سندات القبض'),
         actions: <Widget>[
+          BlocBuilder<PaymentsCubit, PaymentsState>(
+            builder: (context, state) => IgnorePointer(
+              ignoring: state.isLoading,
+              child: ListPresentationControls(
+                settings: _presentation,
+                sortOptions: const {
+                  'payment_date': ListOptionsStrings.date,
+                  'receipt_number': ListOptionsStrings.receiptNumber,
+                  'subscriber_name': ListOptionsStrings.subscriber,
+                  'amount': ListOptionsStrings.amount,
+                  'user_name': ListOptionsStrings.collector,
+                  'id': ListOptionsStrings.id,
+                },
+                fields: const {
+                  'date': ListOptionsStrings.date,
+                  'method': ListOptionsStrings.method,
+                  'invoice': ListOptionsStrings.invoice,
+                  'account': ListOptionsStrings.account,
+                  'reference': ListOptionsStrings.reference,
+                  'collector': ListOptionsStrings.collector,
+                  'whatsapp': ListOptionsStrings.whatsapp,
+                },
+                onChanged: _applyPresentation,
+              ),
+            ),
+          ),
           if (_selecting) ...<Widget>[
             IconButton(
               tooltip: 'تحديد الكل',
@@ -132,7 +192,8 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               icon: const Icon(Icons.checklist_rtl),
             ),
             // اعتماد طلبات الإلغاء المعلّقة — للمشرف فقط (خطة 2.0 — الفصل 5.3).
-            if (trySl<PermissionService>()?.can('payments.void.approve') ?? false)
+            if (trySl<PermissionService>()?.can('payments.void.approve') ??
+                false)
               IconButton(
                 tooltip: 'طلبات الإلغاء المعلّقة',
                 onPressed: () async {
@@ -192,9 +253,8 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                     AppFilterChip(
                       label: 'كل الطرق',
                       selected: state.query.method == null,
-                      onTap: () => cubit.applyFilters(
-                        state.query.copyWith(method: ''),
-                      ),
+                      onTap: () =>
+                          cubit.applyFilters(state.query.copyWith(method: '')),
                     ),
                     for (final method in PaymentMethod.values)
                       AppFilterChip(
@@ -219,9 +279,11 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                           state.query.copyWith(method: ''),
                         ),
                       ),
-                    if (state.query.fromDate != null || state.query.toDate != null)
+                    if (state.query.fromDate != null ||
+                        state.query.toDate != null)
                       AppFilterChip(
-                        label: '${DateFormat.day(state.query.fromDate)} ← '
+                        label:
+                            '${DateFormat.day(state.query.fromDate)} ← '
                             '${DateFormat.day(state.query.toDate)}',
                         selected: true,
                         icon: Icons.event_rounded,
@@ -232,7 +294,15 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                   ],
                   onClearAll: () {
                     _search.clear();
-                    cubit.applyFilters(const PaymentQuery());
+                    cubit.applyFilters(
+                      PaymentQuery(
+                        sortBy: _presentation.sortBy,
+                        sortDirection: _presentation.descending
+                            ? 'desc'
+                            : 'asc',
+                        limit: _presentation.pageSize,
+                      ),
+                    );
                   },
                 ),
                 _PaymentsSummary(state: state),
@@ -247,6 +317,39 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                     onBulkDelete: () => _bulkDelete(context, cubit),
                   ),
                 Expanded(child: _buildList(context, cubit, state)),
+                if (state.status != PaymentsLoadStatus.idle)
+                  SafeArea(
+                    top: false,
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      children: [
+                        TextButton(
+                          onPressed: state.isLoading || !state.hasPreviousPage
+                              ? null
+                              : () {
+                                  setState(() => _selecting = false);
+                                  cubit.goToPage(state.query.page - 1);
+                                },
+                          child: const Text(ListOptionsStrings.previous),
+                        ),
+                        Text(
+                          '${ListOptionsStrings.page} ${state.query.page}${state.lastPage == null ? '' : ' / ${state.lastPage}'}'
+                          '${state.totalCount == null ? '' : ' · ${ListOptionsStrings.allRecords}: ${state.totalCount}'}',
+                        ),
+                        TextButton(
+                          onPressed: state.isLoading || !state.hasNextPage
+                              ? null
+                              : () {
+                                  setState(() => _selecting = false);
+                                  cubit.goToPage(state.query.page + 1);
+                                },
+                          child: const Text(ListOptionsStrings.next),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             );
           },
@@ -298,7 +401,11 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     if (mounted) setState(() => _selecting = false);
   }
 
-  Widget _buildList(BuildContext context, PaymentsCubit cubit, PaymentsState state) {
+  Widget _buildList(
+    BuildContext context,
+    PaymentsCubit cubit,
+    PaymentsState state,
+  ) {
     if (state.isLoading && state.payments.isEmpty) {
       return const SkeletonList(count: 7, lines: 2);
     }
@@ -332,17 +439,19 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       child: useGrid
           ? GridView.builder(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 420,
-                mainAxisExtent: 168,
+                mainAxisExtent: _presentation.compact ? 168 : 190,
               ),
               itemCount: state.payments.length,
-              itemBuilder: (context, index) => _tile(cubit, state, state.payments[index]),
+              itemBuilder: (context, index) =>
+                  _tile(cubit, state, state.payments[index]),
             )
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
               itemCount: state.payments.length,
-              itemBuilder: (context, index) => _tile(cubit, state, state.payments[index]),
+              itemBuilder: (context, index) =>
+                  _tile(cubit, state, state.payments[index]),
             ),
     );
   }
@@ -364,7 +473,8 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           final confirmed = await ConfirmDialog.show(
             context,
             title: 'حذف سند قبض',
-            message: 'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفاتورة المرتبطة.',
+            message:
+                'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفاتورة المرتبطة.',
             details: <String>[
               payment.receiptNumber,
               CurrencyFormatter.withLabel(payment.amount),
@@ -373,9 +483,9 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
             destructive: true,
           );
           if (!confirmed) return false;
-          await cubit.deletePayment(payment.id);
-          if (mounted) AppFeedback.success(context, 'تم حذف السند.');
-          return true;
+          final deleted = await cubit.deletePayment(payment.id);
+          if (deleted && mounted) AppFeedback.success(context, 'تم حذف السند.');
+          return deleted;
         },
         child: GestureDetector(
           onLongPress: () {
@@ -384,7 +494,8 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
           },
           child: PaymentCard(
             payment: payment,
-            dense: true,
+            dense: _presentation.compact,
+            hiddenFields: _presentation.hiddenFields,
             onTap: () => showPaymentActionSheet(context, payment: payment),
           ),
         ),
@@ -396,7 +507,11 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       onChanged: (_) => cubit.toggleSelection(payment.id),
       controlAffinity: ListTileControlAffinity.leading,
       contentPadding: EdgeInsets.zero,
-      title: PaymentCard(payment: payment, dense: true),
+      title: PaymentCard(
+        payment: payment,
+        dense: _presentation.compact,
+        hiddenFields: _presentation.hiddenFields,
+      ),
     );
   }
 }
@@ -419,17 +534,20 @@ class _PaymentsSummary extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: _Cell(label: 'عدد السندات', value: '${state.payments.length}'),
+            child: _Cell(
+              label: ListOptionsStrings.pageCount,
+              value: '${state.payments.length}',
+            ),
           ),
           Expanded(
             child: _Cell(
-              label: 'الإجمالي المحصّل',
+              label: ListOptionsStrings.pageTotal,
               value: CurrencyFormatter.withLabel(state.totalSum),
             ),
           ),
           Expanded(
             child: _Cell(
-              label: 'نقدي',
+              label: ListOptionsStrings.pageCash,
               value: CurrencyFormatter.withLabel(state.cashSum),
               tone: AppColors.neutral,
             ),
@@ -452,7 +570,10 @@ class _Cell extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.neutral)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+        ),
         Text(
           value,
           style: TextStyle(
@@ -481,40 +602,47 @@ class _SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: AppColors.primaryDark,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            children: <Widget>[
-              Text(
-                'محدد: $count سند',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: onSelectAll,
-                child: const Text('تحديد الكل', style: TextStyle(color: Colors.white70)),
-              ),
-              TextButton(
-                onPressed: onClear,
-                child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
-              ),
-              TextButton.icon(
-                onPressed: onBulkDelete,
-                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.onPanelSoft),
-                label: const Text(
-                  'حذف المحدد',
-                  style: TextStyle(color: AppColors.onPanelSoft),
-                ),
-              ),
-            ],
+    color: AppColors.primaryDark,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: <Widget>[
+          Text(
+            'محدد: $count سند',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-      );
+          const Spacer(),
+          TextButton(
+            onPressed: onSelectAll,
+            child: const Text(
+              'تحديد الكل',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: onClear,
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton.icon(
+            onPressed: onBulkDelete,
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: AppColors.onPanelSoft,
+            ),
+            label: const Text(
+              'حذف المحدد',
+              style: TextStyle(color: AppColors.onPanelSoft),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _PaymentsFilterSheet extends StatefulWidget {
@@ -534,14 +662,16 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
 
   Future<void> _pick({required bool from}) async {
     final now = DateTime.now();
-    final first = from ? DateTime(now.year - 3) : (_from ?? DateTime(now.year - 3));
+    final first = from
+        ? DateTime(now.year - 3)
+        : (_from ?? DateTime(now.year - 3));
     final last = from ? (_to ?? now) : now;
     final requested = (from ? _from : _to) ?? now;
     final initial = requested.isBefore(first)
         ? first
         : requested.isAfter(last)
-            ? last
-            : requested;
+        ? last
+        : requested;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -567,7 +697,11 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
       applyLabel: 'عرض النتائج',
       onApply: () {
         widget.cubit.applyFilters(
-          widget.state.query.copyWith(method: _method ?? '', fromDate: _from, toDate: _to),
+          widget.state.query.copyWith(
+            method: _method ?? '',
+            fromDate: _from,
+            toDate: _to,
+          ),
         );
         Navigator.of(context).maybePop();
       },
@@ -595,8 +729,8 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
                   icon: method == PaymentMethod.cash
                       ? Icons.payments_rounded
                       : method == PaymentMethod.bankTransfer
-                          ? Icons.account_balance_rounded
-                          : Icons.receipt_long_rounded,
+                      ? Icons.account_balance_rounded
+                      : Icons.receipt_long_rounded,
                   selected: _method == method.wire,
                   onTap: () => setState(() => _method = method.wire),
                 ),
@@ -616,9 +750,9 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
             onClear: _from == null && _to == null
                 ? null
                 : () => setState(() {
-                      _from = null;
-                      _to = null;
-                    }),
+                    _from = null;
+                    _to = null;
+                  }),
           ),
         ),
         const SizedBox(height: 18),

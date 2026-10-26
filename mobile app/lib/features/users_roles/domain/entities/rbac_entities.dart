@@ -88,9 +88,24 @@ class ShieldPermissionGroup extends Equatable {
 }
 
 class ShieldPermissionCatalog extends Equatable {
-  const ShieldPermissionCatalog({required this.groups});
+  const ShieldPermissionCatalog({required this.groups,
+    this.guardNames = const ['web'], this.guardPermissions = const {}});
 
   final List<ShieldPermissionGroup> groups;
+  final List<String> guardNames;
+  final Map<String, List<String>> guardPermissions;
+
+  ShieldPermissionCatalog forGuard(String guard) {
+    if (guardPermissions.isEmpty) return this;
+    final allowed = (guardPermissions[guard] ?? const <String>[]).toSet();
+    return ShieldPermissionCatalog(guardNames: guardNames,
+      guardPermissions: guardPermissions, groups: [
+        for (final group in groups)
+          if (group.permissions.any((permission) => allowed.contains(permission.name)))
+            ShieldPermissionGroup(key: group.key, label: group.label, kind: group.kind,
+              permissions: group.permissions.where((permission) => allowed.contains(permission.name)).toList()),
+      ]);
+  }
 
   List<ShieldPermissionGroup> byKind(ShieldPermissionKind kind) =>
       groups.where((group) => group.kind == kind).toList(growable: false);
@@ -99,5 +114,5 @@ class ShieldPermissionCatalog extends Equatable {
       groups.expand((group) => group.permissions.map((permission) => permission.name)).toSet();
 
   @override
-  List<Object> get props => [groups];
+  List<Object> get props => [groups, guardNames, guardPermissions];
 }

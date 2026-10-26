@@ -62,6 +62,7 @@ class PaymentController extends ApiController
             });
         }
 
+        $this->applySorting($query, $request, self::LIST_SORTS['payments']);
         return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
             $payment->setAttribute('receipt_data', $this->receiptData($payment));
 
@@ -210,11 +211,12 @@ class PaymentController extends ApiController
     {
         $this->authorizeVoidApprover($request->user());
 
-        $payments = Payment::query()
+        $query = Payment::query()
             ->voidRequested()
             ->with(['subscriber:id,name,phone', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
-            ->latest('void_requested_at')
-            ->paginate($this->perPage($request));
+            ->latest('void_requested_at');
+        $this->applySorting($query, $request, self::LIST_SORTS['void_requests']);
+        $payments = $query->paginate($this->perPage($request))->appends($request->query());
 
         return $payments->through(fn (Payment $payment) => [
             'id' => $payment->id,

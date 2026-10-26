@@ -10,6 +10,7 @@ use Illuminate\Validation\Rule;
 class SettingController extends ApiController
 {
     private const SECRET_KEYS = ['whatsapp_access_token'];
+    private const INVOICE_PREFIXES = ['invoice_', 'inv_', 'sub_', 'tanker_', 'site_favicon'];
 
     public function index(Request $request)
     {
@@ -67,7 +68,7 @@ class SettingController extends ApiController
     public function invoiceSettings()
     {
         $this->authorizeSystem('View:InvoiceSettings');
-        return response()->json($this->settingsByPrefixes(['invoice_', 'inv_', 'sub_inv_', 'tanker_']));
+        return response()->json($this->settingsByPrefixes(self::INVOICE_PREFIXES));
     }
 
     public function updateInvoiceSettings(Request $request)
@@ -75,7 +76,7 @@ class SettingController extends ApiController
         $this->authorizeSystemWrite('InvoiceSettings');
         $values = $this->extractValues($request);
         $this->saveUploadedSettings($request, ['invoice_logo', 'site_favicon', 'invoice_watermark']);
-        $saved = $this->saveValues($values, ['invoice_', 'inv_', 'sub_inv_', 'tanker_'], true);
+        $saved = $this->saveValues($values, self::INVOICE_PREFIXES, true);
         return response()->json(['message' => 'تم حفظ إعدادات الفاتورة.', 'settings' => $saved]);
     }
 
@@ -112,11 +113,22 @@ class SettingController extends ApiController
 
     public function uploadLogo(Request $request)
     {
-        $this->authorizeApi(Setting::class, 'update');
         $data = $request->validate([
             'key' => ['required', 'string', 'max:255', 'not_in:whatsapp_access_token'],
             'file' => ['required', 'image', 'max:5120'],
         ]);
+        $scopes = match ($data['key']) {
+            'invoice_logo', 'invoice_watermark' => ['InvoiceSettings', 'ReceiptSettings'],
+            'site_favicon' => ['InvoiceSettings'],
+            'receipt_logo' => ['ReceiptSettings'],
+            default => [],
+        };
+        $allowed = $this->allowsApi(Setting::class, 'update');
+        foreach ($scopes as $scope) {
+            $allowed = $allowed || $this->allowsSystemWrite($scope);
+        }
+        abort_unless($allowed, 403, 'ليست لديك صلاحية تعديل هذه الصورة.');
+
         $oldPath = Setting::get($data['key']);
         if ($oldPath) Storage::disk('public')->delete($oldPath);
         $path = $request->file('file')->store('settings/invoices', 'public');
@@ -129,6 +141,7 @@ class SettingController extends ApiController
         $this->authorizeApi(Setting::class, 'viewAny');
         $query = Setting::query()->whereNotIn('key', self::SECRET_KEYS)->orderBy('key');
         if ($request->filled('q')) $query->where(fn ($q) => $q->where('key', 'like', '%' . $request->query('q') . '%')->orWhere('label', 'like', '%' . $request->query('q') . '%'));
+        $this->applySorting($query, $request, self::LIST_SORTS['settings']);
         return $query->paginate($this->perPage($request))->appends($request->query());
     }
 

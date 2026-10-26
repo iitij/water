@@ -29,6 +29,8 @@ class RouteNames {
   // Dev 3: Finance, Invoices, Payments & Tariffs
   static const quickCollector = '/collector';
   static const cashSession = '/cash-session';
+  static const cashSessionReview = '/cash-sessions/review';
+  static const auditEvents = '/audit-events';
   static const invoices = '/invoices';
   static const invoiceIssue = '/issue-invoice';
   static const invoiceCreate = '/invoices/create';
