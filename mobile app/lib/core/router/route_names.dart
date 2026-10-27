@@ -46,12 +46,10 @@ class RouteNames {
   static const serviceRequests = '/service-requests';
   static const transactions = '/transactions';
 
-  // Dev 5: Dashboard, Reports, Settings Studio, Users/Roles & Exports
+  // Dev 5: Dashboard, Reports, Settings Studio & Exports
   static const dashboard = '/dashboard';
   static const reports = '/reports';
   static const settings = '/settings';
-  static const users = '/users';
-  static const roles = '/roles';
   static const devices = '/devices';
   static const dataQuality = '/data-quality';
   static const backup = '/backup';

@@ -24,17 +24,29 @@ void main() {
       expect(router.configuration.findMatch(Uri.parse(entry.route)).isError,
         isFalse, reason: 'Missing route for ${entry.title}: ${entry.route}');
     }
+    expect(router.configuration.findMatch(Uri.parse('/users')).isError, isTrue);
+    expect(router.configuration.findMatch(Uri.parse('/roles')).isError, isTrue);
+  });
+
+  test('mobile account administration routes are unavailable', () {
+    final session = _Session();
+    when(() => session.isReady).thenReturn(false);
+    when(() => session.isAuthenticated).thenReturn(false);
+    final router = AppRouter(session: session).router;
+    addTearDown(router.dispose);
+    expect(router.configuration.findMatch(Uri.parse('/users')).isError, isTrue);
+    expect(router.configuration.findMatch(Uri.parse('/roles')).isError, isTrue);
   });
 
   testWidgets('settings route passes the section query to its screen builder', (tester) async {
     final router = GoRouter(
-      initialLocation: '/settings?section=whatsapp',
+      initialLocation: '/settings?section=reading',
       routes: SettingsRoutes.routes(sectionBuilder: (section) => Scaffold(body: Text('section:$section'))),
     );
     addTearDown(router.dispose);
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
-    expect(find.text('section:whatsapp'), findsOneWidget);
+    expect(find.text('section:reading'), findsOneWidget);
     router.go('/settings?section=invoice');
     await tester.pumpAndSettle();
     expect(find.text('section:invoice'), findsOneWidget);

@@ -32,59 +32,31 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final enabled = onPressed != null && !loading;
-    final radius = BorderRadius.circular(AppRadius.md);
-    final foreground = scheme.onPrimary;
-
-    return Opacity(
-      opacity: enabled ? 1 : .45,
-      child: Container(
-        width: expand ? double.infinity : null,
-        height: height,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(color: scheme.primary, borderRadius: radius),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: enabled ? onPressed : null,
-            borderRadius: radius,
-            splashColor: foreground.withValues(alpha: .16),
-            highlightColor: foreground.withValues(alpha: .08),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (loading)
-                    SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: foreground,
-                      ),
-                    )
-                  else if (icon != null)
-                    Icon(icon, size: 18, color: foreground),
-                  if (loading || icon != null) const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: foreground,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
-                        height: 1.2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return SizedBox(
+      width: expand ? double.infinity : null,
+      child: FilledButton(
+        onPressed: loading ? null : onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: Size(48, height < 48 ? 48 : height),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            if (loading)
+              const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else if (icon != null)
+              Icon(icon, size: 20),
+            if (loading || icon != null) const SizedBox(width: 8),
+            Flexible(child: Text(label, textAlign: TextAlign.center)),
+          ],
         ),
       ),
     );
@@ -110,50 +82,27 @@ class AppSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(AppRadius.md);
-    return Opacity(
-      opacity: onPressed == null ? .45 : 1,
-      child: SizedBox(
-        width: expand ? double.infinity : null,
-        height: height,
-        child: Material(
-          color: scheme.surface,
-          borderRadius: radius,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: radius,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (icon != null) ...<Widget>[
-                    Icon(icon, size: 17, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 7),
-                  ],
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        height: 1.2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return SizedBox(
+      width: expand ? double.infinity : null,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: Size(48, height < 48 ? 48 : height),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            if (icon != null) ...<Widget>[
+              Icon(icon, size: 20),
+              const SizedBox(width: 8),
+            ],
+            Flexible(child: Text(label, textAlign: TextAlign.center)),
+          ],
         ),
       ),
     );

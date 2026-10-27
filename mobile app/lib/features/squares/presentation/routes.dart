@@ -10,12 +10,13 @@ class SquaresRoutes {
   static const String squares = '/squares';
 
   static Map<String, WidgetBuilder> routes(FouadDependencies deps) => {
-        squares: (_) => BlocProvider(
-              create: (_) => SquaresCubit(deps.squares)..load(),
-              child: const SquaresScreen(),
-            ),
-      };
+    squares: (_) => BlocProvider(
+      create: (_) => SquaresCubit(deps.squares)..load(),
+      child: const SquaresScreen(),
+    ),
+  };
 
-  static RepositoryProvider<SquaresRepository> repositoryProvider(FouadDependencies deps) =>
-      RepositoryProvider<SquaresRepository>.value(value: deps.squares);
+  static RepositoryProvider<SquaresRepository> repositoryProvider(
+    FouadDependencies deps,
+  ) => RepositoryProvider<SquaresRepository>.value(value: deps.squares);
 }

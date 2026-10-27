@@ -13,19 +13,21 @@ void main() {
     }
   });
 
-  test('all Laravel resource modules are discoverable', () {
+  test('mobile work modules are discoverable without admin account screens', () {
     final paths = WorkspaceCatalog.visible((_) => true).map((e) => Uri.parse(e.route).path).toSet();
     expect(paths, containsAll([
       RouteNames.squares, RouteNames.subscribers, RouteNames.meters,
       RouteNames.readings, RouteNames.invoices, RouteNames.payments,
       RouteNames.tariffs, RouteNames.subscriptionFees, RouteNames.serviceRequests,
-      RouteNames.transactions, RouteNames.users, RouteNames.roles,
+      RouteNames.transactions,
       RouteNames.settings, RouteNames.exports, RouteNames.dashboard,
       RouteNames.reports, RouteNames.profile, RouteNames.offlineSync,
     ]));
     expect(WorkspaceCatalog.entries.where((e) => e.group == WorkspaceGroup.settings)
         .map((e) => Uri.parse(e.route).queryParameters['section']),
-      containsAll(['reading', 'invoice', 'receipt', 'whatsapp', 'general']));
+      containsAll(['reading', 'invoice', 'receipt', 'general']));
+    expect(paths, isNot(contains('/users')));
+    expect(paths, isNot(contains('/roles')));
   });
 
   test('an account without permissions only sees its own tools', () {
@@ -33,18 +35,18 @@ void main() {
       [RouteNames.offlineSync, RouteNames.profile]);
   });
 
-  test('one settings permission never exposes other admin tools', () {
+  test('removed WhatsApp settings permission exposes no mobile admin tools', () {
     final entries = WorkspaceCatalog.visible((p) => p == 'View:WhatsAppSettings');
     expect(entries.map((e) => e.route), [
-      '${RouteNames.settings}?section=whatsapp', RouteNames.offlineSync, RouteNames.profile,
+      RouteNames.offlineSync, RouteNames.profile,
     ]);
   });
 
   test('Arabic spelling, diacritics, English and multiword searches', () {
     final all = WorkspaceCatalog.visible;
     expect(all((_) => true, query: 'إِعْدَادَات قـراءات'), isNotEmpty);
-    expect(all((_) => true, query: 'واتس اب').single.title, 'الواتساب');
-    expect(all((_) => true, query: 'WHATSAPP').single.title, 'الواتساب');
+    expect(all((_) => true, query: 'واتس اب'), isEmpty);
+    expect(all((_) => true, query: 'WHATSAPP'), isEmpty);
     expect(all((_) => true, query: 'فاتوره يدويه').single.route, RouteNames.invoiceIssue);
     expect(all((_) => true, query: 'not-a-real-service'), isEmpty);
   });

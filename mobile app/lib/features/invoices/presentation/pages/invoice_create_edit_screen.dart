@@ -5,6 +5,7 @@ import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_fields.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/l10n/resource_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -30,18 +31,28 @@ class InvoiceCreateEditScreen extends StatefulWidget {
   final InvoiceModel? invoice;
 
   @override
-  State<InvoiceCreateEditScreen> createState() => _InvoiceCreateEditScreenState();
+  State<InvoiceCreateEditScreen> createState() =>
+      _InvoiceCreateEditScreenState();
 }
 
 class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _consumption =
-      _num(widget.invoice?.consumptionFee);
-  late final TextEditingController _previousBalance = _num(widget.invoice?.previousBalance);
-  late final TextEditingController _subscription = _num(widget.invoice?.subscriptionInstallment);
-  late final TextEditingController _tanker = _num(widget.invoice?.tankerCharges);
-  late final TextEditingController _credit = _num(widget.invoice?.creditApplied);
+  late final TextEditingController _consumption = _num(
+    widget.invoice?.consumptionFee,
+  );
+  late final TextEditingController _previousBalance = _num(
+    widget.invoice?.previousBalance,
+  );
+  late final TextEditingController _subscription = _num(
+    widget.invoice?.subscriptionInstallment,
+  );
+  late final TextEditingController _tanker = _num(
+    widget.invoice?.tankerCharges,
+  );
+  late final TextEditingController _credit = _num(
+    widget.invoice?.creditApplied,
+  );
   late final TextEditingController _total = _num(
     (widget.invoice?.totalAmount ?? 0) > 0
         ? widget.invoice!.totalAmount
@@ -52,8 +63,9 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       (invoice?.consumptionFee ?? 0) +
       (invoice?.subscriptionInstallment ?? 0) +
       (invoice?.tankerCharges ?? 0);
-  late final TextEditingController _notes =
-      TextEditingController(text: widget.invoice?.notes ?? '');
+  late final TextEditingController _notes = TextEditingController(
+    text: widget.invoice?.notes ?? '',
+  );
 
   int? _subscriberId;
   DateTime? _billDate;
@@ -87,8 +99,9 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     super.dispose();
   }
 
-  static TextEditingController _num(double? value) =>
-      TextEditingController(text: value == null || value == 0 ? '' : value.toString());
+  static TextEditingController _num(double? value) => TextEditingController(
+    text: value == null || value == 0 ? '' : value.toString(),
+  );
 
   double get _liveTotal =>
       _parse(_consumption) + _parse(_subscription) + _parse(_tanker);
@@ -97,6 +110,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       double.tryParse(controller.text.trim()) ?? 0;
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_subscriberId == null) {
       setState(() => _error = 'اختر المشترك أولاً.');
@@ -136,6 +150,12 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
         _saving = false;
         _error = failure.message;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = ResourceUxStrings.saveFailed;
+      });
     }
   }
 
@@ -145,189 +165,223 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
 
     return SubPageScaffold(
       title: isEditing ? 'تعديل فاتورة' : 'فاتورة يدوية',
-      subtitle: isEditing ? 'تحديث بيانات الفاتورة والمبالغ' : 'إصدار فاتورة بمبالغ مدخلة يدوياً',
+      subtitle: isEditing
+          ? 'تحديث بيانات الفاتورة والمبالغ'
+          : 'إصدار فاتورة بمبالغ مدخلة يدوياً',
       child: SafeArea(
         top: false,
         child: Form(
-        key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.all(gutter),
-          children: <Widget>[
-            const SectionHeading(
-              title: 'بيانات الفاتورة',
-              icon: Icons.description_outlined,
-            ),
-            const SizedBox(height: 8),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _SubscriberPicker(
-                    initialId: _subscriberId,
-                    initialName: widget.invoice?.subscriber?.name,
-                    onSelected: (id) => setState(() => _subscriberId = id),
-                  ),
-                  const SizedBox(height: 12),
-                  if (isEditing) ...<Widget>[
-                    LtrNumberTextTile(
-                      label: 'رقم الفاتورة',
-                      value: widget.invoice!.billNumber,
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  AppSettingRow(
-                    icon: Icons.calendar_today_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                    title: 'تاريخ الفاتورة',
-                    showChevron: false,
-                    trailing: Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Text(
-                        DateFormat.day(_billDate),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                    ),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _billDate ?? DateTime.now(),
-                        firstDate: DateTime(2015),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) setState(() => _billDate = picked);
-                    },
-                  ),
-                ],
+          key: _formKey,
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.all(gutter),
+            children: <Widget>[
+              const Text(ResourceUxStrings.invoiceGuide),
+              const SizedBox(height: 16),
+              const SectionHeading(
+                title: 'بيانات الفاتورة',
+                icon: Icons.description_outlined,
               ),
-            ),
-            const SizedBox(height: 16),
-            const SectionHeading(
-              title: 'تفاصيل المبالغ',
-              subtitle: 'الإجمالي يُحسب تلقائياً من الاستهلاك + الاشتراك + الوايت',
-              icon: Icons.calculate_outlined,
-            ),
-            const SizedBox(height: 8),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-            AppNumericField(
-              controller: _consumption,
-              label: 'قيمة الاستهلاك',
-              prefixText: 'ريال',
-              onChanged: (_) => _syncTotal(),
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
-              controller: _previousBalance,
-              label: 'المتأخرات السابقة',
-              prefixText: 'ريال',
-              helperText: 'تُعرض ولا تُضاف إلى إجمالي الفاتورة لتفادي المضاعفة',
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
-              controller: _subscription,
-              label: 'قسط الاشتراك',
-              prefixText: 'ريال',
-              onChanged: (_) => _syncTotal(),
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
-              controller: _tanker,
-              label: 'رسوم الوايت',
-              prefixText: 'ريال',
-              onChanged: (_) => _syncTotal(),
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
-              controller: _credit,
-              label: 'خصم رصيد دائن',
-              prefixText: 'ريال',
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
-              controller: _total,
-              label: 'الإجمالي',
-              prefixText: 'ريال',
-              helperText: 'فارغ = محسوب تلقائياً من الاستهلاك + الاشتراك + الوايت',
-            ),
-            const SizedBox(height: 10),
-            AppTextField(
-              controller: _notes,
-              label: 'ملاحظات',
-              maxLines: 3,
-            ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (isEditing) ...<Widget>[
-              const SectionHeading(title: 'الحالة', icon: Icons.flag_outlined),
               const SizedBox(height: 8),
               AppCard(
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: InvoiceStatus.values
-                      .where((s) => s != InvoiceStatus.cancelled)
-                      .map(
-                        (s) => AppFilterChip(
-                          label: s.label,
-                          selected: _status == s,
-                          onTap: () => setState(() => _status = s),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _SubscriberPicker(
+                      initialId: _subscriberId,
+                      initialName: widget.invoice?.subscriber?.name,
+                      onSelected: (id) => setState(() => _subscriberId = id),
+                    ),
+                    const SizedBox(height: 12),
+                    if (isEditing) ...<Widget>[
+                      LtrNumberTextTile(
+                        label: 'رقم الفاتورة',
+                        value: widget.invoice!.billNumber,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    AppSettingRow(
+                      icon: Icons.calendar_today_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                      title: 'تاريخ الفاتورة',
+                      showChevron: false,
+                      trailing: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          DateFormat.day(_billDate),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
-                      )
-                      .toList(),
+                      ),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _billDate ?? DateTime.now(),
+                          firstDate: DateTime(2015),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (picked != null) setState(() => _billDate = picked);
+                      },
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
-            ],
-            if (_error != null) ...<Widget>[
-              Text(
-                _error!,
-                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+              const SectionHeading(
+                title: 'تفاصيل المبالغ',
+                subtitle:
+                    'الإجمالي يُحسب تلقائياً من الاستهلاك + الاشتراك + الوايت',
+                icon: Icons.calculate_outlined,
               ),
-              const SizedBox(height: 10),
-            ],
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-              ),
-              child: Row(
-                children: <Widget>[
-                  const Expanded(
-                    child: Text('صافي المطلوب بعد المتأخرات والخصم'),
-                  ),
-                  LtrNumberText(
-                    CurrencyFormatter.withLabel(
-                      (_parse(_total) > 0 ? _parse(_total) : _liveTotal) +
-                          _parse(_previousBalance) -
-                          _parse(_credit),
+              const SizedBox(height: 8),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    AppNumericField(
+                      controller: _consumption,
+                      label: 'قيمة الاستهلاك',
+                      prefixText: 'ريال',
+                      onChanged: (_) => _syncTotal(),
                     ),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.danger,
+                    const SizedBox(height: 10),
+                    ExpansionTile(
+                      key: const PageStorageKey('manual-invoice-optional'),
+                      tilePadding: EdgeInsets.zero,
+                      maintainState: true,
+                      initiallyExpanded:
+                          isEditing &&
+                          (_parse(_previousBalance) != 0 ||
+                              _parse(_subscription) != 0 ||
+                              _parse(_tanker) != 0 ||
+                              _parse(_credit) != 0 ||
+                              _notes.text.isNotEmpty),
+                      title: const Text(ResourceUxStrings.optionalAmounts),
+                      subtitle: const Text(
+                        ResourceUxStrings.optionalAmountsHelp,
+                      ),
+                      children: [
+                        AppNumericField(
+                          controller: _subscription,
+                          label: 'قسط الاشتراك',
+                          prefixText: 'ريال',
+                          onChanged: (_) => _syncTotal(),
+                        ),
+                        const SizedBox(height: 10),
+                        AppNumericField(
+                          controller: _tanker,
+                          label: 'رسوم الوايت',
+                          prefixText: 'ريال',
+                          onChanged: (_) => _syncTotal(),
+                        ),
+                        const SizedBox(height: 10),
+                        AppNumericField(
+                          controller: _previousBalance,
+                          label: 'المتأخرات السابقة',
+                          prefixText: 'ريال',
+                          helperText:
+                              'تُعرض ولا تُضاف إلى إجمالي الفاتورة لتفادي المضاعفة',
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        AppNumericField(
+                          controller: _credit,
+                          label: 'خصم رصيد دائن',
+                          prefixText: 'ريال',
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        AppTextField(
+                          controller: _notes,
+                          label: 'ملاحظات',
+                          maxLines: 3,
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    AppNumericField(
+                      controller: _total,
+                      label: 'الإجمالي',
+                      prefixText: 'ريال',
+                      helperText:
+                          'فارغ = محسوب تلقائياً من الاستهلاك + الاشتراك + الوايت',
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            AppPrimaryButton(
-              label: isEditing ? 'حفظ التعديلات' : 'إصدار الفاتورة',
-              icon: Icons.save_outlined,
-              loading: _saving,
-              onPressed: _saving ? null : _save,
-            ),
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 16),
+              if (isEditing) ...<Widget>[
+                const SectionHeading(
+                  title: 'الحالة',
+                  icon: Icons.flag_outlined,
+                ),
+                const SizedBox(height: 8),
+                AppCard(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: InvoiceStatus.values
+                        .where((s) => s != InvoiceStatus.cancelled)
+                        .map(
+                          (s) => AppFilterChip(
+                            label: s.label,
+                            selected: _status == s,
+                            onTap: () => setState(() => _status = s),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_error != null) ...<Widget>[
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                ),
+                const SizedBox(height: 10),
+              ],
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text('صافي المطلوب بعد المتأخرات والخصم'),
+                    const SizedBox(height: 6),
+                    LtrNumberText(
+                      CurrencyFormatter.withLabel(
+                        (_parse(_total) > 0 ? _parse(_total) : _liveTotal) +
+                            _parse(_previousBalance) -
+                            _parse(_credit),
+                      ),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(ResourceUxStrings.reviewInvoice),
+              const SizedBox(height: 8),
+              AppPrimaryButton(
+                label: isEditing ? 'حفظ التعديلات' : 'إصدار الفاتورة',
+                icon: Icons.save_outlined,
+                loading: _saving,
+                onPressed: _saving ? null : _save,
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -340,7 +394,11 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
 
 /// خانة عرض قيمة رقمية داخل LTR (لأرقام المستندات).
 class LtrNumberTextTile extends StatelessWidget {
-  const LtrNumberTextTile({super.key, required this.label, required this.value});
+  const LtrNumberTextTile({
+    super.key,
+    required this.label,
+    required this.value,
+  });
 
   final String label;
   final String value;
@@ -356,7 +414,10 @@ class LtrNumberTextTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.neutral)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+          ),
           Directionality(
             textDirection: TextDirection.ltr,
             child: Text(
@@ -409,8 +470,9 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
   Future<void> _searchSubscribers() async {
     setState(() => _loading = true);
     try {
-      final results = await ReferencesRemoteDataSource(sl<FinanceApiClient>())
-          .subscribers(search: _search.text, limit: 30);
+      final results = await ReferencesRemoteDataSource(
+        sl<FinanceApiClient>(),
+      ).subscribers(search: _search.text, limit: 30);
       if (!mounted) return;
       setState(() {
         _results = results;
@@ -490,7 +552,10 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                     widget.onSelected(option.id);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -499,14 +564,20 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                           option.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 1),
                         Text(
                           meta,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.neutral,
+                          ),
                         ),
                       ],
                     ),

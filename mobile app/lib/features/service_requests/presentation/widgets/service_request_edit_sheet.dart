@@ -13,12 +13,18 @@ import '../../../subscribers/domain/repositories/subscribers_repository.dart';
 import '../../domain/entities/service_request.dart';
 
 class ServiceRequestEditSheet extends StatefulWidget {
-  const ServiceRequestEditSheet({super.key, required this.request, required this.onSave, this.subscribers});
+  const ServiceRequestEditSheet({
+    super.key,
+    required this.request,
+    required this.onSave,
+    this.subscribers,
+  });
   final ServiceRequest request;
   final Future<void> Function(ServiceRequest) onSave;
   final SubscribersRepository? subscribers;
 
-  static Future<bool?> show(BuildContext context, {
+  static Future<bool?> show(
+    BuildContext context, {
     required ServiceRequest request,
     required Future<void> Function(ServiceRequest) onSave,
   }) {
@@ -31,24 +37,31 @@ class ServiceRequestEditSheet extends StatefulWidget {
       isDismissible: false,
       enableDrag: false,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xxl),
+        ),
       ),
       builder: (_) => ServiceRequestEditSheet(request: request, onSave: onSave),
     );
   }
 
   @override
-  State<ServiceRequestEditSheet> createState() => _ServiceRequestEditSheetState();
+  State<ServiceRequestEditSheet> createState() =>
+      _ServiceRequestEditSheetState();
 }
 
 class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
   final _form = GlobalKey<FormState>();
-  late final _amount = TextEditingController(text: widget.request.amount.toString());
+  late final _amount = TextEditingController(
+    text: widget.request.amount.toString(),
+  );
   late final _notes = TextEditingController(text: widget.request.notes ?? '');
-  late DateTime _date = DateTime.tryParse(widget.request.serviceDate) ?? DateTime.now();
+  late DateTime _date =
+      DateTime.tryParse(widget.request.serviceDate) ?? DateTime.now();
   late TankerStatus _status = widget.request.status;
   late int _subscriberId = widget.request.subscriberId;
-  late String _subscriberName = widget.request.subscriberName ?? 'مشترك #${widget.request.subscriberId}';
+  late String _subscriberName =
+      widget.request.subscriberName ?? 'مشترك #${widget.request.subscriberId}';
   bool _changingSubscriber = false;
   bool _saving = false;
   String? _error;
@@ -61,33 +74,47 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
   }
 
   Future<void> _save() async {
-    if (_saving || !widget.request.canEdit || !_form.currentState!.validate()) return;
-    setState(() { _saving = true; _error = null; });
+    if (_saving || !widget.request.canEdit || !_form.currentState!.validate())
+      return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
-      await widget.onSave(ServiceRequest(
-        id: widget.request.id,
-        subscriberId: _subscriberId,
-        subscriberName: _subscriberName,
-        amount: double.parse(ArabicToEnglishDigitsFormatter.normalize(_amount.text).trim()),
-        serviceDate: _date.toIso8601String().substring(0, 10),
-        status: _status,
-        notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-        invoiceId: widget.request.invoiceId,
-        invoiceNumber: widget.request.invoiceNumber,
-      ));
+      await widget.onSave(
+        ServiceRequest(
+          id: widget.request.id,
+          subscriberId: _subscriberId,
+          subscriberName: _subscriberName,
+          amount: double.parse(
+            ArabicToEnglishDigitsFormatter.normalize(_amount.text).trim(),
+          ),
+          serviceDate: _date.toIso8601String().substring(0, 10),
+          status: _status,
+          notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+          invoiceId: widget.request.invoiceId,
+          invoiceNumber: widget.request.invoiceNumber,
+        ),
+      );
       if (mounted) {
         setState(() => _saving = false);
         Navigator.pop(context, true);
       }
     } catch (error) {
-      if (mounted) setState(() { _saving = false; _error = friendlyError(error); });
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _error = friendlyError(error);
+        });
     }
   }
 
   Future<void> _pickDate() async {
     final selected = await showDatePicker(
-      context: context, initialDate: _date,
-      firstDate: DateTime(1900), lastDate: DateTime(2200),
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2200),
     );
     if (selected != null && mounted) setState(() => _date = selected);
   }
@@ -99,7 +126,9 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
     return PopScope(
       canPop: !_saving,
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -114,7 +143,9 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                     children: [
                       Text(
                         'تعديل طلب الخدمة',
-                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const Gap(4),
                       Text(
@@ -123,33 +154,61 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall,
                       ),
-                      if (widget.request.canEditFinancial) Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: TextButton.icon(
-                          onPressed: _saving ? null : () => setState(() => _changingSubscriber = !_changingSubscriber),
-                          icon: const Icon(Icons.person_search_outlined, size: 18),
-                          label: Text(_changingSubscriber ? AppStrings.of(context).serviceCloseSubscriber : AppStrings.of(context).serviceChangeSubscriber),
+                      if (widget.request.canEditFinancial)
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: TextButton.icon(
+                            onPressed: _saving
+                                ? null
+                                : () => setState(
+                                    () => _changingSubscriber =
+                                        !_changingSubscriber,
+                                  ),
+                            icon: const Icon(
+                              Icons.person_search_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              _changingSubscriber
+                                  ? AppStrings.of(
+                                      context,
+                                    ).serviceCloseSubscriber
+                                  : AppStrings.of(
+                                      context,
+                                    ).serviceChangeSubscriber,
+                            ),
+                          ),
                         ),
-                      ),
-                      if (_changingSubscriber && !_saving) SizedBox(
-                        height: 240,
-                        child: SubscriberMeterSelectorWidget(
-                          repository: widget.subscribers,
-                          showMeterPicker: false,
-                          onSelected: (subscriber, _) => setState(() {
-                            _subscriberId = subscriber.id;
-                            _subscriberName = subscriber.name;
-                            _changingSubscriber = false;
-                          }),
+                      if (_changingSubscriber && !_saving)
+                        SizedBox(
+                          height: 240,
+                          child: SubscriberMeterSelectorWidget(
+                            repository: widget.subscribers,
+                            showMeterPicker: false,
+                            onSelected: (subscriber, _) => setState(() {
+                              _subscriberId = subscriber.id;
+                              _subscriberName = subscriber.name;
+                              _changingSubscriber = false;
+                            }),
+                          ),
                         ),
-                      ),
                       const Gap(12),
                       AppNumericField(
-                        controller: _amount, label: 'المبلغ (ريال)', allowDecimal: true,
+                        controller: _amount,
+                        label: 'المبلغ (ريال)',
+                        allowDecimal: true,
                         enabled: !_saving && widget.request.canEditFinancial,
                         validator: (value) {
-                          final amount = double.tryParse(ArabicToEnglishDigitsFormatter.normalize(value ?? '').trim());
-                          return amount == null || !amount.isFinite || amount <= 0 ? 'أدخل مبلغاً أكبر من صفر' : null;
+                          final amount = double.tryParse(
+                            ArabicToEnglishDigitsFormatter.normalize(
+                              value ?? '',
+                            ).trim(),
+                          );
+                          return amount == null ||
+                                  !amount.isFinite ||
+                                  amount <= 0
+                              ? 'أدخل مبلغاً أكبر من صفر'
+                              : null;
                         },
                       ),
                       const Gap(8),
@@ -159,32 +218,54 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                         title: 'تاريخ الخدمة',
                         subtitle: _date.toIso8601String().substring(0, 10),
                         showChevron: false,
-                        onTap: _saving || !widget.request.canEdit ? null : _pickDate,
+                        onTap: _saving || !widget.request.canEdit
+                            ? null
+                            : _pickDate,
                       ),
                       const Gap(8),
                       DropdownButtonFormField<TankerStatus>(
                         initialValue: _status,
-                        decoration: const InputDecoration(labelText: 'حالة الطلب'),
-                        items: [for (final status in widget.request.canEdit
-                            ? TankerStatus.values : [widget.request.status])
-                          DropdownMenuItem(value: status, child: Text(status.label))],
-                        onChanged: _saving || !widget.request.canEdit ? null : (value) => setState(() => _status = value!),
+                        decoration: const InputDecoration(
+                          labelText: 'حالة الطلب',
+                        ),
+                        items: [
+                          for (final status
+                              in widget.request.canEdit
+                                  ? TankerStatus.values
+                                  : [widget.request.status])
+                            DropdownMenuItem(
+                              value: status,
+                              child: Text(status.label),
+                            ),
+                        ],
+                        onChanged: _saving || !widget.request.canEdit
+                            ? null
+                            : (value) => setState(() => _status = value!),
                       ),
                       const Gap(12),
-                      TextFormField(controller: _notes, enabled: !_saving && widget.request.canEdit,
-                        maxLines: 3, decoration: const InputDecoration(labelText: 'ملاحظات')),
-                      if (_error != null) Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: AppNotice(
-                          title: 'تعذر الحفظ',
-                          message: _error!,
-                          icon: Icons.error_outline_rounded,
-                          color: AppColors.danger,
-                        ),
+                      TextFormField(
+                        controller: _notes,
+                        enabled: !_saving && widget.request.canEdit,
+                        maxLines: 3,
+                        decoration: const InputDecoration(labelText: 'ملاحظات'),
                       ),
-                      if (!widget.request.canEditFinancial) Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(AppStrings.of(context).serviceFinancialLocked)),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: AppNotice(
+                            title: 'تعذر الحفظ',
+                            message: _error!,
+                            icon: Icons.error_outline_rounded,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      if (!widget.request.canEditFinancial)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            AppStrings.of(context).serviceFinancialLocked,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -201,11 +282,15 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
                     AppPrimaryButton(
                       label: _saving ? 'جارٍ الحفظ…' : 'حفظ التعديلات',
                       loading: _saving,
-                      onPressed: _saving || !widget.request.canEdit ? null : _save,
+                      onPressed: _saving || !widget.request.canEdit
+                          ? null
+                          : _save,
                     ),
                     const Gap(4),
                     TextButton(
-                      onPressed: _saving ? null : () => Navigator.pop(context, false),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.pop(context, false),
                       child: const Text('إلغاء'),
                     ),
                   ],

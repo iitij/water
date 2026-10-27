@@ -538,6 +538,19 @@ class AppDatabase extends GeneratedDatabase {
     };
 
     await transaction(() async {
+      // Never replace the field cache while this device has unsent work.
+      final active = await _select(
+        "SELECT 1 FROM pending_sync_actions WHERE state IN "
+        "('pending', 'retrying', 'syncing', 'failed', 'needs_attention') LIMIT 1",
+      );
+      final localReadings = await _select(
+        'SELECT 1 FROM cached_readings WHERE server_id IS NULL LIMIT 1',
+      );
+      if (active.isNotEmpty || localReadings.isNotEmpty) {
+        throw StateError(
+          'يوجد عمل ميداني غير مرسل على هذا الجهاز. زامنه أو عالجه قبل استعادة النسخة حتى لا تُفقد البيانات.',
+        );
+      }
       for (final entry in tables.entries) {
         final rows = data[entry.key];
         if (rows is! List) continue;

@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/permissions/permission_service.dart';
+import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -22,7 +24,6 @@ import '../cubit/payments_cubit.dart';
 import '../sheets/void_requests_sheet.dart';
 import '../widgets/payment_actions.dart';
 import '../widgets/payment_card.dart';
-import 'payment_form_screen.dart';
 
 /// `SCR-17` — قائمة سندات القبض (`PaymentTable` في Filament):
 /// بحث برقم السند/المشترك/اسم المحصل، فلترة بطريقة الدفع وبفترة زمنية،
@@ -232,7 +233,7 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(cubit),
         icon: const Icon(Icons.add),
-        label: const Text('دفعة جديدة'),
+        label: const Text('بدء التحصيل'),
       ),
       body: SafeArea(
         child: BlocBuilder<PaymentsCubit, PaymentsState>(
@@ -359,10 +360,8 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
   }
 
   Future<void> _openForm(PaymentsCubit cubit) async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(builder: (_) => const PaymentFormScreen()),
-    );
-    if (created == true) await cubit.load(refresh: true);
+    await context.push<void>(RouteNames.quickCollector);
+    if (mounted) await cubit.load(refresh: true);
   }
 
   int _activeFacets(PaymentsState state) =>

@@ -26,7 +26,7 @@ void main() {
     expect(routes, containsAll([RouteNames.fieldReader, RouteNames.readings, RouteNames.meters]));
     expect(routes, isNot(contains(RouteNames.quickCollector)));
     expect(routes, isNot(contains(RouteNames.invoiceIssue)));
-    expect(routes, isNot(contains(RouteNames.users)));
+    expect(routes, isNot(contains('/users')));
   });
 
   test('collector sees collection and squares but cannot create invoices', () {
@@ -39,10 +39,10 @@ void main() {
 
   test('legacy and Shield grants expose the same navigation', () {
     user(grants: ['view_any_subscriber', 'view_any_subscription_fee',
-      'view_any_setting', 'view_whats_app_settings', 'create_reading', 'view_any_invoice']);
+      'view_any_setting', 'create_reading', 'view_any_invoice']);
     final legacy = WorkspaceCatalog.visible(permissions.can).map((e) => e.route).toList();
     user(grants: ['ViewAny:Subscriber', 'ViewAny:SubscriptionFee',
-      'ViewAny:Setting', 'View:WhatsAppSettings', 'Create:Reading', 'ViewAny:Invoice']);
+      'ViewAny:Setting', 'Create:Reading', 'ViewAny:Invoice']);
     expect(WorkspaceCatalog.visible(permissions.can).map((e) => e.route), legacy);
     expect(permissions.can('Create:Subscriber'), isFalse);
   });

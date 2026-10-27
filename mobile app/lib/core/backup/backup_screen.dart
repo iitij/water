@@ -156,7 +156,8 @@ class _RestoreOptions extends StatelessWidget {
             : (value) => context.read<BackupCubit>().setIncludePendingActions(value),
         title: const Text('استعادة عمليات المزامنة غير المرسلة'),
         subtitle: const Text(
-          'أطفئها إن كانت النسخة من جهاز آخر شغّال — لتجنّب إرسال نفس القراءة مرتين.',
+          'مغلق افتراضياً. فعّله فقط لاسترجاع عمل لم يُرسل من الجهاز الأصلي؛ '
+          'قد تتكرر العملية إن كان الخادم قد استقبلها.',
         ),
         secondary: const Icon(Icons.sync_problem_outlined),
       ),
@@ -261,6 +262,7 @@ class _BackupCard extends StatelessWidget {
       context,
       title: 'استعادة هذه النسخة؟',
       message: 'تُستبدل بيانات الميدان المحفوظة على هذا الجهاز بمحتوى النسخة. '
+          'لن تتم الاستعادة إذا كان على الجهاز عمل غير مرسل. '
           'البيانات على الخادم لا تتأثر.',
       confirmLabel: 'استعادة',
       destructive: true,
@@ -268,7 +270,9 @@ class _BackupCard extends StatelessWidget {
         if (file.counts['readings'] != null) 'قراءات: ${file.counts['readings']}',
         if (file.counts['meters'] != null) 'عدادات: ${file.counts['meters']}',
         if (file.counts['pending_actions'] != null)
-          'عمليات غير مرسلة: ${file.counts['pending_actions']}',
+          state.includePendingActions
+              ? 'ستُستعاد ${file.counts['pending_actions']} عملية مزامنة من النسخة؛ تأكد أنها لم تُرسل من الجهاز الأصلي.'
+              : 'لن تُستعاد عمليات المزامنة من النسخة ولا القراءات غير المرسلة المرتبطة بها.',
       ],
     );
     if (!confirmed || !context.mounted) return;

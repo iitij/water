@@ -5,6 +5,7 @@ import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/list_options_strings.dart';
+import '../../../../core/l10n/resource_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
@@ -181,8 +182,8 @@ class _TransactionsView extends StatelessWidget {
             : null;
 
         return SubPageScaffold(
-          title: 'دفتر الأستاذ العام (قراءة فقط)',
-          subtitle: 'بحث وفلترة كل القيود المالية للمشروع',
+          title: ResourceUxStrings.transactionsTitle,
+          subtitle: ResourceUxStrings.transactionsSubtitle,
           actions: [
             AppIconButton(
               tooltip: 'تحديث',

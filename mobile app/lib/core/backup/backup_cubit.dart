@@ -11,7 +11,7 @@ class BackupState extends Equatable {
     this.files = const <BackupFile>[],
     this.busy = false,
     this.restoring,
-    this.includePendingActions = true,
+    this.includePendingActions = false,
     this.message,
     this.errorMessage,
   });
@@ -145,5 +145,7 @@ class BackupCubit extends Cubit<BackupState> {
 
   String _messageFor(Object error) => error is BackupException
       ? error.message
+      : error is StateError
+          ? error.message.toString()
       : 'تعذّرت العملية على الجهاز: ${error.toString()}';
 }

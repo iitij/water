@@ -184,18 +184,6 @@ abstract final class WorkspaceCatalog {
       keywords: 'اكسل ملفات export xlsx',
     ),
     WorkspaceEntry(
-      title: 'المستخدمون', description: 'حسابات الموظفين',
-      icon: Icons.manage_accounts_outlined, route: RouteNames.users,
-      group: WorkspaceGroup.management, permissions: ['ViewAny:User'],
-      keywords: 'مستخدم موظف users',
-    ),
-    WorkspaceEntry(
-      title: 'الأدوار والصلاحيات', description: 'صلاحيات الوصول والعمل',
-      icon: Icons.admin_panel_settings_outlined, route: RouteNames.roles,
-      group: WorkspaceGroup.management, permissions: ['ViewAny:Role'],
-      keywords: 'دور صلاحية roles permissions shield',
-    ),
-    WorkspaceEntry(
       title: 'إعدادات القراءات', description: 'فترات القراءة وطريقة احتسابها',
       icon: Icons.calendar_month_outlined, route: '${RouteNames.settings}?section=reading',
       group: WorkspaceGroup.settings, permissions: ['View:ReadingSettings'],
@@ -212,12 +200,6 @@ abstract final class WorkspaceCatalog {
       icon: Icons.article_outlined, route: '${RouteNames.settings}?section=receipt',
       group: WorkspaceGroup.settings, permissions: ['View:ReceiptSettings'],
       keywords: 'إعدادات طباعة receipt settings',
-    ),
-    WorkspaceEntry(
-      title: 'الواتساب', description: 'الاتصال وقوالب الرسائل',
-      icon: Icons.chat_outlined, route: '${RouteNames.settings}?section=whatsapp',
-      group: WorkspaceGroup.settings, permissions: ['View:WhatsAppSettings'],
-      keywords: 'واتس اب ربط qr whatsapp',
     ),
     WorkspaceEntry(
       title: 'الإعدادات العامة', description: 'بيانات المشروع وإعدادات النظام',

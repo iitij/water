@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_service.dart';
+import '../../../core/l10n/owner_ux_strings.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/ui/app_filters.dart';
@@ -31,7 +32,12 @@ class ServicesScreen extends StatelessWidget {
 }
 
 class ServicesDirectory extends StatefulWidget {
-  const ServicesDirectory({super.key, required this.can, required this.onNavigate, this.autofocus = false});
+  const ServicesDirectory({
+    super.key,
+    required this.can,
+    required this.onNavigate,
+    this.autofocus = false,
+  });
   final bool Function(String) can;
   final ValueChanged<String> onNavigate;
   final bool autofocus;
@@ -61,7 +67,8 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
       });
     }
     // A changed account/permission set must not leave an invisible category selected.
-    if (_group != null && !WorkspaceCatalog.visible(widget.can).any((e) => e.group == _group)) {
+    if (_group != null &&
+        !WorkspaceCatalog.visible(widget.can).any((e) => e.group == _group)) {
       _group = null;
     }
   }
@@ -75,8 +82,21 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final available = WorkspaceCatalog.visible(widget.can);
-    final entries = WorkspaceCatalog.visible(widget.can, query: _search.text, group: _group);
-    final groups = WorkspaceGroup.values.where((group) => available.any((entry) => entry.group == group));
+    final entries = WorkspaceCatalog.visible(
+      widget.can,
+      query: _search.text,
+      group: _group,
+    );
+    final groups = WorkspaceGroup.values.where(
+      (group) => available.any((entry) => entry.group == group),
+    );
+    final rows = <Object>[
+      for (final group in WorkspaceGroup.values)
+        if (entries.any((entry) => entry.group == group)) ...<Object>[
+          group,
+          ...entries.where((entry) => entry.group == group),
+        ],
+    ];
     return SafeArea(
       top: false,
       child: CustomScrollView(
@@ -92,9 +112,17 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('كل الخدمات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        OwnerUxStrings.allServices,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 6),
-                      Text('اختر خدمة أو ابحث عنها بالاسم.', style: theme.textTheme.bodyLarge),
+                      Text(
+                        OwnerUxStrings.directoryHelp,
+                        style: theme.textTheme.bodyLarge,
+                      ),
                       const SizedBox(height: 20),
                       TextField(
                         controller: _search,
@@ -104,22 +132,26 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                         onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         decoration: InputDecoration(
-                          labelText: 'ابحث عن خدمة',
-                          hintText: 'مثلاً: فاتورة، مشترك، واتساب',
+                          labelText: OwnerUxStrings.searchServiceLabel,
+                          hintText: OwnerUxStrings.serviceExample,
                           prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _search.text.isEmpty ? null : IconButton(
-                            tooltip: 'مسح البحث',
-                            icon: const Icon(Icons.close_rounded),
-                            onPressed: () => setState(() => _search.clear()),
-                          ),
+                          suffixIcon: _search.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: OwnerUxStrings.clearSearch,
+                                  icon: const Icon(Icons.close_rounded),
+                                  onPressed: () =>
+                                      setState(() => _search.clear()),
+                                ),
                         ),
                       ),
                       const SizedBox(height: 16),
                       Wrap(
-                        spacing: 6, runSpacing: 6,
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           AppFilterChip(
-                            label: 'الكل',
+                            label: OwnerUxStrings.all,
                             selected: _group == null,
                             onTap: () => setState(() => _group = null),
                           ),
@@ -134,7 +166,10 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      Text('${entries.length} خدمة متاحة', style: theme.textTheme.bodyMedium),
+                      Text(
+                        OwnerUxStrings.servicesCount(entries.length),
+                        style: theme.textTheme.bodyMedium,
+                      ),
                       const SizedBox(height: 12),
                     ],
                   ),
@@ -142,35 +177,68 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
               ),
             ),
           ),
-          if (entries.isEmpty) SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(children: [
-                Icon(Icons.search_off_rounded, size: 48, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(height: 16),
-                Text('لم نجد خدمة بهذا الاسم', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                const Text('جرّب اسماً آخر أو اختر قسماً مختلفاً.', textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                TextButton(onPressed: _clear, child: const Text('عرض كل الخدمات')),
-              ]),
+          if (entries.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.search_off_rounded,
+                      size: 48,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      OwnerUxStrings.noServices,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      OwnerUxStrings.noServicesHelp,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _clear,
+                      child: const Text(OwnerUxStrings.showAll),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
             sliver: SliverList.builder(
-              itemCount: entries.length,
+              itemCount: rows.length,
               itemBuilder: (context, index) {
-                final entry = entries[index];
+                final row = rows[index];
+                if (row is WorkspaceGroup) {
+                  return Center(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 1080),
+                      alignment: AlignmentDirectional.centerStart,
+                      padding: const EdgeInsets.only(top: 12, bottom: 10),
+                      child: Text(
+                        row.label,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                  );
+                }
+                final entry = row as WorkspaceEntry;
                 return Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1080),
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: WorkspaceTile(entry: entry, onTap: () {
-                        FocusScope.of(context).unfocus();
-                        widget.onNavigate(entry.route);
-                      }),
+                      child: WorkspaceTile(
+                        entry: entry,
+                        onTap: () {
+                          FocusScope.of(context).unfocus();
+                          widget.onNavigate(entry.route);
+                        },
+                      ),
                     ),
                   ),
                 );

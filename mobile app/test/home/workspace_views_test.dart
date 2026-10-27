@@ -54,17 +54,14 @@ void main() {
     expect(opened.last, RouteNames.offlineSync);
   });
 
-  testWidgets('service search supports Arabic and direct settings navigation', (tester) async {
+  testWidgets('removed admin services are absent from service search', (tester) async {
     final opened = <String>[];
     await tester.pumpWidget(_app(ServicesDirectory(can: (_) => true, onNavigate: opened.add)));
     await tester.enterText(find.byType(TextField), 'واتس اب');
     await tester.pumpAndSettle();
-    expect(find.text('الواتساب'), findsOneWidget);
-    expect(find.text('المستخدمون'), findsNothing);
-    await tester.ensureVisible(find.text('الواتساب'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('الواتساب'));
-    expect(opened.single, '${RouteNames.settings}?section=whatsapp');
+    expect(find.widgetWithText(WorkspaceTile, 'الواتساب'), findsNothing);
+    expect(find.text('لم نجد خدمة بهذا الاسم'), findsOneWidget);
+    expect(opened, isEmpty);
   });
 
   testWidgets('empty results can be reset and category filters apply', (tester) async {
@@ -81,7 +78,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(AppFilterChip, 'الإعدادات'));
     await tester.pumpAndSettle();
-    expect(find.text('5 خدمة متاحة'), findsOneWidget);
+    expect(find.text('4 خدمة متاحة'), findsOneWidget);
     expect(find.text('المشتركون'), findsNothing);
   });
 
@@ -90,7 +87,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'المستخدمون');
     await tester.pumpAndSettle();
     // `find.text` also matches the search field's EditableText, so assert on the tile.
-    expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsOneWidget);
+    expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsNothing);
     await tester.pumpWidget(_app(ServicesDirectory(can: (_) => false, onNavigate: (_) {})));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsNothing);

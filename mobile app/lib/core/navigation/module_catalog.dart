@@ -26,7 +26,7 @@ extension AppModuleGroupX on AppModuleGroup {
         AppModuleGroup.billing => 'سندات القبض والفواتير وشرائح التعرفة',
         AppModuleGroup.crm => 'ملفات المشتركين والمربعات وطلبات الخدمة',
         AppModuleGroup.insights => 'لوحة القيادة والتقارير والتصدير',
-        AppModuleGroup.admin => 'المستخدمون والصلاحيات وإعدادات النظام',
+        AppModuleGroup.admin => 'إعدادات المشروع وأدوات الإدارة',
         AppModuleGroup.system => 'المزامنة والملف الشخصي والمظهر',
       };
 
@@ -267,7 +267,7 @@ abstract final class ModuleCatalog {
       id: 'settings',
       group: AppModuleGroup.admin,
       title: 'استوديو الإعدادات',
-      subtitle: 'مصمم الفاتورة والسند وخادم الواتساب',
+      subtitle: 'مصمم الفاتورة والسند وإعدادات القراءات',
       icon: Icons.tune_rounded,
       color: AppColors.warning,
       route: RouteNames.settings,
@@ -275,19 +275,8 @@ abstract final class ModuleCatalog {
         'View:InvoiceSettings',
         'View:ReadingSettings',
         'View:ReceiptSettings',
-        'View:WhatsAppSettings',
         'ViewAny:Setting',
       ],
-    ),
-    AppModule(
-      id: 'users',
-      group: AppModuleGroup.admin,
-      title: 'المستخدمون',
-      subtitle: 'حسابات الموظفين والمحصلين والقراء',
-      icon: Icons.manage_accounts_rounded,
-      color: AppColors.info,
-      route: RouteNames.users,
-      requiredPermissions: <String>['ViewAny:User'],
     ),
     AppModule(
       id: 'data-quality',
@@ -309,16 +298,6 @@ abstract final class ModuleCatalog {
       route: RouteNames.devices,
       // بلا شرط صلاحية: كل موظف يحتاج إبطال جهازه المفقود، والخادم يقيّد
       // الإبطال بمالك الجهاز أو مشرف.
-    ),
-    AppModule(
-      id: 'roles',
-      group: AppModuleGroup.admin,
-      title: 'الأدوار والصلاحيات',
-      subtitle: 'مصفوفة الصلاحيات الدقيقة لكل دور',
-      icon: Icons.policy_rounded,
-      color: AppColors.violet,
-      route: RouteNames.roles,
-      requiredPermissions: <String>['ViewAny:Role'],
     ),
 
     // ── System ─────────────────────────────────────────────────────────────

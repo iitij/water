@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/owner_ux_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -11,6 +12,7 @@ import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../home/domain/workspace_catalog.dart';
 import '../widgets/module_section.dart';
 
 class CrmHubScreen extends StatelessWidget {
@@ -19,7 +21,13 @@ class CrmHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final permissions = GetIt.I<PermissionService>();
-    final modules = ModuleCatalog.visible(permissions, group: AppModuleGroup.crm);
+    final visibleRoutes = WorkspaceCatalog.visible(
+      permissions.can,
+    ).map((entry) => entry.route).toSet();
+    final modules = ModuleCatalog.visible(
+      permissions,
+      group: AppModuleGroup.crm,
+    );
 
     return AppPageBody(
       children: <Widget>[
@@ -30,32 +38,49 @@ class CrmHubScreen extends StatelessWidget {
               children: <Widget>[
                 const HeroCopy(
                   eyebrow: 'المشتركون والخدمات',
-                  title: 'اعرف مشتركك بالكامل',
-                  subtitle:
-                      'ملف 360° يجمع العدادات والقراءات والفواتير والمدفوعات وسجل التواصل في مكان واحد.',
+                  title: OwnerUxStrings.crmTitle,
+                  subtitle: OwnerUxStrings.crmHelp,
                 ),
                 const Gap(AppSpacing.md),
                 const Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: <Widget>[
-                    HeroMetaChip(icon: Icons.badge_outlined, label: 'ملف 360°'),
-                    HeroMetaChip(icon: Icons.location_city_rounded, label: 'مربعات وحارات'),
-                    HeroMetaChip(icon: Icons.receipt_long_outlined, label: 'كشف حساب'),
+                    HeroMetaChip(
+                      icon: Icons.badge_outlined,
+                      label: OwnerUxStrings.subscriberFile,
+                    ),
+                    HeroMetaChip(
+                      icon: Icons.location_city_rounded,
+                      label: 'مربعات وحارات',
+                    ),
+                    HeroMetaChip(
+                      icon: Icons.receipt_long_outlined,
+                      label: 'كشف حساب',
+                    ),
                   ],
                 ),
                 const Gap(AppSpacing.lg),
-                HeroActions(
-                  primary: HeroButton(
-                    label: 'إضافة مشترك جديد',
-                    icon: Icons.person_add_alt_1_rounded,
-                    onPressed: () => context.push(RouteNames.subscriberNew),
-                  ),
-                  secondary: HeroGhostButton(
-                    label: 'بحث في المشتركين',
-                    icon: Icons.search_rounded,
-                    onPressed: () => context.push(RouteNames.subscribers),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    if (visibleRoutes.contains(RouteNames.subscriberNew))
+                      HeroButton(
+                        label: 'إضافة مشترك جديد',
+                        icon: Icons.person_add_alt_1_rounded,
+                        onPressed: () => context.push(RouteNames.subscriberNew),
+                      ),
+                    if (visibleRoutes.contains(
+                      RouteNames.subscribers,
+                    )) ...<Widget>[
+                      const SizedBox(height: 8),
+                      HeroGhostButton(
+                        label: 'بحث في المشتركين',
+                        icon: Icons.search_rounded,
+                        onPressed: () => context.push(RouteNames.subscribers),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -85,7 +110,8 @@ class CrmHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 1,
                 title: 'الملف الأساسي',
-                description: 'الاسم والهاتف والعنوان والمربع، مع بحث فوري بالمسار أو رقم العداد.',
+                description:
+                    'الاسم والهاتف والعنوان والمربع، مع بحث فوري بالمسار أو رقم العداد.',
                 icon: Icons.person_search_rounded,
                 color: AppColors.primary,
               ),
@@ -93,7 +119,8 @@ class CrmHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 2,
                 title: 'العدادات والقراءات',
-                description: 'كل العدادات المرتبطة، آخر قراءة، ومتوسط الاستهلاك الشهري.',
+                description:
+                    'كل العدادات المرتبطة، آخر قراءة، ومتوسط الاستهلاك الشهري.',
                 icon: Icons.water_damage_outlined,
                 color: AppColors.info,
               ),
@@ -101,7 +128,8 @@ class CrmHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 3,
                 title: 'الحساب والتحصيل',
-                description: 'الفواتير والمدفوعات والأرصدة مع كشف حساب قابل للطباعة والمشاركة.',
+                description:
+                    'الفواتير والمدفوعات والأرصدة مع كشف حساب قابل للطباعة والمشاركة.',
                 icon: Icons.request_quote_outlined,
                 color: AppColors.success,
               ),
@@ -117,11 +145,16 @@ class CrmHubScreen extends StatelessWidget {
                 'سجّل طلب الوايت من الميدان، وتابع تنفيذه، ثم حوّله إلى فاتورة مباشرة دون أي ورقة إضافية.',
             icon: Icons.local_shipping_outlined,
             color: AppColors.warning,
-            action: TextButton(
-              onPressed: () => context.push(RouteNames.serviceRequests),
-              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
-              child: const Text('فتح طلبات الخدمة'),
-            ),
+            action: !visibleRoutes.contains(RouteNames.serviceRequests)
+                ? null
+                : TextButton(
+                    onPressed: () => context.push(RouteNames.serviceRequests),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 28),
+                    ),
+                    child: const Text('فتح طلبات الخدمة'),
+                  ),
           ),
         ),
       ],

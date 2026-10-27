@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-10-26",
+  "updated_at": "2026-10-27",
   "branch": "arena/9da3be61-water",
   "status_values": [
    "todo",
@@ -29,6 +29,99 @@
   }
  },
  "tasks": [
+  {
+   "id": "UX-SIMPLIFY-01",
+   "sprint": "OWNER-UX",
+   "agent": "A1+A9+A10",
+   "task": "إبعاد إدارة المستخدمين والأدوار ومصفوفة الصلاحيات وإعدادات واتساب المتقدمة وخادمها المحلي عن تطبيق الجوال",
+   "files": "mobile app/lib/core/router/app_router.dart; core/navigation/module_catalog.dart; features/home/domain/workspace_catalog.dart; features/settings/presentation/pages/settings_studio_screen.dart; core/di/injection_container.dart",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_catalog_test.dart test/home/permission_navigation_test.dart: 12 PASS؛ test/home/workspace_views_test.dart: 11 PASS؛ test/home/workspace_routes_test.dart: 6 PASS؛ لا قبول جهاز. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
+  },
+  {
+   "id": "UX-SIMPLIFY-02",
+   "sprint": "OWNER-UX",
+   "agent": "A7+A10",
+   "task": "توحيد مدخل إنشاء التحصيل من سجل السندات مع رحلة المحصل مع إبقاء السجل للمراجعة",
+   "files": "mobile app/lib/features/payments/presentation/pages/payments_list_screen.dart; test/features/payments/receipts_collection_entry_test.dart",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_routes_test.dart test/features/payments/receipts_collection_entry_test.dart: 7 PASS؛ flutter analyze --no-pub لملفات التحصيل المعدلة: No issues found. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
+  },
+  {
+   "id": "UX-SIMPLIFY-03",
+   "sprint": "OWNER-UX",
+   "agent": "A5+A10",
+   "task": "حماية استعادة النسخة المحلية من تكرار الطابور أو محو العمل الميداني المعلق",
+   "files": "mobile app/lib/core/backup/**; core/database/app_database.dart; test/core/backup/**",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 test/core/backup/local_backup_test.dart test/core/backup/database_restore_guard_test.dart: 18 PASS؛ استعادة الطابور اختيار صريح وحارس قاعدة البيانات يمنع استبدال العمليات والقراءات المحلية المعلقة. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
+  },
+  {
+   "id": "UX-05",
+   "sprint": "OWNER-UX",
+   "agent": "A9",
+   "subagent": "resource-forms",
+   "task": "تقليل تعقيد الفاتورة اليدوية ومنع اختفاء نموذج الخدمة والمربع عند فشل الحفظ",
+   "files": "mobile app/lib/features/{invoices,service_requests,squares,transactions,users_roles,exports}/presentation/**, mobile app/lib/core/l10n/resource_ux_strings.dart",
+   "definition_of_done": "الحقول الإضافية قابلة للفتح دون فقد قيمها؛ خطأ واضح والتحقق من الاسم والمبلغ والمشترك؛ حفظ مرة واحدة مع بقاء النموذج والمدخلات عند الفشل؛ عناوين عربية مفهومة؛ اختبارات",
+   "status": "doing",
+   "evidence": "إسناد A1 لملكية واجهات الموارد غير المسندة في الجدول الأساسي موثق في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md؛ لا تعديل عقود API أو الحسابات.",
+   "owner_acceptance": "not_tested"
+  },
+  {
+   "id": "UX-01",
+   "sprint": "OWNER-UX",
+   "agent": "A1",
+   "subagent": "owner-screen-review",
+   "task": "جرد الشاشات وتجربة صاحب المشروع قليل الخبرة",
+   "files": "docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
+   "definition_of_done": "جرد 54 شاشة والأسطح المساندة مع قرارات تصميم وحدود تحقق واختبارات قبول واضحة",
+   "status": "done",
+   "evidence": "rg --files lib مع ترشيح _screen.dart أعاد 54 ملفاً؛ مقارنة أسماء الملفات مع جدول المراجعة لم تجد شاشة ناقصة. مراجعة مصدرية لا تعني قبول جهاز.",
+   "owner_acceptance": "not_tested"
+  },
+  {
+   "id": "UX-02",
+   "sprint": "OWNER-UX",
+   "agent": "A9",
+   "subagent": "owner-navigation",
+   "task": "رئيسية تبدأ بالمهام ودليل خدمات ومكونات تتحمل النص الكبير",
+   "files": "mobile app/lib/features/home/**, mobile app/lib/features/navigation/**, mobile app/lib/core/ui/**, mobile app/lib/core/l10n/owner_ux_strings.dart",
+   "definition_of_done": "مهام بصلاحياتها وملخص مالي واضح ودليل بحث سهل؛ لمس 48dp ونص RTL كبير بلا قص للإجراءات الأساسية؛ اختبار تنقل وحالات عرض",
+   "status": "doing",
+   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
+   "owner_acceptance": "not_tested"
+  },
+  {
+   "id": "UX-03",
+   "sprint": "OWNER-UX",
+   "agent": "A7",
+   "subagent": "owner-collection",
+   "task": "تبسيط التحصيل وإظهار نتيجة السند وفرق عد الصندوق",
+   "files": "mobile app/lib/features/payments/**, mobile app/lib/features/cash_sessions/**, mobile app/lib/core/l10n/finance_ux_strings.dart",
+   "definition_of_done": "الاختياري قابل للفتح ويحفظ المدخلات؛ نتيجة الحفظ من الحالة المحدثة؛ فرق العدد ظاهر؛ مسح البحث يحافظ على المربع؛ اختبارات سلوك",
+   "status": "doing",
+   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
+   "owner_acceptance": "not_tested"
+  },
+  {
+   "id": "UX-04",
+   "sprint": "OWNER-UX",
+   "agent": "A8",
+   "subagent": "owner-meter-reading",
+   "task": "اختيار مالك العداد بالبحث وتوجيه إدخال القراءة",
+   "files": "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart, mobile app/lib/features/readings/presentation/pages/submit_reading_screen.dart, mobile app/lib/core/l10n/field_ux_strings.dart",
+   "definition_of_done": "بحث مشترك بالاسم والمربع واختيار واضح؛ خطأ اختيار داخل الحقل؛ إعادة تحميل ناجحة بعد الفشل؛ حفظ القراءة والعداد بالمسار الحالي؛ اختبارات",
+   "status": "doing",
+   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
+   "owner_acceptance": "not_tested"
+  },
   {
    "id": "S1-01",
    "sprint": "S1",

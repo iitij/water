@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_fields.dart';
+import '../../../../core/l10n/finance_ux_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
@@ -67,11 +68,20 @@ class CollectPaymentForm extends StatelessWidget {
             ReferenceNumberField(cubit: cubit),
           ],
           const SizedBox(height: 10),
-          ReasonField(cubit: cubit),
-          const SizedBox(height: 10),
-          NotesField(cubit: cubit),
-          const SizedBox(height: 10),
-          PaymentDateField(state: state, cubit: cubit),
+          ExpansionTile(
+            maintainState: true,
+            tilePadding: EdgeInsets.zero,
+            title: const Text(FinanceUxStrings.paymentDetails),
+            subtitle: const Text(FinanceUxStrings.paymentDetailsHint),
+            children: <Widget>[
+              ReasonField(cubit: cubit),
+              const SizedBox(height: 10),
+              NotesField(cubit: cubit),
+              const SizedBox(height: 10),
+              PaymentDateField(state: state, cubit: cubit),
+              const SizedBox(height: 10),
+            ],
+          ),
           const SizedBox(height: 12),
           AllocationPreviewCard(state: state),
           const SizedBox(height: 12),
@@ -116,13 +126,19 @@ class DueHeaderCard extends StatelessWidget {
                   state.subscriberName ?? '—',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               if (invoice != null)
                 Text(
                   invoice!.invoiceType.label,
-                  style: const TextStyle(fontSize: 11, color: AppColors.neutral),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.neutral,
+                  ),
                 ),
             ],
           ),
@@ -143,7 +159,9 @@ class DueHeaderCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
-              const Expanded(child: Text('المطلوب تحصيله', style: TextStyle(fontSize: 12))),
+              const Expanded(
+                child: Text('المطلوب تحصيله', style: TextStyle(fontSize: 12)),
+              ),
               Text(
                 CurrencyFormatter.debt(state.dueAmount),
                 style: TextStyle(
@@ -162,11 +180,18 @@ class DueHeaderCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Icon(Icons.warning_amber_rounded, size: 13, color: AppSemantic.resolve(context, AppColors.warning)),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 13,
+                    color: AppSemantic.resolve(context, AppColors.warning),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'يشمل ${CurrencyFormatter.withLabel(invoice!.previousBalance)} متأخرات سابقة',
-                    style: TextStyle(fontSize: 11, color: AppSemantic.resolve(context, AppColors.warning)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppSemantic.resolve(context, AppColors.warning),
+                    ),
                   ),
                 ],
               ),
@@ -176,7 +201,7 @@ class DueHeaderCard extends StatelessWidget {
               padding: EdgeInsets.only(top: 8),
               child: InfoNotice(
                 icon: Icons.auto_awesome,
-                text: 'بدون فاتورة محددة: يوزّع الخادم المبلغ على أقدم الفواتير (FIFO).',
+                text: FinanceUxStrings.allocationExplanation,
               ),
             ),
         ],
@@ -206,7 +231,7 @@ class InvoicePickerRow extends StatelessWidget {
           runSpacing: 8,
           children: <Widget>[
             AppFilterChip(
-              label: 'تلقائي (FIFO)',
+              label: FinanceUxStrings.automaticAllocation,
               selected: state.invoiceId == null,
               onTap: cubit.useFifoAutomatically,
             ),
@@ -261,13 +286,14 @@ class _AmountFieldState extends State<AmountField> {
 
   @override
   Widget build(BuildContext context) => AppNumericField(
-        controller: _controller,
-        label: 'مبلغ الدفعة',
-        prefixText: 'ريال',
-        required: true,
-        autofocus: !widget.state.hasInvoice,
-        onChanged: (value) => widget.cubit.setAmount(double.tryParse(value.trim()) ?? 0),
-      );
+    controller: _controller,
+    label: 'مبلغ الدفعة',
+    prefixText: 'ريال',
+    required: true,
+    autofocus: !widget.state.hasInvoice,
+    onChanged: (value) =>
+        widget.cubit.setAmount(double.tryParse(value.trim()) ?? 0),
+  );
 }
 
 class QuickAmountRow extends StatelessWidget {
@@ -312,7 +338,10 @@ class MethodPickerRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text('طريقة الدفع', style: TextStyle(fontSize: 12, color: AppColors.neutral)),
+        const Text(
+          'طريقة الدفع',
+          style: TextStyle(fontSize: 12, color: AppColors.neutral),
+        ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -332,10 +361,10 @@ class MethodPickerRow extends StatelessWidget {
   }
 
   static IconData _methodIcon(PaymentMethod method) => switch (method) {
-        PaymentMethod.cash => Icons.payments_outlined,
-        PaymentMethod.bankTransfer => Icons.account_balance_outlined,
-        PaymentMethod.check => Icons.event_note_outlined,
-      };
+    PaymentMethod.cash => Icons.payments_outlined,
+    PaymentMethod.bankTransfer => Icons.account_balance_outlined,
+    PaymentMethod.check => Icons.event_note_outlined,
+  };
 }
 
 /// حقل `reference_number` المشروط — إلزامي مع التحويل البنكي/الشيك فقط.
@@ -359,21 +388,21 @@ class _ReferenceNumberFieldState extends State<ReferenceNumberField> {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          AppTextField(
-            controller: _controller,
-            label: 'رقم الحوالة / رقم الشيك',
-            required: true,
-            onChanged: widget.cubit.setReferenceNumber,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'إلزامي مع التحويل البنكي والشيك فقط — يطابق منطق Filament.',
-            style: TextStyle(fontSize: 11, color: AppColors.neutral),
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      AppTextField(
+        controller: _controller,
+        label: 'رقم الحوالة / رقم الشيك',
+        required: true,
+        onChanged: widget.cubit.setReferenceNumber,
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        'إلزامي مع التحويل البنكي والشيك فقط — يطابق منطق Filament.',
+        style: TextStyle(fontSize: 11, color: AppColors.neutral),
+      ),
+    ],
+  );
 }
 
 /// حقل `reason` (يظهر في السند خلف عبارة «وذلك مقابل»).
@@ -397,11 +426,11 @@ class _ReasonFieldState extends State<ReasonField> {
 
   @override
   Widget build(BuildContext context) => AppTextField(
-        controller: _controller,
-        label: 'البيان (وذلك مقابل)',
-        hint: 'مثال: سداد فاتورة شهر سبتمبر',
-        onChanged: widget.cubit.setReason,
-      );
+    controller: _controller,
+    label: 'البيان (وذلك مقابل)',
+    hint: 'مثال: سداد فاتورة شهر سبتمبر',
+    onChanged: widget.cubit.setReason,
+  );
 }
 
 /// حقل `notes` متعدد الأسطر — الحقل التاسع في مواصفة سند القبض
@@ -426,12 +455,12 @@ class _NotesFieldState extends State<NotesField> {
 
   @override
   Widget build(BuildContext context) => AppTextField(
-        controller: _controller,
-        label: 'ملاحظات',
-        hint: 'ملاحظات إضافية تُحفظ مع السند (اختياري)',
-        maxLines: 3,
-        onChanged: widget.cubit.setNotes,
-      );
+    controller: _controller,
+    label: 'ملاحظات',
+    hint: 'ملاحظات إضافية تُحفظ مع السند (اختياري)',
+    maxLines: 3,
+    onChanged: widget.cubit.setNotes,
+  );
 }
 
 class PaymentDateField extends StatelessWidget {
@@ -496,7 +525,8 @@ class AllocationPreviewCard extends StatelessWidget {
     }
 
     final affectsMeter =
-        state.openInvoices.isNotEmpty && state.openInvoices.first.meterId != null;
+        state.openInvoices.isNotEmpty &&
+        state.openInvoices.first.meterId != null;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -514,18 +544,31 @@ class AllocationPreviewCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ...preview.allocations.map((entry) {
-            final invoice = preview.invoices.where((i) => i.id == entry.invoiceId);
-            final bill = invoice.isEmpty ? '#${entry.invoiceId}' : invoice.first.billNumber;
+            final invoice = preview.invoices.where(
+              (i) => i.id == entry.invoiceId,
+            );
+            final bill = invoice.isEmpty
+                ? '#${entry.invoiceId}'
+                : invoice.first.billNumber;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.arrow_left, size: 16, color: AppColors.neutral),
+                  const Icon(
+                    Icons.arrow_left,
+                    size: 16,
+                    color: AppColors.neutral,
+                  ),
                   const SizedBox(width: 4),
-                  Expanded(child: Text(bill, style: const TextStyle(fontSize: 12))),
+                  Expanded(
+                    child: Text(bill, style: const TextStyle(fontSize: 12)),
+                  ),
                   Text(
                     CurrencyFormatter.withLabel(entry.applied),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -537,7 +580,8 @@ class AllocationPreviewCard extends StatelessWidget {
               child: InfoNotice(
                 icon: Icons.account_balance_wallet_outlined,
                 color: AppColors.success,
-                text: 'الفائض ${CurrencyFormatter.withLabel(preview.surplusCredit)} يبقى '
+                text:
+                    'الفائض ${CurrencyFormatter.withLabel(preview.surplusCredit)} يبقى '
                     'رصيداً دائناً في ${affectsMeter ? 'حساب العداد' : 'حساب المشترك'}.',
               ),
             ),
@@ -567,7 +611,8 @@ class CollectSubmitButton extends StatelessWidget {
       final confirmed = await ConfirmDialog.show(
         context,
         title: 'مبلغ أكبر من المستحق',
-        message: 'سيدفع ${CurrencyFormatter.withLabel(overpay)} زائداً ويُحوَّل رصيداً دائناً.',
+        message:
+            'سيدفع ${CurrencyFormatter.withLabel(overpay)} زائداً ويُحوَّل رصيداً دائناً.',
         confirmLabel: 'تأكيد',
       );
       if (!confirmed || !context.mounted) return;
@@ -577,7 +622,8 @@ class CollectSubmitButton extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) return;
 
-    final payment = state.outcome?.payment;
+    final outcome = cubit.state.outcome;
+    final payment = outcome?.payment;
     if (payment == null) {
       onSubmitted(true);
       return;
@@ -586,11 +632,11 @@ class CollectSubmitButton extends StatelessWidget {
     await ReceiptSuccessSheet.show(
       context,
       payment: payment,
-      receiptData: state.outcome?.receiptData,
+      receiptData: outcome?.receiptData,
       invoice: invoice,
-      queuedOffline: state.outcome?.queuedOffline ?? false,
-      onDone: () => onSubmitted(true),
+      queuedOffline: outcome?.queuedOffline ?? false,
     );
+    if (context.mounted) onSubmitted(true);
   }
 
   @override
@@ -615,6 +661,10 @@ class CollectSubmitButton extends StatelessWidget {
               text: 'أدخل رقم الحوالة/الشيك للمتابعة.',
             ),
           ),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(FinanceUxStrings.reviewPayment),
+        ),
         AppPrimaryButton(
           label: state.amount > 0
               ? 'تحصيل ${CurrencyFormatter.amount(state.amount)} ريال'

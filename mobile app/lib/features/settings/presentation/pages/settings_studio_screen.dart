@@ -11,7 +11,6 @@ import 'general_settings_resource_screen.dart';
 import 'invoice_settings_studio_screen.dart';
 import 'reading_settings_screen.dart';
 import 'receipt_settings_studio_screen.dart';
-import 'whatsapp_settings_screen.dart';
 
 class SettingsStudioScreen extends StatelessWidget {
   const SettingsStudioScreen({
@@ -27,7 +26,7 @@ class SettingsStudioScreen extends StatelessWidget {
   final AdminPermissionCheck can;
 
   /// Optional deep-link section id (`reading` / `invoice` / `receipt` /
-  /// `whatsapp` / `general`). The studio is a hub list now and each center
+  /// `general`). The studio is a hub list now and each center
   /// opens as its own sub-page; the id is retained for API compatibility
   /// with the router's `?section=` deep links.
   final String? initialSection;
@@ -69,14 +68,6 @@ class SettingsStudioScreen extends StatelessWidget {
             mediaBaseUrl: mediaBaseUrl,
             imagePicker: imagePicker,
           ),
-        ),
-      if (can(AdminPermissions.viewWhatsAppSettings))
-        _SettingsCenter(
-          id: 'whatsapp',
-          title: 'الواتساب',
-          description: 'محرك الإرسال وقوالب الرسائل',
-          icon: Icons.chat_outlined,
-          builder: () => WhatsAppSettingsScreen(repository: repository),
         ),
       if (can(AdminPermissions.viewSettings))
         _SettingsCenter(
@@ -121,7 +112,7 @@ class SettingsStudioScreen extends StatelessWidget {
             icon: Icons.request_quote_outlined,
             rows: [
               for (final center in centers)
-                if (center.id == 'invoice' || center.id == 'receipt' || center.id == 'whatsapp')
+                if (center.id == 'invoice' || center.id == 'receipt')
                   center,
             ],
           ),

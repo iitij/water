@@ -43,7 +43,6 @@ import '../../features/readings/presentation/pages/field_reader_screen.dart';
 import '../../features/readings/presentation/pages/readings_list_screen.dart';
 import '../../features/security/presentation/app_lock_settings_screen.dart';
 import '../../features/settings/settings.dart';
-import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
 import '../backup/backup_screen.dart';
 import '../backup/local_backup.dart';
@@ -338,21 +337,6 @@ class AppRouter {
           ...SettingsRoutes.routes(
             studioBuilder: () => SettingsStudioScreen(
               repository: GetIt.I<SettingsRepository>(),
-              can: GetIt.I<PermissionService>().can,
-            ),
-          ),
-          ...UsersRolesRoutes.routes(
-            usersBuilder: () {
-              final rawId = session.user?['id'];
-              final currentUserId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
-              return UsersManagementScreen(
-                repository: GetIt.I<RbacRepository>(),
-                can: GetIt.I<PermissionService>().can,
-                currentUserId: currentUserId,
-              );
-            },
-            rolesBuilder: () => RolesAndPermissionsScreen(
-              repository: GetIt.I<RbacRepository>(),
               can: GetIt.I<PermissionService>().can,
             ),
           ),

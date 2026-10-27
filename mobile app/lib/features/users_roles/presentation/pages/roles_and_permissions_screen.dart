@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
+import '../../../../core/l10n/resource_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -32,7 +33,9 @@ class RolesAndPermissionsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!can(AdminPermissions.viewRoles)) {
       return const Scaffold(
-        body: AdminErrorView(message: 'لا تملك صلاحية ViewAny:Role لعرض الأدوار.'),
+        body: AdminErrorView(
+          message: 'لا تملك صلاحية ViewAny:Role لعرض الأدوار.',
+        ),
       );
     }
     return BlocProvider(
@@ -50,16 +53,21 @@ class _RolesView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<RolesCubit, RolesState>(
-      listenWhen: (previous, current) => previous.errorMessage != current.errorMessage,
+      listenWhen: (previous, current) =>
+          previous.errorMessage != current.errorMessage,
       listener: (context, state) {
         if (state.errorMessage != null) {
-          showAdminSnackBar(context, adminErrorMessage(state.errorMessage!), isError: true);
+          showAdminSnackBar(
+            context,
+            adminErrorMessage(state.errorMessage!),
+            isError: true,
+          );
         }
       },
       builder: (context, state) {
         final catalog = state.catalog;
         return SubPageScaffold(
-          title: 'الأدوار ومصفوفة Shield',
+          title: ResourceUxStrings.rolesTitle,
           subtitle: 'أدوار النظام وصلاحياتها التفصيلية',
           actions: [
             AppIconButton(
@@ -76,15 +84,15 @@ class _RolesView extends StatelessWidget {
                 onPressed: catalog == null
                     ? null
                     : () => _openEditor(
-                          context,
-                          catalog,
-                          const Role(
-                            id: 0,
-                            name: '',
-                            guardName: 'web',
-                            permissions: [],
-                          ),
+                        context,
+                        catalog,
+                        const Role(
+                          id: 0,
+                          name: '',
+                          guardName: 'web',
+                          permissions: [],
                         ),
+                      ),
                 icon: Icons.add_moderator_outlined,
               ),
             ),
@@ -97,7 +105,10 @@ class _RolesView extends StatelessWidget {
 
   Widget _buildBody(BuildContext context, RolesState state) {
     if (state.isLoading && state.roles.isEmpty) {
-      return const Padding(padding: EdgeInsets.all(16), child: AdminLoadingView(itemCount: 4));
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: AdminLoadingView(itemCount: 4),
+      );
     }
     if (state.roles.isEmpty && state.errorMessage != null) {
       return AdminErrorView(
@@ -105,7 +116,11 @@ class _RolesView extends StatelessWidget {
         onRetry: () => context.read<RolesCubit>().load(),
       );
     }
-    if (state.roles.isEmpty) return const AdminEmptyView(title: 'لا توجد أدوار بعد', icon: Icons.admin_panel_settings_outlined);
+    if (state.roles.isEmpty)
+      return const AdminEmptyView(
+        title: 'لا توجد أدوار بعد',
+        icon: Icons.admin_panel_settings_outlined,
+      );
     final selectionCount = state.selectedIds.length;
     return Column(
       children: [
@@ -117,116 +132,177 @@ class _RolesView extends StatelessWidget {
             onDelete: () => _confirmBulkDelete(context, selectionCount),
           ),
         Expanded(
-          child: ListPresentation<Role>(items: state.roles,
+          child: ListPresentation<Role>(
+            items: state.roles,
             sortValues: {
-              'name': (label: ListOptionsStrings.name, value: (role) => role.name),
+              'name': (
+                label: ListOptionsStrings.name,
+                value: (role) => role.name,
+              ),
               'id': (label: ListOptionsStrings.id, value: (role) => role.id),
-              'guard_name': (label: ListOptionsStrings.guard, value: (role) => role.guardName),
-              'permissions_count': (label: ListOptionsStrings.permissions, value: (role) => role.effectivePermissionsCount),
-              'updated_at': (label: ListOptionsStrings.updatedAt, value: (role) => role.updatedAt),
+              'guard_name': (
+                label: ListOptionsStrings.guard,
+                value: (role) => role.guardName,
+              ),
+              'permissions_count': (
+                label: ListOptionsStrings.permissions,
+                value: (role) => role.effectivePermissionsCount,
+              ),
+              'updated_at': (
+                label: ListOptionsStrings.updatedAt,
+                value: (role) => role.updatedAt,
+              ),
             },
-            fields: const {'guard': ListOptionsStrings.guard, 'permissions': ListOptionsStrings.permissions,
-              'updated_at': ListOptionsStrings.updatedAt},
+            fields: const {
+              'guard': ListOptionsStrings.guard,
+              'permissions': ListOptionsStrings.permissions,
+              'updated_at': ListOptionsStrings.updatedAt,
+            },
             builder: (context, roles, options) => RefreshIndicator(
-            onRefresh: () => context.read<RolesCubit>().load(),
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
-              itemCount: roles.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final role = roles[index];
-                final checked = state.selectedIds.contains(role.id);
-                final deleting = state.deletingIds.contains(role.id);
-                return GestureDetector(
-                  onLongPress: can(AdminPermissions.deleteRoles) && !role.isSuperAdmin
-                      ? () => context.read<RolesCubit>().toggleSelect(role)
-                      : null,
-                  child: AdminCard(
-                    padding: EdgeInsetsDirectional.fromSTEB(12, options.compact ? 6 : 10, 12, options.compact ? 6 : 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                      if (can(AdminPermissions.deleteRoles) && !role.isSuperAdmin) ...[
-                        Checkbox(
-                          value: checked,
-                          onChanged: (_) => context.read<RolesCubit>().toggleSelect(role),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        const SizedBox(width: 2),
-                      ],
-                      AppGlyph(
-                        icon: role.isSuperAdmin
-                            ? Icons.security_rounded
-                            : Icons.admin_panel_settings_outlined,
-                        tone: role.isSuperAdmin ? AdminPalette.danger : AdminPalette.primary,
-                        size: 40,
+              onRefresh: () => context.read<RolesCubit>().load(),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+                itemCount: roles.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final role = roles[index];
+                  final checked = state.selectedIds.contains(role.id);
+                  final deleting = state.deletingIds.contains(role.id);
+                  return GestureDetector(
+                    onLongPress:
+                        can(AdminPermissions.deleteRoles) && !role.isSuperAdmin
+                        ? () => context.read<RolesCubit>().toggleSelect(role)
+                        : null,
+                    child: AdminCard(
+                      padding: EdgeInsetsDirectional.fromSTEB(
+                        12,
+                        options.compact ? 6 : 10,
+                        12,
+                        options.compact ? 6 : 10,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            LtrText(
-                              role.name,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (can(AdminPermissions.deleteRoles) &&
+                              !role.isSuperAdmin) ...[
+                            Checkbox(
+                              value: checked,
+                              onChanged: (_) =>
+                                  context.read<RolesCubit>().toggleSelect(role),
+                              visualDensity: VisualDensity.compact,
                             ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              crossAxisAlignment: WrapCrossAlignment.center,
+                            const SizedBox(width: 2),
+                          ],
+                          AppGlyph(
+                            icon: role.isSuperAdmin
+                                ? Icons.security_rounded
+                                : Icons.admin_panel_settings_outlined,
+                            tone: role.isSuperAdmin
+                                ? AdminPalette.danger
+                                : AdminPalette.primary,
+                            size: 40,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (options.isVisible('guard')) AdminStatusBadge(label: role.guardName, color: AdminPalette.warning),
-                                if (options.isVisible('permissions')) Text(
-                                  '${role.effectivePermissionsCount} صلاحية',
-                                  style: Theme.of(context).textTheme.labelSmall,
+                                LtrText(
+                                  role.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                                if (options.isVisible('updated_at')) Text(
-                                  'آخر تحديث ${AdminFormat.dateTime(role.updatedAt)}',
-                                  style: Theme.of(context).textTheme.labelSmall,
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (options.isVisible('guard'))
+                                      AdminStatusBadge(
+                                        label: role.guardName,
+                                        color: AdminPalette.warning,
+                                      ),
+                                    if (options.isVisible('permissions'))
+                                      Text(
+                                        '${role.effectivePermissionsCount} صلاحية',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                      ),
+                                    if (options.isVisible('updated_at'))
+                                      Text(
+                                        'آخر تحديث ${AdminFormat.dateTime(role.updatedAt)}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      if (can(AdminPermissions.updateRoles) || can('View:Role') || can(AdminPermissions.viewRoles))
-                        AppIconButton(
-                          key: ValueKey('edit-role-${role.id}'),
-                          tooltip: role.isSuperAdmin || !can(AdminPermissions.updateRoles)
-                              ? AppStrings.of(context).roleViewMatrix : 'تعديل المصفوفة',
-                          onPressed: state.catalog == null
-                              ? null
-                              : () => _openEditor(context, state.catalog!, role),
-                          icon: role.isSuperAdmin || !can(AdminPermissions.updateRoles)
-                              ? Icons.visibility_outlined : Icons.edit_outlined,
-                          size: 38,
-                        ),
-                      if (can(AdminPermissions.deleteRoles)) ...[
-                        const SizedBox(width: 6),
-                        if (deleting)
-                          const SizedBox.square(
-                            dimension: 38,
-                            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                          )
-                        else
-                          AppIconButton(
-                            key: ValueKey('delete-role-${role.id}'),
-                            tooltip: role.isSuperAdmin ? 'دور محمي' : 'حذف الدور',
-                            onPressed: role.isSuperAdmin ? null : () => _confirmDelete(context, role),
-                            icon: Icons.delete_outline_rounded,
-                            color: role.isSuperAdmin ? null : Theme.of(context).colorScheme.error,
-                            size: 38,
                           ),
-                      ],
-                    ],
-                  ),
-                ),
-                );
-              },
+                          const SizedBox(width: 4),
+                          if (can(AdminPermissions.updateRoles) ||
+                              can('View:Role') ||
+                              can(AdminPermissions.viewRoles))
+                            AppIconButton(
+                              key: ValueKey('edit-role-${role.id}'),
+                              tooltip:
+                                  role.isSuperAdmin ||
+                                      !can(AdminPermissions.updateRoles)
+                                  ? AppStrings.of(context).roleViewMatrix
+                                  : 'تعديل المصفوفة',
+                              onPressed: state.catalog == null
+                                  ? null
+                                  : () => _openEditor(
+                                      context,
+                                      state.catalog!,
+                                      role,
+                                    ),
+                              icon:
+                                  role.isSuperAdmin ||
+                                      !can(AdminPermissions.updateRoles)
+                                  ? Icons.visibility_outlined
+                                  : Icons.edit_outlined,
+                              size: 38,
+                            ),
+                          if (can(AdminPermissions.deleteRoles)) ...[
+                            const SizedBox(width: 6),
+                            if (deleting)
+                              const SizedBox.square(
+                                dimension: 38,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            else
+                              AppIconButton(
+                                key: ValueKey('delete-role-${role.id}'),
+                                tooltip: role.isSuperAdmin
+                                    ? 'دور محمي'
+                                    : 'حذف الدور',
+                                onPressed: role.isSuperAdmin
+                                    ? null
+                                    : () => _confirmDelete(context, role),
+                                icon: Icons.delete_outline_rounded,
+                                color: role.isSuperAdmin
+                                    ? null
+                                    : Theme.of(context).colorScheme.error,
+                                size: 38,
+                              ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
           ),
         ),
       ],
@@ -238,7 +314,8 @@ class _RolesView extends StatelessWidget {
     final confirmed = await showConfirmDialog(
       context,
       title: 'حذف الأدوار المحددة',
-      message: 'هل تريد حذف $count دور محدد؟ الأدوار المرتبطة بمستخدمين لن تُحذف وفق حماية الخادم.',
+      message:
+          'هل تريد حذف $count دور محدد؟ الأدوار المرتبطة بمستخدمين لن تُحذف وفق حماية الخادم.',
       confirmLabel: 'حذف المحدد',
       destructive: true,
     );
@@ -259,7 +336,9 @@ class _RolesView extends StatelessWidget {
           role: role,
           catalog: catalog,
           onSave: cubit.save,
-          readOnly: role.id == 0 ? !can(AdminPermissions.createRoles) : !can(AdminPermissions.updateRoles),
+          readOnly: role.id == 0
+              ? !can(AdminPermissions.createRoles)
+              : !can(AdminPermissions.updateRoles),
         ),
       ),
     );
@@ -270,7 +349,8 @@ class _RolesView extends StatelessWidget {
     final confirmed = await showConfirmDialog(
       context,
       title: 'حذف الدور',
-      message: 'هل تريد حذف دور «${role.name}»؟ لن يُحذف إذا كان مرتبطاً بمستخدمين وفق حماية الخادم.',
+      message:
+          'هل تريد حذف دور «${role.name}»؟ لن يُحذف إذا كان مرتبطاً بمستخدمين وفق حماية الخادم.',
       confirmLabel: 'حذف',
       destructive: true,
     );
@@ -306,7 +386,11 @@ class _BulkDeleteBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.checklist_rounded, size: 18, color: AppColors.accentStrong),
+          const Icon(
+            Icons.checklist_rounded,
+            size: 18,
+            color: AppColors.accentStrong,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

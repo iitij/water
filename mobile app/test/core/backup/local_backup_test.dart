@@ -142,7 +142,7 @@ void main() {
       store.data = <String, dynamic>{};
       store.imports = 0;
 
-      final result = await service.restore(created.name);
+      final result = await service.restore(created.name, includePendingActions: true);
 
       expect(store.imports, 1);
       expect(store.data['readings'], hasLength(2));
@@ -153,11 +153,13 @@ void main() {
 
     test('تعطيل عمليات المزامنة يمرّر الخيار للمخزن', () async {
       final created = await service.createBackup();
-      final result = await service.restore(created.name, includePendingActions: false);
+      final result = await service.restore(created.name);
 
       expect(store.pendingActions, isFalse);
       expect(result.pendingActions, 0);
-      expect(result.warnings, isEmpty);
+      expect(store.data['pending_actions'], isNull);
+      expect(store.data['readings'], isEmpty);
+      expect(result.warnings.single, contains('قراءة غير مرسلة'));
     });
 
     test('ملف معدّل بعد النسخ يُرفض ولا يلمس البيانات', () async {

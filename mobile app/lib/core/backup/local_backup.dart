@@ -270,7 +270,7 @@ class LocalBackupService {
   /// يستعيد نسخة بعد التحقق من الصيغة والبصمة.
   ///
   /// أي شك = رفض: ملف مقطوع يستعيد نصف بيانات ويبدو ناجحاً، وهذا أسوأ من خطأ.
-  Future<BackupRestoreResult> restore(String name, {bool includePendingActions = true}) async {
+  Future<BackupRestoreResult> restore(String name, {bool includePendingActions = false}) async {
     final raw = await _storage.read(name);
     final Map<String, dynamic> payload;
     try {
@@ -303,14 +303,31 @@ class LocalBackupService {
     }
 
     final pending = includePendingActions ? _countOf(dataMap['pending_actions']) : 0;
-    await _store.importFieldData(dataMap, pendingActions: includePendingActions);
+    // A reading without a server id needs its queue action to be sent.
+    final restorableData = Map<String, dynamic>.from(dataMap);
+    var skippedReadings = 0;
+    if (!includePendingActions) {
+      final readings = dataMap['readings'];
+      if (readings is List) {
+        final syncedReadings = readings
+            .where((row) => row is Map && row['server_id'] != null)
+            .toList(growable: false);
+        skippedReadings = readings.length - syncedReadings.length;
+        restorableData['readings'] = syncedReadings;
+      }
+      restorableData.remove('pending_actions');
+    }
+    await _store.importFieldData(restorableData, pendingActions: includePendingActions);
 
-    final counts = _countsOf(dataMap);
+    final counts = _countsOf(restorableData);
     final restored = counts.entries
         .where((entry) => entry.key != 'pending_actions')
         .fold<int>(0, (sum, entry) => sum + entry.value);
 
     final warnings = <String>[];
+    if (skippedReadings > 0) {
+      warnings.add('لم تُستعد $skippedReadings قراءة غير مرسلة لأن استعادة طابور المزامنة مغلقة.');
+    }
     if (includePendingActions && pending > 0) {
       warnings.add(
         'أُعيدت $pending عملية مزامنة غير مرسلة. إن كانت قد أُرسلت من الجهاز الأصلي '

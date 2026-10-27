@@ -25,7 +25,6 @@ import '../../features/readings/data/reading_fault_log.dart';
 import '../../features/readings/data/services/reading_invoice_actions_service.dart';
 import '../../features/readings/domain/readings_repository.dart';
 import '../../features/settings/settings.dart';
-import '../../features/users_roles/users_roles.dart';
 import '../auth/session_service.dart';
 import '../backup/database_field_data_store.dart';
 import '../backup/local_backup.dart';
@@ -266,7 +265,6 @@ Future<void> configureDependencies({String? appVersion}) async {
     DashboardRemoteDataSource(adminApi),
     DashboardLocalDataSource(),
   );
-  final rbacRepository = RbacRepositoryImpl(RbacRemoteDataSource(adminApi));
   final exportRepository = ExportRepositoryImpl(
     ExportRemoteDataSource(adminApi),
   );
@@ -279,7 +277,6 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<SettingsCache>(settingsCache);
   getIt.registerSingleton<SettingsRepository>(settingsRepository);
   getIt.registerSingleton<DashboardRepository>(dashboardRepository);
-  getIt.registerSingleton<RbacRepository>(rbacRepository);
   getIt.registerSingleton<ExportRepository>(exportRepository);
   getIt.registerSingleton<DevicesRepository>(devicesRepository);
   getIt.registerSingleton<ExcelExportService>(excelService);

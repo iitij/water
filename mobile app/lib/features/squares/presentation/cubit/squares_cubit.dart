@@ -6,7 +6,14 @@ import '../../domain/entities/square.dart';
 import '../../domain/repositories/squares_repository.dart';
 
 class SquaresState extends Equatable {
-  const SquaresState({this.loading = false, this.squares = const [], this.selected, this.selectedSubscribers = const [], this.error, this.selectedIds = const {}});
+  const SquaresState({
+    this.loading = false,
+    this.squares = const [],
+    this.selected,
+    this.selectedSubscribers = const [],
+    this.error,
+    this.selectedIds = const {},
+  });
   final bool loading;
   final List<Square> squares;
   final Square? selected;
@@ -14,17 +21,33 @@ class SquaresState extends Equatable {
   final String? error;
   final Set<int> selectedIds;
 
-  SquaresState copyWith({bool? loading, List<Square>? squares, Square? selected, List<Subscriber>? selectedSubscribers, String? error, Set<int>? selectedIds, bool clearSelection = false}) =>
-      SquaresState(
-        loading: loading ?? this.loading,
-        squares: squares ?? this.squares,
-        selected: clearSelection ? null : (selected ?? this.selected),
-        selectedSubscribers: clearSelection ? const [] : (selectedSubscribers ?? this.selectedSubscribers),
-        error: error,
-        selectedIds: selectedIds ?? this.selectedIds,
-      );
+  SquaresState copyWith({
+    bool? loading,
+    List<Square>? squares,
+    Square? selected,
+    List<Subscriber>? selectedSubscribers,
+    String? error,
+    Set<int>? selectedIds,
+    bool clearSelection = false,
+  }) => SquaresState(
+    loading: loading ?? this.loading,
+    squares: squares ?? this.squares,
+    selected: clearSelection ? null : (selected ?? this.selected),
+    selectedSubscribers: clearSelection
+        ? const []
+        : (selectedSubscribers ?? this.selectedSubscribers),
+    error: error,
+    selectedIds: selectedIds ?? this.selectedIds,
+  );
   @override
-  List<Object?> get props => [loading, squares, selected, selectedSubscribers, error, selectedIds];
+  List<Object?> get props => [
+    loading,
+    squares,
+    selected,
+    selectedSubscribers,
+    error,
+    selectedIds,
+  ];
 }
 
 class SquaresCubit extends Cubit<SquaresState> {
@@ -36,7 +59,12 @@ class SquaresCubit extends Cubit<SquaresState> {
     _search = search ?? _search;
     emit(state.copyWith(loading: true));
     try {
-      emit(state.copyWith(loading: false, squares: await _repo.getSquares(search: _search)));
+      emit(
+        state.copyWith(
+          loading: false,
+          squares: await _repo.getSquares(search: _search),
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(loading: false, error: friendlyError(e)));
     }
@@ -46,23 +74,38 @@ class SquaresCubit extends Cubit<SquaresState> {
     emit(state.copyWith(loading: true));
     try {
       final r = await _repo.getSquare(square.id);
-      emit(state.copyWith(loading: false, selected: r.square, selectedSubscribers: r.subscribers));
+      emit(
+        state.copyWith(
+          loading: false,
+          selected: r.square,
+          selectedSubscribers: r.subscribers,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(loading: false, error: friendlyError(e)));
     }
   }
 
-  Future<void> save({int? id, required String name, String? description}) async {
+  Future<bool> save({
+    int? id,
+    required String name,
+    String? description,
+  }) async {
     try {
       if (id == null) {
         await _repo.createSquare(name, description);
       } else {
-        await _repo.updateSquare(Square(id: id, name: name, description: description));
+        await _repo.updateSquare(
+          Square(id: id, name: name, description: description),
+        );
       }
-      await load();
     } catch (e) {
-      emit(state.copyWith(error: friendlyError(e)));
+      if (!isClosed) emit(state.copyWith(error: friendlyError(e)));
+      return false;
     }
+    // The write succeeded. A list refresh failure must not invite a duplicate save.
+    if (!isClosed) await load();
+    return true;
   }
 
   Future<void> delete(int id) async {
