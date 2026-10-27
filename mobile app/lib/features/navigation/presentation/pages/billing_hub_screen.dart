@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/l10n/owner_ux_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -17,7 +16,6 @@ import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../dashboard/domain/repositories/dashboard_repository.dart';
 import '../../../dashboard/presentation/cubit/dashboard_cubit.dart';
 import '../../../dashboard/presentation/widgets/collection_progress_card.dart';
-import '../../../home/domain/workspace_catalog.dart';
 import '../widgets/module_section.dart';
 
 class BillingHubScreen extends StatelessWidget {
@@ -26,15 +24,13 @@ class BillingHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final permissions = GetIt.I<PermissionService>();
-    final visibleRoutes = WorkspaceCatalog.visible(
-      permissions.can,
-    ).map((entry) => entry.route).toSet();
-    final modules = ModuleCatalog.visible(
-      permissions,
-      group: AppModuleGroup.billing,
-    );
-    final canSeeStats =
-        permissions.isAdmin || permissions.can('View:StatsOverview');
+    final modules = ModuleCatalog.visible(permissions, group: AppModuleGroup.billing);
+    final canSeeStats = permissions.isAdmin ||
+        permissions.hasAnyPermission(const <String>[
+          'View:StatsOverview',
+          'View:MonthlyRevenueChart',
+          'View:OverdueInvoicesWidget',
+        ]);
 
     return AppPageBody(
       children: <Widget>[
@@ -45,8 +41,9 @@ class BillingHubScreen extends StatelessWidget {
               children: <Widget>[
                 const HeroCopy(
                   eyebrow: 'التحصيل والمالية',
-                  title: OwnerUxStrings.billingTitle,
-                  subtitle: OwnerUxStrings.billingHelp,
+                  title: 'كل ريال واضح',
+                  subtitle:
+                      'حصّل الفواتير، أصدر السندات وأرسل الإشعارات — مع توزيع تلقائي للدفعات وطباعة حرارية فورية.',
                 ),
                 const Gap(AppSpacing.md),
                 const Wrap(
@@ -54,38 +51,22 @@ class BillingHubScreen extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     HeroMetaChip(icon: Icons.bolt_rounded, label: 'تحصيل فوري'),
-                    HeroMetaChip(
-                      icon: Icons.print_rounded,
-                      label: 'طباعة سندات',
-                    ),
-                    HeroMetaChip(
-                      icon: Icons.chat_rounded,
-                      label: 'إشعار واتساب',
-                    ),
+                    HeroMetaChip(icon: Icons.print_rounded, label: 'طباعة سندات'),
+                    HeroMetaChip(icon: Icons.chat_rounded, label: 'إشعار واتساب'),
                   ],
                 ),
                 const Gap(AppSpacing.lg),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    if (visibleRoutes.contains(RouteNames.quickCollector))
-                      HeroButton(
-                        label: 'بدء التحصيل السريع',
-                        icon: Icons.point_of_sale_rounded,
-                        onPressed: () =>
-                            context.push(RouteNames.quickCollector),
-                      ),
-                    if (visibleRoutes.contains(
-                      RouteNames.invoices,
-                    )) ...<Widget>[
-                      const SizedBox(height: 8),
-                      HeroGhostButton(
-                        label: 'قائمة الفواتير',
-                        icon: Icons.receipt_long_outlined,
-                        onPressed: () => context.push(RouteNames.invoices),
-                      ),
-                    ],
-                  ],
+                HeroActions(
+                  primary: HeroButton(
+                    label: 'بدء التحصيل السريع',
+                    icon: Icons.point_of_sale_rounded,
+                    onPressed: () => context.push(RouteNames.quickCollector),
+                  ),
+                  secondary: HeroGhostButton(
+                    label: 'قائمة الفواتير',
+                    icon: Icons.receipt_long_outlined,
+                    onPressed: () => context.push(RouteNames.invoices),
+                  ),
                 ),
               ],
             ),
@@ -95,9 +76,7 @@ class BillingHubScreen extends StatelessWidget {
           const Gap(AppSpacing.lg),
           AppReveal(
             delay: const Duration(milliseconds: 70),
-            child: _FinanceSnapshot(
-              onOpenReports: () => context.push(RouteNames.reports),
-            ),
+            child: _FinanceSnapshot(onOpenReports: () => context.push(RouteNames.reports)),
           ),
         ],
         const Gap(AppSpacing.md),
@@ -123,16 +102,11 @@ class BillingHubScreen extends StatelessWidget {
                 'عند تحصيل أي مبلغ يوزعه النظام تلقائياً على أقدم الفواتير غير المسددة (FIFO) ثم يحدّث الأرصدة والكشوف فوراً.',
             icon: Icons.auto_awesome_rounded,
             color: AppColors.violet,
-            action: !visibleRoutes.contains(RouteNames.payments)
-                ? null
-                : TextButton(
-                    onPressed: () => context.push(RouteNames.payments),
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 28),
-                    ),
-                    child: const Text('مراجعة سندات القبض'),
-                  ),
+            action: TextButton(
+              onPressed: () => context.push(RouteNames.payments),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+              child: const Text('مراجعة سندات القبض'),
+            ),
           ),
         ),
       ],
@@ -201,17 +175,12 @@ class _FinanceSnapshot extends StatelessWidget {
                     label: 'فواتير متأخرة',
                     value: AdminFormat.number(stats.overdueInvoicesCount),
                     icon: Icons.schedule_rounded,
-                    color: stats.overdueInvoicesCount > 0
-                        ? AppColors.warning
-                        : AppColors.success,
+                    color: stats.overdueInvoicesCount > 0 ? AppColors.warning : AppColors.success,
                   ),
                 ],
               ),
               const Gap(AppSpacing.md),
-              CollectionProgressCard(
-                stats: stats,
-                onOpenReports: onOpenReports,
-              ),
+              CollectionProgressCard(stats: stats, onOpenReports: onOpenReports),
             ],
           );
         },

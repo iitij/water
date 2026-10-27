@@ -3,10 +3,10 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_service.dart';
-import '../../../core/l10n/owner_ux_strings.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/ui/app_filters.dart';
+import '../../../core/ui/app_tokens.dart';
 import '../domain/workspace_catalog.dart';
 import 'widgets/workspace_widgets.dart';
 
@@ -90,13 +90,9 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
     final groups = WorkspaceGroup.values.where(
       (group) => available.any((entry) => entry.group == group),
     );
-    final rows = <Object>[
-      for (final group in WorkspaceGroup.values)
-        if (entries.any((entry) => entry.group == group)) ...<Object>[
-          group,
-          ...entries.where((entry) => entry.group == group),
-        ],
-    ];
+    final visibleGroups = WorkspaceGroup.values
+        .where((group) => entries.any((entry) => entry.group == group))
+        .toList();
     return SafeArea(
       top: false,
       child: CustomScrollView(
@@ -104,7 +100,7 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 22, 20, 0),
             sliver: SliverToBoxAdapter(
               child: Center(
                 child: ConstrainedBox(
@@ -112,18 +108,56 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        OwnerUxStrings.allServices,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      Container(
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          16,
+                          14,
+                          16,
+                          14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: .08,
+                          ),
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: .22,
+                            ),
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: .16,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.md,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.apps_rounded,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'اختر خدمة أو ابحث عنها بالاسم.',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        OwnerUxStrings.directoryHelp,
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       TextField(
                         controller: _search,
                         focusNode: _searchFocus,
@@ -132,32 +166,35 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                         onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         decoration: InputDecoration(
-                          labelText: OwnerUxStrings.searchServiceLabel,
-                          hintText: OwnerUxStrings.serviceExample,
+                          hintText: 'ابحث عن خدمة',
                           prefixIcon: const Icon(Icons.search_rounded),
                           suffixIcon: _search.text.isEmpty
                               ? null
                               : IconButton(
-                                  tooltip: OwnerUxStrings.clearSearch,
+                                  tooltip: 'مسح البحث',
                                   icon: const Icon(Icons.close_rounded),
                                   onPressed: () =>
                                       setState(() => _search.clear()),
                                 ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                      const SizedBox(height: 14),
+                      AppFilterChips(
+                        padding: EdgeInsets.zero,
+                        spacing: 8,
                         children: [
                           AppFilterChip(
-                            label: OwnerUxStrings.all,
+                            label: 'الكل',
+                            count: available.length,
                             selected: _group == null,
                             onTap: () => setState(() => _group = null),
                           ),
                           for (final group in groups)
                             AppFilterChip(
                               label: group.label,
+                              count: available
+                                  .where((entry) => entry.group == group)
+                                  .length,
                               selected: _group == group,
                               onTap: () => setState(
                                 () => _group = _group == group ? null : group,
@@ -165,12 +202,26 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        OwnerUxStrings.servicesCount(entries.length),
-                        style: theme.textTheme.bodyMedium,
+                      const SizedBox(height: 22),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${entries.length} خدمة متاحة',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Divider(
+                              color: theme.colorScheme.outlineVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
@@ -190,55 +241,109 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      OwnerUxStrings.noServices,
+                      'لم نجد خدمة بهذا الاسم',
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      OwnerUxStrings.noServicesHelp,
+                      'جرّب اسماً آخر أو اختر قسماً مختلفاً.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: _clear,
-                      child: const Text(OwnerUxStrings.showAll),
+                      child: const Text('عرض كل الخدمات'),
                     ),
                   ],
                 ),
               ),
             ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 28),
             sliver: SliverList.builder(
-              itemCount: rows.length,
+              itemCount: visibleGroups.length,
               itemBuilder: (context, index) {
-                final row = rows[index];
-                if (row is WorkspaceGroup) {
-                  return Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 1080),
-                      alignment: AlignmentDirectional.centerStart,
-                      padding: const EdgeInsets.only(top: 12, bottom: 10),
-                      child: Text(
-                        row.label,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                  );
-                }
-                final entry = row as WorkspaceEntry;
+                final group = visibleGroups[index];
+                final groupEntries = entries
+                    .where((entry) => entry.group == group)
+                    .toList();
                 return Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1080),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: WorkspaceTile(
-                        entry: entry,
-                        onTap: () {
-                          FocusScope.of(context).unfocus();
-                          widget.onNavigate(entry.route);
-                        },
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                            4,
+                            22,
+                            4,
+                            10,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 4,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.pill,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  group.label,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final largeText =
+                                MediaQuery.textScalerOf(context).scale(16) > 20;
+                            final columns = largeText
+                                ? 1
+                                : constraints.maxWidth >= 900
+                                ? 4
+                                : constraints.maxWidth >= 600
+                                ? 3
+                                : constraints.maxWidth >= 320
+                                ? 2
+                                : 1;
+                            const gap = 10.0;
+                            final cardWidth =
+                                (constraints.maxWidth - gap * (columns - 1)) /
+                                columns;
+                            return Wrap(
+                              spacing: gap,
+                              runSpacing: gap,
+                              children: [
+                                for (final entry in groupEntries)
+                                  SizedBox(
+                                    width: cardWidth,
+                                    height: columns > 1 ? 148 : null,
+                                    child: WorkspaceTile(
+                                      entry: entry,
+                                      directory: true,
+                                      compactGrid: columns > 1,
+                                      onTap: () {
+                                        FocusScope.of(context).unfocus();
+                                        widget.onNavigate(entry.route);
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );

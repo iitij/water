@@ -34,44 +34,43 @@ class _ShellDestination {
 }
 
 /// وجهات التنقل — تُبنى من `AppStrings` حتى لا تتكرر النصوص في الشاشات (S5-04).
-List<_ShellDestination> _buildDestinations(AppStrings strings) =>
-    <_ShellDestination>[
-      _ShellDestination(
-        label: strings.navHome,
-        title: strings.homeTitle,
-        subtitle: strings.homeSubtitle,
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard_rounded,
-      ),
-      _ShellDestination(
-        label: strings.navField,
-        title: strings.fieldTitle,
-        subtitle: strings.fieldSubtitle,
-        icon: Icons.sensors_outlined,
-        selectedIcon: Icons.sensors_rounded,
-      ),
-      _ShellDestination(
-        label: strings.navFinance,
-        title: strings.financeTitle,
-        subtitle: strings.financeSubtitle,
-        icon: Icons.account_balance_wallet_outlined,
-        selectedIcon: Icons.account_balance_wallet_rounded,
-      ),
-      _ShellDestination(
-        label: strings.navSubscribers,
-        title: strings.subscribersTitle,
-        subtitle: strings.subscribersSubtitle,
-        icon: Icons.groups_2_outlined,
-        selectedIcon: Icons.groups_2_rounded,
-      ),
-      _ShellDestination(
-        label: strings.navMore,
-        title: strings.moreTitle,
-        subtitle: strings.moreSubtitle,
-        icon: Icons.grid_view_outlined,
-        selectedIcon: Icons.grid_view_rounded,
-      ),
-    ];
+List<_ShellDestination> _buildDestinations(AppStrings strings) => <_ShellDestination>[
+  _ShellDestination(
+    label: strings.navHome,
+    title: strings.homeTitle,
+    subtitle: strings.homeSubtitle,
+    icon: Icons.dashboard_outlined,
+    selectedIcon: Icons.dashboard_rounded,
+  ),
+  _ShellDestination(
+    label: strings.navField,
+    title: strings.fieldTitle,
+    subtitle: strings.fieldSubtitle,
+    icon: Icons.sensors_outlined,
+    selectedIcon: Icons.sensors_rounded,
+  ),
+  _ShellDestination(
+    label: strings.navFinance,
+    title: strings.financeTitle,
+    subtitle: strings.financeSubtitle,
+    icon: Icons.account_balance_wallet_outlined,
+    selectedIcon: Icons.account_balance_wallet_rounded,
+  ),
+  _ShellDestination(
+    label: strings.navSubscribers,
+    title: strings.subscribersTitle,
+    subtitle: strings.subscribersSubtitle,
+    icon: Icons.groups_2_outlined,
+    selectedIcon: Icons.groups_2_rounded,
+  ),
+  _ShellDestination(
+    label: strings.navMore,
+    title: strings.moreTitle,
+    subtitle: strings.moreSubtitle,
+    icon: Icons.grid_view_outlined,
+    selectedIcon: Icons.grid_view_rounded,
+  ),
+];
 
 /// Application frame: a hairline header, a flat floating tab bar on phones and
 /// a quiet rail on wide screens. Pages provide their own panes and sections.
@@ -87,8 +86,10 @@ class AppHomeShell extends StatelessWidget {
     final destinations = _buildDestinations(AppStrings.of(context));
     final index = shell.currentIndex.clamp(0, destinations.length - 1).toInt();
 
-    void select(int next) =>
-        shell.goBranch(next, initialLocation: next == shell.currentIndex);
+    void select(int next) => shell.goBranch(
+          next,
+          initialLocation: next == shell.currentIndex,
+        );
 
     if (wide) {
       return Scaffold(
@@ -156,9 +157,7 @@ class _TopBar extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -202,11 +201,7 @@ class _TopBar extends StatelessWidget {
 
 /// Cloud glyph with a status dot: the only ambient element in the header.
 class _SyncButton extends StatelessWidget {
-  const _SyncButton({
-    required this.online,
-    required this.pending,
-    required this.onTap,
-  });
+  const _SyncButton({required this.online, required this.pending, required this.onTap});
 
   final bool? online;
   final int pending;
@@ -218,13 +213,13 @@ class _SyncButton extends StatelessWidget {
     final icon = online == false
         ? Icons.cloud_off_rounded
         : pending > 0
-        ? Icons.cloud_upload_outlined
-        : Icons.cloud_done_rounded;
+            ? Icons.cloud_upload_outlined
+            : Icons.cloud_done_rounded;
     final dot = online == false
         ? AppColors.warning
         : pending > 0
-        ? AppColors.warning
-        : AppColors.success;
+            ? AppColors.warning
+            : AppColors.success;
 
     return Semantics(
       button: true,
@@ -233,8 +228,8 @@ class _SyncButton extends StatelessWidget {
         onTap: onTap,
         radius: 22,
         child: SizedBox(
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           child: Stack(
             alignment: Alignment.center,
             children: <Widget>[
@@ -248,10 +243,7 @@ class _SyncButton extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: dot,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
                   ),
                 ),
               ),
@@ -281,12 +273,7 @@ class PressableAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AppAvatar(
-        name: name,
-        imageUrl: imageUrl,
-        online: online,
-        size: 38,
-      ),
+      child: AppAvatar(name: name, imageUrl: imageUrl, online: online, size: 38),
     );
   }
 }
@@ -306,7 +293,7 @@ class _BottomNav extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(14, 0, 14, 10),
         child: Container(
-          height: 38 + MediaQuery.textScalerOf(context).scale(11) * 3,
+          height: 62,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: scheme.surface,
@@ -346,53 +333,42 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: destination.label,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: scheme.primary.withValues(alpha: .05),
-        highlightColor: Colors.transparent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            AnimatedContainer(
-              duration: AppMotion.normal,
-              curve: Curves.easeOutCubic,
-              width: 30,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected
-                    ? scheme.primary.withValues(alpha: .1)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppRadius.xs),
-              ),
-              child: Icon(
-                selected ? destination.selectedIcon : destination.icon,
-                size: 19,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
-              ),
+    return InkWell(
+      onTap: onTap,
+      splashColor: scheme.primary.withValues(alpha: .05),
+      highlightColor: Colors.transparent,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          AnimatedContainer(
+            duration: AppMotion.normal,
+            curve: Curves.easeOutCubic,
+            width: 30,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? scheme.primary.withValues(alpha: .1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.xs),
             ),
-            const SizedBox(height: 3),
-            AnimatedDefaultTextStyle(
-              duration: AppMotion.fast,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 11,
-                height: 1.15,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-              child: Text(
-                destination.label,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-              ),
+            child: Icon(
+              selected ? destination.selectedIcon : destination.icon,
+              size: 19,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 3),
+          AnimatedDefaultTextStyle(
+            duration: AppMotion.fast,
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 10,
+              height: 1.1,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+            child: Text(destination.label),
+          ),
+        ],
       ),
     );
   }
@@ -442,17 +418,10 @@ class _SideRail extends StatelessWidget {
                   onTap: () => context.push(RouteNames.globalSearch),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     child: Row(
                       children: <Widget>[
-                        Icon(
-                          Icons.search_rounded,
-                          size: 18,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        Icon(Icons.search_rounded, size: 18, color: scheme.onSurfaceVariant),
                         const SizedBox(width: 8),
                         Text('بحث شامل', style: theme.textTheme.bodySmall),
                       ],
@@ -465,9 +434,7 @@ class _SideRail extends StatelessWidget {
                 padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
                 child: Text(
                   'القائمة الرئيسية',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    letterSpacing: .3,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
                 ),
               ),
               Expanded(
@@ -487,15 +454,10 @@ class _SideRail extends StatelessWidget {
                     const AppDivider(),
                     const SizedBox(height: 10),
                     Padding(
-                      padding: const EdgeInsetsDirectional.only(
-                        start: 8,
-                        bottom: 8,
-                      ),
+                      padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
                       child: Text(
                         'النظام والحساب',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          letterSpacing: .3,
-                        ),
+                        style: theme.textTheme.labelSmall?.copyWith(letterSpacing: .3),
                       ),
                     ),
                     _RailActionItem(
@@ -506,12 +468,8 @@ class _SideRail extends StatelessWidget {
                     _RailActionItem(
                       icon: Icons.sync_rounded,
                       label: 'مراقب المزامنة',
-                      badge: queue.pendingCount > 0
-                          ? '${queue.pendingCount}'
-                          : null,
-                      badgeColor: queue.failedCount > 0
-                          ? AppColors.danger
-                          : AppColors.warning,
+                      badge: queue.pendingCount > 0 ? '${queue.pendingCount}' : null,
+                      badgeColor: queue.failedCount > 0 ? AppColors.danger : AppColors.warning,
                       onTap: () => context.push(RouteNames.offlineSync),
                     ),
                     _RailActionItem(
@@ -573,10 +531,7 @@ class _SideRail extends StatelessWidget {
               Row(
                 children: <Widget>[
                   Expanded(
-                    child: Text(
-                      'الإصدار 1.0.0',
-                      style: theme.textTheme.labelSmall,
-                    ),
+                    child: Text('الإصدار 1.0.0', style: theme.textTheme.labelSmall),
                   ),
                   AnimatedBuilder(
                     animation: GetIt.I<AppThemeController>(),
@@ -584,8 +539,7 @@ class _SideRail extends StatelessWidget {
                       final controller = GetIt.I<AppThemeController>();
                       return IconButton(
                         tooltip: 'تبديل المظهر',
-                        onPressed: () =>
-                            controller.toggle(current: theme.brightness),
+                        onPressed: () => controller.toggle(current: theme.brightness),
                         icon: Icon(
                           theme.brightness == Brightness.dark
                               ? Icons.light_mode_outlined
@@ -631,9 +585,7 @@ class _RailItem extends StatelessWidget {
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withValues(alpha: .09)
-                : Colors.transparent,
+            color: selected ? scheme.primary.withValues(alpha: .09) : Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(
@@ -716,14 +668,9 @@ class _RailActionItem extends StatelessWidget {
               ),
               if (badge != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1.5,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                   decoration: BoxDecoration(
-                    color: (badgeColor ?? scheme.primary).withValues(
-                      alpha: .15,
-                    ),
+                    color: (badgeColor ?? scheme.primary).withValues(alpha: .15),
                     borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                   child: Text(

@@ -27,13 +27,8 @@ class SubPageScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final width = MediaQuery.sizeOf(context).width;
-    final largeText = MediaQuery.textScalerOf(context).scale(16) > 23;
     final stackedActions =
-        actions.isNotEmpty &&
-        ((width < 430 && actions.length > 2) ||
-            (width < 380 && actions.length > 1) ||
-            (largeText && width < 600));
+        MediaQuery.sizeOf(context).width < 430 && actions.length > 2;
     return Scaffold(
       body: Column(
         children: <Widget>[
@@ -326,7 +321,7 @@ class AppLoader extends StatelessWidget {
 Color brandAccent(BuildContext context) =>
     AppTheme.isDark(context) ? AppColors.accentOnPanel : AppColors.primary;
 
-/// Primary action in a branded panel, with enough room for enlarged labels.
+/// Solid accent button used inside the ink summary panel.
 class HeroButton extends StatelessWidget {
   const HeroButton({
     super.key,
@@ -335,21 +330,61 @@ class HeroButton extends StatelessWidget {
     this.icon,
     this.expanded = true,
   });
+
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool expanded;
 
   @override
-  Widget build(BuildContext context) => AppPrimaryButton(
-    label: label,
-    onPressed: onPressed,
-    icon: icon,
-    expand: expanded,
-  );
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = dark ? AppColors.panel : Colors.white;
+    final radius = BorderRadius.circular(AppRadius.md);
+    return SizedBox(
+      width: expanded ? double.infinity : null,
+      height: 48,
+      child: Material(
+        color: scheme.primary,
+        borderRadius: radius,
+        elevation: 0,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: radius,
+          splashColor: foreground.withValues(alpha: .16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (icon != null) ...<Widget>[
+                  Icon(icon, size: 18, color: foreground),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-/// Secondary panel action. Native button semantics include the disabled state.
+/// Hairline-outline button for secondary actions on the ink panel.
 class HeroGhostButton extends StatelessWidget {
   const HeroGhostButton({
     super.key,
@@ -358,36 +393,58 @@ class HeroGhostButton extends StatelessWidget {
     this.icon,
     this.expanded = true,
   });
+
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool expanded;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: expanded ? double.infinity : null,
-    child: OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.onPanelSoft,
-        minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        side: BorderSide(color: AppColors.onPanel.withValues(alpha: .25)),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadius.md);
+    return SizedBox(
+      width: expanded ? double.infinity : null,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: radius,
+          splashColor: Colors.white.withValues(alpha: .12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(
+                color: AppColors.onPanel.withValues(alpha: .18),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (icon != null) ...<Widget>[
+                  Icon(icon, size: 17, color: AppColors.onPanelSoft),
+                  const SizedBox(width: 7),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.onPanelSoft,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (icon != null) ...<Widget>[
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
-          ],
-          Flexible(child: Text(label, textAlign: TextAlign.center)),
-        ],
-      ),
-    ),
-  );
+    );
+  }
 }

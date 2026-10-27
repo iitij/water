@@ -7,13 +7,10 @@ import 'pages/service_requests_screen.dart';
 class ServiceRequestsRoutes {
   static const String requests = '/service-requests';
 
-  static Map<String, WidgetBuilder> routes(
-    FouadDependencies deps, {
-    VoidCallback? onAddRequest,
-  }) => {
-    requests: (_) => BlocProvider(
-      create: (_) => ServiceRequestsCubit(deps.requests)..load(),
-      child: ServiceRequestsScreen(onAddRequest: onAddRequest),
-    ),
-  };
+  static Map<String, WidgetBuilder> routes(FouadDependencies deps, {VoidCallback? onAddRequest}) => {
+        requests: (_) => BlocProvider(
+              create: (_) => ServiceRequestsCubit(deps.requests)..load(),
+              child: ServiceRequestsScreen(onAddRequest: onAddRequest),
+            ),
+      };
 }

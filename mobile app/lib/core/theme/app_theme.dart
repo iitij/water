@@ -27,11 +27,11 @@ abstract final class AppTheme {
     return ColorScheme(
       brightness: brightness,
       primary: dark ? AppColors.darkAccent : AppColors.accent,
-      onPrimary: dark ? const Color(0xFF092943) : AppColors.onAccent,
+      onPrimary: dark ? AppColors.darkPaper : AppColors.onAccent,
       primaryContainer: dark ? AppColors.darkAccentSoft : AppColors.accentSoft,
       onPrimaryContainer: dark ? AppColors.darkAccent : AppColors.accentStrong,
       secondary: dark ? AppColors.darkAccent : AppColors.accent,
-      onSecondary: dark ? const Color(0xFF092943) : AppColors.onAccent,
+      onSecondary: dark ? AppColors.darkPaper : AppColors.onAccent,
       secondaryContainer: dark
           ? AppColors.darkAccentSoft
           : AppColors.accentSoft,
@@ -60,8 +60,8 @@ abstract final class AppTheme {
       onSurfaceVariant: dark ? AppColors.darkMuted : AppColors.muted,
       outline: dark ? AppColors.darkBorderStrong : AppColors.borderStrong,
       outlineVariant: dark ? AppColors.darkBorder : AppColors.border,
-      inverseSurface: dark ? AppColors.surface : AppColors.panel,
-      onInverseSurface: dark ? AppColors.ink : AppColors.onPanel,
+      inverseSurface: dark ? AppColors.darkInk : AppColors.panel,
+      onInverseSurface: dark ? AppColors.darkPaper : AppColors.onPanel,
       shadow: Colors.black,
       scrim: Colors.black,
       surfaceTint: Colors.transparent,

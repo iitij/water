@@ -6,7 +6,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_search.dart';
-import '../../../../core/l10n/finance_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -37,19 +36,17 @@ class QuickCollectorScreen extends StatelessWidget {
   /// يبني الـ Cubit الخاص بالشاشة — يُستعمل من `finance_routes` عندما يريد
   /// الأب توفير الحالة (مثلاً بعد الرجوع من `SCR-18`).
   static Widget create({required QuickCollectorCubit cubit}) {
-    return BlocProvider<QuickCollectorCubit>.value(
-      value: cubit,
-      child: const QuickCollectorScreen(),
-    );
+    return BlocProvider<QuickCollectorCubit>.value(value: cubit, child: const QuickCollectorScreen());
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider<QuickCollectorCubit>(
       create: (_) => QuickCollectorCubit(
-        invoicesRepository: sl<InvoicesRepository>(),
-        references: sl<ReferencesRemoteDataSource>(),
-      )..bootstrap(),
+            invoicesRepository: sl<InvoicesRepository>(),
+            references: sl<ReferencesRemoteDataSource>(),
+          )
+          ..bootstrap(),
       child: const _QuickCollectorBody(),
     );
   }
@@ -76,14 +73,14 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
     final cubit = context.read<QuickCollectorCubit>();
 
     return SubPageScaffold(
-      title: FinanceUxStrings.collectorTitle,
-      subtitle: FinanceUxStrings.collectorSubtitle,
+      title: 'المحصل السريع',
+      subtitle: 'بحث فوري وتحصيل بلمسة واحدة',
       actions: <Widget>[
         AppIconButton(
           tooltip: 'تحديث',
-          onPressed: cubit.searchNow,
+          onPressed: cubit.loadUnpaid,
           icon: Icons.refresh_rounded,
-          size: 48,
+          size: 38,
         ),
       ],
       child: SafeArea(
@@ -91,56 +88,53 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
         child: AppReveal(
           child: BlocBuilder<QuickCollectorCubit, QuickCollectorState>(
             builder: (context, state) {
-              final invoices = state.visibleInvoices;
-              final overdueCount = state.invoices
-                  .where((i) => i.isOverdue && i.status.isOpenForCollection)
-                  .length;
+            final invoices = state.visibleInvoices;
+            final overdueCount = state.invoices
+                .where((i) => i.isOverdue && i.status.isOpenForCollection)
+                .length;
 
-              return Column(
-                children: <Widget>[
-                  FinanceSearchBar(
-                    controller: _search,
-                    autofocus: false,
-                    onChanged: (value) => cubit.onSearchChanged(value),
-                    onSubmitted: (_) => cubit.searchNow(),
-                    filters: <Widget>[
-                      FilterChipButton(
-                        label: 'المربع',
-                        value: _squareLabel(state),
-                        selected: state.selectedSquareId != null,
-                        onPressed: () => _pickSquare(context, cubit, state),
-                      ),
-                      if (state.isCompoundSearch)
-                        const FilterChipButton(
-                          label: 'بحث مسار',
-                          icon: Icons.alt_route,
-                          selected: true,
-                        ),
-                    ],
-                    trailing: state.searchText.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: FinanceUxStrings.searchClear,
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _search.clear();
-                              cubit.clearSearch();
-                            },
-                          ),
-                  ),
-                  InvoicesSummaryBar(
-                    count: state.invoices.length,
-                    openCount: state.openCount,
-                    overdueCount: overdueCount,
-                    totalDue: state.totalDue,
-                  ),
-                  if (state.lastCollectedBillNumber != null)
-                    _LastCollectedBanner(
-                      billNumber: state.lastCollectedBillNumber!,
+            return Column(
+              children: <Widget>[
+                FinanceSearchBar(
+                  controller: _search,
+                  autofocus: true,
+                  onChanged: (value) => cubit.onSearchChanged(value),
+                  onSubmitted: (_) => cubit.searchNow(),
+                  filters: <Widget>[
+                    FilterChipButton(
+                      label: 'المربع',
+                      value: _squareLabel(state),
+                      selected: state.selectedSquareId != null,
+                      onPressed: () => _pickSquare(context, cubit, state),
                     ),
-                  Expanded(child: _buildList(context, cubit, state, invoices)),
-                ],
-              );
+                    if (state.isCompoundSearch)
+                      const FilterChipButton(
+                        label: 'بحث مسار',
+                        icon: Icons.alt_route,
+                        selected: true,
+                      ),
+                  ],
+                  trailing: state.searchText.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _search.clear();
+                            cubit.clearSearch();
+                          },
+                        ),
+                ),
+                InvoicesSummaryBar(
+                  count: state.invoices.length,
+                  openCount: state.openCount,
+                  overdueCount: overdueCount,
+                  totalDue: state.totalDue,
+                ),
+                if (state.lastCollectedBillNumber != null)
+                  _LastCollectedBanner(billNumber: state.lastCollectedBillNumber!),
+                Expanded(child: _buildList(context, cubit, state, invoices)),
+              ],
+            );
             },
           ),
         ),
@@ -161,37 +155,32 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
     if (state.errorMessage != null && invoices.isEmpty) {
       return ErrorStateWidget(
         message: state.errorMessage!,
-        onRetry: () => cubit.searchNow(),
+        onRetry: () => cubit.loadUnpaid(),
       );
     }
 
     if (invoices.isEmpty) {
       return RefreshIndicator(
-        onRefresh: () => cubit.searchNow(),
+        onRefresh: () => cubit.loadUnpaid(),
         child: ListView(
           children: <Widget>[
             const SizedBox(height: 60),
             EmptyStateWidget(
-              title: state.searchText.isEmpty && state.selectedSquareId == null
+              title: state.searchText.isEmpty
                   ? 'لا توجد فواتير مفتوحة للتحصيل'
-                  : FinanceUxStrings.filteredEmptyTitle,
-              message:
-                  state.searchText.isEmpty && state.selectedSquareId == null
-                  ? FinanceUxStrings.noInvoices
-                  : FinanceUxStrings.filteredEmptyHint,
-              icon: state.searchText.isEmpty && state.selectedSquareId == null
+                  : 'لا نتائج للبحث',
+              message: state.searchText.isEmpty
+                  ? 'كل الفواتير مسدّدة حالياً.'
+                  : 'جرّب اسم المستأجر أو رقم الفاتورة أو مسار بصيغة 4/1.',
+              icon: state.searchText.isEmpty
                   ? Icons.task_alt
                   : Icons.search_off,
-              actionLabel:
-                  state.searchText.isEmpty && state.selectedSquareId == null
-                  ? null
-                  : FinanceUxStrings.clearFilters,
-              onAction:
-                  state.searchText.isEmpty && state.selectedSquareId == null
+              actionLabel: state.searchText.isEmpty ? null : 'مسح البحث',
+              onAction: state.searchText.isEmpty
                   ? null
                   : () {
                       _search.clear();
-                      cubit.clearFilters();
+                      cubit.clearSearch();
                     },
             ),
           ],
@@ -200,7 +189,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => cubit.searchNow(),
+      onRefresh: () => cubit.loadUnpaid(),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         itemCount: invoices.length,
@@ -383,9 +372,9 @@ class _CollectorCard extends StatelessWidget {
             children: <Widget>[
               Text(
                 invoice.beneficiaryName,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
               const SizedBox(height: 2),
               Text(
@@ -393,15 +382,9 @@ class _CollectorCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 14),
-              _DetailRow(
-                label: 'إجمالي الفاتورة',
-                value: CurrencyFormatter.withLabel(invoice.totalAmount),
-              ),
+              _DetailRow(label: 'إجمالي الفاتورة', value: CurrencyFormatter.withLabel(invoice.totalAmount)),
               if (invoice.previousBalance > 0)
-                _DetailRow(
-                  label: 'متأخرات سابقة',
-                  value: CurrencyFormatter.withLabel(invoice.previousBalance),
-                ),
+                _DetailRow(label: 'متأخرات سابقة', value: CurrencyFormatter.withLabel(invoice.previousBalance)),
               if (invoice.creditApplied > 0)
                 _DetailRow(
                   label: 'رصيد دائن مخصوم',
@@ -409,15 +392,8 @@ class _CollectorCard extends StatelessWidget {
                   tone: AppColors.success,
                 ),
               if (invoice.amountPaid > 0)
-                _DetailRow(
-                  label: 'المسدد',
-                  value: CurrencyFormatter.withLabel(invoice.amountPaid),
-                ),
-              _DetailRow(
-                label: 'صافي المستحق',
-                value: CurrencyFormatter.debt(due),
-                bold: true,
-              ),
+                _DetailRow(label: 'المسدد', value: CurrencyFormatter.withLabel(invoice.amountPaid)),
+              _DetailRow(label: 'صافي المستحق', value: CurrencyFormatter.debt(due), bold: true),
               const SizedBox(height: 16),
               AppPrimaryButton(
                 label: 'تحصيل ${CurrencyFormatter.amount(due)} ريال',
@@ -437,12 +413,7 @@ class _CollectorCard extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.tone,
-    this.bold = false,
-  });
+  const _DetailRow({required this.label, required this.value, this.tone, this.bold = false});
 
   final String label;
   final String value;

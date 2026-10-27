@@ -44,6 +44,7 @@ import '../network/secure_storage_service.dart';
 import '../permissions/permission_service.dart';
 import '../router/app_router.dart';
 import '../security/app_lock_service.dart';
+import '../security/developer_access_service.dart';
 import '../theme/app_theme.dart';
 
 final GetIt getIt = GetIt.instance;
@@ -96,6 +97,8 @@ Future<void> configureDependencies({String? appVersion}) async {
   unawaited(appLock.load());
   getIt.registerSingleton<DioClient>(dioClient);
   getIt.registerSingleton<Dio>(dioClient.dio);
+  final developerAccess = DeveloperAccessService(dio: dioClient.dio);
+  getIt.registerSingleton<DeveloperAccessService>(developerAccess);
   getIt.registerSingleton(dioClient.offlineCache);
   getIt.registerSingleton<NetworkInfo>(NetworkInfo());
 
@@ -105,6 +108,7 @@ Future<void> configureDependencies({String? appVersion}) async {
     offlineCache: dioClient.offlineCache,
   );
   getIt.registerSingleton<SessionService>(session);
+  session.addSessionClearedListener(developerAccess.lock);
   dioClient.errorInterceptor.onUnauthorized = session.expireSession;
   getIt.registerSingleton<PermissionService>(PermissionService(session));
   getIt.registerSingleton<AppThemeController>(AppThemeController());

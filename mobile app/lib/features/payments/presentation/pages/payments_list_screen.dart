@@ -230,11 +230,15 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               )
             : null,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(cubit),
-        icon: const Icon(Icons.add),
-        label: const Text('بدء التحصيل'),
-      ),
+      floatingActionButton:
+          (trySl<PermissionService>()?.can('invoices.view') ?? false) &&
+                  (trySl<PermissionService>()?.can('payments.collect') ?? false)
+              ? FloatingActionButton.extended(
+                  onPressed: () => _openForm(cubit),
+                  icon: const Icon(Icons.add),
+                  label: const Text('بدء التحصيل'),
+                )
+              : null,
       body: SafeArea(
         child: BlocBuilder<PaymentsCubit, PaymentsState>(
           builder: (context, state) {

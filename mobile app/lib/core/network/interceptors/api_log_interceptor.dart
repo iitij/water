@@ -172,21 +172,12 @@ class ApiLogInterceptor extends Interceptor {
 
   Map<String, dynamic>? _sanitizeHeaders(Map<String, dynamic>? headers) {
     if (headers == null) return null;
-    final clean = Map<String, dynamic>.from(headers);
-    if (clean.containsKey('authorization')) {
-      final auth = clean['authorization'].toString();
-      clean['authorization'] = auth.startsWith('Bearer ') ? 'Bearer ********' : '********';
-    }
-    if (clean.containsKey('Authorization')) {
-      final auth = clean['Authorization'].toString();
-      clean['Authorization'] = auth.startsWith('Bearer ') ? 'Bearer ********' : '********';
-    }
-    return clean;
+    return _redactMap(headers);
   }
 
   Map<String, dynamic>? _sanitizeMap(Map<String, dynamic>? map) {
     if (map == null) return null;
-    return Map<String, dynamic>.from(map);
+    return _redactMap(map);
   }
 
   dynamic _sanitizePayload(dynamic data) {
@@ -195,21 +186,7 @@ class ApiLogInterceptor extends Interceptor {
       return '[FormData مع ${data.fields.length} حقول و ${data.files.length} ملفات]';
     }
     if (data is Map) {
-      final clean = Map<String, dynamic>.from(data);
-      final sensitive = <String>[
-        'password',
-        'password_confirmation',
-        'pin',
-        'token',
-        'secret',
-        'credit_card',
-      ];
-      for (final key in clean.keys.toList()) {
-        if (sensitive.contains(key.toLowerCase())) {
-          clean[key] = '******** (محمي)';
-        }
-      }
-      return clean;
+      return _redactMap(data);
     }
     return data;
   }
@@ -219,7 +196,7 @@ class ApiLogInterceptor extends Interceptor {
     headers.forEach((key, values) {
       map[key] = values.length == 1 ? values.first : values;
     });
-    return map;
+    return _redactMap(map);
   }
 
   dynamic _previewBody(dynamic data) {
@@ -229,11 +206,34 @@ class ApiLogInterceptor extends Interceptor {
     }
     if (data is String) {
       try {
-        return jsonDecode(data);
+        return _redactValue(jsonDecode(data));
       } catch (_) {
         return data.length > 2000 ? '${data.substring(0, 2000)}… (مقتطع)' : data;
       }
     }
-    return data;
+    return _redactValue(data);
+  }
+
+  static const _sensitiveKeys = <String>{
+    'authorization', 'x-developer-grant', 'grant', 'pin', 'password',
+    'password_confirmation', 'token', 'access_token', 'refresh_token',
+    'secret', 'credit_card', 'cookie', 'set-cookie', 'api_key',
+  };
+
+  Map<String, dynamic> _redactMap(Map data) {
+    final clean = <String, dynamic>{};
+    for (final entry in data.entries) {
+      final key = entry.key.toString();
+      clean[key] = _sensitiveKeys.contains(key.toLowerCase())
+          ? '******** (محمي)'
+          : _redactValue(entry.value);
+    }
+    return clean;
+  }
+
+  dynamic _redactValue(dynamic value) {
+    if (value is Map) return _redactMap(value);
+    if (value is List) return value.map(_redactValue).toList(growable: false);
+    return value;
   }
 }

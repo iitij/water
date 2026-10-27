@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/l10n/resource_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -28,9 +27,7 @@ class ExportCenterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!can(AdminPermissions.viewExports)) {
       return const Scaffold(
-        body: AdminErrorView(
-          message: 'لا تملك صلاحية View:ExportDataPage للوصول إلى التصدير.',
-        ),
+        body: AdminErrorView(message: 'لا تملك صلاحية View:ExportDataPage للوصول إلى التصدير.'),
       );
     }
     return BlocProvider(
@@ -52,8 +49,7 @@ class ExportDataCenterScreen extends StatelessWidget {
   final AdminPermissionCheck can;
 
   @override
-  Widget build(BuildContext context) =>
-      ExportCenterScreen(service: service, can: can);
+  Widget build(BuildContext context) => ExportCenterScreen(service: service, can: can);
 }
 
 class _ExportCenterView extends StatelessWidget {
@@ -67,11 +63,7 @@ class _ExportCenterView extends StatelessWidget {
           previous.successMessage != current.successMessage,
       listener: (context, state) {
         if (state.errorMessage != null) {
-          showAdminSnackBar(
-            context,
-            adminErrorMessage(state.errorMessage!),
-            isError: true,
-          );
+          showAdminSnackBar(context, adminErrorMessage(state.errorMessage!), isError: true);
         } else if (state.successMessage != null) {
           showAdminSnackBar(context, state.successMessage!);
         }
@@ -93,7 +85,7 @@ class _ExportCenterView extends StatelessWidget {
             children: [
               const AdminSectionHeader(
                 title: 'تصدير بيانات المشروع',
-                subtitle: ResourceUxStrings.exportHelp,
+                subtitle: 'تُنشأ الملفات على الخادم باستخدام DataExportService ثم تُحفظ وتُشارك من الجهاز.',
                 icon: Icons.file_download_outlined,
               ),
               const SizedBox(height: 16),
@@ -118,10 +110,7 @@ class _ExportCenterView extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (final card in cards) ...[
-                          card,
-                          const SizedBox(height: 16),
-                        ],
+                        for (final card in cards) ...[card, const SizedBox(height: 16)],
                       ],
                     );
                   }
@@ -157,30 +146,10 @@ class _ExportStats extends StatelessWidget {
     }
     final summary = state.catalog?.summary;
     final cards = [
-      (
-        'إجمالي المشتركين',
-        summary?.totalSubscribers,
-        Icons.groups_outlined,
-        AdminPalette.subscribersExport,
-      ),
-      (
-        'إجمالي الفواتير',
-        summary?.totalInvoices,
-        Icons.receipt_long_outlined,
-        AdminPalette.invoicesExport,
-      ),
-      (
-        'إجمالي القراءات',
-        summary?.totalReadings,
-        Icons.speed_rounded,
-        AdminPalette.readingsExport,
-      ),
-      (
-        'المربعات السكنية',
-        summary?.totalSquares,
-        Icons.grid_view_rounded,
-        AdminPalette.primary,
-      ),
+      ('إجمالي المشتركين', summary?.totalSubscribers, Icons.groups_outlined, AdminPalette.subscribersExport),
+      ('إجمالي الفواتير', summary?.totalInvoices, Icons.receipt_long_outlined, AdminPalette.invoicesExport),
+      ('إجمالي القراءات', summary?.totalReadings, Icons.speed_rounded, AdminPalette.readingsExport),
+      ('المربعات السكنية', summary?.totalSquares, Icons.grid_view_rounded, AdminPalette.primary),
     ];
     return AdminResponsiveGrid(
       minItemWidth: 190,
@@ -205,22 +174,22 @@ class _ExportCard extends StatelessWidget {
   final ExportState state;
 
   Color get _color => switch (kind) {
-    ExportKind.subscribers => AdminPalette.subscribersExport,
-    ExportKind.invoices => AdminPalette.invoicesExport,
-    ExportKind.readings => AdminPalette.readingsExport,
-  };
+        ExportKind.subscribers => AdminPalette.subscribersExport,
+        ExportKind.invoices => AdminPalette.invoicesExport,
+        ExportKind.readings => AdminPalette.readingsExport,
+      };
 
   String get _title => switch (kind) {
-    ExportKind.subscribers => 'تصدير المشتركين',
-    ExportKind.invoices => 'تصدير الفواتير',
-    ExportKind.readings => 'تصدير قراءات العدادات',
-  };
+        ExportKind.subscribers => 'تصدير المشتركين',
+        ExportKind.invoices => 'تصدير الفواتير',
+        ExportKind.readings => 'تصدير قراءات العدادات',
+      };
 
   IconData get _icon => switch (kind) {
-    ExportKind.subscribers => Icons.groups_outlined,
-    ExportKind.invoices => Icons.receipt_long_outlined,
-    ExportKind.readings => Icons.speed_rounded,
-  };
+        ExportKind.subscribers => Icons.groups_outlined,
+        ExportKind.invoices => Icons.receipt_long_outlined,
+        ExportKind.readings => Icons.speed_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -244,15 +213,14 @@ class _ExportCard extends StatelessWidget {
                   child: Text(
                     _title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ),
                 if (state.catalog != null) ...[
                   const SizedBox(width: 8),
                   AdminStatusBadge(
-                    label:
-                        '${AdminFormat.number(state.catalog!.summary.forKind(kind))} سجل',
+                    label: '${AdminFormat.number(state.catalog!.summary.forKind(kind))} سجل',
                     color: _color,
                   ),
                 ],
@@ -268,22 +236,17 @@ class _ExportCard extends StatelessWidget {
                 DropdownButtonFormField<int>(
                   key: ValueKey('square-$kind-${filters.squareId}'),
                   initialValue: filters.squareId,
-                  decoration: const InputDecoration(labelText: 'المربع السكني'),
+                  decoration: const InputDecoration(
+                    labelText: 'المربع السكني',
+                  ),
                   items: [
                     const DropdownMenuItem(child: Text('كل المربعات')),
-                    for (final square
-                        in state.catalog?.squares ?? const <ExportSquare>[])
-                      DropdownMenuItem(
-                        value: square.id,
-                        child: Text(square.name),
-                      ),
+                    for (final square in state.catalog?.squares ?? const <ExportSquare>[])
+                      DropdownMenuItem(value: square.id, child: Text(square.name)),
                   ],
                   onChanged: (value) => cubit.updateFilters(
                     kind,
-                    filters.copyWith(
-                      squareId: value,
-                      clearSquare: value == null,
-                    ),
+                    filters.copyWith(squareId: value, clearSquare: value == null),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -292,37 +255,24 @@ class _ExportCard extends StatelessWidget {
                     key: ValueKey('status-$kind-${filters.status}'),
                     initialValue: filters.status,
                     decoration: InputDecoration(
-                      labelText: kind == ExportKind.subscribers
-                          ? 'حالة المشترك'
-                          : 'حالة الفاتورة',
+                      labelText: kind == ExportKind.subscribers ? 'حالة المشترك' : 'حالة الفاتورة',
                     ),
                     items: [
                       const DropdownMenuItem(child: Text('كل الحالات')),
-                      for (final status
-                          in kind == ExportKind.subscribers
-                              ? const {
-                                  'active': 'نشط',
-                                  'inactive': 'غير نشط',
-                                  'suspended': 'موقوف',
-                                }.entries
-                              : const {
-                                  'draft': 'مسودة',
-                                  'issued': 'صادرة',
-                                  'partially_paid': 'مسددة جزئياً',
-                                  'paid': 'مسددة',
-                                  'overdue': 'متأخرة',
-                                }.entries)
-                        DropdownMenuItem(
-                          value: status.key,
-                          child: Text(status.value),
-                        ),
+                      for (final status in kind == ExportKind.subscribers
+                          ? const {'active': 'نشط', 'inactive': 'غير نشط', 'suspended': 'موقوف'}.entries
+                          : const {
+                              'draft': 'مسودة',
+                              'issued': 'صادرة',
+                              'partially_paid': 'مسددة جزئياً',
+                              'paid': 'مسددة',
+                              'overdue': 'متأخرة',
+                            }.entries)
+                        DropdownMenuItem(value: status.key, child: Text(status.value)),
                     ],
                     onChanged: (value) => cubit.updateFilters(
                       kind,
-                      filters.copyWith(
-                        status: value,
-                        clearStatus: value == null,
-                      ),
+                      filters.copyWith(status: value, clearStatus: value == null),
                     ),
                   )
                 else
@@ -339,10 +289,7 @@ class _ExportCard extends StatelessWidget {
                     ],
                     onChanged: (value) => cubit.updateFilters(
                       kind,
-                      filters.copyWith(
-                        isInvoiced: value,
-                        clearInvoiced: value == null,
-                      ),
+                      filters.copyWith(isInvoiced: value, clearInvoiced: value == null),
                     ),
                   ),
                 if (kind != ExportKind.subscribers) ...[
@@ -352,9 +299,7 @@ class _ExportCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 AppPrimaryButton(
                   key: ValueKey('export-$kind'),
-                  label: isBusy
-                      ? 'جارٍ إنشاء الملف...'
-                      : 'تصدير وتحميل Excel (.xlsx)',
+                  label: isBusy ? 'جارٍ إنشاء الملف...' : 'تصدير وتحميل Excel (.xlsx)',
                   icon: Icons.download_rounded,
                   loading: isBusy,
                   onPressed: isBusy ? null : () => cubit.export(kind),
@@ -409,10 +354,7 @@ class _FileResultPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LtrText(
-            fileName,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          LtrText(fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
           Text(
             '${_fileSize(sizeInBytes)} • محفوظ على الجهاز',
             style: Theme.of(context).textTheme.bodySmall,
@@ -496,20 +438,14 @@ class _DateFilters extends StatelessWidget {
     if (selected != null) {
       cubit.updateFilters(
         kind,
-        isFrom
-            ? filters.copyWith(fromDate: selected)
-            : filters.copyWith(toDate: selected),
+        isFrom ? filters.copyWith(fromDate: selected) : filters.copyWith(toDate: selected),
       );
     }
   }
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
+  const _DateField({required this.label, required this.value, required this.onTap});
 
   final String label;
   final DateTime? value;
@@ -534,9 +470,7 @@ class _DateField extends StatelessWidget {
 }
 
 String _fileSize(int bytes) {
-  if (bytes >= 1024 * 1024) {
-    return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
-  }
+  if (bytes >= 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
   if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '$bytes B';
 }

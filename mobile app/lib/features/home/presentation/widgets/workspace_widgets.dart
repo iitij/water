@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/l10n/owner_ux_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
@@ -16,25 +15,66 @@ Color workspaceColor(WorkspaceGroup group) => switch (group) {
 };
 
 class WorkspaceTile extends StatelessWidget {
-  const WorkspaceTile({super.key, required this.entry, required this.onTap});
+  const WorkspaceTile({
+    super.key,
+    required this.entry,
+    required this.onTap,
+    this.directory = false,
+    this.compactGrid = false,
+  });
   final WorkspaceEntry entry;
   final VoidCallback onTap;
+  final bool directory;
+  final bool compactGrid;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tone = workspaceColor(entry.group);
+    if (directory) {
+      return AppCard(
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        radius: AppRadius.lg,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppGlyph(icon: entry.icon, tone: tone, size: 38),
+              if (compactGrid) const Spacer() else const SizedBox(height: 16),
+              Text(
+                entry.title,
+                maxLines: compactGrid ? 2 : null,
+                overflow: compactGrid ? TextOverflow.ellipsis : null,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                entry.description,
+                maxLines: compactGrid ? 2 : null,
+                overflow: compactGrid ? TextOverflow.ellipsis : null,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return AppCard(
       padding: EdgeInsets.zero,
       onTap: onTap,
+      radius: AppRadius.xl,
       child: Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 10, 12),
         child: Row(
           children: <Widget>[
-            AppGlyph(
-              icon: entry.icon,
-              tone: workspaceColor(entry.group),
-              size: 40,
-            ),
+            AppGlyph(icon: entry.icon, tone: tone, size: 40),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -48,7 +88,14 @@ class WorkspaceTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 1),
-                  Text(entry.description, style: theme.textTheme.labelSmall),
+                  Text(
+                    entry.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -126,6 +173,8 @@ class _ShortcutCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               entry.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w500,
               ),
@@ -133,6 +182,8 @@ class _ShortcutCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               entry.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(height: 1.5),
             ),
           ],
@@ -157,8 +208,8 @@ class WorkspaceSearchButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
+          height: 46,
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: scheme.outlineVariant),
@@ -172,13 +223,10 @@ class WorkspaceSearchButton extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  OwnerUxStrings.searchService,
-                  style: theme.textTheme.bodySmall,
-                ),
+                child: Text('ابحث عن خدمة…', style: theme.textTheme.bodySmall),
               ),
               Icon(
-                Icons.chevron_left_rounded,
+                Icons.keyboard_command_key_rounded,
                 size: 15,
                 color: scheme.onSurfaceVariant.withValues(alpha: .6),
               ),

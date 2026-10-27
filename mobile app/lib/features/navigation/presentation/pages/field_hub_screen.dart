@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/l10n/owner_ux_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -12,7 +11,6 @@ import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
-import '../../../home/domain/workspace_catalog.dart';
 import '../widgets/module_section.dart';
 
 class FieldHubScreen extends StatelessWidget {
@@ -21,17 +19,10 @@ class FieldHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final permissions = GetIt.I<PermissionService>();
-    final visibleRoutes = WorkspaceCatalog.visible(
-      permissions.can,
-    ).map((entry) => entry.route).toSet();
-    final modules = ModuleCatalog.visible(
-      permissions,
-      group: AppModuleGroup.field,
-    );
-    final extraModules = ModuleCatalog.visible(
-      permissions,
-      group: AppModuleGroup.billing,
-    ).where((module) => module.id == 'quick_collector').toList(growable: false);
+    final modules = ModuleCatalog.visible(permissions, group: AppModuleGroup.field);
+    final extraModules = ModuleCatalog.visible(permissions, group: AppModuleGroup.billing)
+        .where((module) => module.id == 'quick_collector')
+        .toList(growable: false);
 
     return AppPageBody(
       children: <Widget>[
@@ -42,8 +33,9 @@ class FieldHubScreen extends StatelessWidget {
               children: <Widget>[
                 const HeroCopy(
                   eyebrow: 'العمليات الميدانية',
-                  title: OwnerUxStrings.fieldTitle,
-                  subtitle: OwnerUxStrings.fieldHelp,
+                  title: 'الميدان بين يديك',
+                  subtitle:
+                      'سجّل القراءات، امسح الباركود وتابع العدادات — كل ذلك يعمل بسلاسة حتى دون اتصال بالشبكة.',
                 ),
                 const Gap(AppSpacing.md),
                 const Wrap(
@@ -51,37 +43,22 @@ class FieldHubScreen extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     HeroMetaChip(icon: Icons.bolt_rounded, label: 'إدخال سريع'),
-                    HeroMetaChip(
-                      icon: Icons.wifi_off_rounded,
-                      label: 'يعمل أوفلاين',
-                    ),
-                    HeroMetaChip(
-                      icon: Icons.qr_code_scanner_rounded,
-                      label: 'مسح باركود',
-                    ),
+                    HeroMetaChip(icon: Icons.wifi_off_rounded, label: 'يعمل أوفلاين'),
+                    HeroMetaChip(icon: Icons.qr_code_scanner_rounded, label: 'مسح باركود'),
                   ],
                 ),
                 const Gap(AppSpacing.lg),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    if (visibleRoutes.contains(RouteNames.fieldReader))
-                      HeroButton(
-                        label: 'بدء جولة القراءة',
-                        icon: Icons.play_arrow_rounded,
-                        onPressed: () => context.push(RouteNames.fieldReader),
-                      ),
-                    if (visibleRoutes.contains(
-                      RouteNames.readings,
-                    )) ...<Widget>[
-                      const SizedBox(height: 8),
-                      HeroGhostButton(
-                        label: 'سجل القراءات',
-                        icon: Icons.fact_check_outlined,
-                        onPressed: () => context.push(RouteNames.readings),
-                      ),
-                    ],
-                  ],
+                HeroActions(
+                  primary: HeroButton(
+                    label: 'بدء جولة القراءة',
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () => context.push(RouteNames.fieldReader),
+                  ),
+                  secondary: HeroGhostButton(
+                    label: 'سجل القراءات',
+                    icon: Icons.fact_check_outlined,
+                    onPressed: () => context.push(RouteNames.readings),
+                  ),
                 ),
               ],
             ),
@@ -90,22 +67,22 @@ class FieldHubScreen extends StatelessWidget {
         const Gap(AppSpacing.lg),
         const AppReveal(
           delay: Duration(milliseconds: 60),
-          child: SyncSummaryCard(showDescription: true),
+          child: SyncSummaryCard(
+            showDescription: true,
+          ),
         ),
         const Gap(AppSpacing.md),
         AppReveal(
           delay: const Duration(milliseconds: 90),
           child: AppNotice(
-            title: OwnerUxStrings.fieldOffline,
-            message: OwnerUxStrings.fieldOfflineHelp,
+            title: 'القراءة بلا إنترنت آمنة',
+            message:
+                'تُحفظ القراءات على الجهاز أولاً ثم تُرسل تلقائياً عند عودة الشبكة، مع منع التكرار لكل عملية.',
             icon: Icons.cloud_done_outlined,
             color: AppColors.success,
             action: TextButton(
               onPressed: () => context.push(RouteNames.offlineSync),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 28),
-              ),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
               child: const Text('متابعة حالة المزامنة'),
             ),
           ),
@@ -133,8 +110,7 @@ class FieldHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 1,
                 title: 'ابحث عن المسار أو امسح الباركود',
-                description:
-                    'أدخل رقم المربع والعداد، أو امسح الكود مباشرة للوصول إلى المشترك.',
+                description: 'أدخل رقم المربع والعداد، أو امسح الكود مباشرة للوصول إلى المشترك.',
                 icon: Icons.qr_code_scanner_rounded,
                 color: AppColors.primary,
               ),
@@ -142,8 +118,7 @@ class FieldHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 2,
                 title: 'أدخل القراءة وراجع الفارق',
-                description:
-                    'يعرض النظام القراءة السابقة والاستهلاك المتوقع قبل الحفظ.',
+                description: 'يعرض النظام القراءة السابقة والاستهلاك المتوقع قبل الحفظ.',
                 icon: Icons.speed_rounded,
                 color: AppColors.info,
               ),
@@ -151,8 +126,7 @@ class FieldHubScreen extends StatelessWidget {
               ProcessStepCard(
                 index: 3,
                 title: 'أصدر الفاتورة أو اطبع السند',
-                description:
-                    'أكمل الزيارة بإصدار الفاتورة أو تحصيل المبلغ وطباعة السند فوراً.',
+                description: 'أكمل الزيارة بإصدار الفاتورة أو تحصيل المبلغ وطباعة السند فوراً.',
                 icon: Icons.print_rounded,
                 color: AppColors.success,
               ),
@@ -171,9 +145,7 @@ class FieldHubScreen extends StatelessWidget {
                   subtitle: 'عندما يكون التحصيل جزءاً من الزيارة الميدانية',
                 ),
                 const Gap(AppSpacing.sm),
-                ...extraModules.map(
-                  (module) => AppModuleTileView(module: module, list: true),
-                ),
+                ...extraModules.map((module) => AppModuleTileView(module: module, list: true)),
               ],
             ),
           ),

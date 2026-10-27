@@ -44,6 +44,7 @@ class DashboardCubit extends Cubit<DashboardState> {
   final DashboardRepository _repository;
 
   Future<void> load({bool forceRefresh = false}) async {
+    if (isClosed) return;
     if (state.isRefreshing || state.status == DashboardRequestStatus.loading) return;
     emit(
       state.copyWith(
@@ -56,6 +57,7 @@ class DashboardCubit extends Cubit<DashboardState> {
     );
     try {
       final snapshot = await _repository.getDashboard(forceRefresh: forceRefresh);
+      if (isClosed) return;
       emit(
         DashboardState(
           status: DashboardRequestStatus.success,
@@ -63,6 +65,7 @@ class DashboardCubit extends Cubit<DashboardState> {
         ),
       );
     } catch (error) {
+      if (isClosed) return;
       emit(
         state.copyWith(
           status: state.snapshot == null

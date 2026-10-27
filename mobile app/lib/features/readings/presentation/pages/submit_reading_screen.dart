@@ -9,7 +9,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/l10n/app_strings.dart';
-import '../../../../core/l10n/field_ux_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -521,14 +520,9 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
             constraints: BoxConstraints(maxWidth: maxWidth),
             child: Form(
               key: _formKey,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: ListView(
                 padding: const EdgeInsets.all(16),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
                 children: [
-                  const Text(FieldUxStrings.readingGuide),
-                  const SizedBox(height: 12),
                   _meterHeader(),
                   if (_todayFault != null) ...[
                     const SizedBox(height: 10),
@@ -580,7 +574,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _currentReadingController,
-                    autofocus: false,
+                    autofocus: true,
                     textDirection: TextDirection.ltr,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -592,7 +586,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                     ),
                     decoration: const InputDecoration(
-                      errorMaxLines: 3,
                       labelText: 'القراءة الحالية',
                       hintText: 'أدخل الرقم الظاهر على العداد',
                       prefixIcon: Icon(Icons.speed_outlined),
@@ -723,9 +716,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+                Row(
                   children: <Widget>[
                     LtrNumberText(
                       _meter.uniqueCode,
@@ -735,6 +726,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       ),
                     ),
                     if (_meter.pathNumber != null) ...<Widget>[
+                      const SizedBox(width: 6),
                       Text(
                         '· مسار ${_meter.pathNumber}',
                         style: theme.textTheme.labelSmall,
@@ -788,7 +780,8 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  FieldUxStrings.readingFaultHelp,
+                  'تُسجَّل القراءة المتعذرة على الجهاز فقط ولا تُرسل كقراءة،'
+                  ' حتى لا يُحتسب استهلاك غير حقيقي.',
                   style: theme.textTheme.labelSmall,
                 ),
               ],

@@ -10,6 +10,7 @@ import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../finance/finance_api_client.dart';
 import '../network/dio_client.dart';
+import '../security/developer_access_service.dart';
 import '../theme/app_colors.dart';
 import '../ui/app_tokens.dart';
 import '../widgets/app_button.dart';
@@ -77,6 +78,9 @@ class ServerConnectionService {
     }
 
     final getIt = GetIt.I;
+    if (getIt.isRegistered<DeveloperAccessService>()) {
+      getIt<DeveloperAccessService>().lock();
+    }
     if (getIt.isRegistered<SessionService>()) {
       final session = getIt<SessionService>();
       if (session.isAuthenticated) {

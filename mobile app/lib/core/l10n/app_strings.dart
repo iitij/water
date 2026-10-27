@@ -1,5 +1,47 @@
 import 'package:flutter/widgets.dart';
 
+/// نصوص وضع المطور، مركزية حتى لا تتوزع رسائل الدعم بين الشاشات.
+abstract final class DeveloperModeStrings {
+  static const entryTitle = 'تفعيل وضع المطور';
+  static const entrySubtitle = 'إعدادات متقدمة وسجلات التشخيص برقم حماية';
+  static const title = 'وضع المطور';
+  static const unlockedDescription =
+      'يمكنك إدارة إعدادات الدعم حتى انتهاء صلاحية الجلسة.';
+  static const lockedDescription =
+      'أدخل رقم المطور للتحقق من الخادم وفتح أدوات الدعم.';
+  static const pinLabel = 'رقم المطور';
+  static const verifying = 'جارٍ التحقق...';
+  static const wrongPin = 'رقم المطور غير صحيح.';
+  static const rateLimited = 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.';
+  static const unavailable = 'تعذر التحقق من الخادم. افحص الاتصال أو عنوانه.';
+  static const serverSaved = 'حُفظ عنوان الخادم. سجّل الدخول من جديد.';
+  static const noLogs = 'لا توجد سجلات لإرسالها.';
+  static const grantExpired = 'انتهت صلاحية وضع المطور. أعد تفعيله.';
+  static const refreshFailed =
+      'تعذر التأكد من إعدادات المطور الحالية. تحقق من الاتصال ثم أعد المحاولة.';
+  static const featureDisabled = 'هذه الميزة معطّلة من لوحة Laravel.';
+  static const uploadFailed = 'تعذر إرسال السجلات. تحقق من اتصال الخادم.';
+  static const uploadFailedShort = 'تعذر إرسال السجلات.';
+  static const recoveryHint =
+      'إذا تغيّر عنوان الخادم وتعذر الاتصال، استخدم خيار تغيير الخادم في شاشة الدخول.';
+  static const changeServer = 'تغيير رابط الخادم';
+  static const whatsappSettings = 'إعدادات واتساب';
+  static const visibleByLaravel = 'تظهر وفق إعداد Laravel';
+  static const sendLogs = 'إرسال سجلات التطبيق إلى Laravel';
+  static const sendLogsFeature = 'إرسال سجلات التطبيق';
+  static const logsPrivacy = 'آخر 50 عملية، دون بيانات الطلبات الحساسة';
+  static const openLocalLogs = 'فتح سجلات API المحلية';
+  static const managedFeatures = 'الميزات التي يديرها Laravel';
+  static const noFeatures = 'لا توجد إعدادات إظهار متاحة حالياً.';
+  static const managedInLaravel = 'تُغيّر من لوحة Laravel';
+  static const serverSettings = 'إعدادات الخادم';
+  static const close = 'إغلاق وضع المطور';
+  static const closed = 'أُغلق وضع المطور.';
+
+  static String uploadedCount(Object count) =>
+      'أُرسل $count سجل تشخيصي إلى الخادم.';
+}
+
 /// نصوص الواجهة الأساسية (S5-04).
 ///
 /// المشروع لا يستخدم `flutter gen-l10n` ولا ملفات `.arb` بعد — وهذا مذكور
@@ -22,7 +64,8 @@ abstract final class AppStringsDefaults {
   static const String forbiddenError = 'لا تملك صلاحية تنفيذ هذه العملية.';
   static const String notFoundError = 'السجل غير موجود أو تم حذفه.';
   static const String errorTitle = 'تعذّر تحميل البيانات';
-  static const String invalidResponse = 'وصلت بيانات غير مكتملة من الخادم. أعد المحاولة.';
+  static const String invalidResponse =
+      'وصلت بيانات غير مكتملة من الخادم. أعد المحاولة.';
   static const String conflictError =
       'العملية متعارضة مع حالة السجل الحالية. أعد التحميل ثم حاول.';
   static const String serverError = 'حدث خطأ في الخادم. حاول بعد قليل.';
@@ -297,8 +340,11 @@ class AppStrings {
   String get settingValue => 'القيمة';
   String get settingLabel => 'اسم الإعداد';
   String auditSourceLabel(String? source) => switch (source) {
-    'mobile' => 'التطبيق', 'api' => 'واجهة الربط', 'web' => 'لوحة الويب',
-    'console' => 'مهام النظام', _ => source ?? auditSystem,
+    'mobile' => 'التطبيق',
+    'api' => 'واجهة الربط',
+    'web' => 'لوحة الويب',
+    'console' => 'مهام النظام',
+    _ => source ?? auditSystem,
   };
   String get saveAndAddMeter => 'حفظ وإضافة عداد';
   String get setupAddFee => 'إضافة رسوم اشتراك للعداد';
@@ -355,10 +401,12 @@ class AppStrings {
   String get roleReadOnly => 'المصفوفة للعرض فقط';
   String get roleViewMatrix => 'عرض مصفوفة الصلاحيات';
   String get roleGuardChangeTitle => 'تغيير نطاق المصادقة';
-  String get roleGuardChangeMessage => 'ستُزال الصلاحيات غير المتاحة في النطاق الجديد من الاختيار. راجع المصفوفة قبل الحفظ. الدور المرتبط بمستخدمين لا يقبل تغيير نطاقه.';
+  String get roleGuardChangeMessage =>
+      'ستُزال الصلاحيات غير المتاحة في النطاق الجديد من الاختيار. راجع المصفوفة قبل الحفظ. الدور المرتبط بمستخدمين لا يقبل تغيير نطاقه.';
   String get roleGuardConfirm => 'تغيير النطاق ومراجعة الصلاحيات';
   String get readingActualDateLabel => 'تاريخ إدخال القراءة الفعلي';
-  String get readingActualDateHelp => 'اختر اليوم الذي تمت فيه قراءة العداد؛ فترة الاستهلاك تبقى كما حددها النظام.';
+  String get readingActualDateHelp =>
+      'اختر اليوم الذي تمت فيه قراءة العداد؛ فترة الاستهلاك تبقى كما حددها النظام.';
   String get readingActualDateChange => 'تغيير تاريخ القراءة';
 }
 

@@ -41,7 +41,11 @@ class AppIconBubble extends StatelessWidget {
           color: filled ? Colors.transparent : tint.withValues(alpha: .16),
         ),
       ),
-      child: Icon(icon, size: size * .46, color: filled ? Colors.white : tint),
+      child: Icon(
+        icon,
+        size: size * .46,
+        color: filled ? (dark ? AppColors.darkPaper : Colors.white) : tint,
+      ),
     );
   }
 }
@@ -70,7 +74,7 @@ class AppModuleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (list || MediaQuery.textScalerOf(context).scale(16) > 23) {
+    if (list) {
       return AppCard(
         padding: const EdgeInsets.all(13),
         onTap: onTap,
@@ -86,7 +90,12 @@ class AppModuleTile extends StatelessWidget {
                   Row(
                     children: <Widget>[
                       Flexible(
-                        child: Text(title, style: theme.textTheme.titleMedium),
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium,
+                        ),
                       ),
                       if (badge != null) ...<Widget>[
                         const SizedBox(width: 8),
@@ -95,7 +104,12 @@ class AppModuleTile extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: theme.textTheme.bodySmall),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -166,18 +180,6 @@ class AppModuleGrid extends StatelessWidget {
     if (children.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (MediaQuery.textScalerOf(context).scale(16) > 23) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (final child in children)
-                Padding(
-                  padding: EdgeInsets.only(bottom: spacing),
-                  child: child,
-                ),
-            ],
-          );
-        }
         final available = constraints.maxWidth;
         final columns = (available / minTileWidth).floor().clamp(1, 4).toInt();
         final width = (available - spacing * (columns - 1)) / columns;
@@ -214,18 +216,6 @@ class AppModuleRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
-    if (MediaQuery.textScalerOf(context).scale(16) > 23) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (final child in children)
-            Padding(
-              padding: EdgeInsets.only(bottom: spacing),
-              child: child,
-            ),
-        ],
-      );
-    }
     return SizedBox(
       height: tileHeight,
       child: ListView.separated(

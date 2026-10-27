@@ -260,7 +260,10 @@ class AppHeroPanel extends StatelessWidget {
             LinearGradient(
               begin: AlignmentDirectional.topStart,
               end: AlignmentDirectional.bottomEnd,
-              colors: [background, AppColors.panelElevated],
+              colors: [
+                background,
+                dark ? AppColors.darkSurfaceAlt : AppColors.panelElevated,
+              ],
             ),
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: accent?.withValues(alpha: .4) ?? line),

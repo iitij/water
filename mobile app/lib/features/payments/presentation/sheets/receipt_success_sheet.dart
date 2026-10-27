@@ -75,11 +75,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
   /// `whatsapp_auto_send_payment` + `payment.created`: يرسل تلقائياً بعد الحفظ.
   void _maybeAutoSend() {
     final config = sl<FinanceConfigRepository>().cached;
-    if (!config.autoSendWhatsappPayment ||
-        !config.whatsappEnabled ||
-        _autoSent) {
-      return;
-    }
+    if (!config.autoSendWhatsappPayment || !config.whatsappEnabled || _autoSent) return;
     if (widget.payment.subscriberPhone == null) return;
     _autoSent = true;
     unawaited(
@@ -101,7 +97,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
     final receipt = widget.receiptData;
 
     return SafeArea(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -112,27 +108,21 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                 icon: widget.queuedOffline
                     ? Icons.cloud_upload_outlined
                     : Icons.check_circle_rounded,
-                tone: widget.queuedOffline
-                    ? AppColors.warning
-                    : AppColors.success,
+                tone: widget.queuedOffline ? AppColors.warning : AppColors.success,
                 size: 62,
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              widget.queuedOffline
-                  ? 'الدفعة في طابور المزامنة'
-                  : 'تم التحصيل بنجاح',
+              widget.queuedOffline ? 'الدفعة في طابور المزامنة' : 'تم التحصيل بنجاح',
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 2),
             Text(
-              payment.receiptNumber.isEmpty
-                  ? 'سند محلي — يُرقَّم عند المزامنة'
-                  : 'سند قبض ${payment.receiptNumber}',
+              payment.receiptNumber.isEmpty ? 'سند محلي — يُرقَّم عند المزامنة' : 'سند قبض ${payment.receiptNumber}',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -142,25 +132,18 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(
-                  color: AppColors.success.withValues(alpha: 0.2),
-                ),
+                border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
               ),
               child: Column(
                 children: <Widget>[
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: LtrNumberText(
-                      CurrencyFormatter.withLabel(payment.amount),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                        letterSpacing: -.4,
-                        fontFeatures: <FontFeature>[
-                          FontFeature.tabularFigures(),
-                        ],
-                      ),
+                  LtrNumberText(
+                    CurrencyFormatter.withLabel(payment.amount),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      letterSpacing: -.4,
+                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -170,24 +153,22 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                     style: const TextStyle(fontSize: 12, height: 1.5),
                   ),
                   const Divider(height: 20),
-                  _Row(label: 'استلمنا من', value: payment.displayName),
+                  _Row(
+                    label: 'استلمنا من',
+                    value: payment.displayName,
+                  ),
                   _Row(
                     label: 'التاريخ',
                     value: DateFormat.day(payment.paymentDate),
                   ),
                   _Row(label: 'طريقة الدفع', value: payment.method.label),
                   if (payment.invoiceBillNumber != null)
-                    _Row(
-                      label: 'بموجب فاتورة',
-                      value: payment.invoiceBillNumber!,
-                    ),
+                    _Row(label: 'بموجب فاتورة', value: payment.invoiceBillNumber!),
                   if (receipt != null) ...<Widget>[
                     _Row(
                       label: 'متبقي الفاتورة',
                       value: CurrencyFormatter.debt(receipt.invoiceRemaining),
-                      tone: receipt.invoiceRemaining > 0
-                          ? AppColors.danger
-                          : AppColors.success,
+                      tone: receipt.invoiceRemaining > 0 ? AppColors.danger : AppColors.success,
                     ),
                     _Row(
                       label: 'إجمالي مستحق الحساب',
@@ -196,9 +177,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                     if (receipt.hasSurplus)
                       _Row(
                         label: 'رصيد دائن زائد',
-                        value: CurrencyFormatter.withLabel(
-                          receipt.creditBalance,
-                        ),
+                        value: CurrencyFormatter.withLabel(receipt.creditBalance),
                         tone: AppColors.success,
                       ),
                   ],
@@ -218,10 +197,10 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final actions = <Widget>[
-                  AppSecondaryButton(
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: AppSecondaryButton(
                     label: 'طباعة',
                     icon: Icons.print_outlined,
                     height: 44,
@@ -232,14 +211,20 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                       invoice: widget.invoice,
                     ),
                   ),
-                  AppSecondaryButton(
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: AppSecondaryButton(
                     label: 'PDF',
                     icon: Icons.picture_as_pdf_outlined,
                     height: 44,
                     onPressed: () => openPaymentPdfPreview(context, payment),
                   ),
-                  if (sl<FinanceConfigRepository>().cached.whatsappEnabled)
-                    AppSecondaryButton(
+                ),
+                if (sl<FinanceConfigRepository>().cached.whatsappEnabled) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: AppSecondaryButton(
                       label: 'واتساب',
                       icon: Icons.chat_outlined,
                       height: 44,
@@ -250,28 +235,9 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                         invoice: widget.invoice,
                       ),
                     ),
-                ];
-                if (constraints.maxWidth < 400 ||
-                    MediaQuery.textScalerOf(context).scale(16) > 23) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      for (var i = 0; i < actions.length; i++) ...<Widget>[
-                        if (i > 0) const SizedBox(height: 8),
-                        actions[i],
-                      ],
-                    ],
-                  );
-                }
-                return Row(
-                  children: <Widget>[
-                    for (var i = 0; i < actions.length; i++) ...<Widget>[
-                      if (i > 0) const SizedBox(width: 8),
-                      Expanded(child: actions[i]),
-                    ],
-                  ],
-                );
-              },
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 10),
             AppPrimaryButton(
@@ -300,38 +266,18 @@ class _Row extends StatelessWidget {
     if (value.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final labelText = Text(label, style: const TextStyle(fontSize: 12));
-          final valueText = Text(
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
+          Text(
             value,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: tone,
             ),
-          );
-          if (constraints.maxWidth < 360 ||
-              MediaQuery.textScalerOf(context).scale(16) > 23) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                labelText,
-                const SizedBox(height: 2),
-                valueText,
-                const SizedBox(height: 6),
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(flex: 2, child: labelText),
-              const SizedBox(width: 12),
-              Expanded(flex: 3, child: valueText),
-            ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }

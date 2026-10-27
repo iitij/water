@@ -82,6 +82,42 @@ void main() {
     expect(find.text('المشتركون'), findsNothing);
   });
 
+  testWidgets(
+    'search survives category changes and opens the matching service',
+    (tester) async {
+      final opened = <String>[];
+      await tester.pumpWidget(
+        _app(ServicesDirectory(can: (_) => true, onNavigate: opened.add)),
+      );
+
+      // Arabic alef variants are normalized by the catalog search.
+      await tester.enterText(find.byType(TextField), 'ايصالات');
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(WorkspaceTile, 'سندات القبض'), findsOneWidget);
+
+      await tester.ensureVisible(find.widgetWithText(AppFilterChip, 'التقارير والإدارة'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppFilterChip, 'التقارير والإدارة'));
+      await tester.pumpAndSettle();
+      expect(find.text('لم نجد خدمة بهذا الاسم'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'ايصالات',
+      );
+
+      await tester.ensureVisible(find.widgetWithText(AppFilterChip, 'الكل'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppFilterChip, 'الكل'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(WorkspaceTile, 'سندات القبض'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(WorkspaceTile, 'سندات القبض'));
+      expect(opened, [RouteNames.payments]);
+    },
+  );
+
   testWidgets('directory updates immediately when permissions change', (tester) async {
     await tester.pumpWidget(_app(ServicesDirectory(can: (_) => true, onNavigate: (_) {})));
     await tester.enterText(find.byType(TextField), 'المستخدمون');
@@ -92,6 +128,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(WorkspaceTile, 'المستخدمون'), findsNothing);
     expect(find.text('0 خدمة متاحة'), findsOneWidget);
+  });
+
+  testWidgets('service directory shows two cards side by side on a phone', (tester) async {
+    tester.view.physicalSize = const Size(390, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app(ServicesDirectory(can: (_) => true, onNavigate: (_) {}), dark: true));
+    await tester.pumpAndSettle();
+    final first = tester.getRect(find.byType(WorkspaceTile).at(0));
+    final second = tester.getRect(find.byType(WorkspaceTile).at(1));
+    expect((first.center.dy - second.center.dy).abs(), lessThan(2));
+    expect(first.right <= second.left || second.right <= first.left, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   for (final width in [320.0, 390.0, 1024.0]) {
@@ -110,6 +161,11 @@ void main() {
         await tester.pumpWidget(_app(ServicesDirectory(can: (_) => true, onNavigate: (_) {}), scale: scale));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        if (width <= 390 && scale == 2.0) {
+          await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
       });
     }
   }

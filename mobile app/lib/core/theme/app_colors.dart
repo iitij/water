@@ -1,66 +1,66 @@
 import 'package:flutter/material.dart';
 
-/// Marine blue identity shared by the app's light and dark workspaces.
-/// Blue marks navigation and actions; green, amber and red retain their
+/// Green identity shared by the app's light and dark workspaces.
+/// Green marks navigation and actions; amber and red retain their
 /// operational meaning and always appear alongside a readable label.
 /// Legacy names remain available to keep existing screens on the same palette.
 abstract final class AppColors {
   // ── Brand accent ─────────────────────────────────────────────────────────
   /// The single brand colour. Primary actions, active navigation, key figures.
-  static const accent = Color(0xFF1265C8);
+  static const accent = Color(0xFF176B4D);
 
   /// Pressed / hover state of [accent].
-  static const accentStrong = Color(0xFF084991);
+  static const accentStrong = Color(0xFF0E5038);
 
   /// Low-emphasis accent wash for selected rows, active tabs and panels.
-  static const accentSoft = Color(0xFFE8F2FF);
+  static const accentSoft = Color(0xFFDDF3E7);
 
   /// Text and icons placed on top of [accent].
   static const onAccent = Color(0xFFFFFFFF);
 
   // ── Ink (light theme text) ───────────────────────────────────────────────
-  static const ink = Color(0xFF142B46);
-  static const inkSoft = Color(0xFF3E5570);
-  static const muted = Color(0xFF566A80);
+  static const ink = Color(0xFF17352B);
+  static const inkSoft = Color(0xFF38594B);
+  static const muted = Color(0xFF4F685C);
 
   // ── Light surfaces ───────────────────────────────────────────────────────
-  static const paper = Color(0xFFF1F5FA);
+  static const paper = Color(0xFFF2F7F3);
   static const surface = Color(0xFFFFFFFF);
-  static const surfaceAlt = Color(0xFFEAF0F7);
-  static const border = Color(0xFFDBE4EF);
-  static const borderStrong = Color(0xFFBACADB);
+  static const surfaceAlt = Color(0xFFE8F0E9);
+  static const border = Color(0xFFD5E3D9);
+  static const borderStrong = Color(0xFF9EB9A9);
 
   // ── Ink panel (dark summary cards, splash, login) ────────────────────────
-  static const panel = Color(0xFF102C4D);
-  static const panelElevated = Color(0xFF17416B);
+  static const panel = Color(0xFF16372B);
+  static const panelElevated = Color(0xFF24513D);
   static const panelLine = Color(0x24FFFFFF);
 
   /// Accent used *inside* the ink panel: lighter than [accent] so it keeps
   /// contrast on the dark surface.
-  static const accentOnPanel = Color(0xFF7CD9FF);
+  static const accentOnPanel = Color(0xFF8DE4B6);
   static const onPanel = Color(0xFFFFFFFF);
-  static const onPanelSoft = Color(0xFFD7E6F5);
-  static const onPanelMuted = Color(0xFFB5CBE0);
+  static const onPanelSoft = Color(0xFFD5EBDD);
+  static const onPanelMuted = Color(0xFFB7D3C2);
 
   // ── Dark surfaces ────────────────────────────────────────────────────────
-  static const darkPaper = Color(0xFF0B1423);
-  static const darkSurface = Color(0xFF142238);
-  static const darkSurfaceAlt = Color(0xFF1B2D47);
-  static const darkBorder = Color(0xFF2A405D);
-  static const darkBorderStrong = Color(0xFF48617D);
-  static const darkInk = Color(0xFFF2F7FF);
-  static const darkInkSoft = Color(0xFFCBDBEC);
-  static const darkMuted = Color(0xFFADC1D8);
-  static const darkAccent = Color(0xFF77CFFF);
-  static const darkAccentSoft = Color(0xFF193B5B);
-  static const darkPanel = Color(0xFF123658);
+  static const darkPaper = Color(0xFF0B1513);
+  static const darkSurface = Color(0xFF162420);
+  static const darkSurfaceAlt = Color(0xFF263A32);
+  static const darkBorder = Color(0xFF365347);
+  static const darkBorderStrong = Color(0xFF557467);
+  static const darkInk = Color(0xFFF2F7F3);
+  static const darkInkSoft = Color(0xFFD8E9DD);
+  static const darkMuted = Color(0xFFB6CFC0);
+  static const darkAccent = Color(0xFF58CB99);
+  static const darkAccentSoft = Color(0xFF1B4432);
+  static const darkPanel = darkSurface;
 
   // ── Semantic (text, dots, charts only) ───────────────────────────────────
   static const success = Color(0xFF157347);
   static const warning = Color(0xFF9A5B00);
   static const danger = Color(0xFFB02A37);
   static const info = Color(0xFF24639A);
-  static const neutral = Color(0xFF566A80);
+  static const neutral = muted;
 
   // ── Legacy brand aliases ─────────────────────────────────────────────────
   // Kept so existing screens compile; they now resolve to the single accent.

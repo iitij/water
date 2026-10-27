@@ -33,7 +33,7 @@ class LogApiRequests
         $requestTime = now()->format('Y-m-d H:i:s');
 
         // لا نسجل طلبات السجلات نفسها لتجنب الحلقات اللانهائية
-        $isLogRoute = str_contains($request->path(), 'api-logs') || str_contains($request->path(), 'system/logs');
+        $isLogRoute = str_contains($request->path(), 'api-logs') || str_contains($request->path(), 'system/logs') || str_contains($request->path(), 'developer/');
 
         // تنظيف البيانات الحساسة (كلمات المرور، التوكنات، أرقام البطاقات، PIN)
         $sanitizedPayload = $this->sanitizeData($request->all());

@@ -3,6 +3,7 @@
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
   "updated_at": "2026-10-27",
+  "ux_revert": "بطلب المستخدم ألغيت دفعة UX-01 إلى UX-05 واستعيدت ملفاتها من 7feff2f؛ حُفظت أعمال UX-SIMPLIFY وإصلاح Dashboard المستقلة. flutter test --no-pub --concurrency=1: 468 PASS؛ flutter analyze --no-pub: No issues found!؛ السجلان mobile app/build/ux-revert-tests.log وux-revert-analyze.log.",
   "branch": "arena/9da3be61-water",
   "status_values": [
    "todo",
@@ -38,7 +39,7 @@
    "status": "done",
    "verification_status": "local_tests_passed",
    "owner_acceptance": "not_tested",
-   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_catalog_test.dart test/home/permission_navigation_test.dart: 12 PASS؛ test/home/workspace_views_test.dart: 11 PASS؛ test/home/workspace_routes_test.dart: 6 PASS؛ لا قبول جهاز. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
+   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_catalog_test.dart test/home/permission_navigation_test.dart: 12 PASS؛ test/home/workspace_views_test.dart: 11 PASS؛ test/home/workspace_routes_test.dart: 7 PASS بينها رفض مسارات المستخدمين والأدوار؛ لا قبول جهاز. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
   },
   {
    "id": "UX-SIMPLIFY-02",
@@ -49,7 +50,7 @@
    "status": "done",
    "verification_status": "local_tests_passed",
    "owner_acceptance": "not_tested",
-   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_routes_test.dart test/features/payments/receipts_collection_entry_test.dart: 7 PASS؛ flutter analyze --no-pub لملفات التحصيل المعدلة: No issues found. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
+   "evidence": "flutter test --no-pub --concurrency=1 test/home/workspace_routes_test.dart test/features/payments/receipts_collection_entry_test.dart: 9 PASS بينها إخفاء زر التحصيل دون صلاحية؛ flutter analyze --no-pub لملفات التحصيل المعدلة: No issues found. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
   },
   {
    "id": "UX-SIMPLIFY-03",
@@ -61,66 +62,6 @@
    "verification_status": "local_tests_passed",
    "owner_acceptance": "not_tested",
    "evidence": "flutter test --no-pub --concurrency=1 test/core/backup/local_backup_test.dart test/core/backup/database_restore_guard_test.dart: 18 PASS؛ استعادة الطابور اختيار صريح وحارس قاعدة البيانات يمنع استبدال العمليات والقراءات المحلية المعلقة. docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md"
-  },
-  {
-   "id": "UX-05",
-   "sprint": "OWNER-UX",
-   "agent": "A9",
-   "subagent": "resource-forms",
-   "task": "تقليل تعقيد الفاتورة اليدوية ومنع اختفاء نموذج الخدمة والمربع عند فشل الحفظ",
-   "files": "mobile app/lib/features/{invoices,service_requests,squares,transactions,users_roles,exports}/presentation/**, mobile app/lib/core/l10n/resource_ux_strings.dart",
-   "definition_of_done": "الحقول الإضافية قابلة للفتح دون فقد قيمها؛ خطأ واضح والتحقق من الاسم والمبلغ والمشترك؛ حفظ مرة واحدة مع بقاء النموذج والمدخلات عند الفشل؛ عناوين عربية مفهومة؛ اختبارات",
-   "status": "doing",
-   "evidence": "إسناد A1 لملكية واجهات الموارد غير المسندة في الجدول الأساسي موثق في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md؛ لا تعديل عقود API أو الحسابات.",
-   "owner_acceptance": "not_tested"
-  },
-  {
-   "id": "UX-01",
-   "sprint": "OWNER-UX",
-   "agent": "A1",
-   "subagent": "owner-screen-review",
-   "task": "جرد الشاشات وتجربة صاحب المشروع قليل الخبرة",
-   "files": "docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
-   "definition_of_done": "جرد 54 شاشة والأسطح المساندة مع قرارات تصميم وحدود تحقق واختبارات قبول واضحة",
-   "status": "done",
-   "evidence": "rg --files lib مع ترشيح _screen.dart أعاد 54 ملفاً؛ مقارنة أسماء الملفات مع جدول المراجعة لم تجد شاشة ناقصة. مراجعة مصدرية لا تعني قبول جهاز.",
-   "owner_acceptance": "not_tested"
-  },
-  {
-   "id": "UX-02",
-   "sprint": "OWNER-UX",
-   "agent": "A9",
-   "subagent": "owner-navigation",
-   "task": "رئيسية تبدأ بالمهام ودليل خدمات ومكونات تتحمل النص الكبير",
-   "files": "mobile app/lib/features/home/**, mobile app/lib/features/navigation/**, mobile app/lib/core/ui/**, mobile app/lib/core/l10n/owner_ux_strings.dart",
-   "definition_of_done": "مهام بصلاحياتها وملخص مالي واضح ودليل بحث سهل؛ لمس 48dp ونص RTL كبير بلا قص للإجراءات الأساسية؛ اختبار تنقل وحالات عرض",
-   "status": "doing",
-   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
-   "owner_acceptance": "not_tested"
-  },
-  {
-   "id": "UX-03",
-   "sprint": "OWNER-UX",
-   "agent": "A7",
-   "subagent": "owner-collection",
-   "task": "تبسيط التحصيل وإظهار نتيجة السند وفرق عد الصندوق",
-   "files": "mobile app/lib/features/payments/**, mobile app/lib/features/cash_sessions/**, mobile app/lib/core/l10n/finance_ux_strings.dart",
-   "definition_of_done": "الاختياري قابل للفتح ويحفظ المدخلات؛ نتيجة الحفظ من الحالة المحدثة؛ فرق العدد ظاهر؛ مسح البحث يحافظ على المربع؛ اختبارات سلوك",
-   "status": "doing",
-   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
-   "owner_acceptance": "not_tested"
-  },
-  {
-   "id": "UX-04",
-   "sprint": "OWNER-UX",
-   "agent": "A8",
-   "subagent": "owner-meter-reading",
-   "task": "اختيار مالك العداد بالبحث وتوجيه إدخال القراءة",
-   "files": "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart, mobile app/lib/features/readings/presentation/pages/submit_reading_screen.dart, mobile app/lib/core/l10n/field_ux_strings.dart",
-   "definition_of_done": "بحث مشترك بالاسم والمربع واختيار واضح؛ خطأ اختيار داخل الحقل؛ إعادة تحميل ناجحة بعد الفشل؛ حفظ القراءة والعداد بالمسار الحالي؛ اختبارات",
-   "status": "doing",
-   "evidence": "التنفيذ تحت التحقق؛ الدليل النهائي في docs/v2/OWNER_UX_REVIEW_2026-10-27_AR.md",
-   "owner_acceptance": "not_tested"
   },
   {
    "id": "S1-01",
@@ -1200,6 +1141,50 @@
   "verification_status": "local_tests_passed",
   "owner_acceptance": "not_tested",
   "evidence": "تقريرQA بأوامرPHP/Flutter ونتائجفعلية؛ نقل ملكية العداد وجماعيالتعرفة موجودان مسبقًا؛ لاادعاءقبولأجهزةأوإطلاقإنتاجي"
+},
+{
+  "id": "RUNTIME-20261027-01",
+  "sprint": "S9",
+  "agent": "A1+A10",
+  "task": "معالجة إصدار DashboardCubit للحالة بعد إغلاق الشاشة أثناء انتظار API",
+  "files": "mobile app/lib/features/dashboard/presentation/cubit/dashboard_cubit.dart; mobile app/test/dashboard/dashboard_cubit_lifecycle_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub --concurrency=1 test/dashboard/dashboard_cubit_lifecycle_test.dart: 2 PASS؛ flutter analyze للملفين: No issues found؛ Laragon MySQL 127.0.0.1:3306 متصل و php artisan db:show أكد water؛ GET /api/admin/dashboard دون توكن و Accept: application/json أعاد 401 بعد زوال خطأ الاتصال؛ لا إثبات لاستجابة المستخدم المصادق"
+},
+{
+  "id": "UX-SERVICES-20261027-01",
+  "sprint": "OWNER-UX",
+  "agent": "A9+A10",
+  "task": "إعادة تصميم شاشة كل الخدمات مع الحفاظ على البحث والتصفية والتنقل والصلاحيات",
+  "files": "mobile app/lib/features/home/presentation/services_screen.dart; mobile app/lib/features/home/presentation/widgets/workspace_widgets.dart; mobile app/test/home/workspace_views_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "عُدّل دليل الخدمات إلى شبكة بطاقات بعمودين على عرض 390px مع أيقونة أعلى ونص أسفل، وعمود مرن عند العرض الضيق أو تكبير النص؛ dart analyze --fatal-infos للملفين المعدلين: No issues found؛ flutter test --no-pub --concurrency=1 test/home/workspace_views_test.dart: 13 PASS بما فيها تخطيط البطاقتين وعرض 320/390px مع تكبير النص 200%، والبحث العربي والتصفية والتنقل؛ git diff --check نجح. لم يجر فحص مرئي على جهاز."
+},
+{
+  "id": "UX-THEME-20261027-01",
+  "sprint": "OWNER-UX",
+  "agent": "A9+A10",
+  "task": "تطبيق ألوان الوضع الداكن المحددة وإصلاح ألوان الوضع الفاتح وتباين المكونات المشتركة",
+  "files": "mobile app/lib/core/theme/app_colors.dart; mobile app/lib/core/theme/app_theme.dart; mobile app/lib/core/ui/app_surfaces.dart; mobile app/lib/core/ui/app_controls.dart; mobile app/lib/core/ui/app_tiles.dart; mobile app/test/core/theme/app_theme_palette_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "dart analyze للملفات الستة الخاصة بالثيم والاختبار: No issues found؛ flutter test --no-pub --concurrency=1 test/core/theme/app_theme_palette_test.dart test/ui/water_experience_test.dart --reporter expanded: 16 passed، exit 0. اختبارات محلية فقط؛ لم تُراجع الواجهة على جهاز."
+},
+{
+  "id": "DEV-MODE-20261027-01",
+  "sprint": "S9",
+  "agent": "A1+A2+A6+A9+A10",
+  "task": "وضع مطور محمي بPIN متغير من Laravel، تغيير رابط الخادم، إظهار إعدادات واتساب، وإرسال سجلات هاتف منقحة وعرضها في Filament",
+  "files": "mobile app/lib/core/security/developer_access_service.dart; mobile app/lib/features/navigation/presentation/pages/developer_mode_sheet.dart; mobile app/lib/core/network/interceptors/api_log_interceptor.dart; app/Http/Controllers/Api/MobileDeveloperController.php; app/Filament/Pages/MobileDeveloperSettings.php; app/Filament/Resources/MobileAppLogResource.php; docs/V2_S1_HANDOVER.md; tests/Feature/MobileDeveloperModeTest.php; mobile app/test/core/security/developer_access_service_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "php artisan test tests/Feature/MobileDeveloperModeTest.php: 4 PASS و25 assertions؛ flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart: 4 PASS بينها بوابة الواجهة وحجب المنحة؛ dart analyze للملفات الثمانية المعدلة واختبارها: No issues found؛ php artisan route:list --path=api/developer: 3 routes. اكتشف الاختبار خلل تثبيت سجل إعدادات المطور وأُصلح. لم يُنفذ ترحيل الإنتاج أو فحص جهاز فعلي."
 }
 ]
 }

@@ -4,7 +4,6 @@ import '../../../core/error/failures.dart';
 import '../../../core/finance/finance_feedback.dart';
 import '../../../core/finance/finance_fields.dart';
 import '../../../core/finance/finance_locator.dart';
-import '../../../core/l10n/finance_ux_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_controls.dart';
 import '../../../core/ui/app_surfaces.dart';
@@ -445,34 +444,18 @@ class _OpenSessionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Text(
-                FinanceUxStrings.closeDay,
+                'إغلاق الصندوق',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const Gap(4),
-              const Text(FinanceUxStrings.closeDayHint),
+              const Text(
+                'عُدّ النقد فعلياً؛ الفرق يُحسب تلقائياً ويُسجَّل في سجل التدقيق.',
+              ),
               const Gap(AppSpacing.md),
               AppNumericField(
                 controller: countedController,
                 label: 'المبلغ المعدود نقداً',
                 prefixText: 'ريال',
-              ),
-              const Gap(AppSpacing.sm),
-              const Text(FinanceUxStrings.cashCountHint),
-              const Gap(AppSpacing.sm),
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: countedController,
-                builder: (context, value, _) {
-                  final counted = double.tryParse(
-                    value.text.replaceAll(',', ''),
-                  );
-                  if (counted == null || !counted.isFinite || counted < 0) {
-                    return const SizedBox.shrink();
-                  }
-                  return CashCountPreview(
-                    counted: counted,
-                    expected: session.expectedAmount,
-                  );
-                },
               ),
               const Gap(AppSpacing.sm),
               TextField(
@@ -573,36 +556,6 @@ class _AmountRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Live comparison lets the collector check their count before sending it.
-class CashCountPreview extends StatelessWidget {
-  const CashCountPreview({
-    super.key,
-    required this.counted,
-    required this.expected,
-  });
-  final double counted;
-  final double expected;
-
-  @override
-  Widget build(BuildContext context) {
-    final difference = counted - expected;
-    final matches = difference.abs() < .01;
-    return Semantics(
-      liveRegion: true,
-      child: AppNotice(
-        title: matches
-            ? FinanceUxStrings.cashMatches
-            : difference < 0
-            ? FinanceUxStrings.cashShortage
-            : FinanceUxStrings.cashSurplus,
-        message: CurrencyFormatter.withLabel(difference.abs()),
-        icon: matches ? Icons.check_circle_outline : Icons.info_outline,
-        color: matches ? AppColors.success : AppColors.warning,
       ),
     );
   }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController as ApiExportController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MeterController;
+use App\Http\Controllers\Api\MobileDeveloperController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReadingController;
 use App\Http\Controllers\Api\ReadingFaultController;
@@ -31,6 +32,9 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login'])->name('api.login');
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/developer/verify-pin', [MobileDeveloperController::class, 'verifyPin'])->middleware('throttle:5,1');
+    Route::get('/developer/config', [MobileDeveloperController::class, 'config']);
+    Route::post('/developer/mobile-logs', [MobileDeveloperController::class, 'storeLogs'])->middleware('throttle:10,1');
     // Authentication, current user and profile (legacy aliases remain available).
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     // تدوير التوكن عند أول 401 (خطة 2.0 — الفصل 9.1).

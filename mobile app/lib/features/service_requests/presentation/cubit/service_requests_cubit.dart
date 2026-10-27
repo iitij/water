@@ -36,27 +36,19 @@ class ServiceRequestsState extends Equatable {
     bool clearUntil = false,
     Set<int>? selectedIds,
     String? error,
-  }) => ServiceRequestsState(
-    loading: loading ?? this.loading,
-    requests: requests ?? this.requests,
-    totalSum: totalSum ?? this.totalSum,
-    status: clearStatus ? null : (status ?? this.status),
-    from: clearFrom ? null : (from ?? this.from),
-    until: clearUntil ? null : (until ?? this.until),
-    selectedIds: selectedIds ?? this.selectedIds,
-    error: error,
-  );
+  }) =>
+      ServiceRequestsState(
+        loading: loading ?? this.loading,
+        requests: requests ?? this.requests,
+        totalSum: totalSum ?? this.totalSum,
+        status: clearStatus ? null : (status ?? this.status),
+        from: clearFrom ? null : (from ?? this.from),
+        until: clearUntil ? null : (until ?? this.until),
+        selectedIds: selectedIds ?? this.selectedIds,
+        error: error,
+      );
   @override
-  List<Object?> get props => [
-    loading,
-    requests,
-    totalSum,
-    status,
-    from,
-    until,
-    selectedIds,
-    error,
-  ];
+  List<Object?> get props => [loading, requests, totalSum, status, from, until, selectedIds, error];
 }
 
 class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
@@ -73,34 +65,19 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
         from: state.from,
         until: state.until,
       );
-      emit(
-        state.copyWith(
-          loading: false,
-          requests: page.requests,
-          totalSum: page.totalSum,
-        ),
-      );
+      emit(state.copyWith(loading: false, requests: page.requests, totalSum: page.totalSum));
     } catch (e) {
       emit(state.copyWith(loading: false, error: friendlyError(e)));
     }
   }
 
   void filterStatus(TankerStatus? s) {
-    emit(
-      s == null ? state.copyWith(clearStatus: true) : state.copyWith(status: s),
-    );
+    emit(s == null ? state.copyWith(clearStatus: true) : state.copyWith(status: s));
     load();
   }
 
   void filterRange(String? from, String? until) {
-    emit(
-      state.copyWith(
-        from: from,
-        clearFrom: from == null,
-        until: until,
-        clearUntil: until == null,
-      ),
-    );
+    emit(state.copyWith(from: from, clearFrom: from == null, until: until, clearUntil: until == null));
     load();
   }
 
@@ -112,7 +89,7 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
 
   void clearSelection() => emit(state.copyWith(selectedIds: const {}));
 
-  Future<bool> create({
+  Future<void> create({
     required int subscriberId,
     required double amount,
     String? serviceDate,
@@ -123,18 +100,14 @@ class ServiceRequestsCubit extends Cubit<ServiceRequestsState> {
       await _repo.createRequest(
         subscriberId: subscriberId,
         amount: amount,
-        serviceDate:
-            serviceDate ?? DateTime.now().toIso8601String().substring(0, 10),
+        serviceDate: serviceDate ?? DateTime.now().toIso8601String().substring(0, 10),
         status: status,
         notes: notes,
       );
+      await load();
     } catch (e) {
-      if (!isClosed) emit(state.copyWith(error: friendlyError(e)));
-      return false;
+      emit(state.copyWith(error: friendlyError(e)));
     }
-    // The request exists even if refreshing the list cannot reach the server.
-    if (!isClosed) await load();
-    return true;
   }
 
   Future<void> updateRequest(ServiceRequest request) async {
