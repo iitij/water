@@ -74,8 +74,9 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
   }
 
   Future<void> _save() async {
-    if (_saving || !widget.request.canEdit || !_form.currentState!.validate())
+    if (_saving || !widget.request.canEdit || !_form.currentState!.validate()) {
       return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -101,11 +102,12 @@ class _ServiceRequestEditSheetState extends State<ServiceRequestEditSheet> {
         Navigator.pop(context, true);
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _saving = false;
           _error = friendlyError(error);
         });
+      }
     }
   }
 

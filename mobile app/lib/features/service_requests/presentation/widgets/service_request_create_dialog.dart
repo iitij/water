@@ -62,8 +62,9 @@ class _ServiceRequestCreateDialogState
       if (!mounted ||
           _saving ||
           _subscriber?.id != subscriber.id ||
-          _amount.text != previousInput)
+          _amount.text != previousInput) {
         return;
+      }
       if (last != null) _amount.text = last.toStringAsFixed(0);
     } catch (_) {
       // The optional previous-price suggestion must not block a new request.
@@ -74,8 +75,9 @@ class _ServiceRequestCreateDialogState
     if (_saving) return;
     final validAmount = _form.currentState?.validate() ?? false;
     final subscriber = _subscriber;
-    if (subscriber == null)
+    if (subscriber == null) {
       setState(() => _error = ResourceUxStrings.subscriberRequired);
+    }
     if (!validAmount || subscriber == null) return;
     FocusScope.of(context).unfocus();
     setState(() {
@@ -168,8 +170,9 @@ class _ServiceRequestCreateDialogState
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2100),
                         );
-                        if (picked != null && mounted)
+                        if (picked != null && mounted) {
                           setState(() => _date = picked);
+                        }
                       },
               ),
               DropdownButtonFormField<TankerStatus>(

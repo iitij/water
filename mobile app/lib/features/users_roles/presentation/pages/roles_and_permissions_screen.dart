@@ -116,11 +116,12 @@ class _RolesView extends StatelessWidget {
         onRetry: () => context.read<RolesCubit>().load(),
       );
     }
-    if (state.roles.isEmpty)
+    if (state.roles.isEmpty) {
       return const AdminEmptyView(
         title: 'لا توجد أدوار بعد',
         icon: Icons.admin_panel_settings_outlined,
       );
+    }
     final selectionCount = state.selectedIds.length;
     return Column(
       children: [
