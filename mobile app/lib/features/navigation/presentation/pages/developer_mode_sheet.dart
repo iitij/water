@@ -81,7 +81,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
   }
 
   Future<void> _changeServer() async {
-    if (!await _requireFreshFeature('server_settings')) return;
+    if (!await _requireFreshGrant()) return;
     if (!mounted) return;
     final updated = await ServerConfigSheet.show(context);
     if (!mounted || updated == null) return;
@@ -89,7 +89,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
     setState(() => _notice = DeveloperModeStrings.serverSaved);
   }
 
-  Future<bool> _requireFreshFeature(String key) async {
+  Future<bool> _requireFreshGrant() async {
     if (_busy || !_access.isUnlocked) return false;
     setState(() {
       _busy = true;
@@ -98,16 +98,11 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
     });
     final refreshed = await _access.refreshConfig();
     if (!mounted) return false;
-    final enabled = refreshed && _access.isFeatureEnabled(key);
     setState(() {
       _busy = false;
-      if (!enabled) {
-        _error = refreshed
-            ? DeveloperModeStrings.featureDisabled
-            : DeveloperModeStrings.refreshFailed;
-      }
+      if (!refreshed) _error = DeveloperModeStrings.refreshFailed;
     });
-    return enabled;
+    return refreshed;
   }
 
   Future<void> _uploadLogs() async {
@@ -189,7 +184,10 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
   }
 
   Future<void> _openWhatsAppSettings() async {
-    if (!await _requireFreshFeature('whatsapp_settings')) return;
+    if (!_access.isFeatureEnabled('whatsapp_settings') ||
+        !await _requireFreshGrant()) {
+      return;
+    }
     if (!mounted) return;
     Navigator.of(context).pop();
     if (widget.pageContext.mounted) {
@@ -276,17 +274,16 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                 Card(
                   child: Column(
                     children: <Widget>[
-                      if (_access.isFeatureEnabled('server_settings'))
-                        ListTile(
-                          leading: const Icon(Icons.dns_outlined),
-                          title: const Text(DeveloperModeStrings.changeServer),
-                          subtitle: Text(
-                            AppConfig.apiBaseUrl,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: _changeServer,
+                      ListTile(
+                        leading: const Icon(Icons.dns_outlined),
+                        title: const Text(DeveloperModeStrings.changeServer),
+                        subtitle: Text(
+                          AppConfig.apiBaseUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        onTap: _changeServer,
+                      ),
                       if (_access.isFeatureEnabled('whatsapp_settings'))
                         ListTile(
                           leading: const Icon(Icons.chat_rounded),
@@ -294,7 +291,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                             DeveloperModeStrings.whatsappSettings,
                           ),
                           subtitle: const Text(
-                            DeveloperModeStrings.visibleByLaravel,
+                            DeveloperModeStrings.visibleOnDevice,
                           ),
                           onTap: _openWhatsAppSettings,
                         ),
@@ -321,26 +318,38 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                if (features.isEmpty)
-                  const Text(DeveloperModeStrings.noFeatures)
-                else
-                  ...features.entries.map(
-                    (feature) => SwitchListTile(
-                      title: Text(switch (feature.key) {
-                        'whatsapp_settings' =>
-                          DeveloperModeStrings.whatsappSettings,
-                        'mobile_logs' => DeveloperModeStrings.sendLogsFeature,
-                        'server_settings' =>
-                          DeveloperModeStrings.serverSettings,
-                        _ => feature.key,
-                      }),
-                      subtitle: const Text(
-                        DeveloperModeStrings.managedInLaravel,
-                      ),
-                      value: feature.value,
-                      onChanged: null,
-                    ),
+                ...features.entries.map(
+                  (feature) => SwitchListTile(
+                    title: Text(switch (feature.key) {
+                      'whatsapp_settings' =>
+                        DeveloperModeStrings.whatsappSettings,
+                      'mobile_logs' => DeveloperModeStrings.sendLogsFeature,
+                      'diagnostics' => DeveloperModeStrings.diagnostics,
+                      'api_logs' => DeveloperModeStrings.apiLogs,
+                      'server_card' => DeveloperModeStrings.serverCard,
+                      _ => feature.key,
+                    }),
+                    subtitle: const Text(DeveloperModeStrings.savedOnDevice),
+                    value: feature.value,
+                    onChanged: _busy
+                        ? null
+                        : (enabled) async {
+                            try {
+                              await _access.setFeatureEnabled(
+                                feature.key,
+                                enabled,
+                              );
+                            } catch (_) {
+                              if (mounted) {
+                                setState(
+                                  () => _error =
+                                      DeveloperModeStrings.saveVisibilityFailed,
+                                );
+                              }
+                            }
+                          },
                   ),
+                ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () {

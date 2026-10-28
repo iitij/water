@@ -4,7 +4,6 @@ namespace App\Filament\Pages;
 
 use App\Models\MobileDeveloperSetting;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -33,11 +32,8 @@ class MobileDeveloperSettings extends Page implements HasForms
     public function mount(): void
     {
         abort_unless(static::canAccess(), 403);
-        $settings = MobileDeveloperSetting::current();
         $this->form->fill([
             'pin' => '',
-            'show_whatsapp_settings' => $settings->show_whatsapp_settings,
-            'allow_log_upload' => $settings->allow_log_upload,
         ]);
     }
 
@@ -50,11 +46,6 @@ class MobileDeveloperSettings extends Page implements HasForms
                 ->revealable()
                 ->rule('regex:/^[0-9]{5,12}$/')
                 ->helperText('اتركه فارغاً للإبقاء على الرمز الحالي. تغيير الرمز يلغي جلسات المطور المفتوحة.'),
-            Toggle::make('show_whatsapp_settings')
-                ->label('إظهار إعدادات واتساب داخل وضع المطور'),
-            Toggle::make('allow_log_upload')
-                ->label('السماح برفع سجلات تطبيق الهاتف')
-                ->helperText('يرفع التطبيق السجلات فقط عند طلب المطور من الجهاز.'),
         ])->statePath('data');
     }
 
@@ -66,12 +57,8 @@ class MobileDeveloperSettings extends Page implements HasForms
         if (! empty($data['pin'])) {
             $settings->pin_hash = Hash::make($data['pin']);
         }
-        $settings->show_whatsapp_settings = (bool) ($data['show_whatsapp_settings'] ?? false);
-        $settings->allow_log_upload = (bool) ($data['allow_log_upload'] ?? false);
         $settings->save();
-        $this->form->fill(['pin' => '',
-            'show_whatsapp_settings' => $settings->show_whatsapp_settings,
-            'allow_log_upload' => $settings->allow_log_upload]);
+        $this->form->fill(['pin' => '']);
         Notification::make()->success()->title('تم حفظ إعدادات مطور الهاتف')->send();
     }
 }

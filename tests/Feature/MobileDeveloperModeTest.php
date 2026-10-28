@@ -25,8 +25,7 @@ class MobileDeveloperModeTest extends TestCase
         $response = $this->actingAs($user, 'sanctum')
             ->postJson('/api/developer/verify-pin', ['pin' => '77288'])
             ->assertOk()
-            ->assertJsonPath('authorized', true)
-            ->assertJsonPath('features.server_settings', true);
+            ->assertJsonPath('authorized', true);
 
         $this->assertSame(64, strlen($response->json('grant')));
         $this->assertTrue(Hash::check('77288', MobileDeveloperSetting::current()->pin_hash));
@@ -44,7 +43,8 @@ class MobileDeveloperModeTest extends TestCase
         $this->actingAs($owner, 'sanctum')
             ->withHeaders(['X-Device-Id' => 'device-A', 'X-Developer-Grant' => $grant])
             ->getJson('/api/developer/config')
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('authorized', true);
 
         $this->actingAs($other, 'sanctum')
             ->withHeaders(['X-Device-Id' => 'device-A', 'X-Developer-Grant' => $grant])
@@ -71,7 +71,7 @@ class MobileDeveloperModeTest extends TestCase
             ->assertOk();
     }
 
-    public function test_mobile_log_upload_needs_grant_and_admin_opt_in_and_redacts_secrets(): void
+    public function test_mobile_log_upload_needs_grant_and_redacts_secrets(): void
     {
         $user = User::factory()->create();
         $payload = ['logs' => [[
@@ -90,13 +90,6 @@ class MobileDeveloperModeTest extends TestCase
             ->json('grant');
         $this->withHeader('X-Developer-Grant', $grant)
             ->postJson('/api/developer/mobile-logs', $payload)
-            ->assertForbidden();
-
-        $settings = MobileDeveloperSetting::current();
-        $settings->allow_log_upload = true;
-        $settings->save();
-        $this->withHeader('X-Developer-Grant', $grant)
-            ->postJson('/api/developer/mobile-logs', $payload)
             ->assertOk()
             ->assertJsonPath('received_count', 1);
 
@@ -109,9 +102,6 @@ class MobileDeveloperModeTest extends TestCase
     public function test_mobile_log_upload_is_bounded_to_fifty_entries(): void
     {
         $user = User::factory()->create();
-        $settings = MobileDeveloperSetting::current();
-        $settings->allow_log_upload = true;
-        $settings->save();
         $grant = $this->actingAs($user, 'sanctum')
             ->postJson('/api/developer/verify-pin', ['pin' => '77288'])
             ->assertOk()

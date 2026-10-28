@@ -19,22 +19,23 @@ abstract final class DeveloperModeStrings {
   static const grantExpired = 'انتهت صلاحية وضع المطور. أعد تفعيله.';
   static const refreshFailed =
       'تعذر التأكد من إعدادات المطور الحالية. تحقق من الاتصال ثم أعد المحاولة.';
-  static const featureDisabled = 'هذه الميزة معطّلة من لوحة Laravel.';
+  static const saveVisibilityFailed = 'تعذر حفظ خيار الإظهار على هذا الجهاز.';
   static const uploadFailed = 'تعذر إرسال السجلات. تحقق من اتصال الخادم.';
   static const uploadFailedShort = 'تعذر إرسال السجلات.';
   static const recoveryHint =
       'إذا تغيّر عنوان الخادم وتعذر الاتصال، استخدم خيار تغيير الخادم في شاشة الدخول.';
   static const changeServer = 'تغيير رابط الخادم';
   static const whatsappSettings = 'إعدادات واتساب';
-  static const visibleByLaravel = 'تظهر وفق إعداد Laravel';
+  static const visibleOnDevice = 'تظهر وفق إعداد هذا الجهاز';
   static const sendLogs = 'إرسال سجلات التطبيق إلى Laravel';
   static const sendLogsFeature = 'إرسال سجلات التطبيق';
   static const logsPrivacy = 'آخر 50 عملية، دون بيانات الطلبات الحساسة';
   static const openLocalLogs = 'فتح سجلات API المحلية';
-  static const managedFeatures = 'الميزات التي يديرها Laravel';
-  static const noFeatures = 'لا توجد إعدادات إظهار متاحة حالياً.';
-  static const managedInLaravel = 'تُغيّر من لوحة Laravel';
-  static const serverSettings = 'إعدادات الخادم';
+  static const managedFeatures = 'إظهار أو إخفاء ميزات التطبيق';
+  static const savedOnDevice = 'يُحفظ خيار الإظهار على هذا الجهاز';
+  static const diagnostics = 'التشخيص والدعم';
+  static const apiLogs = 'سجلات API';
+  static const serverCard = 'بطاقة الخادم';
   static const close = 'إغلاق وضع المطور';
   static const closed = 'أُغلق وضع المطور.';
 

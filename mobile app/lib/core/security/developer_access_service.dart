@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// وضع المطور صلاحية مؤقتة يؤكدها Laravel. لا يُحفظ رقم الحماية أو المنحة محلياً.
 enum DeveloperUnlockResult { success, wrongPin, rateLimited, unavailable }
@@ -13,18 +14,44 @@ class DeveloperAccessService extends ChangeNotifier {
   final DateTime Function() _now;
   String? _grant;
   DateTime? _expiresAt;
-  Map<String, bool> _features = const <String, bool>{};
+  static const Map<String, bool> defaultFeatures = <String, bool>{
+    'whatsapp_settings': false,
+    'mobile_logs': true,
+    'diagnostics': true,
+    'api_logs': false,
+    'server_card': true,
+  };
+  final Map<String, bool> _features = Map<String, bool>.from(defaultFeatures);
+  static const String _preferencePrefix = 'developer_visible.';
 
   bool get isUnlocked =>
       _grant != null && _expiresAt != null && _now().isBefore(_expiresAt!);
 
   String? get grant => isUnlocked ? _grant : null;
 
-  Map<String, bool> get features => isUnlocked
-      ? Map<String, bool>.unmodifiable(_features)
-      : const <String, bool>{};
+  Map<String, bool> get features => Map<String, bool>.unmodifiable(_features);
 
-  bool isFeatureEnabled(String key) => isUnlocked && (_features[key] ?? false);
+  bool isFeatureEnabled(String key) => _features[key] ?? false;
+
+  Future<void> loadVisibility() async {
+    final preferences = await SharedPreferences.getInstance();
+    for (final entry in defaultFeatures.entries) {
+      _features[entry.key] =
+          preferences.getBool('$_preferencePrefix${entry.key}') ?? entry.value;
+    }
+    notifyListeners();
+  }
+
+  Future<void> setFeatureEnabled(String key, bool enabled) async {
+    if (!isUnlocked) throw StateError('يلزم تفعيل وضع المطور.');
+    if (!defaultFeatures.containsKey(key)) throw ArgumentError.value(key);
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool('$_preferencePrefix$key', enabled)) {
+      throw StateError('تعذر حفظ خيار العرض.');
+    }
+    _features[key] = enabled;
+    notifyListeners();
+  }
 
   /// يفشل مغلقاً عند انقطاع الخادم؛ إصلاح عنوان الخادم متاح من مساره المستقل.
   Future<DeveloperUnlockResult> unlock(String pin) async {
@@ -49,13 +76,6 @@ class DeveloperAccessService extends ChangeNotifier {
           !expiry.isAfter(_now())) {
         return DeveloperUnlockResult.unavailable;
       }
-      final rawFeatures = data['features'];
-      _features = rawFeatures is Map
-          ? rawFeatures.map<String, bool>(
-              (key, value) =>
-                  MapEntry<String, bool>(key.toString(), value == true),
-            )
-          : const <String, bool>{};
       _grant = grant;
       _expiresAt = expiry;
       notifyListeners();
@@ -75,7 +95,7 @@ class DeveloperAccessService extends ChangeNotifier {
     }
   }
 
-  /// يجلب المفاتيح الحالية؛ تغيير PIN على الخادم يبطل المنحة فور أول تحقق.
+  /// يتحقق من صلاحية المنحة؛ تغيير PIN على الخادم يبطلها فور أول تحقق.
   /// يرجع false عند تعذر الاتصال وتبقى صلاحية المنحة الأصلية محدودة بمدتها.
   Future<bool> refreshConfig() async {
     if (!isUnlocked) {
@@ -88,12 +108,7 @@ class DeveloperAccessService extends ChangeNotifier {
         options: grantOptions,
       );
       final data = response.data;
-      if (data is! Map || data['features'] is! Map) return false;
-      _features = (data['features'] as Map).map<String, bool>(
-        (key, value) => MapEntry<String, bool>(key.toString(), value == true),
-      );
-      notifyListeners();
-      return true;
+      return data is Map && data['authorized'] == true;
     } on DioException catch (error) {
       if (error.response?.statusCode == 401 ||
           error.response?.statusCode == 403) {
@@ -112,10 +127,9 @@ class DeveloperAccessService extends ChangeNotifier {
   }
 
   void lock() {
-    if (_grant == null && _features.isEmpty) return;
+    if (_grant == null) return;
     _grant = null;
     _expiresAt = null;
-    _features = const <String, bool>{};
     notifyListeners();
   }
 }

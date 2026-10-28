@@ -1179,12 +1179,12 @@
   "id": "DEV-MODE-20261027-01",
   "sprint": "S9",
   "agent": "A1+A2+A6+A9+A10",
-  "task": "وضع مطور محمي بPIN متغير من Laravel، تغيير رابط الخادم، إظهار إعدادات واتساب، وإرسال سجلات هاتف منقحة وعرضها في Filament",
+  "task": "وضع مطور محمي بPIN متغير من Laravel، مفاتيح إظهار شاشات وخيارات الجوال محلياً، تغيير رابط الخادم، وإرسال سجلات منقحة وعرضها في Filament",
   "files": "mobile app/lib/core/security/developer_access_service.dart; mobile app/lib/features/navigation/presentation/pages/developer_mode_sheet.dart; mobile app/lib/core/network/interceptors/api_log_interceptor.dart; app/Http/Controllers/Api/MobileDeveloperController.php; app/Filament/Pages/MobileDeveloperSettings.php; app/Filament/Resources/MobileAppLogResource.php; docs/V2_S1_HANDOVER.md; tests/Feature/MobileDeveloperModeTest.php; mobile app/test/core/security/developer_access_service_test.dart",
   "status": "done",
   "verification_status": "local_tests_passed",
   "owner_acceptance": "not_tested",
-  "evidence": "php artisan test tests/Feature/MobileDeveloperModeTest.php: 4 PASS و25 assertions؛ flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart: 4 PASS بينها بوابة الواجهة وحجب المنحة؛ dart analyze للملفات الثمانية المعدلة واختبارها: No issues found؛ php artisan route:list --path=api/developer: 3 routes. اكتشف الاختبار خلل تثبيت سجل إعدادات المطور وأُصلح. لم يُنفذ ترحيل الإنتاج أو فحص جهاز فعلي."
+  "evidence": "بعد تصحيح ملكية مفاتيح الإظهار لتكون على الجهاز: php artisan test tests/Feature/MobileDeveloperModeTest.php: 4 PASS و24 assertions؛ flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart: 4 PASS بينها حفظ خيار العرض محلياً وبوابة الواجهة وحجب المنحة؛ dart analyze للملفات المعدلة واختبارها: No issues found؛ php artisan route:list --path=api/developer: 3 routes. لم يُنفذ ترحيل الإنتاج أو فحص جهاز فعلي."
 }
 ]
 }

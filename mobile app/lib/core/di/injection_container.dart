@@ -99,6 +99,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<Dio>(dioClient.dio);
   final developerAccess = DeveloperAccessService(dio: dioClient.dio);
   getIt.registerSingleton<DeveloperAccessService>(developerAccess);
+  await developerAccess.loadVisibility();
   getIt.registerSingleton(dioClient.offlineCache);
   getIt.registerSingleton<NetworkInfo>(NetworkInfo());
 

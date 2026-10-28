@@ -35,20 +35,18 @@ class MobileDeveloperController extends Controller
             'authorized' => true,
             'grant' => $grant,
             'expires_at' => now()->addMinutes(self::GRANT_MINUTES)->toISOString(),
-            'features' => $this->features($settings),
         ]);
     }
 
     public function config(Request $request): JsonResponse
     {
         $this->requireGrant($request);
-        return response()->json(['features' => $this->features(MobileDeveloperSetting::current())]);
+        return response()->json(['authorized' => true]);
     }
 
     public function storeLogs(Request $request): JsonResponse
     {
         $this->requireGrant($request);
-        abort_unless(MobileDeveloperSetting::current()->allow_log_upload, 403, 'رفع السجلات معطّل من لوحة الإدارة.');
         $data = $request->validate([
             'logs' => ['required', 'array', 'min:1', 'max:50'],
             'logs.*.level' => ['required', 'in:error,warning,info,debug'],
@@ -93,15 +91,6 @@ class MobileDeveloperController extends Controller
     {
         $token = $request->user()->currentAccessToken();
         return $token && method_exists($token, 'getKey') ? $token->getKey() : null;
-    }
-
-    private function features(MobileDeveloperSetting $settings): array
-    {
-        return [
-            'whatsapp_settings' => $settings->show_whatsapp_settings,
-            'mobile_logs' => $settings->allow_log_upload,
-            'server_settings' => true,
-        ];
     }
 
     private function redact(string $message): string

@@ -279,15 +279,16 @@ Filament (`/admin/mobile-developer-settings`). تغييره يبطل منح ال
 
 | المسار | الطريقة | العقد والحماية |
 |---|---|---|
-| `/api/developer/verify-pin` | POST | جلسة Sanctum؛ `{"pin":"77288"}`؛ حد 5 محاولات/دقيقة؛ يعيد `authorized`, `grant`, `expires_at`, `features` عند النجاح |
-| `/api/developer/config` | GET | جلسة Sanctum وترويسة `X-Developer-Grant`؛ يعيد أعلام `whatsapp_settings`, `mobile_logs`, `server_settings` |
-| `/api/developer/mobile-logs` | POST | الجلسة والمنحة وتفعيل الرفع من Laravel؛ `logs` من 1 إلى 50، لكل عنصر `level`, `source`, `message`, `occurred_at`؛ حد 10 طلبات/دقيقة |
+| `/api/developer/verify-pin` | POST | جلسة Sanctum؛ `{"pin":"77288"}`؛ حد 5 محاولات/دقيقة؛ يعيد `authorized`, `grant`, `expires_at` عند النجاح |
+| `/api/developer/config` | GET | جلسة Sanctum وترويسة `X-Developer-Grant`؛ يتحقق من سريان المنحة ويعيد `authorized: true` |
+| `/api/developer/mobile-logs` | POST | الجلسة والمنحة؛ `logs` من 1 إلى 50، لكل عنصر `level`, `source`, `message`, `occurred_at`؛ حد 10 طلبات/دقيقة |
 
 تظهر السجلات المرسلة للمدير فقط في **Mobile App Logs** (`/admin/mobile-app-logs`).
 الإرسال يدوي من وضع المطور، ويقتصر العميل على طريقة الطلب والحالة والزمن ونوع
 الخطأ؛ لا يرسل ترويسات المصادقة أو أجسام الطلبات والاستجابات. يخفي معترض سجلات
-الشبكة رقم PIN والمنحة والرموز الحساسة قبل عرضها محلياً. إعدادات إظهار واتساب
-ورفع السجلات تُغيّر من Laravel، ويقرأها التطبيق عند تفعيل الوضع.
+الشبكة رقم PIN والمنحة والرموز الحساسة قبل عرضها محلياً. مفاتيح إظهار واتساب
+والتشخيص وسجلات API وبطاقة الخادم وإرسال السجلات تُغيّر من وضع المطور داخل
+تطبيق الهاتف وتُحفظ على الجهاز. Laravel يغيّر PIN ويستقبل السجلات ويعرضها.
 
 تغيير رابط الخادم يستعمل `ServerConnectionService`: يمنع التبديل مع عمليات
 أوفلاين معلّقة، يمسح جلسة الخادم القديم وبياناته المؤقتة، ثم يطلب تسجيل الدخول

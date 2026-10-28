@@ -10,8 +10,6 @@ return new class extends Migration {
         Schema::create('mobile_developer_settings', function (Blueprint $table) {
             $table->id();
             $table->string('pin_hash');
-            $table->boolean('show_whatsapp_settings')->default(true);
-            $table->boolean('allow_log_upload')->default(false);
             $table->timestamps();
         });
 
