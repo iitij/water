@@ -20,6 +20,8 @@ class VoidRequestResource extends Resource
 {
     protected static ?string $model = Payment::class;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-shield-exclamation';
 
     protected static ?string $modelLabel = 'طلب إلغاء';

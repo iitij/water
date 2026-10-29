@@ -530,7 +530,7 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
       helperText: helperText,
       mediaBaseUrl: widget.mediaBaseUrl,
       picker: widget.imagePicker,
-      isUploading: context.watch<TemplateSettingsCubit>().state.uploadingImages.contains(key),
+      isUploading: _cubit.state.uploadingImages.contains(key),
       onSelected: (file) async {
         final bytes = await file.readAsBytes();
         await _cubit.uploadImage(key, bytes, file.name);

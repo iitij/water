@@ -482,16 +482,6 @@ class _SideRail extends StatelessWidget {
                       label: 'وضع المسار',
                       onTap: () => context.push(RouteNames.routeMode),
                     ),
-                    _RailActionItem(
-                      icon: Icons.health_and_safety_outlined,
-                      label: 'التشخيص والدعم',
-                      onTap: () => context.push(RouteNames.diagnostics),
-                    ),
-                    _RailActionItem(
-                      icon: Icons.sync_alt_rounded,
-                      label: 'سجلات API',
-                      onTap: () => context.push(RouteNames.apiLogs),
-                    ),
                   ],
                 ),
               ),

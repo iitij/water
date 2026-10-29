@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
@@ -12,6 +13,7 @@ import '../../../core/finance/finance_locator.dart';
 import '../../../core/network/device_identity.dart';
 import '../../../core/network/network_info.dart';
 import '../../../core/router/route_names.dart';
+import '../../../core/security/developer_access_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/ui/app_surfaces.dart';
 import '../../../core/ui/app_tokens.dart';
@@ -142,10 +144,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final developerAccess = GetIt.I.isRegistered<DeveloperAccessService>()
+        ? GetIt.I<DeveloperAccessService>()
+        : null;
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListenableBuilder(
-        listenable: Listenable.merge(<Listenable>[_queue, _audit, _apiLogs]),
+        listenable: Listenable.merge(<Listenable>[
+          _queue,
+          _audit,
+          _apiLogs,
+          if (developerAccess != null) developerAccess,
+        ]),
         builder: (context, _) => AppPageBody(
           topPadding: 16,
           bottomPadding: 32,
@@ -189,16 +199,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 ),
               ],
               actions: <Widget>[
-                FilledButton.icon(
-                  onPressed: () => context.push(RouteNames.apiLogs),
-                  icon: const Icon(Icons.sync_alt_rounded),
-                  label: const Text('فتح سجل الـ API ومراقبة الأخطاء'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => _apiLogs.toggleFloatingPill()),
-                  icon: Icon(_apiLogs.showFloatingPill ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                  label: Text(_apiLogs.showFloatingPill ? 'إخفاء الزر العائم' : 'إظهار الزر العائم'),
-                ),
+                if (developerAccess?.canOpenFeature('api_logs') == true) ...<Widget>[
+                  FilledButton.icon(
+                    onPressed: () => context.push(RouteNames.apiLogs),
+                    icon: const Icon(Icons.sync_alt_rounded),
+                    label: const Text('فتح سجل الـ API ومراقبة الأخطاء'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _apiLogs.toggleFloatingPill()),
+                    icon: Icon(_apiLogs.showFloatingPill ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    label: Text(_apiLogs.showFloatingPill ? 'إخفاء الزر العائم' : 'إظهار الزر العائم'),
+                  ),
+                ],
               ],
             ),
             const Gap(AppSpacing.md),

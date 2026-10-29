@@ -55,6 +55,7 @@ import '../navigation/sub_page.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notification_settings_screen.dart';
 import '../permissions/permission_service.dart';
+import '../security/developer_access_service.dart';
 import '../services/whatsapp_launcher_service.dart';
 import 'route_names.dart';
 
@@ -63,9 +64,29 @@ class AppRouter {
 
   final GoRouter router;
 
-  static GoRouter _createRouter(SessionService session) => GoRouter(
+  static String? developerRedirectFor(
+    String location,
+    DeveloperAccessService? access,
+  ) {
+    if (location != RouteNames.diagnostics && location != RouteNames.apiLogs) {
+      return null;
+    }
+    final feature = location == RouteNames.diagnostics ? 'diagnostics' : 'api_logs';
+    return access?.canOpenFeature(feature) == true
+        ? null
+        : RouteNames.moreHub;
+  }
+
+  static GoRouter _createRouter(SessionService session) {
+    final developerAccess = GetIt.I.isRegistered<DeveloperAccessService>()
+        ? GetIt.I<DeveloperAccessService>()
+        : null;
+    return GoRouter(
         initialLocation: RouteNames.splash,
-        refreshListenable: session,
+        refreshListenable: Listenable.merge(<Listenable>[
+          session,
+          if (developerAccess != null) developerAccess,
+        ]),
         redirect: (context, state) {
           final location = state.matchedLocation;
           final isPublic = location == RouteNames.splash || location == RouteNames.login;
@@ -76,7 +97,7 @@ class AppRouter {
             return location == RouteNames.login ? null : RouteNames.login;
           }
           if (isPublic) return RouteNames.home;
-          return null;
+          return developerRedirectFor(location, developerAccess);
         },
         routes: <RouteBase>[
           GoRoute(
@@ -373,4 +394,5 @@ class AppRouter {
           ),
         ],
       );
+  }
 }

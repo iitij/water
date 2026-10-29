@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,12 +16,12 @@ class DeveloperAccessService extends ChangeNotifier {
   final DateTime Function() _now;
   String? _grant;
   DateTime? _expiresAt;
+  Timer? _expiryTimer;
   static const Map<String, bool> defaultFeatures = <String, bool>{
     'whatsapp_settings': false,
     'mobile_logs': true,
     'diagnostics': true,
     'api_logs': false,
-    'server_card': true,
   };
   final Map<String, bool> _features = Map<String, bool>.from(defaultFeatures);
   static const String _preferencePrefix = 'developer_visible.';
@@ -32,6 +34,9 @@ class DeveloperAccessService extends ChangeNotifier {
   Map<String, bool> get features => Map<String, bool>.unmodifiable(_features);
 
   bool isFeatureEnabled(String key) => _features[key] ?? false;
+
+  /// مفاتيح الإظهار المحلية لا تمنح وصولاً إلى أدوات المطور دون منحة سارية.
+  bool canOpenFeature(String key) => isUnlocked && isFeatureEnabled(key);
 
   Future<void> loadVisibility() async {
     final preferences = await SharedPreferences.getInstance();
@@ -78,6 +83,7 @@ class DeveloperAccessService extends ChangeNotifier {
       }
       _grant = grant;
       _expiresAt = expiry;
+      _scheduleExpiry();
       notifyListeners();
       return DeveloperUnlockResult.success;
     } on DioException catch (error) {
@@ -128,8 +134,33 @@ class DeveloperAccessService extends ChangeNotifier {
 
   void lock() {
     if (_grant == null) return;
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
     _grant = null;
     _expiresAt = null;
     notifyListeners();
+  }
+
+  void _scheduleExpiry() {
+    _expiryTimer?.cancel();
+    final expiry = _expiresAt;
+    if (expiry == null) return;
+    _expiryTimer = Timer(expiry.difference(_now()), () {
+      // إعادة الجدولة إذا تغيّرت ساعة الجهاز إلى الخلف أثناء صلاحية المنحة.
+      if (_now().isBefore(expiry)) {
+        _scheduleExpiry();
+      } else {
+        lock();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    _grant = null;
+    _expiresAt = null;
+    super.dispose();
   }
 }

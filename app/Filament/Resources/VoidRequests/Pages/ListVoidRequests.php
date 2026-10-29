@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources\VoidRequests\Pages;
 
+use App\Filament\Concerns\BelongsToMobileDeveloperSettings;
 use App\Filament\Resources\VoidRequests\VoidRequestResource;
 use Filament\Resources\Pages\ListRecords;
 
 class ListVoidRequests extends ListRecords
 {
+    use BelongsToMobileDeveloperSettings;
+
     protected static string $resource = VoidRequestResource::class;
 
     public function getTitle(): string

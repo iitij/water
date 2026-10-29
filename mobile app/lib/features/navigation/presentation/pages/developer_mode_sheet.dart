@@ -108,7 +108,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
   Future<void> _uploadLogs() async {
     if (_busy ||
         !_access.isUnlocked ||
-        !_access.isFeatureEnabled('mobile_logs')) {
+        !_access.canOpenFeature('mobile_logs')) {
       return;
     }
     final entries = ApiLogManager.instance.logs
@@ -176,26 +176,42 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
       ? value
       : '-';
 
-  void _openLocalLogs() {
+  void _openTool(String feature, String route) {
+    if (!_access.canOpenFeature(feature)) return;
     Navigator.of(context).pop();
     if (widget.pageContext.mounted) {
-      widget.pageContext.push(RouteNames.apiLogs);
+      widget.pageContext.push(route);
     }
   }
 
   Future<void> _openWhatsAppSettings() async {
-    if (!_access.isFeatureEnabled('whatsapp_settings') ||
+    if (!_access.canOpenFeature('whatsapp_settings') ||
         !await _requireFreshGrant()) {
       return;
     }
     if (!mounted) return;
+    final access = _access;
     Navigator.of(context).pop();
     if (widget.pageContext.mounted) {
       unawaited(
         Navigator.of(widget.pageContext).push(
           MaterialPageRoute<void>(
-            builder: (_) => WhatsAppSettingsScreen(
-              repository: GetIt.I<SettingsRepository>(),
+            builder: (routeContext) => ListenableBuilder(
+              listenable: access,
+              builder: (routeContext, _) {
+                if (!access.canOpenFeature('whatsapp_settings')) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (routeContext.mounted &&
+                        ModalRoute.of(routeContext)?.isCurrent == true) {
+                      Navigator.of(routeContext).pop();
+                    }
+                  });
+                  return const SizedBox.shrink();
+                }
+                return WhatsAppSettingsScreen(
+                  repository: GetIt.I<SettingsRepository>(),
+                );
+              },
             ),
           ),
         ),
@@ -284,7 +300,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                         ),
                         onTap: _changeServer,
                       ),
-                      if (_access.isFeatureEnabled('whatsapp_settings'))
+                      if (_access.canOpenFeature('whatsapp_settings'))
                         ListTile(
                           leading: const Icon(Icons.chat_rounded),
                           title: const Text(
@@ -295,7 +311,7 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                           ),
                           onTap: _openWhatsAppSettings,
                         ),
-                      if (_access.isFeatureEnabled('mobile_logs'))
+                      if (_access.canOpenFeature('mobile_logs'))
                         ListTile(
                           leading: const Icon(Icons.upload_file_rounded),
                           title: const Text(DeveloperModeStrings.sendLogs),
@@ -304,11 +320,20 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                           ),
                           onTap: _busy ? null : _uploadLogs,
                         ),
-                      ListTile(
-                        leading: const Icon(Icons.receipt_long_rounded),
-                        title: const Text(DeveloperModeStrings.openLocalLogs),
-                        onTap: _openLocalLogs,
-                      ),
+                      if (_access.canOpenFeature('diagnostics'))
+                        ListTile(
+                          leading: const Icon(Icons.health_and_safety_outlined),
+                          title: const Text(DeveloperModeStrings.diagnostics),
+                          onTap: () =>
+                              _openTool('diagnostics', RouteNames.diagnostics),
+                        ),
+                      if (_access.canOpenFeature('api_logs'))
+                        ListTile(
+                          leading: const Icon(Icons.receipt_long_rounded),
+                          title: const Text(DeveloperModeStrings.openLocalLogs),
+                          onTap: () =>
+                              _openTool('api_logs', RouteNames.apiLogs),
+                        ),
                     ],
                   ),
                 ),
@@ -326,7 +351,6 @@ class _DeveloperModeSheetState extends State<DeveloperModeSheet> {
                       'mobile_logs' => DeveloperModeStrings.sendLogsFeature,
                       'diagnostics' => DeveloperModeStrings.diagnostics,
                       'api_logs' => DeveloperModeStrings.apiLogs,
-                      'server_card' => DeveloperModeStrings.serverCard,
                       _ => feature.key,
                     }),
                     subtitle: const Text(DeveloperModeStrings.savedOnDevice),

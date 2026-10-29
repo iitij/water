@@ -1,0 +1,1502 @@
+{
+  "baseline": "783afe1c01c64ea95b4dabb5e4f488e58820f023",
+  "revision": "4f058443f75eff18e0d3cb56bcecbfe180f487d1",
+  "audited_at": "2026-10-29",
+  "groups": [
+    {
+      "id": "session_devices",
+      "title": "الجلسات والتوكنات والأجهزة",
+      "summary": "توسيع تسجيل الدخول وربط استخدام التطبيق بالجهاز.",
+      "changes": [
+        "إضافة انتهاء للتوكن بمدة افتراضية 12 ساعة وتدويره، وإرجاع تاريخ الانتهاء وبيانات الحساب.",
+        "إضافة مسار المستخدم الحالي وتأكيد كلمة المرور عند تعديل الملف الشخصي مع إبقاء المسارات القديمة.",
+        "تسجيل الأجهزة وعرضها وإبطالها وتحديث آخر ظهور، وإضافة وسيط لفحص الجهاز المعروف من ترويسة الطلب."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/AuthController.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/DeviceController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Middleware/EnsureDeviceIsActive.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/Device.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000400_create_devices_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "api_foundation",
+      "title": "عقد واجهات التطبيق والفرز والصلاحيات",
+      "summary": "توسيع API الموجود في الإصدار الأول وضبط الوصول إلى عملياته.",
+      "changes": [
+        "جمع مسارات التطبيق تحت مصادقة Sanctum مع مسارات بديلة للتوافق مع إصداراته السابقة.",
+        "توحيد فحص صلاحيات الموارد وصفحات الإعدادات وأدوار المحصل والقارئ والأسماء القديمة للصلاحيات.",
+        "إضافة فرز مسموح على الخادم قبل تقسيم الصفحات، وفرز العلاقات والمجاميع وثبات الصفوف المتساوية.",
+        "توحيد حجم الصفحة وبعض صيغ البحث والأرقام العربية، وإرجاع أخطاء API بصيغة JSON."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/ApiController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "bootstrap/app.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "routes/api.php",
+          "status": "M",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "subscribers_squares",
+      "title": "واجهات المشتركين والمربعات",
+      "summary": "إتاحة عمليات الويب الموجودة للموبايل وإضافة استجابات مجمعة له.",
+      "changes": [
+        "واجهات إنشاء وتعديل وعرض وحذف فردي وجماعي للمربعات والمشتركين، مع فحص السجلات المرتبطة.",
+        "ملخص المشترك وكشف حسابه وحركاته والفواتير غير المدفوعة والتحصيل منه.",
+        "حزمة المربع للأوفلاين تشمل بيانات المشتركين والعدادات وفترات القراءة اللازمة للميدان."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/SquareController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/SubscriberController.php",
+          "status": "M",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "meters_readings",
+      "title": "العدادات والقراءات والمزامنة",
+      "summary": "توسيع خدمات القراءة الميدانية ومزامنة العمل المؤجل.",
+      "changes": [
+        "واجهات إدارة العدادات والبحث والتحقق من رقم المسار والحذف الجماعي.",
+        "تعديل وحذف القراءات وسجل العداد وحساب التواريخ وفصل تاريخ القراءة الفعلي عن فترة الفوترة.",
+        "رفع دفعات القراءات مع نتيجة لكل سجل وربط المعرّف المحلي بمعرّف المزامنة لمنع التكرار.",
+        "دعم صورة القراءة وإصدار الفواتير جماعيًا أو بحسب إعداد الإصدار عند القراءة."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/MeterController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/ReadingController.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/Reading.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_23_000001_add_offline_sync_fields_to_readings_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "faults_visits",
+      "title": "أعطال القراءة وزيارات المسار",
+      "summary": "إضافة سجل خادم لبيانات ميدانية كانت تُحفظ على الهاتف.",
+      "changes": [
+        "تسجيل سبب تعذر القراءة والملاحظات والعداد والمستخدم والجهاز، وعرضها ورفعها دفعة واحدة.",
+        "تسجيل زيارات المسار وتاريخ الجولة وحالة الزيارة والمبلغ المسجل والملاحظات، ورفعها واسترجاعها.",
+        "إضافة معرّفات مزامنة فريدة للأعطال والزيارات لتفادي تكرار الدفعة عند إعادة إرسالها."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/ReadingFaultController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/RouteVisitController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/ReadingFault.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/RouteVisit.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_25_000100_create_reading_faults_table.php",
+          "status": "A",
+          "scope": "database"
+        },
+        {
+          "path": "database/migrations/2026_10_25_000200_create_route_visits_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "invoices",
+      "title": "واجهات الفواتير والتحصيل منها",
+      "summary": "توسيع المتحكم لعمليات الفواتير التي يستهلكها التطبيق.",
+      "changes": [
+        "قوائم وبحث وفترات فوترة وإجماليات، وإنشاء وتعديل وحذف واستعادة وحذف نهائي فردي وجماعي.",
+        "توليد فواتير العداد والاشتراك والوايت باستدعاء خدمة الفوترة الأصلية الموجودة في أول إصدار.",
+        "إعادة احتساب الفواتير والتحصيل منها وإرجاع بيانات الإيصال وروابط PDF وواتساب.",
+        "إضافة تحميل PDF عبر API بصلاحية المستخدم؛ ملف خدمة إنشاء الفواتير الأصلية لم يتغير في المقارنة."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/InvoiceController.php",
+          "status": "M",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "payment_accounting",
+      "title": "السندات وإعادة احتساب الأرصدة",
+      "summary": "تغييرات تمس خدمة التحصيل ونموذج السند المشتركين بين الويب والتطبيق.",
+      "changes": [
+        "إضافة واجهات السندات وبيانات الإيصال وكتابة المبلغ بالعربية وتنزيل PDF.",
+        "منع تكرار التحصيل بمعرّف المزامنة ورفض استخدام المعرّف لعملية مالية مختلفة.",
+        "تحويل تاريخ الدفع إلى تاريخ ووقت، وإضافة ربط السند بالصندوق وبيانات الإلغاء.",
+        "تحديث حركة الدفتر وإعادة احتساب حسابَي المشترك أو العداد السابق والجديد عند تعديل السند، واستبعاد السند الملغى من التوزيع.",
+        "مسارات الحذف الفردي والجماعي القديمة ما زالت موجودة بجانب مسار الإلغاء، وتستخدم الحذف المنطقي."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/PaymentController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/Payment.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "app/Services/PaymentService.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_23_000002_add_sync_uuid_to_payments_table.php",
+          "status": "A",
+          "scope": "database"
+        },
+        {
+          "path": "database/migrations/2026_10_23_000003_change_payment_date_to_datetime_on_payments_table.php",
+          "status": "A",
+          "scope": "database"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000200_add_cash_session_and_void_fields_to_payments_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "cash_sessions",
+      "title": "صناديق المحصّلين وتقاريرها",
+      "summary": "ميزة مالية أضيفت بعد الإصدار الأول مع خدمة وواجهة إدارة.",
+      "changes": [
+        "فتح صندوق المحصل وربط التحصيل به وإغلاقه بالمبلغ المعدود، وحساب المتوقع والفرق على الخادم.",
+        "اعتماد أو رفض الصندوق المغلق مع الملاحظات، ومنع تغيير القرار النهائي بطلب قديم.",
+        "قائمة وفلاتر وأسماء المحصلين وتقرير JSON وPDF يومي، مع صلاحيات للصندوق وسجل أحداثه."
+      ],
+      "files": [
+        {
+          "path": "app/Filament/Resources/CashSessions/CashSessionResource.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/CashSessions/Pages/ListCashSessions.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/CashSessions/Tables/CashSessionsTable.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/CashSessionController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/CashSession.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Services/CashSessionService.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Support/ArabicNumber.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000100_create_cash_sessions_table.php",
+          "status": "A",
+          "scope": "database"
+        },
+        {
+          "path": "database/seeders/CashSessionPermissionsSeeder.php",
+          "status": "A",
+          "scope": "database"
+        },
+        {
+          "path": "database/seeders/DatabaseSeeder.php",
+          "status": "M",
+          "scope": "database"
+        },
+        {
+          "path": "resources/views/pdf/cash_session.blade.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "void_approvals",
+      "title": "اعتماد إلغاء السندات",
+      "summary": "إضافة مسار مراجعة للإلغاء الكبير مع بقاء السند حتى القرار.",
+      "changes": [
+        "طلب سبب مكتوب للإلغاء وتحديد حد مالي قابل للضبط؛ الصفر يعطل شرط اعتماد المبلغ الكبير.",
+        "عرض الطلبات المعلقة وقرار المشرف بالقبول أو الرفض مع بيانات الطلب والقرار.",
+        "تنفيذ الإلغاء وإعادة احتساب الرصيد عبر خدمة الدفع وتسجيل القرار في التدقيق."
+      ],
+      "files": [
+        {
+          "path": "app/Filament/Resources/VoidRequests/Pages/ListVoidRequests.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/VoidRequests/Tables/VoidRequestsTable.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/VoidRequests/VoidRequestResource.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000500_add_void_approval_to_payments_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "fees_requests",
+      "title": "واجهات الاشتراكات وطلبات الوايت",
+      "summary": "إتاحة إدارة الرسوم والطلبات الموجودة في الويب عبر API.",
+      "changes": [
+        "عرض وإنشاء وتعديل وحذف الرسوم والطلبات والحذف الجماعي وتحويلها إلى فاتورة.",
+        "إكمال طلب الخدمة وتحديث بياناته مع حماية هويته المالية بعد الفوترة."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/ServiceRequestController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/SubscriptionFeeController.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "tariffs_ledger",
+      "title": "واجهات التعرفة ودفتر الحركات",
+      "summary": "خدمات التطبيق للتعرفة والدفتر القائمين في النظام.",
+      "changes": [
+        "إدارة التعرفة وفلاترها والحذف المنطقي والاستعادة والحذف النهائي الفردي والجماعي.",
+        "عرض دفتر الحركات وتفاصيل الحركة والفلاتر والترتيب دون إضافة مسار كتابة للدفتر."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/TariffController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/TransactionController.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "reports_search_exports",
+      "title": "البحث ولوحة المؤشرات والتقارير والتصدير",
+      "summary": "إضافة قراءات مجمعة وتنزيل ملفات للموبايل.",
+      "changes": [
+        "بحث شامل في المشتركين والعدادات والفواتير والسندات والمربعات بحسب صلاحية المستخدم.",
+        "توسيع إحصاءات لوحة التحكم والإيراد الشهري وآخر الفواتير والمتأخرات والتقارير المفلترة.",
+        "واجهات تنزيل XLSX للمشتركين والفواتير والقراءات باستعمال خدمة التصدير الأصلية."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/AdminController.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/ExportController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/SearchController.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "واجهات الإعدادات ورفع الصور",
+      "summary": "توسيع API لصفحات إعدادات كانت موجودة في الويب.",
+      "changes": [
+        "قراءة وحفظ إعدادات فترات القراءة وتصميم الفاتورة والسند وواتساب ومفاتيح الإعدادات.",
+        "إصلاح حفظ حقول فاتورة الاشتراك والأيقونة، وتقييد رفع الشعارات والعلامة المائية بصلاحية الصفحة.",
+        "إبعاد مفاتيح واتساب السرية عن استجابة إعدادات التشغيل العامة."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/SettingController.php",
+          "status": "M",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "users_roles",
+      "title": "واجهات المستخدمين والأدوار والصلاحيات",
+      "summary": "إتاحة إدارة الحسابات ومصفوفة الصلاحيات للتطبيق.",
+      "changes": [
+        "قوائم وإنشاء وتعديل وحذف فردي وجماعي للمستخدمين والأدوار، وربط الصلاحيات.",
+        "مصفوفة الصلاحيات بحسب الحارس المعرّف فعليًا في الإعدادات.",
+        "رفض خلط صلاحيات الحراس أو تغيير حارس دور مستخدم، والتراجع عن الحفظ الجزئي عند الخطأ."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/RoleController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/UserController.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "whatsapp",
+      "title": "واتساب وإثبات نتيجة الإرسال",
+      "summary": "توسيع استخدام خدمة واتساب الأصلية من الموبايل.",
+      "changes": [
+        "واجهات حالة الجسر المحلي ورمز الربط والتشغيل والإيقاف والخروج والإرسال التجريبي.",
+        "فصل نص رسالة الفاتورة والسند عن رابط فتح واتساب لتعيده استجابات التطبيق.",
+        "تسجيل وقت وطريقة ومستخدم إرسال السند، وتسجيل نجاح مزود الإرسال من المهمة الخلفية.",
+        "فتح واتساب أو تسجيل نتيجة يدوية لا يثبت وصول الرسالة إلى المستلم."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/WhatsAppServerController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Jobs/SendWhatsAppPaymentJob.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "app/Services/WhatsAppService.php",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000600_add_whatsapp_delivery_to_payments_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "audit_events",
+      "title": "سجل التدقيق المركزي",
+      "summary": "إضافة سجل للعمليات الحساسة ورفع الأحداث من الهاتف.",
+      "changes": [
+        "نموذج وخدمة لتسجيل الحدث والمستخدم والمصدر والجهاز والكيان وبيانات التغيير.",
+        "استقبال دفعات من الهاتف وعرض مركزي للقراءة مع فلاتر المستخدم والحدث والمصدر والتاريخ.",
+        "واجهة Filament للقراءة فقط، مع خيارات الفلاتر دون اشتراط صلاحية إدارة المستخدمين."
+      ],
+      "files": [
+        {
+          "path": "app/Filament/Resources/AuditEvents/AuditEventResource.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/AuditEvents/Pages/ListAuditEvents.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/AuditEventController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/AuditEvent.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Services/AuditLogger.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_24_000300_create_audit_events_table.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "data_quality",
+      "title": "جودة البيانات",
+      "summary": "إضافة تقرير خادم للمشكلات القابلة للتصحيح.",
+      "changes": [
+        "حصر المشتركين بلا هاتف أو عداد، والعدادات بلا رقم مسار أو تعرفة فعالة.",
+        "كشف القراءات الصفرية أو القديمة وعدم تطابق الاستهلاك، مع عدد وأمثلة لكل مشكلة وفلاتر للمربع والمدة.",
+        "هذه واجهة بيانات للتطبيق؛ لم تُضف لها صفحة إدارة مستقلة في Laravel."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/DataQualityController.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "diagnostics",
+      "title": "سجلات API وتقارير الأعطال",
+      "summary": "إضافة مراقبة محلية لطلبات التطبيق وأخطائه على الخادم.",
+      "changes": [
+        "تسجيل الطلب والرد والزمن والبطء والاستثناء ومعرّف الطلب، والاحتفاظ بآخر 200 طلب.",
+        "واجهات قراءة ومسح السجلات واستقبال دفعات تقارير أعطال الهاتف.",
+        "السجلات محفوظة في ملفات الخادم؛ يلزم مراجعة محتواها عند ضبط سياسة الخصوصية والاحتفاظ."
+      ],
+      "files": [
+        {
+          "path": "app/Http/Controllers/Api/SystemLogController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Middleware/LogApiRequests.php",
+          "status": "A",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "developer_mode",
+      "title": "وضع المطور وسجلات الهاتف",
+      "summary": "رمز مطور ومنحة مؤقتة وأدوات عرض السجلات.",
+      "changes": [
+        "تخزين تجزئة رمز المطور وتغييره من Laravel، والتحقق منه مع حد للمحاولات.",
+        "منحة 15 دقيقة مرتبطة بالمستخدم والتوكن والجهاز وتبطل بتغيير الرمز.",
+        "استقبال حتى 50 سجلًا في الدفعة مع إخفاء صيغ الأسرار المعروفة وعرضها للمدير.",
+        "إضافة صفحة إعدادات المطور ومورد سجلات الهاتف؛ الأربع أدوات الظاهرة ليست كامل تغييرات Laravel."
+      ],
+      "files": [
+        {
+          "path": "app/Filament/Pages/MobileDeveloperSettings.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/MobileAppLogResource.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Filament/Resources/MobileAppLogResource/Pages/ListMobileAppLogs.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Http/Controllers/Api/MobileDeveloperController.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/MobileAppLog.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "app/Models/MobileDeveloperSetting.php",
+          "status": "A",
+          "scope": "production"
+        },
+        {
+          "path": "database/migrations/2026_10_27_000001_create_mobile_developer_tables.php",
+          "status": "A",
+          "scope": "database"
+        }
+      ]
+    },
+    {
+      "id": "web_pdf",
+      "title": "توافق طباعة الويب مع Windows",
+      "summary": "تعديل مساري الطباعة الموجودين في الإصدار الأول.",
+      "changes": [
+        "استخدام مسارات Node وChromium الثابتة على Linux فقط، وترك Windows يستخدم أدواته المكتشفة.",
+        "بقاء قوالب الفاتورة وسند القبض الأصلية؛ قالب تقرير الصندوق هو القالب الجديد.",
+        "تحديث Puppeteer من النطاق ^25.5.0 إلى الإصدار المثبت 25.16.0 وتحديث ملف قفل npm واعتمادياته التابعة."
+      ],
+      "files": [
+        {
+          "path": "package-lock.json",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "package.json",
+          "status": "M",
+          "scope": "production"
+        },
+        {
+          "path": "routes/web.php",
+          "status": "M",
+          "scope": "production"
+        }
+      ]
+    },
+    {
+      "id": "tests",
+      "title": "اختبارات Laravel وبيئتها",
+      "summary": "إضافة أدلة سلوكية للواجهات والمال والصلاحيات والمزامنة.",
+      "changes": [
+        "اختبارات API للمشتركين والمربعات والرسوم والطلبات والاتصال والقراءات والزيارات.",
+        "اختبارات للصندوق وقرار الإلغاء والتدقيق والمطابقة والفرز والحراس ووضع المطور.",
+        "إعداد SQLite في الذاكرة وبيئة اختبار بديلة مع تعديل اختبار الصفحة الرئيسية."
+      ],
+      "files": [
+        {
+          "path": "phpunit.xml",
+          "status": "M",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/AuditEventsApiTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/CashSessionApiTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/ExampleTest.php",
+          "status": "M",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/FouadModulesApiTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/ListSortingParityTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/MobileApiIntegrationTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/MobileConnectivityFixesTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/MobileDeveloperModeTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/PaymentVoidApprovalTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/RoleGuardParityTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/Feature/WebMobileParityTest.php",
+          "status": "A",
+          "scope": "test"
+        },
+        {
+          "path": "tests/TestCase.php",
+          "status": "M",
+          "scope": "test"
+        }
+      ]
+    },
+    {
+      "id": "environment",
+      "title": "بيئة تشغيل Laravel محليًا",
+      "summary": "تجهيز Docker مع MySQL وقالب إعدادات التطوير.",
+      "changes": [
+        "Dockerfile وCompose لخادم التطبيق وقاعدة البيانات مع فحص جاهزية وتخزين دائم.",
+        "قالب إعدادات Docker منفصل، دون عرض ملف إعدادات الخادم الفعلي في هذا السجل.",
+        "ملفات CI أضيفت خلال التطوير ثم حُذفت؛ وجود تجهيزات محلية لا يثبت نشرًا إنتاجيًا."
+      ],
+      "files": [
+        {
+          "path": ".env.docker.example",
+          "status": "A",
+          "scope": "environment"
+        },
+        {
+          "path": "docker-compose.yml",
+          "status": "A",
+          "scope": "environment"
+        },
+        {
+          "path": "docker/Dockerfile",
+          "status": "A",
+          "scope": "environment"
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "commit": "2b3187b4221bebd9dc9e5a031b7ce5190f411340",
+      "date": "2026-10-23",
+      "title": "واجهات المربعات والمشترك والرسوم والطلبات والدفتر",
+      "description": "واجهات المربعات والمشترك والرسوم والطلبات والدفتر"
+    },
+    {
+      "commit": "10c948f23c41509dd9c13d819019e3d73d36c275",
+      "date": "2026-10-23",
+      "title": "توسيع API وإضافة حقول المزامنة للقراءات والسندات",
+      "description": "توسيع API وإضافة حقول المزامنة للقراءات والسندات"
+    },
+    {
+      "commit": "99e01c3e0740c2356d14203c910a44efb53bc85c",
+      "date": "2026-10-23",
+      "title": "ضبط عقد الاستجابات والصلاحيات واختبارات تكامل التطبيق",
+      "description": "ضبط عقد الاستجابات والصلاحيات واختبارات تكامل التطبيق"
+    },
+    {
+      "commit": "16572dc1e0c2b5b99267904e2a4fa149e8a83357",
+      "date": "2026-10-23",
+      "title": "ضبط رفع دفعات القراءات ودعم الأوفلاين",
+      "description": "ضبط رفع دفعات القراءات ودعم الأوفلاين"
+    },
+    {
+      "commit": "2361bbf4a471a8a38f21aabb0279cac5fbdb2d7d",
+      "date": "2026-10-23",
+      "title": "استكمال عمليات الويب في API وتحويل تاريخ الدفع إلى وقت",
+      "description": "استكمال عمليات الويب في API وتحويل تاريخ الدفع إلى وقت"
+    },
+    {
+      "commit": "06eaf00ed60eef9a9a7a1e6bdc443949103aa78d",
+      "date": "2026-10-23",
+      "title": "إضافة البحث الشامل بحسب الصلاحية",
+      "description": "إضافة البحث الشامل بحسب الصلاحية"
+    },
+    {
+      "commit": "538341669ec785253390ec74cca3c20e75b6fb0e",
+      "date": "2026-10-24",
+      "title": "إضافة الصناديق والإلغاء والتدقيق وإبطال الجهاز",
+      "description": "إضافة الصناديق والإلغاء والتدقيق وإبطال الجهاز"
+    },
+    {
+      "commit": "505d816e2f64ec23a5e864d7c7462f31e29bef21",
+      "date": "2026-10-24",
+      "title": "إضافة Docker وCI وبيئة التكامل",
+      "description": "إضافة Docker وCI وبيئة التكامل"
+    },
+    {
+      "commit": "f8ae63dac64437f9071cd4eb9b3ec1ee84a3ee30",
+      "date": "2026-10-24",
+      "title": "إضافة موافقة المشرف على الإلغاء الكبير",
+      "description": "إضافة موافقة المشرف على الإلغاء الكبير"
+    },
+    {
+      "commit": "4af5fdf318b7b892096a74f45af5128c7277318e",
+      "date": "2026-10-24",
+      "title": "إضافة تقرير الصندوق PDF وكتابة الأرقام بالعربية",
+      "description": "إضافة تقرير الصندوق PDF وكتابة الأرقام بالعربية"
+    },
+    {
+      "commit": "85fa0c67a268fe9215505ed28c524fbb0565e4bd",
+      "date": "2026-10-24",
+      "title": "إضافة اختبارات رفع دفعات التدقيق",
+      "description": "إضافة اختبارات رفع دفعات التدقيق"
+    },
+    {
+      "commit": "875d3f59ddea3c178a0000501cbdee7e83612ef2",
+      "date": "2026-10-24",
+      "title": "تسجيل نتيجة واتساب واستكمال مسارات التعرفة الجماعية",
+      "description": "تسجيل نتيجة واتساب واستكمال مسارات التعرفة الجماعية"
+    },
+    {
+      "commit": "ef9f11d568e7f1ae8b82ee0c90a0f5748088d833",
+      "date": "2026-10-24",
+      "title": "إضافة تقرير جودة البيانات",
+      "description": "إضافة تقرير جودة البيانات"
+    },
+    {
+      "commit": "c9221bad0e5445c0dcfefdfc857a51b2da80bdec",
+      "date": "2026-10-24",
+      "title": "حذف ملفات CI التي أضيفت أثناء التطوير",
+      "description": "حذف ملفات CI التي أضيفت أثناء التطوير"
+    },
+    {
+      "commit": "d88654b0b7c04638408947f24f8bc8c712b51c66",
+      "date": "2026-10-24",
+      "title": "إضافة تسجيل API وتقارير التشخيص وضبط خدمة الدفع",
+      "description": "إضافة تسجيل API وتقارير التشخيص وضبط خدمة الدفع"
+    },
+    {
+      "commit": "5b4fffb634f8e386c43d2ed0cd25e91c1145f837",
+      "date": "2026-10-24",
+      "title": "ربط أعطال القراءة والزيارات وضبط تعاقدات التطبيق والخادم",
+      "description": "ربط أعطال القراءة والزيارات وضبط تعاقدات التطبيق والخادم"
+    },
+    {
+      "commit": "870e4d3430c069a63cb26e0652540989128231e5",
+      "date": "2026-10-26",
+      "title": "استكمال مطابقة الصلاحيات والإعدادات والفرز والأدوار",
+      "description": "استكمال مطابقة الصلاحيات والإعدادات والفرز والأدوار"
+    },
+    {
+      "commit": "7feff2ff039d033dd208f2de612c0661f37b0c01",
+      "date": "2026-10-26",
+      "title": "ضبط طباعة PDF على Windows",
+      "description": "ضبط طباعة PDF على Windows"
+    },
+    {
+      "commit": "3f965342aeeca5dc85a4d208383d516859d0690d",
+      "date": "2026-10-27",
+      "title": "إضافة وضع مطور الهاتف وصفحات سجلاته",
+      "description": "إضافة وضع مطور الهاتف وصفحات سجلاته"
+    },
+    {
+      "commit": "4f058443f75eff18e0d3cb56bcecbfe180f487d1",
+      "date": "2026-10-29",
+      "title": "تقوية ربط منحة المطور وحماية بياناته",
+      "description": "تقوية ربط منحة المطور وحماية بياناته"
+    }
+  ],
+  "local_changes": [
+    {
+      "path": "app/Filament/Pages/MobileDeveloperSettings.php",
+      "description": "تجميع الأدوات وسجل التغييرات داخل صفحة واحدة، مع فصل صلاحية الرمز."
+    },
+    {
+      "path": "app/Filament/Concerns/BelongsToMobileDeveloperSettings.php",
+      "description": "ربط القوائم الجديدة بالمركز في فتات التنقل."
+    },
+    {
+      "path": "resources/views/filament/pages/mobile-developer-settings.blade.php",
+      "description": "بطاقات الأدوات وعرض الجرد الكامل وملفاته وتاريخه."
+    },
+    {
+      "path": "app/Support/MobileLaravelChangeInventory.php",
+      "description": "قراءة لقطة الجرد المحفوظة دون تشغيل Git على الخادم."
+    },
+    {
+      "path": "resources/data/laravel-mobile-changes.json",
+      "description": "لقطة التغييرات المستخرجة من Git وتصنيفها بحسب الوظيفة."
+    },
+    {
+      "path": "tests/Feature/MobileDeveloperNavigationTest.php",
+      "description": "اختبارات التنقل والصلاحيات وعرض المركز وتغيير الرمز."
+    },
+    {
+      "path": "tests/Feature/MobileLaravelChangeInventoryTest.php",
+      "description": "اختبارات اكتمال الجرد مقارنة بلقطة Git وحجب التفاصيل عن غير المدير."
+    },
+    {
+      "path": "docs/v2/LARAVEL_MOBILE_TOOLS_HUB_2026-10-29_AR.md",
+      "description": "توثيق النطاق والدليل وحدود إعادة شكل النظام."
+    },
+    {
+      "path": "docs/v2/agents/backlog.json",
+      "description": "تسجيل التنفيذ والاختبارات وقبول المالك لكل مرحلة."
+    },
+    {
+      "path": "app/Filament/Resources/CashSessions/CashSessionResource.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/CashSessions/Pages/ListCashSessions.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/VoidRequests/VoidRequestResource.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/VoidRequests/Pages/ListVoidRequests.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/AuditEvents/AuditEventResource.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/AuditEvents/Pages/ListAuditEvents.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/MobileAppLogResource.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    },
+    {
+      "path": "app/Filament/Resources/MobileAppLogResource/Pages/ListMobileAppLogs.php",
+      "description": "نقل المدخل من القائمة الرئيسية إلى مركز مطور الهاتف وإضافة مسار الرجوع."
+    }
+  ],
+  "scope_note": "جرد صافي تغييرات ملفات Laravel وبيئة اختبارها وتشغيلها بعد أول رفع حتى المراجعة المحددة، مع فصل تعديلات المركز المحلية. لا يشمل ملفات Flutter أو بيانات التشغيل أو تعديلات لم تُحفظ في Git قبل هذه اللقطة.",
+  "baseline_note": "كان الإصدار الأول يحتوي نظام الويب والموارد والسياسات والفوترة والتعرفة والدفتر وواتساب والتصدير وقوالب الطباعة؛ يصف هذا السجل ما أضيف أو عُدل عليها بعد الرفع.",
+  "history_note": "محطات تغييرات Laravel وتجهيزاته؛ ملفات CI المضافة ثم المحذوفة تظهر تاريخيًا ولا تُحسب كملفات حالية. التوثيق الكامل لخطة الإصدار والاختبارات محفوظ في docs/v2.",
+  "unchanged_note": "خدمة إنشاء الفواتير الأصلية وخدمة احتساب فترات القراءة وخدمة الدفتر وخدمة تصدير البيانات والسياسات الأصلية وملفات إعداد Laravel واعتماديات Composer لم تتغير في صافي هذه المقارنة.",
+  "ancillary_changes": [
+    {
+      "id": "planning",
+      "title": "الخطط والتوثيق وملفات الوكلاء",
+      "summary": "ملفات مساعدة للتخطيط والتسليم والتصميم؛ لا تنشئ وظائف تشغيلية في Laravel.",
+      "files": [
+        {
+          "path": ".claude/agents/water-backend-api.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-chief.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-field.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-local-data.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-money.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-qa.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-release-ci.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-session-security.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-sync-queue.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/agents/water-ux-l10n.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/LICENSE.txt",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/__init__.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/accept_changes.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/comment.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/merge_runs.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/templates/comments.xml",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/templates/commentsExtended.xml",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/templates/commentsExtensible.xml",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/templates/commentsIds.xml",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/docx/scripts/templates/people.xml",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/parallel-feature-development/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/parallel-feature-development/references/file-ownership.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/parallel-feature-development/references/merge-strategies.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/task-coordination-strategies/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/task-coordination-strategies/references/dependency-graphs.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/task-coordination-strategies/references/task-decomposition.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/team-composition-patterns/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/team-composition-patterns/references/agent-type-selection.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/team-composition-patterns/references/preset-teams.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/LICENSE.txt",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/examples/console_logging.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/examples/element_discovery.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/examples/static_html_automation.py",
+          "status": "A"
+        },
+        {
+          "path": ".claude/skills/webapp-testing/scripts/with_server.py",
+          "status": "A"
+        },
+        {
+          "path": "AGENTS.md",
+          "status": "A"
+        },
+        {
+          "path": "DEVELOPERS_MASTER_PROMPTS.md",
+          "status": "A"
+        },
+        {
+          "path": "FLUTTER_FOUNDATION_HANDOFF.md",
+          "status": "A"
+        },
+        {
+          "path": "FLUTTER_MOBILE_MASTER_PLAN.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/DEV5_FLUTTER_INTEGRATION.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/MOBILE_PARITY_AUDIT_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/MOBILE_PHASE1_ARCHITECTURE.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/V2_MOBILE_PLAN_AR.docx",
+          "status": "A"
+        },
+        {
+          "path": "docs/V2_MOBILE_PLAN_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/V2_MOBILE_PLAN_AR.pdf",
+          "status": "A"
+        },
+        {
+          "path": "docs/V2_S1_HANDOVER.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/design/home-redesign-v2.png",
+          "status": "A"
+        },
+        {
+          "path": "docs/design/index.html",
+          "status": "A"
+        },
+        {
+          "path": "docs/handoff/DEV3_FINANCE_MODULE.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/mobile-field-operations-integration.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/DB_ENCRYPTION_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/MOBILE_SIMPLIFICATION_2026-10-27_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/OWNER_MOBILE_COMPLETION_PLAN_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/PLAY_RELEASE_CHECKLIST_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/README.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/UI_REDESIGN_20261026_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/V2_S4_HANDOVER_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/README.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/SUBAGENTS.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/VENDORED.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/backlog.json",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/LICENSE.txt",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/__init__.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/accept_changes.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/comment.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/merge_runs.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/templates/comments.xml",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/templates/commentsExtended.xml",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/templates/commentsExtensible.xml",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/templates/commentsIds.xml",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/docx/scripts/templates/people.xml",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/LICENSE.txt",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/examples/console_logging.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/examples/element_discovery.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/examples/static_html_automation.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/anthropic-skills/webapp-testing/scripts/with_server.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/backend-architect.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/code-reviewer.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/context-manager.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/database-optimizer.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/devops-troubleshooter.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/flutter-expert.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/performance-engineer.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/security-auditor.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/parallel-feature-development/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/parallel-feature-development/references/file-ownership.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/parallel-feature-development/references/merge-strategies.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/task-coordination-strategies/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/task-coordination-strategies/references/dependency-graphs.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/task-coordination-strategies/references/task-decomposition.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/team-composition-patterns/SKILL.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/team-composition-patterns/references/agent-type-selection.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/skills/team-composition-patterns/references/preset-teams.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/test-automator.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/agents/vendor/wshobson-agents/ui-ux-designer.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/build.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/build_docx.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/build_md.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/content_a.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/content_b.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/content_c.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/content_d.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/engine.py",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/guides/TRAINING_PLAN_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/guides/USER_GUIDE_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/DEFECT_LOG_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/DEVICE_MATRIX_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/FIELD_TEST_PLAN_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/INVOICE_FREEZE_20261026.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/MOBILE_WEB_PARITY_2026-10-26.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/qa/OWNER_AUDIT_2026-10-26.json",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/release/MSIX_AND_CHECKSUMS_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/release/PRIVACY_DATA_SAFETY_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/release/RELEASE_NOTES_2.0_AR.md",
+          "status": "A"
+        },
+        {
+          "path": "docs/v2/support/SUPPORT_PLAN_AR.md",
+          "status": "A"
+        }
+      ]
+    },
+    {
+      "id": "automation",
+      "title": "سكربتات التطوير والفحص",
+      "summary": "توليد التصاميم وبصمات الإصدار وتجهيزات الفحص؛ تُراجع منفصلة عن منطق التطبيق.",
+      "files": [
+        {
+          "path": "scripts/ci_analyze.py",
+          "status": "A"
+        },
+        {
+          "path": "scripts/ci_run.py",
+          "status": "A"
+        },
+        {
+          "path": "scripts/generate_brand_assets.py",
+          "status": "A"
+        },
+        {
+          "path": "scripts/make_sha256sums.py",
+          "status": "A"
+        },
+        {
+          "path": "tool/ci/README.md",
+          "status": "A"
+        },
+        {
+          "path": "tool/ci/analyze_baseline.txt",
+          "status": "A"
+        },
+        {
+          "path": "tool/ci/check_analyze_baseline.sh",
+          "status": "A"
+        },
+        {
+          "path": "tool/ci/check_secrets.sh",
+          "status": "A"
+        }
+      ]
+    },
+    {
+      "id": "repository",
+      "title": "تنظيم المستودع",
+      "summary": "تعليمات المستودع واستثناءات الملفات وإحالات تطبيق الهاتف.",
+      "files": [
+        {
+          "path": ".gitignore",
+          "status": "M"
+        },
+        {
+          "path": "README.md",
+          "status": "M"
+        }
+      ]
+    },
+    {
+      "id": "artifacts",
+      "title": "ملفات تشخيص وتجهيزات هاتف في الجذر",
+      "summary": "ملفات أضيفت إلى جذر المستودع خارج مجلد Flutter ولا تمثل صفحات Laravel. تُعرض أسماؤها فقط دون محتويات التشغيل.",
+      "files": [
+        {
+          "path": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+          "status": "A"
+        },
+        {
+          "path": "android/gradle/wrapper/gradle-wrapper.jar",
+          "status": "A"
+        },
+        {
+          "path": "android/gradlew",
+          "status": "A"
+        },
+        {
+          "path": "android/gradlew.bat",
+          "status": "A"
+        },
+        {
+          "path": "errors.txt",
+          "status": "A"
+        },
+        {
+          "path": "inspect_sub.php",
+          "status": "A"
+        },
+        {
+          "path": "login_body.json",
+          "status": "A"
+        },
+        {
+          "path": "sub_5_response.json",
+          "status": "A"
+        }
+      ]
+    }
+  ],
+  "ancillary_note": "لإكمال المراجعة، هذه بقية الملفات الجديدة أو المعدلة خارج مجلد mobile app في نفس مقارنة Git. هي منفصلة عن ملفات Laravel التشغيلية واختباراتها، ولا تدخل في عدّادها أعلاه."
+}

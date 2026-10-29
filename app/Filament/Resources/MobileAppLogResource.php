@@ -12,9 +12,11 @@ use Filament\Support\Icons\Heroicon;
 class MobileAppLogResource extends Resource
 {
     protected static ?string $model = MobileAppLog::class;
+
+    protected static bool $shouldRegisterNavigation = false;
     protected static ?string $modelLabel = 'سجل تطبيق الهاتف';
     protected static ?string $pluralModelLabel = 'سجلات تطبيق الهاتف';
-    protected static ?string $navigationLabel = 'Mobile App Logs';
+    protected static ?string $navigationLabel = 'سجلات تطبيق الهاتف';
     protected static ?int $navigationSort = 13;
     protected static string | \UnitEnum | null $navigationGroup = 'إدارة النظام';
     protected static string | BackedEnum | null $navigationIcon = Heroicon::OutlinedDocumentText;

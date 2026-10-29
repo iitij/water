@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/diagnostics/api_log_manager.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../core/security/developer_access_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_tokens.dart';
 
@@ -22,6 +23,14 @@ class FloatingApiLogOverlay extends StatefulWidget {
 
 class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
   final ApiLogManager _logManager = getIt<ApiLogManager>();
+  final DeveloperAccessService? _access =
+      getIt.isRegistered<DeveloperAccessService>()
+      ? getIt<DeveloperAccessService>()
+      : null;
+
+  bool get _canShow =>
+      _logManager.showFloatingPill &&
+      _access?.canOpenFeature('api_logs') == true;
 
   Offset _position = const Offset(16, 120);
   late bool _visible;
@@ -30,19 +39,21 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
   @override
   void initState() {
     super.initState();
-    _visible = _logManager.showFloatingPill;
+    _visible = _canShow;
     _logManager.addListener(_onUpdated);
+    _access?.addListener(_onUpdated);
   }
 
   @override
   void dispose() {
     _logManager.removeListener(_onUpdated);
+    _access?.removeListener(_onUpdated);
     super.dispose();
   }
 
   void _onUpdated() {
     if (!mounted) return;
-    final visible = _logManager.showFloatingPill;
+    final visible = _canShow;
     if (!visible && !_visible) return;
     _visible = visible;
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -60,7 +71,7 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_logManager.showFloatingPill) {
+    if (!_canShow) {
       return widget.child;
     }
 
@@ -82,7 +93,9 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
               });
             },
             onTap: () {
-              context.push(RouteNames.apiLogs);
+              if (_access?.canOpenFeature('api_logs') == true) {
+                context.push(RouteNames.apiLogs);
+              }
             },
             child: Material(
               color: Colors.transparent,

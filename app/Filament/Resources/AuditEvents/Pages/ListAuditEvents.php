@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\AuditEvents\Pages;
 
+use App\Filament\Concerns\BelongsToMobileDeveloperSettings;
 use App\Filament\Resources\AuditEvents\AuditEventResource;
 use Filament\Resources\Pages\ListRecords;
 
@@ -10,6 +11,8 @@ use Filament\Resources\Pages\ListRecords;
  */
 class ListAuditEvents extends ListRecords
 {
+    use BelongsToMobileDeveloperSettings;
+
     protected static string $resource = AuditEventResource::class;
 
     public function getTitle(): string

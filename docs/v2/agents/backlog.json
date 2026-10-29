@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-10-27",
+  "updated_at": "2026-10-29",
   "ux_revert": "بطلب المستخدم ألغيت دفعة UX-01 إلى UX-05 واستعيدت ملفاتها من 7feff2f؛ حُفظت أعمال UX-SIMPLIFY وإصلاح Dashboard المستقلة. flutter test --no-pub --concurrency=1: 468 PASS؛ flutter analyze --no-pub: No issues found!؛ السجلان mobile app/build/ux-revert-tests.log وux-revert-analyze.log.",
   "branch": "arena/9da3be61-water",
   "status_values": [
@@ -30,6 +30,52 @@
   }
  },
  "tasks": [
+  {
+   "id": "RUNTIME-20261029-01",
+   "sprint": "S9",
+   "agent": "A1+A10",
+   "task": "إصلاح تعطل محرر تصميم الفاتورة وسند القبض بسبب قراءة TemplateSettingsCubit من سياق أعلى من المزود",
+   "files": "mobile app/lib/features/settings/presentation/pages/template_settings_editor.dart; mobile app/test/settings/template_settings_editor_test.dart",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "أعاد اختبار فتح invoice قبل الإصلاح إنتاج ProviderNotFoundException (exit 1). أصلح A1 قراءة حالة رفع الصور من cubit المحرر نفسه؛ BlocConsumer يعيد بناء الحقول مع كل حالة. flutter test --no-pub --concurrency=1 test/settings --reporter expanded: 21 PASS (exit 0)، منها 10 اختبارات جديدة تشمل الفاتورة والسند بوضع مستقل/مضمن وعرض 400/1440، وعزل حالة رفع الصور عن cubit خارجي وتعطيل الحفظ أثناء الرفع وحفظ المسار الصحيح. flutter analyze --no-pub: No issues found!؛ dart analyze lib/features/settings/presentation/pages/template_settings_editor.dart test/settings/template_settings_editor_test.dart بعد الإصلاح: No issues found!؛ git diff --check للملفات المعنية بلا أخطاء. لم يجر تشغيل Windows أو اتصال API مصادق بعد الإصلاح ولا قبول مالك."
+  },
+  {
+   "id": "WIN-INSTALL-20261029-01",
+   "sprint": "S9",
+   "agent": "A1",
+   "task": "إصلاح فشل INSTALL.vcxproj بسبب مسار تثبيت CMake المحلي إلى Program Files",
+   "files": "mobile app/build/windows/x64/CMakeCache.txt (generated, ignored); docs/v2/qa/WINDOWS_INSTALL_RECOVERY_2026-10-29_AR.md",
+   "status": "done",
+   "verification_status": "local_build_and_launch_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "أعيد إنتاج MSB3073: file cannot create directory C:/Program Files/water_project، exit 1. cmake -U CMAKE_INSTALL_PREFIX -S windows -B build/windows/x64: exit 0 واستعادة TARGET_FILE_DIR. flutter run -d windows --no-pub --no-resident -v: exit 0، Build succeeded، 0 warnings/0 errors، اتصال service protocol وFlutter view، والعملية بقيت مفتوحة. لا تغيير مصدري أو اختبار API/قبول بصري. docs/v2/qa/WINDOWS_INSTALL_RECOVERY_2026-10-29_AR.md"
+  },
+  {
+   "id": "LARAVEL-MOBILE-INVENTORY-02",
+   "sprint": "OWNER-UX",
+   "agent": "A6+A10+A1",
+   "task": "إضافة جرد شامل داخل إعدادات مطور الهاتف لكل تغييرات Laravel منذ أول commit بعد تصحيح المالك لنطاق البطاقات الأربع",
+   "files": "app/Support/MobileLaravelChangeInventory.php; resources/data/laravel-mobile-changes.json; app/Filament/Pages/MobileDeveloperSettings.php; resources/views/filament/pages/mobile-developer-settings.blade.php; tests/Feature/**; docs/v2/LARAVEL_MOBILE_TOOLS_HUB_2026-10-29_AR.md",
+   "definition_of_done": "يعرض المدير مقارنة واضحة بين ما كان موجوداً وما أضيف أو عُدل في الخلفية والمخطط والاختبارات وDocker وتاريخ CI، وقائمة الملفات وحالة كل تغيير من 783afe1 إلى 4f05844 مع توضيح إضافات المركز المحلية والجرد المساعد خارج mobile app؛ لا أسرار أو بيانات تشغيل أو أدوات تعطيل مالي",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "& 'C:\\laragon\\bin\\php\\8.4\\php.exe' -d display_errors=1 -d log_errors=0 -d extension=pdo_sqlite vendor/bin/phpunit --debug tests/Feature/MobileDeveloperNavigationTest.php tests/Feature/MobileDeveloperModeTest.php tests/Feature/MobileLaravelChangeInventoryTest.php: 13/13 PASS، 1923 assertions، 5181ms، exit 0، بلا skip واجتاز تطابق Git. الجرد 22 مجموعة/91 ملفاً/12 ترحيلاً/20 محطة و136 ملفاً مساعداً؛ اللقطة 783afe1..4f05844 والمحلي منفصل. نجح scoped git diff --check app resources tests docs. المعاينة بالمتصفح لم تصل الصفحة: Laravel 500، SQLSTATE[HY000][2002] عند sessions لرفض MySQL على127.0.0.1:3306؛ لا قبول بصري أو مالك ولا تعديل بيئة أو بيانات. docs/v2/LARAVEL_MOBILE_TOOLS_HUB_2026-10-29_AR.md"
+  },
+  {
+   "id": "LARAVEL-MOBILE-TOOLS-01",
+   "sprint": "OWNER-UX",
+   "agent": "A6+A10+A1",
+   "task": "جمع إضافات لوحة Laravel الخاصة بالهاتف داخل إعدادات مطور الهاتف واستعادة شكل القائمة الرئيسية في الإصدار الأول",
+   "files": "app/Filament/Pages/MobileDeveloperSettings.php; app/Filament/Resources/{CashSessions,VoidRequests,AuditEvents,MobileAppLogResource*}/**; app/Filament/Concerns/**; resources/views/filament/pages/mobile-developer-settings.blade.php; tests/Feature/**; docs/v2/LARAVEL_MOBILE_TOOLS_HUB_2026-10-29_AR.md",
+   "definition_of_done": "مدخل واحد في القائمة الرئيسية، بطاقات بحسب صلاحيات الموارد، رجوع من القوائم إلى المركز، وحماية تعديل PIN للمدير فقط مع بقاء الروابط والعمليات الحالية",
+   "status": "done",
+   "verification_status": "local_tests_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "& 'C:\\laragon\\bin\\php\\8.4\\php.exe' -d display_errors=1 -d log_errors=0 -d extension=pdo_sqlite vendor/bin/phpunit tests/Feature/MobileDeveloperNavigationTest.php tests/Feature/MobileDeveloperModeTest.php: 9 PASS، 96 assertions، 1335ms. نجح php -l لكل ملفات PHP المعدلة وtrait، وgit diff --check. أكد route:list بقاء مسارات المركز وسجلات الهاتف. لا قبول بصري بمتصفح أو جهاز ولا قبول مالك. docs/v2/LARAVEL_MOBILE_TOOLS_HUB_2026-10-29_AR.md"
+  },
   {
    "id": "UX-SIMPLIFY-01",
    "sprint": "OWNER-UX",
@@ -1185,6 +1231,17 @@
   "verification_status": "local_tests_passed",
   "owner_acceptance": "not_tested",
   "evidence": "بعد تصحيح ملكية مفاتيح الإظهار لتكون على الجهاز: php artisan test tests/Feature/MobileDeveloperModeTest.php: 4 PASS و24 assertions؛ flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart: 4 PASS بينها حفظ خيار العرض محلياً وبوابة الواجهة وحجب المنحة؛ dart analyze للملفات المعدلة واختبارها: No issues found؛ php artisan route:list --path=api/developer: 3 routes. لم يُنفذ ترحيل الإنتاج أو فحص جهاز فعلي."
+ },
+ {
+  "id": "DEV-MODE-TOOLS-20261029-01",
+  "sprint": "S9",
+  "agent": "A1+A2+A9+A10",
+  "task": "حصر أدوات الدعم داخل وضع المطور وحراسة مسارات التشخيص وسجلات API مع إبقاء أدوات العمل وإصلاح رابط الخادم من الدخول",
+  "files": "mobile app/lib/core/security/developer_access_service.dart; mobile app/lib/core/router/app_router.dart; mobile app/lib/core/navigation/app_shell.dart; mobile app/lib/features/navigation/presentation/pages/{more_screen,developer_mode_sheet}.dart; mobile app/lib/features/auth/presentation/pages/edit_profile_screen.dart; mobile app/lib/features/diagnostics/presentation/{diagnostics_screen.dart,widgets/floating_api_log_overlay.dart}; mobile app/test/core/{security/developer_access_service_test.dart,diagnostics/floating_api_log_overlay_test.dart}; docs/V2_S1_HANDOVER.md",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart test/core/diagnostics/floating_api_log_overlay_test.dart: 8 PASS (All tests passed). dart analyze لخدمة المطور وملفات الواجهة السبعة المعدلة: No issues found. git diff --check: بلا أخطاء. لم يُجر فحص على جهاز فعلي أو قبول مالك."
 }
 ]
 }

@@ -4,7 +4,6 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/session_service.dart';
-import '../../../../core/config/app_config.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
@@ -136,30 +135,6 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => context.push(RouteNames.routeMode),
                       ),
                       const SoftDivider(),
-                      if (developerAccess.isFeatureEnabled(
-                        'diagnostics',
-                      )) ...<Widget>[
-                        AppSettingRow(
-                          title: 'التشخيص والدعم',
-                          subtitle: 'حالة المزامنة وسجل التدقيق وآخر الأخطاء',
-                          icon: Icons.health_and_safety_outlined,
-                          color: AppColors.info,
-                          onTap: () => context.push(RouteNames.diagnostics),
-                        ),
-                        const SoftDivider(),
-                      ],
-                      if (developerAccess.isFeatureEnabled(
-                        'api_logs',
-                      )) ...<Widget>[
-                        AppSettingRow(
-                          title: DeveloperModeStrings.apiLogs,
-                          subtitle: DeveloperModeStrings.logsPrivacy,
-                          icon: Icons.receipt_long_rounded,
-                          color: AppColors.info,
-                          onTap: () => context.push(RouteNames.apiLogs),
-                        ),
-                        const SoftDivider(),
-                      ],
                       AppSettingRow(
                         title: 'الملف الشخصي',
                         subtitle: 'تحديث الاسم والبريد وكلمة المرور',
@@ -178,13 +153,6 @@ class MoreScreen extends StatelessWidget {
             delay: Duration(milliseconds: 180),
             child: _AppearanceCard(),
           ),
-          if (developerAccess.isFeatureEnabled('server_card')) ...<Widget>[
-            const Gap(AppSpacing.lg),
-            const AppReveal(
-              delay: Duration(milliseconds: 210),
-              child: _ServerCard(),
-            ),
-          ],
           const Gap(AppSpacing.md),
           AppReveal(
             delay: const Duration(milliseconds: 220),
@@ -439,60 +407,6 @@ class _AppearanceCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ServerCard extends StatelessWidget {
-  const _ServerCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final uri = Uri.tryParse(AppConfig.apiBaseUrl);
-    final host = uri == null || uri.host.isEmpty
-        ? AppConfig.apiBaseUrl
-        : uri.host;
-    final online = GetIt.I<SyncQueueManager>().isOnline;
-    return AppCard(
-      child: Row(
-        children: <Widget>[
-          const AppIconBubble(
-            icon: Icons.dns_outlined,
-            color: AppColors.info,
-            size: 40,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('خادم المشروع', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: Text(
-                    host,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          AppPill(
-            label: online == false ? 'أوفلاين' : 'متصل',
-            icon: online == false
-                ? Icons.wifi_off_rounded
-                : Icons.lock_outline_rounded,
-            color: online == false ? AppColors.warning : AppColors.success,
-            dense: true,
           ),
         ],
       ),

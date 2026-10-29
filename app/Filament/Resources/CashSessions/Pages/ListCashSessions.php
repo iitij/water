@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CashSessions\Pages;
 
+use App\Filament\Concerns\BelongsToMobileDeveloperSettings;
 use App\Filament\Resources\CashSessions\CashSessionResource;
 use Filament\Resources\Pages\ListRecords;
 
@@ -10,6 +11,8 @@ use Filament\Resources\Pages\ListRecords;
  */
 class ListCashSessions extends ListRecords
 {
+    use BelongsToMobileDeveloperSettings;
+
     protected static string $resource = CashSessionResource::class;
 
     public function getTitle(): string
