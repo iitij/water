@@ -15,6 +15,7 @@ use App\Models\Tariff;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -245,6 +246,12 @@ class MobileConnectivityFixesTest extends TestCase
 
     public function test_client_error_reports_are_received_and_listed(): void
     {
+        // RefreshDatabase لا يعزل الملفات؛ نمنع قراءة سجلات التطوير أو مسحها.
+        $testStorage = sys_get_temp_dir().'/water-client-reports-'.Str::uuid();
+        File::ensureDirectoryExists($testStorage.'/logs');
+        $this->app->useStoragePath($testStorage);
+        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory($testStorage));
+
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/system/error-reports', [
                 'reports' => [

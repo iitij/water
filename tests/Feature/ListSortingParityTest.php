@@ -61,9 +61,9 @@ class ListSortingParityTest extends TestCase
         $this->getJson('/api/subscribers?sort_by=meters_count&sort_direction=desc')->assertOk()
             ->assertJsonPath('data.0.id', $second->id);
         $small = Invoice::withoutEvents(fn () => Invoice::create(['subscriber_id' => $first->id, 'invoice_type' => 'manual',
-            'bill_number' => 'SORT-1', 'bill_date' => '2026-10-26', 'total_amount' => 90, 'previous_balance' => 0, 'status' => 'unpaid']));
+            'bill_number' => 'SORT-1', 'bill_date' => '2026-10-26', 'total_amount' => 90, 'previous_balance' => 0, 'status' => 'issued']));
         $large = Invoice::withoutEvents(fn () => Invoice::create(['subscriber_id' => $second->id, 'invoice_type' => 'manual',
-            'bill_number' => 'SORT-2', 'bill_date' => '2026-10-26', 'total_amount' => 10, 'previous_balance' => 100, 'status' => 'unpaid']));
+            'bill_number' => 'SORT-2', 'bill_date' => '2026-10-26', 'total_amount' => 10, 'previous_balance' => 100, 'status' => 'issued']));
         $this->getJson('/api/invoices?sort_by=total_due&sort_direction=desc&per_page=1')->assertOk()
             ->assertJsonPath('data.0.id', $large->id)->assertJsonPath('total', 2);
         $this->getJson('/api/invoices?sort_by=total_due&sort_direction=desc&per_page=1&page=2')->assertOk()
