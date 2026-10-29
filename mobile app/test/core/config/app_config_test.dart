@@ -16,6 +16,10 @@ void main() {
       AppConfig.normalizeApiBaseUrl('https://water.example/sub/api'),
       'https://water.example/sub/api/',
     );
+    expect(
+      AppConfig.normalizeApiBaseUrl('https://34.57.211.224/'),
+      'https://34.57.211.224/api/',
+    );
   });
 
   test('rejects malformed URLs and embedded credentials', () {
@@ -41,21 +45,13 @@ void main() {
       expect(AppConfig.serverUrlPreferenceKey, 'water.server_url');
     });
 
-    test('defaults to the backend PC on desktop and the host on Android', () {
-      for (final platform in <TargetPlatform>[
-        TargetPlatform.windows,
-        TargetPlatform.linux,
-        TargetPlatform.macOS,
-      ]) {
+    test('defaults to the hosted HTTPS server on every platform', () {
+      for (final platform in TargetPlatform.values) {
         expect(
           AppConfig.defaultApiBaseUrlForPlatform(platform),
-          'http://localhost:8000/api',
+          'https://34.57.211.224/',
         );
       }
-      expect(
-        AppConfig.defaultApiBaseUrlForPlatform(TargetPlatform.android),
-        'http://10.0.2.2:8000/api',
-      );
     });
 
     test(
@@ -67,14 +63,14 @@ void main() {
               stored,
               platform: TargetPlatform.windows,
             ),
-            'http://localhost:8000/api/',
+            'https://34.57.211.224/api/',
           );
           expect(
             AppConfig.resolveStartupApiBaseUrl(
               stored,
               platform: TargetPlatform.android,
             ),
-            'http://10.0.2.2:8000/api/',
+            'https://34.57.211.224/api/',
           );
         }
       },

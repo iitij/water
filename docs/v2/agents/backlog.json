@@ -1289,5 +1289,17 @@
   "owner_acceptance": "not_tested",
   "evidence": "Flutter 3.44.3: إعادة إنتاج orphan قبل الإصلاح عند تجاور Tooltip معلوماتي وAppIconButton داخل ListView؛ بعد الفصل 5 اختبارات serialized semantics PASS + 26 اختبار واجهة وتدقيق وثيم PASS. dart analyze للملفات الخمسة والاختبار: No issues found. flutter build windows --debug --no-pub: نجح. الأوامر والحدود في docs/v2/qa/WINDOWS_AXTREE_2026-10-29_AR.md والسجلات mobile app/build/windows-axtree-*.log. لم يُعد سيناريو المستخدم الأصلي أو قارئ شاشة Windows فعلي، ولا قبول جهاز."
 }
+,
+{
+  "id": "RUNTIME-20261029-BASE-URL",
+  "sprint": "S9",
+  "agent": "A1+A10",
+  "task": "اعتماد https://34.57.211.224/ خادماً افتراضياً للجوال وجميع المنصات مع إبقاء إعداد البناء والخادم المحفوظ",
+  "files": "mobile app/lib/core/config/app_config.dart; mobile app/test/core/config/app_config_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub --concurrency=1 test/core/config/app_config_test.dart test/core/setup/server_connection_service_test.dart --reporter expanded: 16 PASS. dart analyze --fatal-infos lib/core/config/app_config.dart test/core/config/app_config_test.dart: No issues found. git diff --check: نجح. تطبيع الرابط ينتج https://34.57.211.224/api/. GET لهذا الخادم على /api/admin/dashboard مع Accept: application/json وبالتحقق المعتاد من شهادة HTTPS أعاد HTTP 401 دون توكن. الخادم المحفوظ صراحة له الأولوية؛ لم يُفحص دخول مصادق أو جهاز فعلي."
+}
 ]
 }

@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   const AppConfig._();
 
-  /// Set this per environment, e.g. --dart-define=API_BASE_URL=https://water.example.com/api
-  /// Suggested first-launch URL; physical devices need the server's LAN URL.
+  /// Override per environment with --dart-define=API_BASE_URL=https://host/api.
+  /// The hosted server is the first-launch default on every platform.
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://34.57.211.224/',
   );
 
   /// يسمح البناء الاختباري الصريح باستخدام HTTP خارج الشبكة المحلية أيضاً.
@@ -21,8 +21,7 @@ class AppConfig {
   /// نفس المفتاح الذي يحفظه محرر الخادم في وضع المطور وتسجيل الدخول.
   static const String serverUrlPreferenceKey = 'water.server_url';
 
-  /// الهاتف الحقيقي يستعمل عنوان الكمبيوتر على الشبكة المحفوظ في المحرر.
-  /// الافتراضي لأندرويد هو عنوان المضيف داخل المحاكي، وليس IP شبكة مفترضاً.
+  /// الخادم المستضاف هو الافتراضي؛ ويمكن اختيار خادم آخر من محرر الخادم.
   static String get defaultApiBaseUrl =>
       defaultApiBaseUrlForPlatform(defaultTargetPlatform);
 
@@ -30,9 +29,7 @@ class AppConfig {
     if (_configuredApiBaseUrl.trim().isNotEmpty) {
       return _configuredApiBaseUrl;
     }
-    return platform == TargetPlatform.android
-        ? 'http://10.0.2.2:8000/api'
-        : 'http://localhost:8000/api';
+    return 'https://34.57.211.224/';
   }
 
   /// HTTP المحلي مطلوب لتشغيل Laravel على الكمبيوتر وشبكة Wi-Fi الخاصة.
