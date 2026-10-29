@@ -45,14 +45,15 @@
    "id": "V2P-PLAN-20261029-01",
    "sprint": "PRODUCT-V2-PLANNING",
    "agent": "A1",
-   "task": "إعداد مقترح منتج للإصدار الثاني بعد v1: دورة المشروع والفرق والمراجعة والمتأخرات والتواصل وبوابة المشترك، مع توسعات ومراحل ومعايير قبول",
+   "task": "إعداد وتعديل خطة v2 لتطوير Flutter فقط باستخدام API الحالي دون أي تعديل Backend: تخصيص وميدان ومتابعة محلية وبحث وتحليل وطباعة وWindows واستئناف",
    "files": "docs/v2/V2_PRODUCT_VISION_2026-10-29_AR.md; docs/v2/agents/backlog.json",
    "status": "done",
    "verification_status": "document_checks_passed",
    "owner_acceptance": "not_reviewed",
    "plan": "docs/v2/V2_PRODUCT_VISION_2026-10-29_AR.md",
-   "scope": "توثيق وتخطيط فقط. ميزات V2P-00 إلى V2P-07 داخل المقترح لم تنفذ ولم تعتمد ميزانيتها؛ حالة done تخص إعداد الوثيقة فقط ولا تغير قبول v1 أو حالات الخطط السابقة.",
-   "evidence": "مراجعة مصدرية على أساس Git 54ea620 (v1 ready) وFEATURE_COVERAGE وroutes/api.php وميزات الميدان والمال وسجل العمل. تحقق PowerShell من عناوين V2P-01..06 والمراجع المحلية والجداول والمسافات: PLAN CHECK PASS: 6 core features; 16 existing local references; consistent Markdown tables; no trailing whitespace. لا تغيير كود تشغيلي ولا اختبارات تطبيق أو قبول جهاز في جلسة التخطيط."
+   "scope": "توثيق وتخطيط فقط. صحح المالك النطاق صراحةً إلى التطبيق فقط؛ استبدلت الوثيقة المقترح السابق المرتبط بالخادم بميزات M2-01 إلى M2-08 ومراحل F0 إلى F5. لا تعديل Laravel أو قاعدة بياناته أو API أو مهام الخادم وإعداداته؛ البيانات الشخصية الجديدة محلية معزولة بالحساب والخادم. الميزات لم تنفذ؛ done يخص الوثيقة وحدها.",
+   "revision": "2026-10-29: بطلب المالك ألغيت متطلبات تطوير Backend من مقترح هذه الجلسة؛ بوابة المشترك والتكليف المركزي والحملات والتقسيط خارج النطاق. مرجع النسخة الأولى كان Git 54ea620؛ مراجعة النسخة المعدلة مصدرية للعميل والعقود القائمة فقط.",
+   "evidence": "تحقق PowerShell للنسخة المعدلة: MOBILE-ONLY PLAN CHECK PASS: 8 features; explicit no-backend constraint; 16 existing local references; consistent tables; no trailing whitespace. BACKLOG JSON PASS. التحقق يشمل وجود M2-01..08 والمراجع المحلية واتساق جداول Markdown. لا تغيير كود تشغيلي أو خادم ولا اختبارات تطبيق أو قبول جهاز في جلسة تعديل الخطة."
   },
   {
    "id": "WIN-INNO-20261029-01",
