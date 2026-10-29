@@ -6,6 +6,7 @@ import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
+import '../../../../core/ui/app_tooltip.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/entities/settings_entities.dart';
 import '../../domain/repositories/settings_repository.dart';
@@ -286,7 +287,7 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
                       _controllers['accessToken']!.text.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(left: 4),
-                      child: Tooltip(
+                      child: AppTooltip(
                         message: 'يوجد رمز محفوظ في الخادم',
                         child: Icon(Icons.verified_outlined,
                             size: 20, color: Color(0xFF2E7D32)),

@@ -9,13 +9,13 @@ import '../auth/session_service.dart';
 import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../finance/finance_api_client.dart';
+import '../l10n/app_strings.dart';
 import '../network/dio_client.dart';
 import '../security/developer_access_service.dart';
 import '../theme/app_colors.dart';
 import '../ui/app_tokens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/app_text_field.dart';
-import 'server_setup_app.dart';
 
 /// Safely validates and switches the active backend API base URL at runtime
 /// while strictly blocking server changes whenever unsynced offline actions exist.
@@ -26,20 +26,25 @@ class ServerConnectionService {
     final checkAndroid = isAndroid ?? Platform.isAndroid;
     final raw = (rawValue ?? '').trim();
     if (!AppConfig.isInsecureHttpAllowed &&
-        raw.toLowerCase().startsWith('http://')) {
-      return 'نسخة الإنتاج تتصل بخادم مشفّر فقط. استخدم https:// مع شهادة صالحة.';
+        raw.toLowerCase().startsWith('http://') &&
+        !AppConfig.isHttpAllowedForHost(Uri.tryParse(raw)?.host ?? '')) {
+      return AppStringsDefaults.serverPublicHttpsRequired;
     }
     try {
       final normalized = AppConfig.normalizeApiBaseUrl(rawValue ?? '');
       final host = Uri.parse(normalized).host.toLowerCase();
       if (checkAndroid &&
-          const <String>['localhost', '127.0.0.1', '::1', '[::1]']
-              .contains(host)) {
+          const <String>[
+            'localhost',
+            '127.0.0.1',
+            '::1',
+            '[::1]',
+          ].contains(host)) {
         return 'استخدم عنوان الكمبيوتر على الشبكة (مثل 192.168.1.20) أو 10.0.2.2 للمحاكي بدلاً من localhost.';
       }
       return null;
     } on FormatException {
-      return 'أدخل عنواناً صحيحاً يبدأ بـ https:// (أو http:// في نسخة تطوير)';
+      return AppStringsDefaults.serverUrlInvalid;
     }
   }
 
@@ -99,7 +104,10 @@ class ServerConnectionService {
       }
     }
 
-    if (!await preferences.setString(ServerSetupApp.preferenceKey, normalized)) {
+    if (!await preferences.setString(
+      AppConfig.serverUrlPreferenceKey,
+      normalized,
+    )) {
       throw StateError('تعذر حفظ عنوان الخادم الجديد على الجهاز.');
     }
 
@@ -134,8 +142,7 @@ class ServerConfigSheet extends StatefulWidget {
 class _ServerConfigSheetState extends State<ServerConfigSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _urlController = TextEditingController(
-    text: AppConfig.currentApiBaseUrl ??
-        (Platform.isWindows ? 'http://localhost:8000/api/' : ''),
+    text: AppConfig.currentApiBaseUrl ?? AppConfig.defaultApiBaseUrl,
   );
 
   int _pendingCount = 0;
@@ -193,7 +200,8 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final blocked = !_loadingGuard && _pendingCount > 0;
-    final isAuthenticated = GetIt.I.isRegistered<SessionService>() &&
+    final isAuthenticated =
+        GetIt.I.isRegistered<SessionService>() &&
         GetIt.I<SessionService>().isAuthenticated;
 
     return Padding(
@@ -294,7 +302,9 @@ class _ServerConfigSheetState extends State<ServerConfigSheet> {
                       Expanded(
                         child: Text(
                           'عند حفظ خادم مختلف سيتم تسجيل الخروج من الجلسة الحالية وتنظيف الكاش المؤقت بأمان.',
-                          style: theme.textTheme.bodySmall?.copyWith(height: 1.45),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            height: 1.45,
+                          ),
                         ),
                       ),
                     ],

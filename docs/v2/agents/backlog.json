@@ -31,6 +31,41 @@
  },
  "tasks": [
   {
+   "id": "SERVER-STARTUP-20261029-01",
+   "sprint": "S9",
+   "agent": "A1+A2+A3+A9+A10",
+   "task": "حذف صفحة إعداد الخادم من الإقلاع واستخدام رابط وضع المطور المحفوظ أو عنوان Laravel المحلي الافتراضي",
+   "files": "mobile app/lib/main.dart; mobile app/lib/core/config/app_config.dart; mobile app/lib/core/setup/**; mobile app/lib/core/l10n/app_strings.dart; mobile app/android/app/src/main/res/xml/network_security_config.xml; mobile app/test/core/{config,setup}/**; docs/v2/qa/SERVER_STARTUP_2026-10-29_AR.md",
+   "status": "done",
+   "verification_status": "local_tests_and_windows_build_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 test/core/config/app_config_test.dart test/core/setup/server_connection_service_test.dart test/core/l10n/app_strings_test.dart --reporter expanded: 27 PASS، exit 0؛ dart analyze lib test/core/config test/core/setup test/core/l10n: No issues found!، exit 0. flutter build windows --release --no-pub: exit 0، 99.7s؛ build-installer.ps1 -SkipBuild: exit 0؛ setup.exe 22811200 بايت، SHA256 6e9f547a62c1c674a88e21156d0f9f359bd0c9f67aed27259fbdbc12cec2542a. الفحص الشامل: 523 PASS، 26 SKIP، 1 FAIL في اختبار شاشة إعدادات بعرض 320px موجود محلياً قبل المهمة، خارج ملفات الإصلاح. لا قبول Android/اتصال API مصادق أو تثبيت الحزمة المحدثة؛ أوقف المستخدم Computer Use قبل اكتمال الفحص البصري للنسخة الجديدة. التفاصيل والسجلات في docs/v2/qa/SERVER_STARTUP_2026-10-29_AR.md."
+  },
+  {
+   "id": "V2P-PLAN-20261029-01",
+   "sprint": "PRODUCT-V2-PLANNING",
+   "agent": "A1",
+   "task": "إعداد مقترح منتج للإصدار الثاني بعد v1: دورة المشروع والفرق والمراجعة والمتأخرات والتواصل وبوابة المشترك، مع توسعات ومراحل ومعايير قبول",
+   "files": "docs/v2/V2_PRODUCT_VISION_2026-10-29_AR.md; docs/v2/agents/backlog.json",
+   "status": "done",
+   "verification_status": "document_checks_passed",
+   "owner_acceptance": "not_reviewed",
+   "plan": "docs/v2/V2_PRODUCT_VISION_2026-10-29_AR.md",
+   "scope": "توثيق وتخطيط فقط. ميزات V2P-00 إلى V2P-07 داخل المقترح لم تنفذ ولم تعتمد ميزانيتها؛ حالة done تخص إعداد الوثيقة فقط ولا تغير قبول v1 أو حالات الخطط السابقة.",
+   "evidence": "مراجعة مصدرية على أساس Git 54ea620 (v1 ready) وFEATURE_COVERAGE وroutes/api.php وميزات الميدان والمال وسجل العمل. تحقق PowerShell من عناوين V2P-01..06 والمراجع المحلية والجداول والمسافات: PLAN CHECK PASS: 6 core features; 16 existing local references; consistent Markdown tables; no trailing whitespace. لا تغيير كود تشغيلي ولا اختبارات تطبيق أو قبول جهاز في جلسة التخطيط."
+  },
+  {
+   "id": "WIN-INNO-20261029-01",
+   "sprint": "S9",
+   "agent": "A3+A10+A1",
+   "task": "تجهيز سكربت Inno Setup وبناء setup.exe لتطبيق Windows بواجهة عربية وحزمة Flutter وMicrosoft CRT كاملة",
+   "files": "mobile app/windows/installer/{water_project.iss,build-installer.ps1,README_AR.md}; mobile app/test/windows_installer/smoke-installer.ps1; docs/v2/qa/WINDOWS_INNO_SETUP_2026-10-29_AR.md",
+   "status": "done",
+   "verification_status": "local_build_and_installer_smoke_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter build windows --release: exit 0، 170.0s. powershell -NoProfile -ExecutionPolicy Bypass -File .\\windows\\installer\\build-installer.ps1 -SkipBuild: exit 0، Inno 6.7.3 على Windows PowerShell 5.1؛ setup.exe بحجم 17108528 بايت، SHA256 e7dbcab9dab846b2464d7604eb7664497707baad8b1f97bff239a055ae239063. powershell -NoProfile -ExecutionPolicy Bypass -File .\\test\\windows_installer\\smoke-installer.ps1: PASS، تطابق الملفات الـ39 بعد التثبيت وإعادة تثبيت الإصدار نفسه؛ الإزالة حذفت الحزمة والقيد وحفظت بيانات اصطناعية. السجلات في mobile app/build/installer-smoke/69e32ef078164c08b8930f4e6f80afe5. نجحت AST وحماية مسار مترجم غير موجود وCRT ناقص. لا توقيع رقمي أو تشغيل للتطبيق المثبت أو قبول جهاز/إنتاج. التفاصيل docs/v2/qa/WINDOWS_INNO_SETUP_2026-10-29_AR.md."
+  },
+  {
    "id": "RUNTIME-20261029-01",
    "sprint": "S9",
    "agent": "A1+A10",
@@ -1242,6 +1277,17 @@
   "verification_status": "local_tests_passed",
   "owner_acceptance": "not_tested",
   "evidence": "flutter test --no-pub --concurrency=1 test/core/security/developer_access_service_test.dart test/core/diagnostics/floating_api_log_overlay_test.dart: 8 PASS (All tests passed). dart analyze لخدمة المطور وملفات الواجهة السبعة المعدلة: No issues found. git diff --check: بلا أخطاء. لم يُجر فحص على جهاز فعلي أو قبول مالك."
+ },
+ {
+  "id": "RUNTIME-20261029-AXTREE",
+  "sprint": "S9",
+  "agent": "A1+A9+A10",
+  "task": "منع دمج مراجع بوابات التلميحات في شجرة الإتاحة مع الاحتفاظ بالتلميحات وقارئ الشاشة",
+  "files": "mobile app/lib/core/ui/app_tooltip.dart; mobile app/lib/core/ui/app_controls.dart; mobile app/lib/core/navigation/sub_page.dart; mobile app/lib/core/widgets/barcode_scanner_screen.dart; mobile app/lib/features/settings/presentation/pages/whatsapp_settings_screen.dart; mobile app/test/core/ui/windows_tooltip_semantics_test.dart; docs/v2/qa/WINDOWS_AXTREE_2026-10-29_AR.md",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "Flutter 3.44.3: إعادة إنتاج orphan قبل الإصلاح عند تجاور Tooltip معلوماتي وAppIconButton داخل ListView؛ بعد الفصل 5 اختبارات serialized semantics PASS + 26 اختبار واجهة وتدقيق وثيم PASS. dart analyze للملفات الخمسة والاختبار: No issues found. flutter build windows --debug --no-pub: نجح. الأوامر والحدود في docs/v2/qa/WINDOWS_AXTREE_2026-10-29_AR.md والسجلات mobile app/build/windows-axtree-*.log. لم يُعد سيناريو المستخدم الأصلي أو قارئ شاشة Windows فعلي، ولا قبول جهاز."
 }
 ]
 }

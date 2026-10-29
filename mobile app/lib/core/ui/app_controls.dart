@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import 'app_tokens.dart';
+import 'app_tooltip.dart';
 
 /// Primary action: a solid accent block with one icon and one label.
 ///
@@ -220,7 +221,9 @@ class AppIconButton extends StatelessWidget {
         ),
       ),
     );
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+    return tooltip == null
+        ? button
+        : AppTooltip(message: tooltip!, child: button);
   }
 }
 

@@ -5,6 +5,9 @@ Testing builds of the integrated Arabic Water app. Android APKs are attached to
 
 ## What's new in this prerelease
 
+- أُزيلت صفحة إعداد الخادم عند الإقلاع؛ يستخدم التطبيق الرابط المحفوظ من وضع
+  المطور مباشرة، أو عنوان Windows المحلي/محاكي Android عند أول تشغيل.
+
 - Web/mobile parity: cash supervision and central audit, subscriber → meter →
   subscription-fee creation, role guards and read-only matrices, actual reading
   date, metadata edits on invoiced requests, subscription invoice settings, and
@@ -42,17 +45,19 @@ Do not use this build for live financial collection until device/backend QA pass
 1. On the PC, install/configure Laravel dependencies and database, apply migrations,
    then run `php artisan serve --host=0.0.0.0 --port=8000`.
 2. Allow port 8000 through the PC firewall on your trusted private network only.
-3. First launch prompts for the API URL:
-   - Windows on the backend PC: `http://localhost:8000/api`.
-   - Physical Android phone: `http://<PC-LAN-IP>:8000/api`; use the same Wi-Fi.
-   - Android emulator: `http://10.0.2.2:8000/api`.
+3. The app opens directly with the saved server URL, or its platform default:
+   - Windows on the backend PC: `http://localhost:8000/api` by default.
+   - Physical Android phone: set `http://<PC-LAN-IP>:8000/api` from the login
+     screen's server button or developer mode; use the same Wi-Fi.
+   - Android emulator: `http://10.0.2.2:8000/api` by default.
 4. Sign in using an existing backend account. There are no bundled credentials.
 
 `localhost` on a phone refers to the phone, not your PC. HTTP is enabled for
 local testing and is not encrypted. Use HTTPS before production.
 
-The server is saved on first launch. It can be changed later from the login screen
-(server button) or **الملف الشخصي ← الاتصال بالخادم** without clearing app data:
+The saved developer-mode URL takes priority over `API_BASE_URL` and platform
+defaults. It can be changed from the login screen (server button) or
+**المزيد ← وضع المطور ← تغيير رابط الخادم** without clearing app data:
 the app signs the current session out, clears cached server snapshots and keeps
 local data intact. The change is **blocked while any offline operation is still
 waiting in the sync queue** so receipts/readings can never move between servers.

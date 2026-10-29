@@ -29,6 +29,11 @@ class SubPageScaffold extends StatelessWidget {
     final theme = Theme.of(context);
     final stackedActions =
         MediaQuery.sizeOf(context).width < 430 && actions.length > 2;
+    // Keep native tooltip portals in separate nodes from the back button and
+    // from one another, including when narrow layouts move actions below it.
+    final accessibleActions = <Widget>[
+      for (final action in actions) Semantics(container: true, child: action),
+    ];
     return Scaffold(
       body: Column(
         children: <Widget>[
@@ -86,7 +91,7 @@ class SubPageScaffold extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (!stackedActions) ...actions,
+                        if (!stackedActions) ...accessibleActions,
                       ],
                     ),
                     if (stackedActions) ...[
@@ -95,7 +100,7 @@ class SubPageScaffold extends StatelessWidget {
                         alignment: WrapAlignment.end,
                         spacing: 6,
                         runSpacing: 6,
-                        children: actions,
+                        children: accessibleActions,
                       ),
                     ],
                   ],

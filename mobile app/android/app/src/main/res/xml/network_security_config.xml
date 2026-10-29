@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  نسخة الإنتاج: لا اتصال غير مشفّر إطلاقاً (خطة 2.0 — الفصل 9.3).
-  شهادة الخادم يجب أن تكون صادرة من جهة موثوقة؛ التطبيق لا يقبل شهادات
-  موقّعة ذاتياً في الإنتاج. للاختبار على الشبكة المحلية استخدم نسخة debug.
+  يحتاج خادم Laravel المحلي إلى HTTP لعناوين LAN المتغيرة ومحاكي Android.
+  لا يدعم إعداد Android نطاقات IP خاصة كاملة، لذا تسمح طبقة النظام بالاتصال
+  وتقيّد AppConfig عنوان API إلى loopback / RFC1918 أو HTTPS في release.
+  تبقى شهادات HTTPS موثوقة من النظام فقط، بلا شهادات ذاتية أو شهادات مستخدم.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../theme/app_colors.dart';
 import '../ui/app_tokens.dart';
+import '../ui/app_tooltip.dart';
 
 /// شاشة مسح باركود/QR واحدة تُستخدم لكل الحالات (عداد، مشترك، سند).
 ///
@@ -188,7 +189,7 @@ class _ScannerIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    return AppTooltip(
       message: tooltip,
       child: Material(
         color: Colors.black.withValues(alpha: .45),

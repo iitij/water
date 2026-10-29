@@ -57,6 +57,10 @@ abstract final class DeveloperModeStrings {
 /// حقل كائن ثابت ليس تعبيراً ثابتاً؛ لذلك نُعرّف النص هنا مرة واحدة ويشير إليه
 /// كلٌّ من `AppStrings.ar` و`core/error/failures.dart`.
 abstract final class AppStringsDefaults {
+  static const String serverPublicHttpsRequired =
+      'استخدم رابط https:// مع شهادة صالحة للخادم العام. يُسمح بـ http:// للخادم المحلي أو عنوان الكمبيوتر داخل الشبكة الخاصة.';
+  static const String serverUrlInvalid =
+      'أدخل عنواناً صحيحاً يبدأ بـ https:// أو بـ http:// للخادم المحلي داخل الشبكة الخاصة.';
   static const String networkError =
       'تعذر الاتصال بالخادم — تحقق من الشبكة أو جرّب الوضع أوفلاين.';
   static const String timeoutError = 'انتهت مهلة الاتصال بالخادم.';

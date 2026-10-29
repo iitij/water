@@ -34,7 +34,7 @@ flutter pub get --enforce-lockfile
 flutter analyze --no-fatal-infos --no-fatal-warnings
 flutter test
 flutter run
-# Optional first-launch suggested server:
+# Optional default server (a saved developer-mode URL takes priority):
 flutter run --dart-define=API_BASE_URL=http://192.168.1.20:8000/api
 flutter build apk --release
 flutter build windows --release
@@ -42,6 +42,14 @@ flutter build windows --release
 
 The Flutter tool regenerates the ignored Gradle wrapper launchers/JAR on build.
 The committed Gradle configuration targets AGP 9 and Flutter 3.44.
+
+The app opens directly using the server saved by developer mode. With no saved
+URL, Windows uses `http://localhost:8000/api` and Android uses
+`http://10.0.2.2:8000/api` for the emulator. On a physical Android phone, set
+`http://<PC-LAN-IP>:8000/api` through the server button on the login screen or
+developer mode, and connect to the PC's Wi-Fi network. `API_BASE_URL` can supply
+that device's default at build time. HTTP is accepted for local loopback/private
+LAN addresses; public servers require HTTPS in release builds.
 
 ## App icons
 
@@ -82,4 +90,4 @@ for the unified offline-queue design, account isolation rules and server-switch 
 - Physical Bluetooth 58/80 mm printing, barcode camera, and the Node WhatsApp bridge.
 - Resolve remaining analyzer warnings (mostly legacy deprecations) and replace
   debug signing with a production keystore + Play App Signing.
-- Enforce HTTPS in release builds (`usesCleartextTraffic` is still enabled for LAN QA).
+- Use HTTPS for production deployments; local HTTP remains available for LAN use.
