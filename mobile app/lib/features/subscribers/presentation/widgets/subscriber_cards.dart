@@ -390,7 +390,7 @@ class _SubscriberPeek extends StatelessWidget {
 String? _squareName(SubscribersState state) {
   if (state.squareId == null) return null;
   for (final square in state.squares) {
-    if (square.id == state.squareId) return square.name;
+    if (square.id == state.squareId) return square.displayName;
   }
   return 'مربع #${state.squareId}';
 }

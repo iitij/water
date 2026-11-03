@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../../core/finance/finance_api_client.dart';
+import '../../../../core/models/square_label.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 
@@ -11,22 +12,25 @@ import '../../../../core/utils/json_utils.dart';
 /// وحدة Dev 3، وتُستخدم بأشكال مرنة (tolerant parsing) حتى لا ننكسر مع اختلاف
 /// صيغة الاستجابة بين `SubscriberController@index` الحالي والنسخة الموسّعة.
 class SquareOption {
-  const SquareOption({required this.id, required this.name, this.subscribersCount});
+  const SquareOption({required this.id, required this.name, this.code, this.subscribersCount});
 
   final int id;
   final String name;
+  final String? code;
+  String get displayName => squareDisplayName(name, code);
   final int? subscribersCount;
 
   factory SquareOption.fromJson(Map<String, dynamic> json) => SquareOption(
         id: JsonUtils.asInt(json['id']),
         name: JsonUtils.asString(json['name'], fallback: '-'),
+        code: JsonUtils.asStringOrNull(json['code']),
         subscribersCount: JsonUtils.asIntOrNull(
           json['subscribers_count'] ?? json['count'],
         ),
       );
 
   @override
-  String toString() => name;
+  String toString() => displayName;
 }
 
 class MeterOption {

@@ -25,7 +25,10 @@ class ReportBreakdownModel extends ReportBreakdown {
 
   factory ReportBreakdownModel.fromJson(dynamic value, [String? fallbackKey]) {
     final json = adminMap(value);
-    final key = adminString(json['key'] ?? json['status'] ?? json['id'], fallbackKey ?? '');
+    final key = adminString(
+      json['key'] ?? json['status'] ?? json['id'],
+      fallbackKey ?? '',
+    );
     return ReportBreakdownModel(
       key: key,
       label: adminString(json['label'] ?? json['name'] ?? json['status'], key),
@@ -35,11 +38,11 @@ class ReportBreakdownModel extends ReportBreakdown {
   }
 
   Map<String, dynamic> toJson() => {
-        'key': key,
-        'label': label,
-        'value': value,
-        'count': count,
-      };
+    'key': key,
+    'label': label,
+    'value': value,
+    'count': count,
+  };
 }
 
 class FinancialReportModel extends FinancialReport {
@@ -54,6 +57,7 @@ class FinancialReportModel extends FinancialReport {
     required super.revenueSeries,
     required super.statusBreakdown,
     required super.squareBreakdown,
+    super.hasDetailedData,
   });
 
   factory FinancialReportModel.fromJson(dynamic value) {
@@ -61,12 +65,15 @@ class FinancialReportModel extends FinancialReport {
     final summary = root['summary'] is Map ? adminMap(root['summary']) : root;
     return FinancialReportModel(
       totalInvoiced: adminDouble(
-        summary['total_invoiced'] ?? summary['invoiced_amount'],
+        summary['total_invoiced'] ??
+            summary['invoiced_amount'] ??
+            summary['invoices_total'],
       ),
       totalCollected: adminDouble(
         summary['total_collected'] ??
             summary['collected_amount'] ??
-            summary['total_payments'],
+            summary['total_payments'] ??
+            summary['collection_total'],
       ),
       totalOutstanding: adminDouble(
         summary['total_outstanding'] ?? summary['outstanding_amount'],
@@ -75,8 +82,16 @@ class FinancialReportModel extends FinancialReport {
       invoicesCount: adminInt(summary['invoices_count']),
       paidInvoicesCount: adminInt(summary['paid_invoices_count']),
       overdueInvoicesCount: adminInt(summary['overdue_invoices_count']),
+      hasDetailedData:
+          root['has_detailed_data'] != false &&
+          summary.containsKey('total_outstanding') &&
+          root.containsKey('revenue_series') &&
+          root.containsKey('status_breakdown') &&
+          root.containsKey('square_breakdown'),
       revenueSeries: _points(
-        root['revenue_series'] ?? root['monthly_revenue_chart'] ?? root['monthly_revenue'],
+        root['revenue_series'] ??
+            root['monthly_revenue_chart'] ??
+            root['monthly_revenue'],
       ),
       statusBreakdown: _breakdown(
         root['status_breakdown'] ?? root['invoice_statuses'],
@@ -93,8 +108,8 @@ class FinancialReportModel extends FinancialReport {
       final values = value['data'] is List
           ? value['data'] as List
           : value['values'] is List
-              ? value['values'] as List
-              : const <dynamic>[];
+          ? value['values'] as List
+          : const <dynamic>[];
       return List.generate(
         labels.length < values.length ? labels.length : values.length,
         (index) => ReportPointModel(
@@ -103,7 +118,9 @@ class FinancialReportModel extends FinancialReport {
         ),
       );
     }
-    return adminList(value).map(ReportPointModel.fromJson).toList(growable: false);
+    return adminList(
+      value,
+    ).map(ReportPointModel.fromJson).toList(growable: false);
   }
 
   static List<ReportBreakdown> _breakdown(dynamic value) {
@@ -111,7 +128,10 @@ class FinancialReportModel extends FinancialReport {
       return value.entries
           .map(
             (entry) => entry.value is Map
-                ? ReportBreakdownModel.fromJson(entry.value, adminString(entry.key))
+                ? ReportBreakdownModel.fromJson(
+                    entry.value,
+                    adminString(entry.key),
+                  )
                 : ReportBreakdownModel(
                     key: adminString(entry.key),
                     label: adminString(entry.key),
@@ -126,23 +146,24 @@ class FinancialReportModel extends FinancialReport {
   }
 
   Map<String, dynamic> toJson() => {
-        'summary': {
-          'total_invoiced': totalInvoiced,
-          'total_collected': totalCollected,
-          'total_outstanding': totalOutstanding,
-          'overdue_amount': overdueAmount,
-          'invoices_count': invoicesCount,
-          'paid_invoices_count': paidInvoicesCount,
-          'overdue_invoices_count': overdueInvoicesCount,
-        },
-        'revenue_series': revenueSeries
-            .map((point) => (point as ReportPointModel).toJson())
-            .toList(),
-        'status_breakdown': statusBreakdown
-            .map((item) => (item as ReportBreakdownModel).toJson())
-            .toList(),
-        'square_breakdown': squareBreakdown
-            .map((item) => (item as ReportBreakdownModel).toJson())
-            .toList(),
-      };
+    'has_detailed_data': hasDetailedData,
+    'summary': {
+      'total_invoiced': totalInvoiced,
+      'total_collected': totalCollected,
+      'total_outstanding': totalOutstanding,
+      'overdue_amount': overdueAmount,
+      'invoices_count': invoicesCount,
+      'paid_invoices_count': paidInvoicesCount,
+      'overdue_invoices_count': overdueInvoicesCount,
+    },
+    'revenue_series': revenueSeries
+        .map((point) => (point as ReportPointModel).toJson())
+        .toList(),
+    'status_breakdown': statusBreakdown
+        .map((item) => (item as ReportBreakdownModel).toJson())
+        .toList(),
+    'square_breakdown': squareBreakdown
+        .map((item) => (item as ReportBreakdownModel).toJson())
+        .toList(),
+  };
 }

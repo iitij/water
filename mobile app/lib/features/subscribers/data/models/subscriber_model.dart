@@ -1,4 +1,5 @@
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/models/square_label.dart';
 import '../../domain/entities/subscriber.dart';
 
 double _d(Object? v) => jDouble(v);
@@ -30,7 +31,7 @@ class SubscriberModel extends Subscriber {
       phone: jStr(j['phone']),
       address: jStr(j['address']),
       squareId: jIntOrNull(j['square_id']),
-      squareName: jStr(square?['name'] ?? j['square_name']),
+      squareName: squareLabelOrNull(square?['name'] ?? j['square_name'], square?['code'] ?? j['square_code']),
       status: SubscriberStatusX.fromApi(jStr(j['status'])),
       subscriptionStartDate: jStr(j['subscription_start_date']),
       metersCount:

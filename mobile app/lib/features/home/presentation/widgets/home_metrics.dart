@@ -104,10 +104,9 @@ class _WorkspaceMetrics extends StatelessWidget {
 }
 
 class _LiveMetrics extends StatelessWidget {
-  const _LiveMetrics({required this.cubit, required this.canViewRevenue});
+  const _LiveMetrics({required this.cubit});
 
   final DashboardCubit cubit;
-  final bool canViewRevenue;
 
   @override
   Widget build(BuildContext context) {
@@ -133,42 +132,9 @@ class _LiveMetrics extends StatelessWidget {
           return const _MetricsSkeleton();
         }
 
-        final stats = snapshot.data.stats;
-        return AppMetricGrid(
-          children: <Widget>[
-            AppMetricCard(
-              title: 'المشتركون النشطون',
-              value: AdminFormat.number(stats.activeSubscribersCount),
-              icon: Icons.groups_rounded,
-              color: AppColors.primary,
-              sparkline: stats.subscribersSparkline,
-              caption: 'من أصل ${AdminFormat.number(stats.totalSubscribersCount)} مشترك',
-            ),
-            AppMetricCard(
-              title: 'الديون المستحقة',
-              value: CurrencyFormatter.amount(stats.outstandingAmount),
-              unit: 'ر.ي',
-              icon: Icons.account_balance_wallet_outlined,
-              color: AppColors.danger,
-              caption: '${AdminFormat.number(stats.unpaidInvoicesCount)} فاتورة غير مسددة',
-            ),
-            AppMetricCard(
-              title: 'إيرادات هذا الشهر',
-              value: CurrencyFormatter.amount(stats.monthlyCollection),
-              unit: 'ر.ي',
-              icon: Icons.payments_rounded,
-              color: AppColors.success,
-              sparkline: stats.collectionSparkline,
-              caption: '${AdminFormat.number(stats.readingsThisMonth)} قراءة هذا الشهر',
-            ),
-            AppMetricCard(
-              title: 'الفواتير المتأخرة',
-              value: AdminFormat.number(stats.overdueInvoicesCount),
-              icon: Icons.schedule_rounded,
-              color: AppColors.warning,
-              caption: stats.overdueInvoicesCount > 0 ? 'تحتاج متابعة' : 'لا توجد متأخرات',
-            ),
-          ],
+        return StatsOverviewGrid(
+          stats: snapshot.data.stats,
+          can: GetIt.I<PermissionService>().can,
         );
       },
     );

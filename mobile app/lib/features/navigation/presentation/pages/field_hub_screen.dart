@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -55,7 +56,7 @@ class FieldHubScreen extends StatelessWidget {
                     onPressed: () => context.push(RouteNames.fieldReader),
                   ),
                   secondary: HeroGhostButton(
-                    label: 'سجل القراءات',
+                    label: LaravelScreenStrings.readings,
                     icon: Icons.fact_check_outlined,
                     onPressed: () => context.push(RouteNames.readings),
                   ),

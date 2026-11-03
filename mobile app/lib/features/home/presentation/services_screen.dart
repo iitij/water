@@ -6,6 +6,7 @@ import '../../../core/auth/session_service.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/ui/app_filters.dart';
+import '../../../core/ui/app_tiles.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../domain/workspace_catalog.dart';
 import 'widgets/workspace_widgets.dart';
@@ -304,44 +305,17 @@ class _ServicesDirectoryState extends State<ServicesDirectory> {
                             ],
                           ),
                         ),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final largeText =
-                                MediaQuery.textScalerOf(context).scale(16) > 20;
-                            final columns = largeText
-                                ? 1
-                                : constraints.maxWidth >= 900
-                                ? 4
-                                : constraints.maxWidth >= 600
-                                ? 3
-                                : constraints.maxWidth >= 320
-                                ? 2
-                                : 1;
-                            const gap = 10.0;
-                            final cardWidth =
-                                (constraints.maxWidth - gap * (columns - 1)) /
-                                columns;
-                            return Wrap(
-                              spacing: gap,
-                              runSpacing: gap,
-                              children: [
-                                for (final entry in groupEntries)
-                                  SizedBox(
-                                    width: cardWidth,
-                                    height: columns > 1 ? 148 : null,
-                                    child: WorkspaceTile(
-                                      entry: entry,
-                                      directory: true,
-                                      compactGrid: columns > 1,
-                                      onTap: () {
-                                        FocusScope.of(context).unfocus();
-                                        widget.onNavigate(entry.route);
-                                      },
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
+                        AppModuleGrid(
+                          children: [
+                            for (final entry in groupEntries)
+                              WorkspaceTile(
+                                entry: entry,
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                  widget.onNavigate(entry.route);
+                                },
+                              ),
+                          ],
                         ),
                       ],
                     ),

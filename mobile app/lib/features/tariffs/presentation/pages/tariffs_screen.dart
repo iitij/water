@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/permissions/finance_permissions.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -73,7 +74,7 @@ class _TariffsBodyState extends State<_TariffsBody> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('التسعيرات'),
+        title: const Text(LaravelScreenStrings.tariffs),
         actions: <Widget>[
           BlocBuilder<TariffsCubit, TariffsState>(
             builder: (context, state) => IgnorePointer(

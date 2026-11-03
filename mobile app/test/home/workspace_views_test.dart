@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:water_project/core/l10n/laravel_screen_strings.dart';
 import 'package:water_project/core/router/route_names.dart';
 import 'package:water_project/core/theme/app_theme.dart';
 import 'package:water_project/core/ui/app_filters.dart';
@@ -93,7 +94,7 @@ void main() {
       // Arabic alef variants are normalized by the catalog search.
       await tester.enterText(find.byType(TextField), 'ايصالات');
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(WorkspaceTile, 'سندات القبض'), findsOneWidget);
+      expect(find.widgetWithText(WorkspaceTile, LaravelScreenStrings.payments), findsOneWidget);
 
       await tester.ensureVisible(find.widgetWithText(AppFilterChip, 'التقارير والإدارة'));
       await tester.pumpAndSettle();
@@ -110,10 +111,10 @@ void main() {
       await tester.tap(find.widgetWithText(AppFilterChip, 'الكل'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(
-        find.widgetWithText(WorkspaceTile, 'سندات القبض'),
+        find.widgetWithText(WorkspaceTile, LaravelScreenStrings.payments),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(WorkspaceTile, 'سندات القبض'));
+      await tester.tap(find.widgetWithText(WorkspaceTile, LaravelScreenStrings.payments));
       expect(opened, [RouteNames.payments]);
     },
   );
@@ -130,7 +131,7 @@ void main() {
     expect(find.text('0 خدمة متاحة'), findsOneWidget);
   });
 
-  testWidgets('service directory shows two cards side by side on a phone', (tester) async {
+  testWidgets('service directory uses compact content-height rows on a phone', (tester) async {
     tester.view.physicalSize = const Size(390, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -140,8 +141,10 @@ void main() {
     await tester.pumpAndSettle();
     final first = tester.getRect(find.byType(WorkspaceTile).at(0));
     final second = tester.getRect(find.byType(WorkspaceTile).at(1));
-    expect((first.center.dy - second.center.dy).abs(), lessThan(2));
-    expect(first.right <= second.left || second.right <= first.left, isTrue);
+    expect(first.right, second.right);
+    expect(first.bottom, lessThan(second.top));
+    expect(first.height, lessThan(112));
+    expect(second.height, lessThan(112));
     expect(tester.takeException(), isNull);
   });
 

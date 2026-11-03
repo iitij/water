@@ -9,6 +9,7 @@ import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/l10n/field_experience_strings.dart';
 import '../../../../core/l10n/field_list_options_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/models/record_location.dart';
 import '../../../../core/navigation/sub_page.dart';
@@ -89,7 +90,7 @@ class _ReadingsListView extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SubPageScaffold(
-        title: 'سجل القراءات',
+        title: LaravelScreenStrings.readings,
         subtitle: 'أرشيف القراءات المسجلة للعدادات',
         actions: [
           BlocBuilder<ReadingsCubit, ReadingsState>(

@@ -74,7 +74,8 @@ class SubscribersState extends Equatable {
 }
 
 class SubscribersCubit extends Cubit<SubscribersState> {
-  SubscribersCubit(this._repo) : super(const SubscribersState());
+  SubscribersCubit(this._repo, {SubscriberStatus? initialStatus})
+      : super(SubscribersState(status: initialStatus));
   final SubscribersRepository _repo;
   int _loadVersion = 0;
   Set<int>? _visibleIds;

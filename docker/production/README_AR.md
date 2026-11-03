@@ -34,3 +34,28 @@
 الفحص التشغيلي: `/up` يعيد نجاحاً، `/` يوجّه إلى `/admin`، وتتحقق شاشة الدخول
 وصلاحيات API. خدمة `water-queue` ومؤقت `water-scheduler` يعملان عبر systemd.
 هذا السكربت لا يدعي نجاح الاختبارات أو اكتمال قبول المستخدم.
+
+## محرك الطباعة للخادم الصغير
+
+تحتفظ خدمة `water-pdf-browser` بمتصفح Chromium، وتحتفظ خدمة
+`water-pdf-worker` بـ Node/Puppeteer وصفحة رسم واحدة. إعادة تشغيل هذه المكونات
+لكل فاتورة تسبب ضغط ذاكرة وقراءة قرص شديداً على خادم 1 GB. العامل يمسح محتوى
+الصفحة بعد كل مستند، ويمنع الطلبات الخارجية؛ الخطوط والصور مضمنة داخل القوالب.
+لا تُخزّن ملفات الفواتير في ذاكرة تخزين مشتركة بين المستخدمين.
+
+بعد رفع المصدر وتثبيت Puppeteer/Chromium، جهّز مسار المتصفح القابل للكتابة:
+
+```bash
+sudo install -d -o www-data -g www-data -m 700 /var/lib/water-chromium/pdf-worker
+sudo install -m 644 docker/production/water-pdf-browser.service /etc/systemd/system/
+sudo install -m 644 docker/production/water-pdf-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now water-pdf-browser water-pdf-worker
+curl --fail http://127.0.0.1:9310/health
+```
+
+بعد نجاح فحص الصحة، اضبط `WATER_PDF_REUSE_BROWSER=true` في بيئة الخادم ثم
+نفّذ `php artisan config:cache` وأعد تحميل PHP-FPM. المنفذان 9222 و9310 مرتبطان
+بـ `127.0.0.1` فقط؛ لا تفتحهما للإنترنت. يبقى المسار الأصلي متاحاً عند تعطيل
+المتغير على بيئات التطوير. قفل الملفات يمنع رسم ملفين بالتزامن؛ يرجع الانشغال
+503 برسالة عربية. راجع سجلات الخدمتين عند الفشل؛ لا يسجل العامل محتوى الفواتير.

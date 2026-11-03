@@ -38,7 +38,7 @@ class ReadingFaultController extends ApiController
             ->with([
                 'meter:id,unique_code,path_number,tenant_name,subscriber_id',
                 'subscriber:id,name,phone',
-                'square:id,name',
+                'square:id,name,code',
                 'user:id,name',
             ])
             ->latest('reading_date')->latest('id');
@@ -77,7 +77,7 @@ class ReadingFaultController extends ApiController
 
         return response()->json([
             'message' => 'تم تسجيل عطل القراءة.',
-            'fault' => $fault->load(['meter:id,unique_code,path_number', 'square:id,name']),
+            'fault' => $fault->load(['meter:id,unique_code,path_number', 'square:id,name,code']),
             'duplicate' => ! $fault->wasRecentlyCreated,
         ], 201);
     }

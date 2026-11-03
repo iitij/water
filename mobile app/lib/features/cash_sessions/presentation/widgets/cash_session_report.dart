@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
 
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/network/finance_endpoints.dart';
@@ -24,6 +25,7 @@ Future<void> openCashSessionReportPdf(
 
     service: sl<PdfPrintService>(),
     fileName: 'cash-session-${session.id}.pdf',
+    printFormat: PdfPageFormat.a4,
     loader: () => sl<PdfPrintService>().fetchPdf(
       FinanceEndpoints.cashSessionReportPdf(session.id),
     ),

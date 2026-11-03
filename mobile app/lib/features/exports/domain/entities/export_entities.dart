@@ -3,16 +3,20 @@ import 'dart:typed_data';
 import 'package:equatable/equatable.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/models/square_label.dart';
+
 enum ExportKind { subscribers, invoices, readings }
 
 class ExportSquare extends Equatable {
-  const ExportSquare({required this.id, required this.name});
+  const ExportSquare({required this.id, required this.name, this.code});
 
   final int id;
   final String name;
+  final String? code;
+  String get displayName => squareDisplayName(name, code);
 
   @override
-  List<Object> get props => [id, name];
+  List<Object?> get props => [id, name, code];
 }
 
 class ExportSummary extends Equatable {

@@ -215,8 +215,13 @@ class _BalancePanel extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${CurrencyFormatter.amount(collected ?? 0)} ر.ي',
-                  style: const TextStyle(color: _onPanelSoft, fontSize: 10.5, height: 1.4),
+                  '${CurrencyFormatter.amount(collected ?? 0)} ${DashboardMetricStrings.currencyShort}',
+                  style: const TextStyle(
+                    color: _onPanelSoft,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -248,7 +253,7 @@ class _BalancePanel extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: _PanelButton(
-                      label: 'لوحة القيادة',
+                      label: LaravelScreenStrings.dashboard,
                       icon: Icons.insights_rounded,
                       primary: false,
                       onPressed: onDashboard,
@@ -295,15 +300,15 @@ class _AmountLine extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 5),
+        const SizedBox(width: 8),
         const Padding(
           padding: EdgeInsets.only(bottom: 4),
           child: Text(
-            'ر.ي',
+            DashboardMetricStrings.currencyShort,
             style: TextStyle(
-              color: AppColors.onPanelMuted,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
+              color: AppColors.onPanelSoft,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),

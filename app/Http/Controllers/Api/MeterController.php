@@ -13,7 +13,7 @@ class MeterController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(Meter::class, 'viewAny');
-        $query = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name'])
+        $query = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code'])
             ->withCount('readings')->orderBy('id');
 
         if ($request->filled('subscriber_id')) {
@@ -34,6 +34,7 @@ class MeterController extends ApiController
             } else {
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('unique_code', 'like', "%{$search}%")
+                        ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                         ->orWhere('tenant_name', 'like', "%{$search}%")
                         ->orWhere('tenant_phone', 'like', "%{$search}%")
                         ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%"));
@@ -45,6 +46,7 @@ class MeterController extends ApiController
         }
 
         $this->applySorting($query, $request, self::LIST_SORTS['meters']);
+
         return $query->paginate($this->perPage($request))->appends($request->query());
     }
 
@@ -63,9 +65,11 @@ class MeterController extends ApiController
                 ? ((string) $meter->path_number === $exactPath[1] && (string) $meter->subscriber?->square_id === $exactPath[0])
                 : ($search !== '' && (string) $meter->path_number === $search));
             $meter->setAttribute('last_reading', $meter->readings()->latest('id')->value('current_reading') ?? $meter->initial_reading ?? 0);
+
             return $meter;
         });
         $results->setCollection($results->getCollection()->sortByDesc('is_path_match')->values());
+
         return $results;
     }
 
@@ -77,6 +81,7 @@ class MeterController extends ApiController
         $meter->setAttribute('last_reading', $meter->readings->first()?->current_reading ?? $meter->initial_reading ?? 0);
         $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
         $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
+
         return response()->json(['meter' => $meter]);
     }
 
@@ -100,6 +105,7 @@ class MeterController extends ApiController
         }
         $data['status'] ??= 'active';
         $meter = Meter::create($data)->load(['subscriber.square']);
+
         return response()->json(['message' => 'تم إضافة العداد بنجاح.', 'meter' => $meter], 201);
     }
 
@@ -124,6 +130,7 @@ class MeterController extends ApiController
             return response()->json(['errors' => ['path_number' => ['رقم المسار مستخدم بالفعل في هذا المربع السكني.']]], 422);
         }
         $meter->update($data);
+
         return response()->json(['message' => 'تم تحديث العداد بنجاح.', 'meter' => $meter->fresh(['subscriber.square'])]);
     }
 
@@ -135,6 +142,7 @@ class MeterController extends ApiController
             return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
         }
         $meter->delete();
+
         return response()->json(['message' => 'تم حذف العداد بنجاح.']);
     }
 
@@ -148,12 +156,14 @@ class MeterController extends ApiController
             foreach (Meter::whereIn('id', $data['ids'])->lockForUpdate()->get() as $meter) {
                 if ($this->hasHistory($meter)) {
                     $skipped[] = $meter->id;
+
                     continue;
                 }
                 $meter->delete();
                 $deleted++;
             }
         });
+
         return response()->json(['deleted_count' => $deleted, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
     }
 
@@ -171,6 +181,7 @@ class MeterController extends ApiController
         }
         $squareId = $data['square_id'] ?? Subscriber::findOrFail($data['subscriber_id'])->square_id;
         $available = $this->pathAvailable($squareId, (int) $data['path_number'], $data['meter_id'] ?? null);
+
         return response()->json([
             'valid' => $available,
             'available' => $available,
@@ -185,6 +196,7 @@ class MeterController extends ApiController
         if ($pathNumber === null) {
             return true;
         }
+
         return ! Meter::where('path_number', $pathNumber)
             ->when($ignoreMeterId, fn ($q) => $q->where('id', '!=', $ignoreMeterId))
             ->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId))

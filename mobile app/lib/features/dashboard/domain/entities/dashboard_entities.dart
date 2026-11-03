@@ -42,31 +42,31 @@ class DashboardInvoice extends Equatable {
   }
 
   String get statusLabel => switch (status) {
-        'draft' => 'مسودة',
-        'issued' => 'صادرة',
-        'partially_paid' => 'مسددة جزئياً',
-        'paid' => 'مسددة',
-        'overdue' => 'متأخرة',
-        _ => status.isEmpty ? 'غير محدد' : status,
-      };
+    'draft' => 'مسودة',
+    'issued' => 'صادرة',
+    'partially_paid' => 'مسددة جزئياً',
+    'paid' => 'مسددة',
+    'overdue' => 'متأخرة',
+    _ => status.isEmpty ? 'غير محدد' : status,
+  };
 
   @override
   List<Object?> get props => [
-        id,
-        billNumber,
-        subscriberId,
-        meterId,
-        subscriberName,
-        tenantName,
-        subscriberPhone,
-        billDate,
-        totalAmount,
-        previousBalance,
-        creditApplied,
-        amountPaid,
-        status,
-        trueRemainingAmount,
-      ];
+    id,
+    billNumber,
+    subscriberId,
+    meterId,
+    subscriberName,
+    tenantName,
+    subscriberPhone,
+    billDate,
+    totalAmount,
+    previousBalance,
+    creditApplied,
+    amountPaid,
+    status,
+    trueRemainingAmount,
+  ];
 }
 
 class DashboardStats extends Equatable {
@@ -94,16 +94,16 @@ class DashboardStats extends Equatable {
 
   @override
   List<Object> get props => [
-        activeSubscribersCount,
-        totalSubscribersCount,
-        outstandingAmount,
-        monthlyCollection,
-        overdueInvoicesCount,
-        unpaidInvoicesCount,
-        readingsThisMonth,
-        subscribersSparkline,
-        collectionSparkline,
-      ];
+    activeSubscribersCount,
+    totalSubscribersCount,
+    outstandingAmount,
+    monthlyCollection,
+    overdueInvoicesCount,
+    unpaidInvoicesCount,
+    readingsThisMonth,
+    subscribersSparkline,
+    collectionSparkline,
+  ];
 }
 
 class MonthlyRevenue extends Equatable {
@@ -112,7 +112,8 @@ class MonthlyRevenue extends Equatable {
   final List<String> labels;
   final List<double> values;
 
-  int get length => labels.length < values.length ? labels.length : values.length;
+  int get length =>
+      labels.length < values.length ? labels.length : values.length;
 
   @override
   List<Object> get props => [labels, values];
@@ -132,7 +133,12 @@ class DashboardData extends Equatable {
   final List<DashboardInvoice> overdueInvoices;
 
   @override
-  List<Object> get props => [stats, monthlyRevenue, latestInvoices, overdueInvoices];
+  List<Object> get props => [
+    stats,
+    monthlyRevenue,
+    latestInvoices,
+    overdueInvoices,
+  ];
 }
 
 class DashboardSnapshot extends Equatable {
@@ -201,6 +207,7 @@ class FinancialReport extends Equatable {
     required this.revenueSeries,
     required this.statusBreakdown,
     required this.squareBreakdown,
+    this.hasDetailedData = true,
   });
 
   final double totalInvoiced;
@@ -214,23 +221,27 @@ class FinancialReport extends Equatable {
   final List<ReportBreakdown> statusBreakdown;
   final List<ReportBreakdown> squareBreakdown;
 
+  /// Older servers supply only invoice and collection totals.
+  final bool hasDetailedData;
+
   double get collectionRate => totalInvoiced <= 0
       ? 0
       : (totalCollected / totalInvoiced * 100).clamp(0, 100).toDouble();
 
   @override
   List<Object> get props => [
-        totalInvoiced,
-        totalCollected,
-        totalOutstanding,
-        overdueAmount,
-        invoicesCount,
-        paidInvoicesCount,
-        overdueInvoicesCount,
-        revenueSeries,
-        statusBreakdown,
-        squareBreakdown,
-      ];
+    totalInvoiced,
+    totalCollected,
+    totalOutstanding,
+    overdueAmount,
+    invoicesCount,
+    paidInvoicesCount,
+    overdueInvoicesCount,
+    revenueSeries,
+    statusBreakdown,
+    squareBreakdown,
+    hasDetailedData,
+  ];
 }
 
 class ReportSnapshot extends Equatable {

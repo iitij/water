@@ -50,6 +50,7 @@ import '../finance/finance_locator.dart';
 import '../finance/finance_module.dart';
 import '../fouad/api_client.dart';
 import '../fouad/fouad_module.dart';
+import '../l10n/laravel_screen_strings.dart';
 import '../navigation/app_shell.dart';
 import '../navigation/sub_page.dart';
 import '../notifications/notification_service.dart';
@@ -228,7 +229,7 @@ class AppRouter {
           GoRoute(
             path: RouteNames.profile,
             builder: (context, state) => const SubPageScaffold(
-              title: 'الملف الشخصي',
+              title: LaravelScreenStrings.profile,
               subtitle: 'بياناتك وكلمة المرور والصورة',
               child: EditProfileScreen(),
             ),

@@ -1,20 +1,21 @@
+import '../../../core/l10n/laravel_screen_strings.dart';
 import 'entities/rbac_entities.dart';
 
 ShieldPermissionCatalog standardShieldPermissionCatalog() {
   const resources = <String, String>{
-    'Invoice': 'الفواتير',
-    'Payment': 'المدفوعات',
-    'Reading': 'القراءات',
-    'Subscriber': 'المشتركون',
-    'Meter': 'العدادات',
-    'Square': 'المربعات',
-    'SubscriptionFee': 'رسوم الاشتراك',
-    'ServiceRequest': 'طلبات الوايت',
-    'Tariff': 'التعرفة',
-    'Transaction': 'دفتر الأستاذ',
-    'User': 'المستخدمون',
+    'Invoice': LaravelScreenStrings.invoices,
+    'Payment': LaravelScreenStrings.payments,
+    'Reading': LaravelScreenStrings.readings,
+    'Subscriber': LaravelScreenStrings.subscribers,
+    'Meter': LaravelScreenStrings.meters,
+    'Square': LaravelScreenStrings.squares,
+    'SubscriptionFee': LaravelScreenStrings.subscriptionFees,
+    'ServiceRequest': LaravelScreenStrings.serviceRequests,
+    'Tariff': LaravelScreenStrings.tariffs,
+    'Transaction': LaravelScreenStrings.transactions,
+    'User': LaravelScreenStrings.users,
     'Role': 'الأدوار',
-    'Setting': 'الإعدادات',
+    'Setting': LaravelScreenStrings.settings,
   };
   const actions = <String, String>{
     'ViewAny': 'عرض الكل',
@@ -31,12 +32,12 @@ ShieldPermissionCatalog standardShieldPermissionCatalog() {
     'Reorder': 'إعادة ترتيب',
   };
   const pages = <String, String>{
-    'ExportDataPage': 'مركز التصدير',
-    'InvoiceSettings': 'إعدادات الفاتورة',
-    'ReadingSettings': 'إعدادات القراءات',
-    'ReceiptSettings': 'إعدادات سند القبض',
-    'WhatsAppSettings': 'إعدادات الواتساب',
-    'EditProfilePage': 'الملف الشخصي',
+    'ExportDataPage': LaravelScreenStrings.exports,
+    'InvoiceSettings': LaravelScreenStrings.invoiceSettings,
+    'ReadingSettings': LaravelScreenStrings.readingSettings,
+    'ReceiptSettings': LaravelScreenStrings.receiptSettings,
+    'WhatsAppSettings': LaravelScreenStrings.whatsappNavigation,
+    'EditProfilePage': LaravelScreenStrings.profileNavigation,
   };
   const widgets = <String, String>{
     'StatsOverview': 'البطاقات الإحصائية',

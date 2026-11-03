@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/auth/session_service.dart';
+import 'package:water_project/core/l10n/laravel_screen_strings.dart';
 import 'package:water_project/core/permissions/permission_service.dart';
 import 'package:water_project/core/router/route_names.dart';
 import 'package:water_project/features/invoices/domain/repositories/invoices_repository.dart';
@@ -47,6 +48,7 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
+    expect(find.text(LaravelScreenStrings.payments), findsOneWidget);
     expect(find.text('بدء التحصيل'), findsOneWidget);
     expect(find.text('دفعة جديدة'), findsNothing);
     verify(() => payments.list(any())).called(1);

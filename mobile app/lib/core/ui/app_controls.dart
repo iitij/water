@@ -183,7 +183,6 @@ class AppIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tiny = size <= 32;
     final button = Semantics(
       button: true,
       label: tooltip,
@@ -195,22 +194,19 @@ class AppIconButton extends StatelessWidget {
           children: <Widget>[
             Positioned.fill(
               child: Material(
-                color: tiny
-                    ? Colors.transparent
-                    : scheme.surfaceContainerHighest,
+                color: Colors.transparent,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(size * .32),
-                  side: tiny
-                      ? BorderSide.none
-                      : BorderSide(color: scheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: onPressed,
                   child: Icon(
                     icon,
-                    size: size * .46,
-                    color: color ?? scheme.onSurfaceVariant,
+                    size: (size * .46).clamp(18, 24),
+                    color: onPressed == null
+                        ? scheme.onSurface.withValues(alpha: .38)
+                        : color ?? scheme.onSurfaceVariant,
                   ),
                 ),
               ),

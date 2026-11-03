@@ -8,6 +8,8 @@
 /// للتوحيد المستقبلي: انقل هذه الطريقة إلى `core/network/` عند Dev 1 أو اجعل
 /// `DioClient` يطبّق `FinanceApiTransport`. راجع `docs/handoff/DEV3_FINANCE_MODULE.md` §9.
 library;
+
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -44,73 +46,66 @@ class FinanceApiClient {
     String path, {
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
-  }) =>
-      _guard<T>(() async {
-        final response = await dio.get<dynamic>(
-          financeApiPath(path),
-          queryParameters: _clean(query),
-          cancelToken: cancelToken,
-        );
-        return response.data as T;
-      });
+  }) => _guard<T>(() async {
+    final response = await dio.get<dynamic>(
+      financeApiPath(path),
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+    );
+    return response.data as T;
+  });
 
   Future<dynamic> getRaw(
     String path, {
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
-  }) =>
-      _guardRaw(() async {
-        final response = await dio.get<dynamic>(
-          financeApiPath(path),
-          queryParameters: _clean(query),
-          cancelToken: cancelToken,
-        );
-        return response.data;
-      });
+  }) => _guardRaw(() async {
+    final response = await dio.get<dynamic>(
+      financeApiPath(path),
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+    );
+    return response.data;
+  });
 
   Future<dynamic> post(
     String path, {
     Object? body,
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
-  }) =>
-      _guardRaw(() async {
-        final response = await dio.post<dynamic>(
-          financeApiPath(path),
-          data: body,
-          queryParameters: _clean(query),
-          cancelToken: cancelToken,
-        );
-        return response.data;
-      });
+  }) => _guardRaw(() async {
+    final response = await dio.post<dynamic>(
+      financeApiPath(path),
+      data: body,
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+    );
+    return response.data;
+  });
 
   Future<dynamic> put(
     String path, {
     Object? body,
     Map<String, dynamic>? query,
-  }) =>
-      _guardRaw(() async {
-        final response = await dio.put<dynamic>(
-          financeApiPath(path),
-          data: body,
-          queryParameters: _clean(query),
-        );
-        return response.data;
-      });
+  }) => _guardRaw(() async {
+    final response = await dio.put<dynamic>(
+      financeApiPath(path),
+      data: body,
+      queryParameters: _clean(query),
+    );
+    return response.data;
+  });
 
   Future<dynamic> delete(String path, {Object? body}) => _guardRaw(() async {
-        final response = await dio.delete<dynamic>(
-          financeApiPath(path),
-          data: body,
-        );
-        return response.data;
-      });
+    final response = await dio.delete<dynamic>(
+      financeApiPath(path),
+      data: body,
+    );
+    return response.data;
+  });
 
   /// إرسال مباشر إلى رابط مطلق (جسر واتساب المحلي) بلا طباعة مسارات.
-  Future<dynamic> postAbsolute(
-    String url, {
-    Object? body,
-  }) =>
+  Future<dynamic> postAbsolute(String url, {Object? body}) =>
       _guardRaw(() async {
         final response = await dio.post<dynamic>(url, data: body);
         return response.data;
@@ -136,6 +131,24 @@ class FinanceApiClient {
       if (data is List<int>) return Uint8List.fromList(data);
       throw const UnexpectedFailure('استجابة غير صالحة عند تحميل الملف.');
     } on DioException catch (error) {
+      // A byte download also receives JSON error bodies as bytes. Preserve the
+      // server's Arabic permission/busy message instead of hiding it as HTTP 503.
+      final response = error.response;
+      final data = response?.data;
+      if (response != null && data is List<int>) {
+        try {
+          final decoded = jsonDecode(utf8.decode(data));
+          if (decoded is Map) {
+            throw FailureMapper.fromResponse(Response<dynamic>(
+              requestOptions: response.requestOptions,
+              statusCode: response.statusCode,
+              data: decoded,
+            ));
+          }
+        } on FormatException {
+          // HTML proxies and malformed bodies use the normal status fallback.
+        }
+      }
       throw FailureMapper.from(error);
     }
   }
@@ -152,9 +165,8 @@ class FinanceApiClient {
     return cleaned.isEmpty ? <String, dynamic>{} : cleaned;
   }
 
-  Future<T> _guard<T>(Future<T> Function() action) => _guardRaw(action).then(
-        (value) => value as T,
-      );
+  Future<T> _guard<T>(Future<T> Function() action) =>
+      _guardRaw(action).then((value) => value as T);
 
   Future<dynamic> _guardRaw(Future<dynamic> Function() action) async {
     try {

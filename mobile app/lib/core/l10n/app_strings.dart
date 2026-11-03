@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'laravel_screen_strings.dart';
+
 /// نصوص وضع المطور، مركزية حتى لا تتوزع رسائل الدعم بين الشاشات.
 abstract final class DeveloperModeStrings {
   static const entryTitle = 'تفعيل وضع المطور';
@@ -417,9 +419,9 @@ class AppStrings {
 
 /// Const labels allow the permission-aware navigation inventories to stay const.
 abstract final class AppStringsParity {
-  static const auditTitle = 'سجل التدقيق المركزي';
+  static const auditTitle = LaravelScreenStrings.audit;
   static const auditSubtitle = 'أحداث النظام والمستخدمون والتغييرات';
-  static const cashReviewTitle = 'مراجعة صناديق المحصّلين';
+  static const cashReviewTitle = LaravelScreenStrings.cashReview;
   static const cashReviewSubtitle =
       'راجع النقد والتقارير واعتمد الصناديق أو ارفضها';
 }

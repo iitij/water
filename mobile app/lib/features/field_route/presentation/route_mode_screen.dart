@@ -134,7 +134,7 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
       _selectedSquare = square;
       _plan = RoutePlan.fromStops(
         squareId: square.id,
-        squareName: square.name,
+        squareName: square.displayName,
         stops: stops,
         visitedMeterIds: merged,
       );
@@ -187,7 +187,7 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
 
     if (!mounted) return;
     if (updated.isComplete) {
-      AppFeedback.success(context, 'أكملت مسار ${square.name}. عمل ممتاز.');
+      AppFeedback.success(context, 'أكملت مسار ${square.displayName}. عمل ممتاز.');
     }
   }
 
@@ -319,7 +319,7 @@ class _RouteModeScreenState extends State<RouteModeScreen> {
               .map(
                 (square) => DropdownMenuItem<SquareOption>(
                   value: square,
-                  child: Text(square.name),
+                  child: Text(square.displayName),
                 ),
               )
               .toList(growable: false),

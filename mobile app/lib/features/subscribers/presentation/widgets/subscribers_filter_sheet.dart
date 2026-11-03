@@ -117,7 +117,7 @@ class _SubscribersFilterSheetState extends State<_SubscribersFilterSheet> {
               ...widget.state.squares.map(
                 (square) => DropdownMenuItem<int?>(
                   value: square.id,
-                  child: Text(square.name, overflow: TextOverflow.ellipsis),
+                  child: Text(square.displayName, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],

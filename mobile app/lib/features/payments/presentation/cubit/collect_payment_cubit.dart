@@ -25,11 +25,11 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     required ReferencesRemoteDataSource references,
     required int? meterId,
     CashSessionService? cashSessionService,
-  })  : _payments = paymentsRepository,
-        _references = references,
-        _meterId = meterId,
-        _cashSessions = cashSessionService,
-        super(CollectPaymentState(paymentDate: DateTime.now()));
+  }) : _payments = paymentsRepository,
+       _references = references,
+       _meterId = meterId,
+       _cashSessions = cashSessionService,
+       super(CollectPaymentState(paymentDate: DateTime.now()));
 
   final PaymentsRepository _payments;
   final ReferencesRemoteDataSource _references;
@@ -43,26 +43,30 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
 
   /// فتح من فاتورة محددة (`SCR-13`/`SCR-15`/ودجة الفواتير المتأخرة).
   Future<void> openForInvoice(InvoiceModel invoice) async {
-    emit(state.copyWith(
-      subscriberId: invoice.subscriberId,
-      subscriberName: invoice.beneficiaryName,
-      invoiceId: invoice.id,
-      dueAmount: invoice.netPayable,
-      amount: invoice.netPayable,
-      openInvoices: <InvoiceModel>[invoice],
-      clearValidation: true,
-    ));
+    emit(
+      state.copyWith(
+        subscriberId: invoice.subscriberId,
+        subscriberName: invoice.beneficiaryName,
+        invoiceId: invoice.id,
+        dueAmount: invoice.payableAmount,
+        amount: invoice.payableAmount,
+        openInvoices: <InvoiceModel>[invoice],
+        clearValidation: true,
+      ),
+    );
     await _loadAccountInvoices(invoice.subscriberId, invoice.meterId);
   }
 
   /// فتح عام (`SCR-18`): المستخدم يختار المشترك، فنجلب استحقاقه تلقائياً.
   Future<void> openForSubscriber(int subscriberId, {String? name}) async {
-    emit(state.copyWith(
-      subscriberId: subscriberId,
-      subscriberName: name,
-      loadingInvoices: true,
-      clearValidation: true,
-    ));
+    emit(
+      state.copyWith(
+        subscriberId: subscriberId,
+        subscriberName: name,
+        loadingInvoices: true,
+        clearValidation: true,
+      ),
+    );
     await _loadAccountInvoices(subscriberId, _meterId, autoSelectLatest: true);
   }
 
@@ -74,45 +78,75 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     try {
       final summary = await _references.dueSummary(subscriberId);
       final invoice = await _payments.latestUnpaidInvoice(subscriberId);
+      if (isClosed) return;
+      // Refreshing account context must not replace the invoice the user opened.
+      if (!autoSelectLatest) {
+        final selected = state.openInvoices
+            .where((item) => item.id == state.invoiceId)
+            .firstOrNull;
+        if (selected != null) {
+          final refreshed =
+              invoice?.id == selected.id && invoice?.meterId == selected.meterId
+              ? invoice!
+              : selected;
+          final due = refreshed.payableAmount;
+          emit(
+            state.copyWith(
+              loadingInvoices: false,
+              openInvoices: [refreshed],
+              dueAmount: due,
+              amount: state.amount == state.dueAmount ? due : state.amount,
+            ),
+          );
+          return;
+        }
+      }
       final open = InvoiceAccounting.openInvoicesForAccount(
-        invoices: <InvoiceModel>[
-          if (invoice != null) invoice,
-        ],
+        invoices: <InvoiceModel>[if (invoice != null) invoice],
         subscriberId: subscriberId,
         meterId: meterId ?? invoice?.meterId,
       );
 
       final due = autoSelectLatest || invoice != null
-          ? (invoice?.netPayable ?? summary?.dueAmount ?? 0)
+          ? (invoice?.payableAmount ?? summary?.dueAmount ?? 0)
           : (summary?.dueAmount ?? 0);
 
-      emit(state.copyWith(
-        loadingInvoices: false,
-        openInvoices: open.isEmpty && invoice != null ? <InvoiceModel>[invoice] : open,
-        invoiceId: invoice?.id ?? state.invoiceId,
-        dueAmount: due,
-        amount: state.amount > 0 && !autoSelectLatest ? state.amount : due,
-      ));
+      emit(
+        state.copyWith(
+          loadingInvoices: false,
+          openInvoices: open.isEmpty && invoice != null
+              ? <InvoiceModel>[invoice]
+              : open,
+          invoiceId: invoice?.id ?? state.invoiceId,
+          dueAmount: due,
+          amount: state.amount > 0 && !autoSelectLatest ? state.amount : due,
+        ),
+      );
     } catch (error) {
+      if (isClosed) return;
       emit(state.copyWith(loadingInvoices: false, validationMessage: '$error'));
     }
   }
 
   void selectInvoice(int? invoiceId) {
     if (invoiceId == null) {
-      emit(state.copyWith(
-        clearInvoice: true,
-        dueAmount: 0,
-        openInvoices: state.openInvoices,
-      ));
+      emit(
+        state.copyWith(
+          clearInvoice: true,
+          dueAmount: 0,
+          openInvoices: state.openInvoices,
+        ),
+      );
       return;
     }
     final matches = state.openInvoices.where((i) => i.id == invoiceId).toList();
     final invoice = matches.isEmpty ? null : matches.first;
-    emit(state.copyWith(
-      invoiceId: invoiceId,
-      dueAmount: invoice?.netPayable ?? state.dueAmount,
-    ));
+    emit(
+      state.copyWith(
+        invoiceId: invoiceId,
+        dueAmount: invoice?.payableAmount ?? state.dueAmount,
+      ),
+    );
   }
 
   /// خيار «تطبيق على الأقدم تلقائياً (FIFO)».
@@ -124,20 +158,26 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
 
   void fillFullDue() => emit(state.copyWith(amount: state.dueAmount));
 
-  void fillHalfDue() =>
-      emit(state.copyWith(amount: double.parse((state.dueAmount / 2).toStringAsFixed(2))));
+  void fillHalfDue() => emit(
+    state.copyWith(
+      amount: double.parse((state.dueAmount / 2).toStringAsFixed(2)),
+    ),
+  );
 
   void resetAmount() => emit(state.copyWith(amount: 0));
 
   void setMethod(PaymentMethod method) {
-    emit(state.copyWith(
-      method: method,
-      // عند التحول إلى نقدي يُلغى الالتزام ويُبقى الرقم للمرجع الاختياري.
-      clearValidation: true,
-    ));
+    emit(
+      state.copyWith(
+        method: method,
+        // عند التحول إلى نقدي يُلغى الالتزام ويُبقى الرقم للمرجع الاختياري.
+        clearValidation: true,
+      ),
+    );
   }
 
-  void setReferenceNumber(String value) => emit(state.copyWith(referenceNumber: value));
+  void setReferenceNumber(String value) =>
+      emit(state.copyWith(referenceNumber: value));
 
   void setReason(String value) => emit(state.copyWith(reason: value));
 
@@ -146,14 +186,17 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
   void setDate(DateTime date) => emit(state.copyWith(paymentDate: date));
 
   double _totalDueOfOpen() => state.openInvoices.fold<double>(
-        0,
-        (sum, invoice) => sum + invoice.netPayable,
-      );
+    0,
+    (sum, invoice) => sum + invoice.ownRemaining,
+  );
 
   CollectPaymentRequest buildRequest() {
     final subscriberId = state.subscriberId;
     if (subscriberId == null) {
-      throw const ValidationFailure('اختر المشترك أولاً.', <String, List<String>>{});
+      throw const ValidationFailure(
+        'اختر المشترك أولاً.',
+        <String, List<String>>{},
+      );
     }
     return CollectPaymentRequest(
       subscriberId: subscriberId,
@@ -202,10 +245,17 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
       emit(state.copyWith(submitting: false, outcome: outcome));
       return outcome.isSuccess;
     } on AppFailure catch (failure) {
-      emit(state.copyWith(submitting: false, validationMessage: failure.message));
+      emit(
+        state.copyWith(submitting: false, validationMessage: failure.message),
+      );
       return false;
     } catch (error) {
-      emit(state.copyWith(submitting: false, validationMessage: 'فشل الحفظ: $error'));
+      emit(
+        state.copyWith(
+          submitting: false,
+          validationMessage: 'فشل الحفظ: $error',
+        ),
+      );
       return false;
     }
   }

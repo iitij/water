@@ -81,13 +81,14 @@ class PdfPrintService {
   static Future<bool> printDocument(
     Uint8List bytes, {
     String name = 'document',
+    PdfPageFormat? format,
   }) async {
     _validated(bytes);
     try {
       return await Printing.layoutPdf(
         name: name,
         onLayout: (_) async => bytes,
-        format: PdfPageFormat.a5.landscape,
+        format: format ?? PdfPageFormat.a5.landscape,
         dynamicLayout: false,
         windowsModernDialog: defaultTargetPlatform == TargetPlatform.windows,
       );

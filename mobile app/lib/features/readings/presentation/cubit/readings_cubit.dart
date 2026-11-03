@@ -141,7 +141,7 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   String? _squareNameOf(int? id) {
     if (id == null) return null;
     for (final square in state.squares) {
-      if (square.id == id) return square.name;
+      if (square.id == id) return square.displayName;
     }
     return null;
   }

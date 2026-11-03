@@ -37,7 +37,7 @@ class InvoiceController extends ApiController
         };
         $query->with([
             'subscriber:id,name,phone,square_id',
-            'subscriber.square:id,name',
+            'subscriber.square:id,name,code',
             'meter:id,unique_code,path_number,tenant_name,tenant_phone',
         ])->latest('bill_date')->latest('id');
 
@@ -78,6 +78,7 @@ class InvoiceController extends ApiController
             } else {
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('bill_number', 'like', "%{$search}%")
+                        ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                         ->orWhereHas('subscriber', function ($subscriberQuery) use ($search) {
                             $subscriberQuery->where('name', 'like', "%{$search}%")
                                 ->orWhere('phone', 'like', "%{$search}%");
@@ -95,6 +96,7 @@ class InvoiceController extends ApiController
         }
 
         $this->applySorting($query, $request, self::LIST_SORTS['invoices']);
+
         return $query->paginate($this->perPage($request))->through(fn (Invoice $invoice) => $this->decorate($invoice))
             ->appends($request->query());
     }
@@ -114,6 +116,7 @@ class InvoiceController extends ApiController
         }
 
         $this->applySorting($query, $request, self::LIST_SORTS['invoices']);
+
         return $query->paginate($this->perPage($request, 50))->through(fn (Invoice $invoice) => $this->decorate($invoice))
             ->appends($request->query());
     }

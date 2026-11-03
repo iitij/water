@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\CashSessionService;
 use App\Support\ArabicNumber;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Spatie\LaravelPdf\Facades\Pdf;
 
@@ -32,8 +33,7 @@ class CashSessionController extends ApiController
 
     public function __construct(
         private readonly CashSessionService $sessions,
-    ) {
-    }
+    ) {}
 
     /** قائمة الجلسات: المحصّل يرى جلسته، والمشرف يرى الكل (مع فلترة). */
     public function index(Request $request)
@@ -42,7 +42,7 @@ class CashSessionController extends ApiController
         $canViewAll = $this->allowsApi(CashSession::class, 'viewAny') || $this->canApprove($user);
 
         $query = CashSession::query()
-            ->with(['user:id,name', 'square:id,name', 'approver:id,name'])
+            ->with(['user:id,name', 'square:id,name,code', 'approver:id,name'])
             ->latest('id');
 
         if (! $canViewAll) {
@@ -113,7 +113,7 @@ class CashSessionController extends ApiController
 
     public function show(Request $request, int $id)
     {
-        $session = CashSession::with(['user:id,name', 'square:id,name', 'approver:id,name'])->findOrFail($id);
+        $session = CashSession::with(['user:id,name', 'square:id,name,code', 'approver:id,name'])->findOrFail($id);
         $this->authorizeSessionAccess($request->user(), $session);
 
         return response()->json(['cash_session' => $this->sessions->summary($session)]);
@@ -177,7 +177,7 @@ class CashSessionController extends ApiController
      */
     public function report(Request $request, int $id)
     {
-        $session = CashSession::with(['user:id,name', 'square:id,name', 'approver:id,name'])->findOrFail($id);
+        $session = CashSession::with(['user:id,name', 'square:id,name,code', 'approver:id,name'])->findOrFail($id);
         $this->authorizeSessionAccess($request->user(), $session);
 
         return response()->json($this->reportData($session));
@@ -190,7 +190,7 @@ class CashSessionController extends ApiController
      */
     public function downloadPdf(Request $request, int $id)
     {
-        $session = CashSession::with(['user:id,name', 'square:id,name', 'approver:id,name'])->findOrFail($id);
+        $session = CashSession::with(['user:id,name', 'square:id,name,code', 'approver:id,name'])->findOrFail($id);
         $this->authorizeSessionAccess($request->user(), $session);
 
         $data = $this->reportData($session);
@@ -207,11 +207,11 @@ class CashSessionController extends ApiController
         ])
             ->withBrowsershot(fn ($browsershot) => $browsershot->noSandbox())
             ->format('A4')
-            ->name('cash-session-' . $session->id . '-' . optional($session->session_date)->format('Y-m-d') . '.pdf')
+            ->name('cash-session-'.$session->id.'-'.optional($session->session_date)->format('Y-m-d').'.pdf')
             ->download();
     }
 
-    /** @return array{cash_session: array, payments: array, generated_at: \Illuminate\Support\Carbon} */
+    /** @return array{cash_session: array, payments: array, generated_at: Carbon} */
     private function reportData(CashSession $session): array
     {
         $payments = Payment::query()

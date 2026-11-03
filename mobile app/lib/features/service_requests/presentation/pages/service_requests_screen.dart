@@ -8,6 +8,7 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
@@ -265,7 +266,7 @@ class _ServiceRequestsView extends StatelessWidget {
       builder: (context, state) {
         final scheme = Theme.of(context).colorScheme;
         return SubPageScaffold(
-          title: 'طلبات الخدمة والوايت',
+          title: LaravelScreenStrings.serviceRequests,
           subtitle: 'طلبات صهاريج المياه وحالتها',
           actions: [
             if (state.selectedIds.isNotEmpty &&
@@ -401,7 +402,7 @@ class _ServiceRequestsView extends StatelessWidget {
                     ),
                     'square_name': (
                       label: ListOptionsStrings.square,
-                      value: (request) => request.location.squareName,
+                      value: (request) => request.location.squareLabel,
                     ),
                     'path_number': (
                       label: ListOptionsStrings.path,

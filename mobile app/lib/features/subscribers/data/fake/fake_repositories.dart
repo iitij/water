@@ -27,7 +27,7 @@ final _subscribers = <Subscriber>[
 class FakeSquaresRepository implements SquaresRepository {
   @override
   Future<List<Square>> getSquares({String? search}) async => _squares
-      .where((s) => search == null || search.isEmpty || s.name.contains(search))
+      .where((s) => search == null || search.isEmpty || s.displayName.toLowerCase().contains(search.toLowerCase()))
       .toList();
   @override
   Future<({Square square, List<Subscriber> subscribers})> getSquare(int id) async {
@@ -36,8 +36,8 @@ class FakeSquaresRepository implements SquaresRepository {
   }
 
   @override
-  Future<Square> createSquare(String name, String? description) async =>
-      Square(id: _squares.length + 10, name: name, description: description);
+  Future<Square> createSquare(String name, String? description, {String? code}) async =>
+      Square(id: _squares.length + 10, name: name, description: description, code: code);
   @override
   Future<Square> updateSquare(Square square) async => square;
   @override

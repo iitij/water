@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:water_project/core/error/failures.dart';
 import 'package:water_project/core/l10n/reading_invoice_strings.dart';
 import 'package:water_project/core/ui/app_controls.dart';
 import 'package:water_project/features/meters/data/models/meter.dart';
@@ -157,6 +158,29 @@ void main() {
           .onPressed,
       isNotNull,
     );
+  });
+
+  testWidgets('print failure shows its Arabic reason and unlocks the buttons', (
+    tester,
+  ) async {
+    const message = 'الطباعة مشغولة حالياً. أعد المحاولة.';
+    when(
+      () => actions.printInvoice(invoice),
+    ).thenThrow(const ServerFailure(message, statusCode: 503));
+    await save(tester, 390);
+    await tester.ensureVisible(find.text('طباعة الفاتورة'));
+    await tester.tap(find.text('طباعة الفاتورة'));
+    await tester.pumpAndSettle();
+    expect(find.text(message), findsOneWidget);
+    expect(
+      tester
+          .widget<AppSecondaryButton>(
+            find.widgetWithText(AppSecondaryButton, 'طباعة الفاتورة'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('SMS failure is shown without a sent confirmation', (

@@ -2,13 +2,14 @@ import '../../../admin_shared/data/admin_json.dart';
 import '../../domain/entities/export_entities.dart';
 
 class ExportSquareModel extends ExportSquare {
-  const ExportSquareModel({required super.id, required super.name});
+  const ExportSquareModel({required super.id, required super.name, super.code});
 
   factory ExportSquareModel.fromJson(dynamic value) {
     final json = adminMap(value);
     return ExportSquareModel(
       id: adminInt(json['id']),
       name: adminString(json['name'], 'مربع غير مسمى'),
+      code: json['code']?.toString(),
     );
   }
 }

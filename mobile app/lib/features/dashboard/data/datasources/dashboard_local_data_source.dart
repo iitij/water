@@ -23,7 +23,7 @@ class CachedReport {
 
 class DashboardLocalDataSource {
   static const _dashboardKey = 'dev5.dashboard.cache.v1';
-  static const _reportPrefix = 'dev5.report.cache.v1';
+  static const _reportPrefix = 'dev5.report.cache.v2';
 
   Future<void> cacheDashboard(DashboardDataModel data) async {
     final preferences = await SharedPreferences.getInstance();

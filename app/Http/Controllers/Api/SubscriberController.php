@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SubscriberController extends ApiController
 {
@@ -20,7 +21,7 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'viewAny');
         $query = Subscriber::query()
-            ->with(['square:id,name', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone'])
+            ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone'])
             ->withCount('meters')
             ->orderBy('name');
 
@@ -32,6 +33,7 @@ class SubscriberController extends ApiController
             } else {
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('name', 'like', "%{$search}%")
+                        ->orWhereHas('square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhereHas('meters', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
@@ -79,7 +81,7 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'view');
         $subscriber = Subscriber::with([
-            'square:id,name,description',
+            'square:id,name,code,description',
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number,tenant_name'])->latest('bill_date')->latest('id'),
             'payments' => fn ($q) => $q->with(['meter:id,unique_code,tenant_name', 'user:id,name'])->latest('payment_date')->latest('id'),
@@ -170,7 +172,7 @@ class SubscriberController extends ApiController
     public function summary(int $id)
     {
         $this->authorizeApi(Subscriber::class, 'view');
-        $subscriber = Subscriber::with(['square:id,name', 'meters:id,subscriber_id,unique_code,path_number,status,balance'])
+        $subscriber = Subscriber::with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance'])
             ->findOrFail($id);
 
         return response()->json([
@@ -349,7 +351,15 @@ class SubscriberController extends ApiController
     public function storeSquare(Request $request)
     {
         $this->authorizeApi(Square::class, 'create');
-        $data = $request->validate(['name' => ['required', 'string', 'max:100'], 'description' => ['nullable', 'string']]);
+        if (is_string($request->input('code'))) {
+            $code = trim($request->input('code'));
+            $request->merge(['code' => $code === '' ? null : $code]);
+        }
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'code' => ['nullable', 'string', 'max:100', Rule::unique('squares', 'code')],
+            'description' => ['nullable', 'string'],
+        ], ['code.string' => 'أدخل معرّف المربع كنص.', 'code.unique' => 'معرّف المربع مستخدم مسبقاً. اختر معرّفاً آخر.']);
 
         return response()->json(['square' => Square::create($data)], 201);
     }

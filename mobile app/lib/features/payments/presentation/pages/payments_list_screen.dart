@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
+import '../../../../core/l10n/list_clarity_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/router/route_names.dart';
@@ -34,13 +36,7 @@ class PaymentsListScreen extends StatelessWidget {
   final PaymentQuery? initialQuery;
 
   static Widget create({PaymentQuery? initialQuery}) =>
-      BlocProvider<PaymentsCubit>(
-        create: (_) => PaymentsCubit(
-          repository: sl<PaymentsRepository>(),
-          initialQuery: initialQuery,
-        )..load(),
-        child: const PaymentsListScreen(),
-      );
+      PaymentsListScreen(initialQuery: initialQuery);
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +68,9 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     final query = context.read<PaymentsCubit>().state.query;
     _presentation = ListPresentationSettings(
       sortBy: query.sortBy,
-      pathNumber: query.pathNumber, createdFrom: query.addedFrom, createdTo: query.addedTo,
+      pathNumber: query.pathNumber,
+      createdFrom: query.addedFrom,
+      createdTo: query.addedTo,
       descending: query.sortDirection == 'desc',
       pageSize: query.limit ?? 25,
       compact: true,
@@ -155,7 +153,9 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selecting ? 'اختيار سندات' : 'سندات القبض'),
+        title: Text(
+          _selecting ? 'اختيار سندات' : LaravelScreenStrings.payments,
+        ),
         actions: <Widget>[
           BlocBuilder<PaymentsCubit, PaymentsState>(
             builder: (context, state) => IgnorePointer(
@@ -191,29 +191,19 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               ),
             ),
           ),
-          if (_selecting) ...<Widget>[
-            IconButton(
-              tooltip: 'تحديد الكل',
-              onPressed: cubit.selectAll,
-              icon: const Icon(Icons.select_all),
-            ),
-            IconButton(
-              tooltip: 'حذف المحدد',
-              onPressed: () => _bulkDelete(context, cubit),
-              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-            ),
-          ] else ...<Widget>[
-            IconButton(
-              tooltip: 'تحديد متعدد',
-              onPressed: () => setState(() => _selecting = true),
-              icon: const Icon(Icons.checklist_rtl),
-            ),
-            // اعتماد طلبات الإلغاء المعلّقة — للمشرف فقط (خطة 2.0 — الفصل 5.3).
-            if (trySl<PermissionService>()?.can('payments.void.approve') ??
-                false)
-              IconButton(
-                tooltip: 'طلبات الإلغاء المعلّقة',
-                onPressed: () async {
+          PopupMenuButton<_PaymentListAction>(
+            tooltip: ListClarityStrings.moreActions,
+            icon: const Icon(Icons.more_vert_rounded),
+            constraints: const BoxConstraints(minWidth: 220, maxWidth: 300),
+            onSelected: (action) async {
+              switch (action) {
+                case _PaymentListAction.multiSelect:
+                  setState(() => _selecting = true);
+                case _PaymentListAction.selectAll:
+                  cubit.selectAll();
+                case _PaymentListAction.deleteSelected:
+                  await _bulkDelete(context, cubit);
+                case _PaymentListAction.voidRequests:
                   final remaining = await VoidRequestsSheet.show(
                     context,
                     sl<PaymentsRepository>(),
@@ -221,15 +211,43 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                   if (remaining != null && context.mounted) {
                     unawaited(cubit.load(refresh: true));
                   }
-                },
-                icon: const Icon(Icons.gavel_outlined),
-              ),
-            IconButton(
-              tooltip: 'تصدير سندات اليوم (CSV)',
-              onPressed: () => _exportToday(context, cubit),
-              icon: const Icon(Icons.ios_share_rounded),
-            ),
-          ],
+                case _PaymentListAction.exportToday:
+                  await _exportToday(context, cubit);
+              }
+            },
+            itemBuilder: (_) => <PopupMenuEntry<_PaymentListAction>>[
+              if (_selecting) ...[
+                const PopupMenuItem(
+                  value: _PaymentListAction.selectAll,
+                  height: 48,
+                  child: Text(ListClarityStrings.selectAll),
+                ),
+                const PopupMenuItem(
+                  value: _PaymentListAction.deleteSelected,
+                  height: 48,
+                  child: Text(ListClarityStrings.deleteSelected),
+                ),
+              ] else ...[
+                const PopupMenuItem(
+                  value: _PaymentListAction.multiSelect,
+                  height: 48,
+                  child: Text(ListClarityStrings.multiSelect),
+                ),
+                if (trySl<PermissionService>()?.can('payments.void.approve') ??
+                    false)
+                  const PopupMenuItem(
+                    value: _PaymentListAction.voidRequests,
+                    height: 48,
+                    child: Text(ListClarityStrings.voidRequests),
+                  ),
+                const PopupMenuItem(
+                  value: _PaymentListAction.exportToday,
+                  height: 48,
+                  child: Text(ListClarityStrings.exportToday),
+                ),
+              ],
+            ],
+          ),
           IconButton(
             tooltip: 'إعادة تحميل',
             onPressed: () => cubit.load(refresh: true),
@@ -711,7 +729,7 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
   @override
   Widget build(BuildContext context) {
     return AppFilterSheet(
-      title: 'تصفية سندات القبض',
+      title: 'تصفية ${LaravelScreenStrings.payments}',
       resultCountLabel: '${widget.state.payments.length} سند في القائمة',
       applyLabel: 'عرض النتائج',
       onApply: () {
@@ -778,4 +796,12 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
       ],
     );
   }
+}
+
+enum _PaymentListAction {
+  multiSelect,
+  selectAll,
+  deleteSelected,
+  voidRequests,
+  exportToday,
 }

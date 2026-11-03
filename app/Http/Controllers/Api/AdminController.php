@@ -8,7 +8,9 @@ use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Subscriber;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AdminController extends ApiController
 {
@@ -71,37 +73,93 @@ class AdminController extends ApiController
             'square_id' => ['nullable', 'integer', 'exists:squares,id'],
         ]);
 
-        $from = $filters['from_date'] ?? now()->startOfMonth()->toDateString();
-        $to = $filters['to_date'] ?? now()->toDateString();
+        $from = Carbon::parse($filters['from_date'] ?? now()->startOfMonth())->toDateString();
+        $to = Carbon::parse($filters['to_date'] ?? now())->toDateString();
         $squareId = $filters['square_id'] ?? null;
+
+        if ($from > $to) {
+            throw ValidationException::withMessages([
+                'to_date' => 'يجب أن يكون تاريخ النهاية مساوياً لتاريخ البداية أو بعده.',
+            ]);
+        }
 
         // payment_date عمود datetime (منذ 2026-10-23)، لذا يجب تحديد اليوم كاملاً
         // وإلا تُستبعد مدفوعات اليوم نفسه بعد منتصف الليل من التقرير.
-        $paymentQuery = Payment::query()->whereBetween('payment_date', [
+        $paymentQuery = Payment::query()->active()->whereBetween('payment_date', [
             $from.' 00:00:00',
             $to.' 23:59:59',
         ]);
-        $invoiceQuery = Invoice::query()->whereBetween('bill_date', [$from, $to]);
-        $readingQuery = Reading::query()->whereBetween('reading_date', [$from, $to]);
+        $invoiceQuery = Invoice::query()->whereDate('bill_date', '>=', $from)->whereDate('bill_date', '<=', $to);
+        $readingQuery = Reading::query()->whereDate('reading_date', '>=', $from)->whereDate('reading_date', '<=', $to);
         if ($squareId) {
             $paymentQuery->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId));
             $invoiceQuery->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId));
             $readingQuery->whereHas('meter.subscriber', fn ($q) => $q->where('square_id', $squareId));
         }
 
+        $collectionTotal = round((float) (clone $paymentQuery)->sum('amount'), 2);
+        // total_amount is the invoice's own charge; previous_balance is carried
+        // forward for display and must never be counted again in outstanding.
+        $remaining = 'CASE WHEN total_amount > amount_paid THEN total_amount - amount_paid ELSE 0 END';
+        $invoiceTotals = (clone $invoiceQuery)->selectRaw("COUNT(*) AS invoices_count,
+            SUM(total_amount) AS invoices_total,
+            SUM($remaining) AS outstanding_total,
+            SUM(CASE WHEN status = 'overdue' THEN $remaining ELSE 0 END) AS overdue_total,
+            SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_count,
+            SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) AS overdue_count")->first();
+        $invoicesTotal = round((float) $invoiceTotals->invoices_total, 2);
+        $statusLabels = [
+            'draft' => 'مسودة',
+            'issued' => 'غير مسددة',
+            'partially_paid' => 'مسددة جزئياً',
+            'paid' => 'مسددة',
+            'overdue' => 'متأخرة',
+        ];
+        $statusTotals = (clone $invoiceQuery)->select('status')
+            ->selectRaw('SUM(total_amount) AS amount, COUNT(*) AS total')
+            ->groupBy('status')->orderBy('status')->get();
+        $revenueSeries = (clone $paymentQuery)->selectRaw('DATE(payment_date) AS day, SUM(amount) AS total')
+            ->groupByRaw('DATE(payment_date)')->orderBy('day')->get()
+            ->map(fn ($row) => ['label' => $row->day, 'value' => round((float) $row->total, 2)]);
+        $squareBreakdown = (clone $paymentQuery)
+            ->leftJoin('subscribers', 'subscribers.id', '=', 'payments.subscriber_id')
+            ->leftJoin('squares', 'squares.id', '=', 'subscribers.square_id')
+            ->select('squares.id', 'squares.name')
+            ->selectRaw('SUM(payments.amount) AS total, COUNT(*) AS payment_count')
+            ->groupBy('squares.id', 'squares.name')->orderBy('squares.name')->get()
+            ->map(fn ($row) => [
+                'key' => $row->id === null ? 'unassigned' : (string) $row->id,
+                'label' => $row->name ?? 'بلا مربع',
+                'value' => round((float) $row->total, 2),
+                'count' => (int) $row->payment_count,
+            ]);
+
         return response()->json([
             'filters' => ['from_date' => $from, 'to_date' => $to, 'square_id' => $squareId],
             'summary' => [
-                'collection_total' => round((float) (clone $paymentQuery)->sum('amount'), 2),
-                'invoices_total' => round((float) (clone $invoiceQuery)->sum('total_amount'), 2),
-                'invoices_count' => (clone $invoiceQuery)->count(),
+                'collection_total' => $collectionTotal,
+                'invoices_total' => $invoicesTotal,
+                'total_collected' => $collectionTotal,
+                'total_invoiced' => $invoicesTotal,
+                'total_outstanding' => round((float) $invoiceTotals->outstanding_total, 2),
+                'overdue_amount' => round((float) $invoiceTotals->overdue_total, 2),
+                'paid_invoices_count' => (int) $invoiceTotals->paid_count,
+                'overdue_invoices_count' => (int) $invoiceTotals->overdue_count,
+                'invoices_count' => (int) $invoiceTotals->invoices_count,
                 'readings_count' => (clone $readingQuery)->count(),
                 'consumption_units' => (int) (clone $readingQuery)->sum('consumption_units'),
             ],
             'collections_by_method' => (clone $paymentQuery)->select('payment_method', DB::raw('SUM(amount) as total'))
                 ->groupBy('payment_method')->orderBy('payment_method')->get(),
-            'invoices_by_status' => (clone $invoiceQuery)->select('status', DB::raw('COUNT(*) as total'))
-                ->groupBy('status')->orderBy('status')->get(),
+            'invoices_by_status' => $statusTotals->map(fn ($row) => ['status' => $row->status, 'total' => (int) $row->total]),
+            'revenue_series' => $revenueSeries,
+            'status_breakdown' => $statusTotals->map(fn ($row) => [
+                'key' => $row->status,
+                'label' => $statusLabels[$row->status] ?? $row->status,
+                'value' => round((float) $row->amount, 2),
+                'count' => (int) $row->total,
+            ]),
+            'square_breakdown' => $squareBreakdown,
         ]);
     }
 
@@ -148,7 +206,7 @@ class AdminController extends ApiController
 
     private function latestInvoiceData()
     {
-        return Invoice::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'meter:id,unique_code,path_number,tenant_name'])
+        return Invoice::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'meter:id,unique_code,path_number,tenant_name'])
             ->latest('bill_date')->latest('id')->limit(5)->get()
             ->map(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
     }

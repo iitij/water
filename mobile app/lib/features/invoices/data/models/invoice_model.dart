@@ -119,6 +119,20 @@ class InvoiceModel extends Equatable {
     return value < 0 ? 0 : value;
   }
 
+  /// Live collectible balance; issued totals already include applied credit.
+  /// Older invoices must never collect the cumulative debt a second time.
+  double get payableAmount {
+    if (isDeleted ||
+        status == InvoiceStatus.draft ||
+        status == InvoiceStatus.cancelled) {
+      return 0;
+    }
+    final value = isLatestInvoice != false && serverTrueRemaining != null
+        ? serverTrueRemaining!
+        : ownRemaining;
+    return value < 0 ? 0 : value;
+  }
+
   /// `true` عندما يقرر الخادم أن الفاتورة متأخرة (يُحدَّث عبر
   /// `Invoice::updateStatus()` مع `grace_period`) — العرض فقط، لا إعادة احتساب.
   bool get isOverdue => status == InvoiceStatus.overdue;
@@ -279,7 +293,8 @@ class InvoiceModel extends Equatable {
   );
 
   @override
-  List<Object?> get props => <Object?>[location,
+  List<Object?> get props => <Object?>[
+    location,
     id,
     billNumber,
     status,

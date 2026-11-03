@@ -295,7 +295,8 @@ class InvoiceResource extends Resource
                 Tables\Filters\SelectFilter::make('square')
                     ->label('المربع السكني')
                     ->relationship('subscriber.square', 'name')
-                    ->searchable()
+                    ->getOptionLabelFromRecordUsing(fn (\App\Models\Square $record): string => $record->display_name)
+                    ->searchable(['name', 'code'])
                     ->preload(),
 
                 Tables\Filters\SelectFilter::make('status')

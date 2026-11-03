@@ -1,3 +1,5 @@
+import '../../../../core/models/square_label.dart';
+
 class Meter {
   const Meter({
     required this.id,
@@ -99,7 +101,7 @@ class Meter {
         json['square_id'] ?? subscriber?['square_id'] ?? square?['id'],
       ),
       subscriberName: _asString(json['subscriber_name'] ?? subscriber?['name']),
-      squareName: _asString(json['square_name'] ?? square?['name']),
+      squareName: squareLabelOrNull(json['square_name'] ?? square?['name'], json['square_code'] ?? square?['code']),
       subscriptionStartDate: _asDate(
         json['subscription_start_date'] ??
             subscriber?['subscription_start_date'],
@@ -173,15 +175,18 @@ class MeterDraft {
 }
 
 class SquareOption {
-  const SquareOption({required this.id, required this.name, this.description});
+  const SquareOption({required this.id, required this.name, this.code, this.description});
 
   final int id;
   final String name;
+  final String? code;
+  String get displayName => squareDisplayName(name, code);
   final String? description;
 
   factory SquareOption.fromJson(Map<String, dynamic> json) => SquareOption(
     id: _asInt(json['id'] ?? json['server_id']) ?? 0,
     name: (json['name'] ?? '').toString(),
+    code: _asString(json['code']),
     description: _asString(json['description']),
   );
 }
@@ -214,7 +219,7 @@ class SubscriberOption {
       id: _asInt(json['id'] ?? json['server_id']) ?? 0,
       name: (json['name'] ?? '').toString(),
       squareId: _asInt(json['square_id'] ?? square?['id']),
-      squareName: _asString(json['square_name'] ?? square?['name']),
+      squareName: squareLabelOrNull(json['square_name'] ?? square?['name'], json['square_code'] ?? square?['code']),
       phone: _asString(json['phone']),
       status: (json['status'] ?? 'active').toString(),
       subscriptionStartDate: _asDate(json['subscription_start_date']),

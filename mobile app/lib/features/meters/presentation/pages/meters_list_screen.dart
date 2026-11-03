@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/l10n/field_experience_strings.dart';
 import '../../../../core/l10n/field_list_options_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -70,7 +71,7 @@ class _MetersListView extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SubPageScaffold(
-        title: 'إدارة العدادات',
+        title: LaravelScreenStrings.meters,
         subtitle: 'متابعة الحالات والقراءات الميدانية',
         actions: [
           BlocBuilder<MetersCubit, MetersState>(
@@ -637,7 +638,7 @@ class _MetersListView extends StatelessWidget {
 String? _meterSquareName(MetersState state) {
   if (state.squareFilter == null) return null;
   for (final square in state.squares) {
-    if (square.id == state.squareFilter) return square.name;
+    if (square.id == state.squareFilter) return square.displayName;
   }
   return 'مربع #${state.squareFilter}';
 }
@@ -771,7 +772,7 @@ class _MetersFilterSheetState extends State<_MetersFilterSheet> {
               ...widget.state.squares.map(
                 (square) => DropdownMenuItem<int?>(
                   value: square.id,
-                  child: Text(square.name, overflow: TextOverflow.ellipsis),
+                  child: Text(square.displayName, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],

@@ -1,0 +1,21 @@
+[Unit]
+Description=Water private PDF render worker
+Requires=water-pdf-browser.service
+After=water-pdf-browser.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/water
+Environment=HOME=/var/lib/water-chromium
+ExecStart=/usr/bin/node /var/www/water/docker/production/pdf-worker.mjs
+Restart=always
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=10
+MemoryMax=192M
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

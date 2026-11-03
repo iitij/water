@@ -36,8 +36,7 @@ class ModuleGridSection extends StatelessWidget {
     this.title,
     this.subtitle,
     this.trailing,
-    this.minTileWidth = 200,
-    this.tileHeight = 152,
+    this.minTileWidth = 280,
   });
 
   final List<AppModule> modules;
@@ -45,7 +44,6 @@ class ModuleGridSection extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final double minTileWidth;
-  final double tileHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +57,6 @@ class ModuleGridSection extends StatelessWidget {
         ],
         AppModuleGrid(
           minTileWidth: minTileWidth,
-          tileHeight: tileHeight,
           children: modules
               .map((module) => AppModuleTileView(module: module))
               .toList(growable: false),
@@ -77,8 +74,7 @@ class ModuleRailSection extends StatelessWidget {
     required this.title,
     required this.onViewAll,
     this.subtitle,
-    this.tileWidth = 208,
-    this.tileHeight = 152,
+    this.tileWidth = 304,
   });
 
   final List<AppModule> modules;
@@ -86,7 +82,6 @@ class ModuleRailSection extends StatelessWidget {
   final String? subtitle;
   final VoidCallback onViewAll;
   final double tileWidth;
-  final double tileHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +107,6 @@ class ModuleRailSection extends StatelessWidget {
         const Gap(AppSpacing.sm),
         AppModuleRail(
           tileWidth: tileWidth,
-          tileHeight: tileHeight,
           children: modules
               .map((module) => AppModuleTileView(module: module))
               .toList(growable: false),
@@ -124,7 +118,11 @@ class ModuleRailSection extends StatelessWidget {
 
 /// Live sync summary used on several pages.
 class SyncSummaryCard extends StatelessWidget {
-  const SyncSummaryCard({super.key, this.onManage, this.showDescription = true});
+  const SyncSummaryCard({
+    super.key,
+    this.onManage,
+    this.showDescription = true,
+  });
 
   final VoidCallback? onManage;
   final bool showDescription;
@@ -141,10 +139,10 @@ class SyncSummaryCard extends StatelessWidget {
         final headline = queue.isSyncing
             ? 'جارٍ إرسال العمليات الآن'
             : failed > 0
-                ? '$failed عملية تحتاج إلى إعادة محاولة'
-                : pending > 0
-                    ? '$pending عملية بانتظار المزامنة'
-                    : 'كل شيء متزامن مع الخادم';
+            ? '$failed عملية تحتاج إلى إعادة محاولة'
+            : pending > 0
+            ? '$pending عملية بانتظار المزامنة'
+            : 'كل شيء متزامن مع الخادم';
         return AppStatStrip(
           items: <AppStatItem>[
             AppStatItem(
@@ -164,9 +162,11 @@ class SyncSummaryCard extends StatelessWidget {
               value: online == true
                   ? 'متصل'
                   : online == false
-                      ? 'دون اتصال'
-                      : 'جارٍ الفحص',
-              icon: online == true ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                  ? 'دون اتصال'
+                  : 'جارٍ الفحص',
+              icon: online == true
+                  ? Icons.wifi_rounded
+                  : Icons.wifi_off_rounded,
               color: online == true ? AppColors.success : AppColors.warning,
             ),
           ],
@@ -231,7 +231,10 @@ class ProcessStepCard extends StatelessWidget {
               children: <Widget>[
                 Text(title, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
-                Text(description, style: theme.textTheme.bodySmall?.copyWith(height: 1.55)),
+                Text(
+                  description,
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.55),
+                ),
               ],
             ),
           ),

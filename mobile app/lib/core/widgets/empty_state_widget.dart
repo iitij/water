@@ -26,7 +26,7 @@ class EmptyStateWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.all(compact ? AppSpacing.md : AppSpacing.xl),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),

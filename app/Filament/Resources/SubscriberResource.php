@@ -4,21 +4,32 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\SubscriberResource\Pages;
 use App\Filament\Resources\SubscriberResource\RelationManagers;
+use App\Livewire\SubscriberTransactionsTable;
+use App\Models\Square;
 use App\Models\Subscriber;
 use App\Services\PaymentService;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Livewire;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Ysfkaya\FilamentPhoneInput\Forms\PhoneInput;
 
 class SubscriberResource extends Resource
 {
     protected static ?string $model = Subscriber::class;
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-users';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
 
-    protected static string | \UnitEnum | null $navigationGroup = 'إدارة المشتركين';
+    protected static string|\UnitEnum|null $navigationGroup = 'إدارة المشتركين';
 
     protected static ?string $modelLabel = 'مشترك';
 
@@ -26,11 +37,10 @@ class SubscriberResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
-
-    public static function form(\Filament\Schemas\Schema $form): \Filament\Schemas\Schema
+    public static function form(Schema $form): Schema
     {
         return $form->schema([
-                \Filament\Schemas\Components\Section::make('البيانات الأساسية')
+            Section::make('البيانات الأساسية')
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
@@ -38,7 +48,7 @@ class SubscriberResource extends Resource
                         ->required()
                         ->maxLength(255),
 
-                    \Ysfkaya\FilamentPhoneInput\Forms\PhoneInput::make('phone')
+                    PhoneInput::make('phone')
                         ->label('رقم الهاتف')
                         ->defaultCountry('YE')
                         ->initialCountry('ye'),
@@ -46,8 +56,10 @@ class SubscriberResource extends Resource
                     Forms\Components\Select::make('square_id')
                         ->label('المربع السكني')
                         ->relationship('square', 'name')
+                        ->getOptionLabelFromRecordUsing(fn (Square $record): string => $record->display_name)
+                        ->searchable(['name', 'code'])
                         ->required()
-                        ->searchable()
+
                         ->preload(),
 
                     Forms\Components\Select::make('status')
@@ -70,40 +82,46 @@ class SubscriberResource extends Resource
                         ->rows(2),
                 ]),
 
-            \Filament\Schemas\Components\Section::make('الحساب المالي وسجل الحركات')
+            Section::make('الحساب المالي وسجل الحركات')
                 ->visible(fn ($record) => $record !== null)
                 ->schema([
                     Forms\Components\TextInput::make('credit_balance')
                         ->label('إجمالي الرصيد الدائن (للمشترك والعدادات)')
                         ->formatStateUsing(function ($record) {
-                            if (!$record) return 0;
+                            if (! $record) {
+                                return 0;
+                            }
                             $subscriberCredit = $record->balance > 0 ? $record->balance : 0;
-                            $metersCredit = $record->meters->sum(fn($meter) => $meter->balance > 0 ? $meter->balance : 0);
+                            $metersCredit = $record->meters->sum(fn ($meter) => $meter->balance > 0 ? $meter->balance : 0);
+
                             return number_format($subscriberCredit + $metersCredit, 2);
                         })
                         ->suffix('ريال')
                         ->disabled()
                         ->dehydrated(false),
-                        
+
                     Forms\Components\TextInput::make('debit_balance')
                         ->label('إجمالي الرصيد المدين (للمشترك والعدادات)')
                         ->formatStateUsing(function ($record) {
-                            if (!$record) return 0;
+                            if (! $record) {
+                                return 0;
+                            }
                             $subscriberDebit = $record->getOutstandingBalance();
-                            $metersDebit = $record->meters->sum(fn($meter) => $meter->getOutstandingBalance());
+                            $metersDebit = $record->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
+
                             return number_format($subscriberDebit + $metersDebit, 2);
                         })
                         ->suffix('ريال')
                         ->disabled()
                         ->dehydrated(false),
-                        
+
                     Forms\Components\Repeater::make('meters')
                         ->relationship('meters')
                         ->label('أرصدة العدادات التابعة')
                         ->schema([
                             Forms\Components\TextInput::make('meter_number')
                                 ->label('رقم العداد')
-                                ->formatStateUsing(fn ($record) => $record ? "عداد رقم: " . $record->id . " - " . ($record->tenant_name ?? 'بدون مستأجر') : '-')
+                                ->formatStateUsing(fn ($record) => $record ? 'عداد رقم: '.$record->id.' - '.($record->tenant_name ?? 'بدون مستأجر') : '-')
                                 ->disabled()
                                 ->dehydrated(false),
                             Forms\Components\TextInput::make('meter_credit')
@@ -127,7 +145,7 @@ class SubscriberResource extends Resource
                         ->dehydrated(false)
                         ->visible(fn ($record) => $record && $record->meters()->count() > 0),
 
-                    \Filament\Schemas\Components\Livewire::make(\App\Livewire\SubscriberTransactionsTable::class)
+                    Livewire::make(SubscriberTransactionsTable::class)
                         ->key('transactions-table')
                         ->columnSpanFull(),
                 ])
@@ -160,6 +178,8 @@ class SubscriberResource extends Resource
 
                 Tables\Columns\TextColumn::make('square.name')
                     ->label('المربع السكني')
+                    ->formatStateUsing(fn ($state, $record) => $record->square?->display_name)
+                    ->searchable(['name', 'code'])
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('balance')
@@ -190,7 +210,9 @@ class SubscriberResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('square_id')
                     ->label('المربع السكني')
-                    ->relationship('square', 'name'),
+                    ->relationship('square', 'name')
+                    ->getOptionLabelFromRecordUsing(fn (Square $record): string => $record->display_name)
+                    ->searchable(['name', 'code']),
 
                 Tables\Filters\SelectFilter::make('status')
                     ->label('الحالة')
@@ -201,7 +223,7 @@ class SubscriberResource extends Resource
                     ]),
             ])
             ->actions([
-                \Filament\Actions\Action::make('collect_payment')
+                Action::make('collect_payment')
                     ->label('تحصيل دفعة')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
@@ -238,7 +260,7 @@ class SubscriberResource extends Resource
                             ->rows(2),
                     ])
                     ->action(function (Subscriber $record, array $data): void {
-                        $service = new PaymentService();
+                        $service = new PaymentService;
                         $payment = $service->collectPayment(
                             subscriber: $record,
                             amount: (float) $data['amount'],
@@ -254,7 +276,7 @@ class SubscriberResource extends Resource
                             ->send();
                     }),
 
-                \Filament\Actions\Action::make('add_service')
+                Action::make('add_service')
                     ->label('طلب وايت')
                     ->icon('heroicon-o-truck')
                     ->color('info')
@@ -289,12 +311,12 @@ class SubscriberResource extends Resource
                             ->send();
                     }),
 
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
+                ViewAction::make(),
+                EditAction::make(),
             ])
             ->bulkActions([
-                \Filament\Actions\BulkActionGroup::make([
-                    \Filament\Actions\DeleteBulkAction::make(),
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
                 ]),
             ]);
     }
@@ -319,8 +341,3 @@ class SubscriberResource extends Resource
         ];
     }
 }
-
-
-
-
-

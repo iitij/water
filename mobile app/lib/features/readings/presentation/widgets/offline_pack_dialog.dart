@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -171,7 +172,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                           _statRow('المربعات المخزنة', '${result.squareCount}'),
                           _statRow('المشتركون', '${result.subscriberCount}'),
                           _statRow('العدادات', '${result.meterCount}'),
-                          _statRow('سجل القراءات', '${result.readingCount}'),
+                          _statRow(LaravelScreenStrings.readings, '${result.readingCount}'),
                           _statRow('فترات العدادات الجاهزة', '${result.cachedPeriodCount}'),
                         ],
                       ),
@@ -203,7 +204,7 @@ class _OfflinePackDialogState extends State<OfflinePackDialog> {
                         ...widget.squares.map(
                           (sq) => DropdownMenuItem<int?>(
                             value: sq.id,
-                            child: Text(sq.name, overflow: TextOverflow.ellipsis),
+                            child: Text(sq.displayName, overflow: TextOverflow.ellipsis),
                           ),
                         ),
                       ],

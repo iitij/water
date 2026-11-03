@@ -8,6 +8,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
+import '../models/square_label.dart';
 import 'database_encryption.dart';
 
 /// Drift-backed SQLite store for the field/offline features.
@@ -53,7 +54,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -96,6 +97,12 @@ class AppDatabase extends GeneratedDatabase {
               await customStatement(
                 'ALTER TABLE pending_sync_actions ADD COLUMN last_status_code INTEGER',
               );
+            }
+          }
+          if (from < 4 && to >= 4) {
+            final columns = await _select('PRAGMA table_info(cached_squares)');
+            if (!columns.any((column) => column['name'] == 'code')) {
+              await customStatement('ALTER TABLE cached_squares ADD COLUMN code TEXT');
             }
           }
         },
@@ -146,6 +153,7 @@ class AppDatabase extends GeneratedDatabase {
     '''CREATE TABLE IF NOT EXISTS cached_squares (
       server_id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
+      code TEXT,
       description TEXT,
       updated_at TEXT
     )''',
@@ -284,9 +292,9 @@ class AppDatabase extends GeneratedDatabase {
         final id = _int(square['id'] ?? square['server_id']);
         if (id == null) continue;
         await _execute(
-          '''INSERT OR REPLACE INTO cached_squares(server_id, name, description, updated_at)
-             VALUES (?, ?, ?, ?)''',
-          [id, (square['name'] ?? '').toString(), square['description'], _now()],
+          '''INSERT OR REPLACE INTO cached_squares(server_id, name, code, description, updated_at)
+             VALUES (?, ?, ?, ?, ?)''',
+          [id, (square['name'] ?? '').toString(), square['code'], square['description'], _now()],
         );
       }
     });
@@ -313,7 +321,7 @@ class AppDatabase extends GeneratedDatabase {
             subscriber['phone'],
             subscriber['address'],
             _int(subscriber['square_id'] ?? square?['id']),
-            subscriber['square_name'] ?? square?['name'],
+            squareLabelOrNull(subscriber['square_name'] ?? square?['name'], subscriber['square_code'] ?? square?['code']),
             (subscriber['status'] ?? 'active').toString(),
             _date(subscriber['subscription_start_date']),
             _double(subscriber['balance'] ?? subscriber['account_balance']),
@@ -359,7 +367,7 @@ class AppDatabase extends GeneratedDatabase {
             _int(meter['subscriber_id'] ?? subscriber?['id']),
             meter['subscriber_name'] ?? subscriber?['name'],
             _int(meter['square_id'] ?? subscriber?['square_id'] ?? square?['id']),
-            meter['square_name'] ?? square?['name'],
+            squareLabelOrNull(meter['square_name'] ?? square?['name'], meter['square_code'] ?? square?['code']),
             _date(meter['subscription_start_date'] ?? subscriber?['subscription_start_date']),
             meter['tenant_name'],
             meter['tenant_phone'],
@@ -474,7 +482,7 @@ class AppDatabase extends GeneratedDatabase {
     bool pendingActions = true,
   }) async {
     const tables = <String, List<String>>{
-      'squares': <String>['server_id', 'name', 'description', 'updated_at'],
+      'squares': <String>['server_id', 'name', 'code', 'description', 'updated_at'],
       'subscribers': <String>[
         'server_id',
         'name',

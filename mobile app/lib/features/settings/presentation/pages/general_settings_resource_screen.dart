@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_filters.dart';
@@ -38,7 +39,7 @@ class GeneralSettingsResourceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!can(AdminPermissions.viewSettings)) {
       return const SubPageScaffold(
-        title: 'إدارة الإعدادات العامة',
+        title: LaravelScreenStrings.settings,
         child: AdminErrorView(message: 'لا تملك صلاحية ViewAny:Setting لعرض الإعدادات.'),
       );
     }
@@ -116,7 +117,7 @@ class _GeneralSettingsView extends StatelessWidget {
         return Scaffold(
           floatingActionButton: fab,
           body: SubPageScaffold(
-            title: 'إدارة الإعدادات العامة',
+            title: LaravelScreenStrings.settings,
             subtitle: 'المفاتيح المشتركة بين شاشات النظام',
             child: body,
           ),

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,7 +25,7 @@ abstract class ApiController extends Controller
         'void_requests' => ['created_at', 'path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'amount', 'void_requested_at', 'subscriber_name' => 'subscriber.name'],
         'subscription_fees' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'meter_code' => 'meter.unique_code', 'invoice_number' => 'invoice.bill_number'],
         'service_requests' => ['id', 'service_date', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name'],
-        'squares' => ['id', 'name', 'created_at', 'subscribers_count' => '@subscribers_count'],
+        'squares' => ['id', 'name', 'code', 'created_at', 'subscribers_count' => '@subscribers_count'],
         'tariffs' => ['id', 'name', 'unit_price', 'start_date', 'end_date', 'created_at', 'updated_at', 'deleted_at'],
         'transactions' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'created_at', 'amount', 'type', 'subscriber_name' => 'subscriber.name'],
         'users' => ['id', 'name', 'email', 'email_verified_at', 'created_at', 'updated_at'],
@@ -52,7 +53,7 @@ abstract class ApiController extends Controller
             $direction = $input['sort_direction'] ?? 'asc';
             $query->reorder();
             if (is_array($field)) {
-                $query->orderByRaw($field['expression'] . ' ' . $direction);
+                $query->orderByRaw($field['expression'].' '.$direction);
             } elseif (str_starts_with($field, '@')) {
                 $query->orderBy(substr($field, 1), $direction);
             } elseif (str_contains($field, '.')) {
@@ -72,6 +73,7 @@ abstract class ApiController extends Controller
                 $query->orderBy($primaryKey, end($orders)['direction'] ?? 'asc');
             }
         }
+
         return $query;
     }
 
@@ -82,6 +84,7 @@ abstract class ApiController extends Controller
             'added_from' => ['nullable', 'date_format:Y-m-d'],
             'added_to' => ['nullable', 'date_format:Y-m-d', Rule::when($request->filled('added_from'), ['after_or_equal:added_from'])],
             'path_number' => ['nullable', 'integer', 'min:0'],
+            'square_code' => ['nullable', 'string', 'max:100'],
         ], [
             'added_to.after_or_equal' => 'تاريخ البداية يجب أن يسبق تاريخ النهاية.',
             'path_number.integer' => 'أدخل رقم مسار صحيحاً.',
@@ -92,10 +95,25 @@ abstract class ApiController extends Controller
                 $query->where($model->qualifyColumn($model->getCreatedAtColumn()), '>=', $input['added_from'].' 00:00:00');
             }
             if (! empty($input['added_to'])) {
-                $query->where($model->qualifyColumn($model->getCreatedAtColumn()), '<', \Carbon\Carbon::parse($input['added_to'])->addDay()->format('Y-m-d').' 00:00:00');
+                $query->where($model->qualifyColumn($model->getCreatedAtColumn()), '<', Carbon::parse($input['added_to'])->addDay()->format('Y-m-d').' 00:00:00');
             }
         }
         $table = $model->getTable();
+        $squareRelations = [
+            'subscribers' => 'square', 'meters' => 'subscriber.square',
+            'readings' => 'meter.subscriber.square', 'invoices' => 'subscriber.square',
+            'payments' => 'subscriber.square', 'subscription_fees' => 'subscriber.square',
+            'transactions' => 'subscriber.square', 'service_requests' => 'subscriber.square',
+            'cash_sessions' => 'square',
+        ];
+        if (isset($input['square_code']) && trim($input['square_code']) !== '') {
+            $code = trim($input['square_code']);
+            if ($table === 'squares') {
+                $query->where('code', $code);
+            } elseif (isset($squareRelations[$table])) {
+                $query->whereHas($squareRelations[$table], fn ($square) => $square->where('code', $code));
+            }
+        }
         $paths = ['subscribers' => 'meters', 'readings' => 'meter', 'invoices' => 'meter',
             'payments' => 'meter', 'subscription_fees' => 'meter', 'transactions' => 'meter',
             'service_requests' => 'subscriber.meters'];
@@ -130,6 +148,7 @@ abstract class ApiController extends Controller
         } else {
             $sort->select($related->qualifyColumn($column));
         }
+
         return $sort->whereColumn($relation->getQualifiedOwnerKeyName(), $relation->getQualifiedForeignKeyName())->limit(1);
     }
 
@@ -146,6 +165,7 @@ abstract class ApiController extends Controller
         if (method_exists($user, 'roles') && $user->roles()->doesntExist()) {
             return in_array($user->role ?? null, ['super_admin', 'admin'], true);
         }
+
         return false;
     }
 
@@ -171,8 +191,8 @@ abstract class ApiController extends Controller
         }
 
         $resourceName = class_basename($resource);
-        $legacy = ucfirst($ability) . ':' . $resourceName;
-        $permission = Str::snake($ability) . '_' . Str::snake($resourceName);
+        $legacy = ucfirst($ability).':'.$resourceName;
+        $permission = Str::snake($ability).'_'.Str::snake($resourceName);
 
         return $user->can($legacy)
             || $user->can($permission)
@@ -189,7 +209,7 @@ abstract class ApiController extends Controller
         }
 
         [$ability, $resource] = array_pad(explode(':', $permission, 2), 2, '');
-        $legacy = Str::snake($ability) . ($resource === '' ? '' : '_' . Str::snake($resource));
+        $legacy = Str::snake($ability).($resource === '' ? '' : '_'.Str::snake($resource));
         $previousLegacy = Str::snake(str_replace(':', '_', $permission));
         abort_unless($user->can($permission) || $user->can($legacy) || $user->can($previousLegacy), 403, 'ليست لديك صلاحية لإدارة النظام.');
     }
@@ -205,19 +225,23 @@ abstract class ApiController extends Controller
     protected function allowsSystemWrite(string $resource): bool
     {
         $user = request()->user();
-        if (! $user) return false;
+        if (! $user) {
+            return false;
+        }
 
         return $this->isAdminUser($user)
-            || $user->can('Update:' . $resource)
-            || $user->can('update_' . Str::snake($resource))
+            || $user->can('Update:'.$resource)
+            || $user->can('update_'.Str::snake($resource))
             // Preserve previously issued aliases while accepting the normal
             // snake_case names used by the permission catalog.
-            || $user->can(Str::snake('update_' . $resource));
+            || $user->can(Str::snake('update_'.$resource));
     }
 
     private function hasBuiltInRoleAccess(object $user, string $resource, string $ability): bool
     {
-        if (! method_exists($user, 'hasAnyRole')) return false;
+        if (! method_exists($user, 'hasAnyRole')) {
+            return false;
+        }
         $access = [
             'reader' => [
                 'Meter' => ['viewAny', 'view'], 'Reading' => ['viewAny', 'view', 'create', 'update'],
@@ -239,8 +263,11 @@ abstract class ApiController extends Controller
         $hasSpatieRoles = method_exists($user, 'roles') && $user->roles()->exists();
         foreach (array_keys($access) as $role) {
             $matches = $hasSpatieRoles ? $user->hasRole($role) : (($user->role ?? null) === $role);
-            if ($matches && in_array($ability, $access[$role][$resource] ?? [], true)) return true;
+            if ($matches && in_array($ability, $access[$role][$resource] ?? [], true)) {
+                return true;
+            }
         }
+
         return false;
     }
 
@@ -263,6 +290,7 @@ abstract class ApiController extends Controller
     protected function parseCompoundSearch(string $value): ?array
     {
         $value = $this->normalizeDigits(trim($value));
+
         return preg_match('/^(\d+)[\/\-\\\\_](\d+)$/', $value, $matches)
             ? [$matches[1], $matches[2]]
             : null;

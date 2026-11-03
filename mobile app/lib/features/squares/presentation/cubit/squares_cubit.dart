@@ -52,16 +52,19 @@ class SquaresCubit extends Cubit<SquaresState> {
     }
   }
 
-  Future<void> save({int? id, required String name, String? description}) async {
+  Future<bool> save({int? id, required String name, String? description, String? code}) async {
     try {
-      if (id == null) {
-        await _repo.createSquare(name, description);
-      } else {
-        await _repo.updateSquare(Square(id: id, name: name, description: description));
+      final saved = id == null
+          ? await _repo.createSquare(name, description, code: code)
+          : await _repo.updateSquare(Square(id: id, name: name, description: description, code: code));
+      if (state.selected?.id == saved.id) {
+        emit(state.copyWith(selected: saved));
       }
       await load();
+      return true;
     } catch (e) {
       emit(state.copyWith(error: friendlyError(e)));
+      return false;
     }
   }
 

@@ -30,7 +30,7 @@ class RouteVisitController extends ApiController
         $query = RouteVisit::query()
             ->with([
                 'meter:id,unique_code,path_number,tenant_name',
-                'square:id,name',
+                'square:id,name,code',
                 'user:id,name',
             ])
             ->latest('route_date')->latest('id');
@@ -72,7 +72,7 @@ class RouteVisitController extends ApiController
 
         return response()->json([
             'message' => 'تم تسجيل الزيارة.',
-            'visit' => $visit->load(['meter:id,unique_code,path_number', 'square:id,name']),
+            'visit' => $visit->load(['meter:id,unique_code,path_number', 'square:id,name,code']),
             'duplicate' => ! $visit->wasRecentlyCreated,
         ], 201);
     }

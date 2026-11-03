@@ -12,17 +12,30 @@ class ServiceRequestController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(ServiceRequest::class, 'viewAny');
-        $query = ServiceRequest::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number', 'invoice:id,bill_number,status'])
+        $query = ServiceRequest::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'invoice:id,bill_number,status'])
             ->latest('service_date')->latest('id');
-        if ($request->filled('status')) $query->where('status', $request->query('status'));
-        if ($request->filled('subscriber_id')) $query->where('subscriber_id', $request->integer('subscriber_id'));
-        if ($request->filled('created_from')) $query->whereDate('service_date', '>=', $request->query('created_from'));
-        if ($request->filled('created_until')) $query->whereDate('service_date', '<=', $request->query('created_until'));
-        if ($request->filled('from_date')) $query->whereDate('service_date', '>=', $request->query('from_date'));
-        if ($request->filled('to_date')) $query->whereDate('service_date', '<=', $request->query('to_date'));
+        if ($request->filled('status')) {
+            $query->where('status', $request->query('status'));
+        }
+        if ($request->filled('subscriber_id')) {
+            $query->where('subscriber_id', $request->integer('subscriber_id'));
+        }
+        if ($request->filled('created_from')) {
+            $query->whereDate('service_date', '>=', $request->query('created_from'));
+        }
+        if ($request->filled('created_until')) {
+            $query->whereDate('service_date', '<=', $request->query('created_until'));
+        }
+        if ($request->filled('from_date')) {
+            $query->whereDate('service_date', '>=', $request->query('from_date'));
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('service_date', '<=', $request->query('to_date'));
+        }
         $this->applySorting($query, $request, self::LIST_SORTS['service_requests']);
         $total = (clone $query)->sum('amount');
         $page = $query->paginate($this->perPage($request))->appends($request->query());
+
         return response()->json([
             'data' => $page->items(),
             'total_sum' => round((float) $total, 2),
@@ -47,12 +60,14 @@ class ServiceRequestController extends ApiController
         $data['service_type'] ??= 'water_tanker';
         $data['status'] ??= 'completed';
         $requestRecord = ServiceRequest::create($data);
+
         return response()->json(['message' => 'تم تسجيل طلب الخدمة.', 'service_request' => $requestRecord->load(['subscriber', 'invoice'])], 201);
     }
 
     public function show(int $id)
     {
         $this->authorizeApi(ServiceRequest::class, 'view');
+
         return response()->json(['service_request' => ServiceRequest::with(['subscriber.square', 'invoice'])->findOrFail($id)]);
     }
 
@@ -75,6 +90,7 @@ class ServiceRequestController extends ApiController
             return response()->json(['message' => 'لا يمكن تغيير مبلغ أو مشترك طلب مرتبط بفاتورة صادرة.'], 409);
         }
         $record->update($data);
+
         return response()->json(['message' => 'تم تحديث طلب الخدمة.', 'service_request' => $record->fresh(['subscriber', 'invoice'])]);
     }
 
@@ -86,6 +102,7 @@ class ServiceRequestController extends ApiController
             return response()->json(['message' => 'لا يمكن حذف طلب مرتبط بفاتورة.'], 409);
         }
         $record->delete();
+
         return response()->json(['message' => 'تم حذف طلب الخدمة.']);
     }
 
@@ -99,12 +116,14 @@ class ServiceRequestController extends ApiController
             foreach (ServiceRequest::whereIn('id', $data['ids'])->lockForUpdate()->get() as $record) {
                 if ($record->invoice_id || in_array($record->status, ['invoiced', 'paid'], true)) {
                     $skipped[] = $record->id;
+
                     continue;
                 }
                 $record->delete();
                 $deleted++;
             }
         });
+
         return response()->json(['deleted_count' => $deleted, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
     }
 
@@ -116,6 +135,7 @@ class ServiceRequestController extends ApiController
             return response()->json(['message' => 'يمكن إنجاز الطلب المعلق فقط.'], 409);
         }
         $record->update(['status' => 'completed']);
+
         return response()->json(['message' => 'تم إنجاز الطلب.', 'service_request' => $record]);
     }
 
@@ -128,6 +148,7 @@ class ServiceRequestController extends ApiController
         }
         try {
             $invoice = $invoiceService->generateInvoiceForTankerFee($record);
+
             return response()->json(['message' => 'تم إصدار فاتورة الوايت.', 'invoice' => $invoice->load(['subscriber', 'items'])], 201);
         } catch (\Throwable $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);

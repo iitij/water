@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/l10n/subscriber_experience_strings.dart';
 import '../../../../core/models/record_location.dart';
@@ -306,7 +307,7 @@ class _SubscribersView extends StatelessWidget {
       },
       builder: (context, state) {
         return SubPageScaffold(
-          title: 'المشتركون',
+          title: LaravelScreenStrings.subscribers,
           subtitle: 'سجل المشتركين والأرصدة',
           actions: [
             if (state.selectedIds.isNotEmpty) ...[

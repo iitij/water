@@ -48,34 +48,33 @@ class AppFilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-    final foreground = selected
-        ? scheme.onPrimary
-        : (dark ? AppColors.onPanelSoft : scheme.onSurfaceVariant);
+    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
     const height = 48.0;
 
     return Semantics(
       button: true,
       selected: selected,
       child: Material(
-        color: selected
-            ? scheme.primary
-            : (dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt),
+        color: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
-          side: BorderSide(
-            color: selected ? scheme.primary : theme.dividerColor,
-          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onRemove ?? onTap,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: height),
-            child: Padding(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
               padding: EdgeInsets.symmetric(
                 horizontal: dense ? 10 : 12,
-                vertical: 6,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: selected
+                    ? scheme.primary.withValues(alpha: .12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -106,7 +105,7 @@ class AppFilterChip extends StatelessWidget {
                     Text(
                       '$count',
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: selected ? scheme.onPrimary : foreground,
+                        color: foreground,
                         fontWeight: FontWeight.w500,
                         fontFeatures: const <FontFeature>[
                           FontFeature.tabularFigures(),
@@ -228,80 +227,80 @@ class _AppFilterBarState extends State<AppFilterBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-
     return Padding(
       padding: widget.padding,
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: TextField(
-                controller: _controller,
-                autofocus: widget.autofocus,
-                textInputAction: TextInputAction.search,
-                onChanged: widget.onChanged,
-                onSubmitted: widget.onSubmitted,
-                style: theme.textTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: widget.hint,
-                  isDense: true,
-                  filled: true,
-                  fillColor: dark
-                      ? AppColors.darkSurfaceAlt
-                      : AppColors.surfaceAlt,
-                  contentPadding: const EdgeInsetsDirectional.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 44,
-                    minHeight: 44,
-                  ),
-                  suffixIcon: widget.onClear == null
-                      ? null
-                      : IconButton(
-                          onPressed: widget.onClear,
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          color: scheme.onSurfaceVariant,
-                          tooltip: ExperienceStrings.clearSearch,
-                          splashRadius: 18,
-                        ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    borderSide: BorderSide(color: theme.dividerColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    borderSide: BorderSide(color: scheme.primary, width: 1.2),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: TextField(
+                  controller: _controller,
+                  autofocus: widget.autofocus,
+                  textInputAction: TextInputAction.search,
+                  onChanged: widget.onChanged,
+                  onSubmitted: widget.onSubmitted,
+                  style: theme.textTheme.bodyMedium,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    contentPadding: const EdgeInsetsDirectional.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    suffixIcon: widget.onClear == null
+                        ? null
+                        : IconButton(
+                            onPressed: widget.onClear,
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: scheme.onSurfaceVariant,
+                            tooltip: ExperienceStrings.clearSearch,
+                            splashRadius: 18,
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      borderSide: BorderSide(color: scheme.primary, width: 1.2),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          if (widget.onOpenFilters != null) ...<Widget>[
-            const SizedBox(width: AppSpacing.xs),
-            _FilterButton(
-              onTap: widget.onOpenFilters!,
-              count: widget.activeCount,
-              hasActive: widget.activeCount > 0,
-            ),
+            if (widget.onOpenFilters != null) ...<Widget>[
+              Container(width: 1, height: 20, color: scheme.outlineVariant),
+              _FilterButton(
+                onTap: widget.onOpenFilters!,
+                count: widget.activeCount,
+                hasActive: widget.activeCount > 0,
+              ),
+            ],
+            if (widget.trailing != null) ...<Widget>[widget.trailing!],
           ],
-          if (widget.trailing != null) ...<Widget>[
-            const SizedBox(width: AppSpacing.xs),
-            widget.trailing!,
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -322,7 +321,6 @@ class _FilterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
 
     return Semantics(
       button: true,
@@ -330,23 +328,14 @@ class _FilterButton extends StatelessWidget {
           ? ExperienceStrings.activeFilters(count)
           : ExperienceStrings.filters,
       child: Material(
-        color: hasActive
-            ? scheme.primary.withValues(alpha: dark ? .18 : .10)
-            : (dark ? AppColors.darkSurfaceAlt : AppColors.surfaceAlt),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          side: BorderSide(
-            color: hasActive
-                ? scheme.primary.withValues(alpha: .45)
-                : theme.dividerColor,
-          ),
-        ),
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           child: SizedBox(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             child: Stack(
               alignment: Alignment.center,
               children: <Widget>[

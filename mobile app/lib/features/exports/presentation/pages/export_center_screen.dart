@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -70,7 +71,7 @@ class _ExportCenterView extends StatelessWidget {
       },
       builder: (context, state) {
         return SubPageScaffold(
-          title: 'مركز تصدير Excel',
+          title: LaravelScreenStrings.exports,
           subtitle: 'تصدير المشتركين والفواتير والقراءات',
           actions: [
             AppIconButton(
@@ -242,7 +243,7 @@ class _ExportCard extends StatelessWidget {
                   items: [
                     const DropdownMenuItem(child: Text('كل المربعات')),
                     for (final square in state.catalog?.squares ?? const <ExportSquare>[])
-                      DropdownMenuItem(value: square.id, child: Text(square.name)),
+                      DropdownMenuItem(value: square.id, child: Text(square.displayName)),
                   ],
                   onChanged: (value) => cubit.updateFilters(
                     kind,

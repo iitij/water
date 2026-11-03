@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -120,7 +121,7 @@ class CrmHubScreen extends StatelessWidget {
             action: TextButton(
               onPressed: () => context.push(RouteNames.serviceRequests),
               style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
-              child: const Text('فتح طلبات الخدمة'),
+              child: const Text('فتح ${LaravelScreenStrings.serviceRequests}'),
             ),
           ),
         ),

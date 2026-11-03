@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
+import '../../../../core/l10n/list_clarity_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -182,8 +184,8 @@ class _TransactionsView extends StatelessWidget {
             : null;
 
         return SubPageScaffold(
-          title: 'دفتر الأستاذ العام (قراءة فقط)',
-          subtitle: 'بحث وفلترة كل القيود المالية للمشروع',
+          title: LaravelScreenStrings.transactions,
+          subtitle: ListClarityStrings.ledgerSubtitle,
           actions: [
             AppIconButton(
               tooltip: 'تحديث',
@@ -219,26 +221,33 @@ class _TransactionsView extends StatelessWidget {
                                 .filterSubscriber(null),
                     ),
                     const SizedBox(width: 12),
-                    AppFilterDropdown<String>(
-                      value: validMeterValue,
-                      hint: 'كل الحسابات / العدادات',
-                      icon: Icons.water_damage_outlined,
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: null,
-                          child: Text('كل الحسابات'),
-                        ),
-                        const DropdownMenuItem<String>(
-                          value: 'general',
-                          child: Text('الحساب العام (بدون عداد)'),
-                        ),
-                        for (final m in meterOptions)
-                          DropdownMenuItem<String>(
-                            value: '${m.id}',
-                            child: Text(m.label),
+                    // The scrolling row leaves its children unbounded; form
+                    // fields need a finite width before they can be laid out.
+                    SizedBox(
+                      width: 240,
+                      child: AppFilterDropdown<String>(
+                        value: validMeterValue,
+                        hint: 'كل الحسابات / العدادات',
+                        icon: Icons.water_damage_outlined,
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('كل الحسابات'),
                           ),
-                      ],
-                      onChanged: context.read<TransactionsCubit>().filterMeter,
+                          const DropdownMenuItem<String>(
+                            value: 'general',
+                            child: Text('الحساب العام (بدون عداد)'),
+                          ),
+                          for (final m in meterOptions)
+                            DropdownMenuItem<String>(
+                              value: '${m.id}',
+                              child: Text(m.label),
+                            ),
+                        ],
+                        onChanged: context
+                            .read<TransactionsCubit>()
+                            .filterMeter,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     AppFilterChip(
@@ -255,29 +264,32 @@ class _TransactionsView extends StatelessWidget {
                                 .filterDateRange(null, null),
                     ),
                     const SizedBox(width: 12),
-                    AppFilterDropdown<String>(
-                      value: state.type,
-                      hint: 'كل أنواع القيود',
-                      icon: Icons.category_outlined,
-                      items: const [
-                        DropdownMenuItem(
-                          value: null,
-                          child: Text('كل أنواع القيود'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'payment',
-                          child: Text('سند قبض (دائن)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'invoice',
-                          child: Text('فاتورة (مدين)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'adjustment',
-                          child: Text('تسوية'),
-                        ),
-                      ],
-                      onChanged: context.read<TransactionsCubit>().filterType,
+                    SizedBox(
+                      width: 200,
+                      child: AppFilterDropdown<String>(
+                        value: state.type,
+                        hint: 'كل أنواع القيود',
+                        icon: Icons.category_outlined,
+                        items: const [
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text('كل أنواع القيود'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'payment',
+                            child: Text('سند قبض (دائن)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'invoice',
+                            child: Text('فاتورة (مدين)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'adjustment',
+                            child: Text('تسوية'),
+                          ),
+                        ],
+                        onChanged: context.read<TransactionsCubit>().filterType,
+                      ),
                     ),
                   ],
                 ),
@@ -314,7 +326,7 @@ class _TransactionsView extends StatelessWidget {
                     ),
                     'square_name': (
                       label: ListOptionsStrings.square,
-                      value: (transaction) => transaction.location.squareName,
+                      value: (transaction) => transaction.location.squareLabel,
                     ),
                     'path_number': (
                       label: ListOptionsStrings.path,
@@ -358,7 +370,7 @@ class _TransactionsView extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                           itemCount: transactions.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 10),
                           itemBuilder: (_, i) {
                             final t = transactions[i];
                             return _LedgerRow(
@@ -391,52 +403,71 @@ class _LedgerRow extends StatelessWidget {
     final theme = Theme.of(context);
     final t = transaction;
     final tone = TransactionsScreen.typeColor(t.type);
+    final quietStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return AppCard(
-      padding: EdgeInsetsDirectional.fromSTEB(
-        12,
-        presentation.compact ? 6 : 10,
-        12,
-        presentation.compact ? 6 : 10,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: EdgeInsets.all(presentation.compact ? 12 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppGlyph(icon: Icons.receipt_long_rounded, tone: tone, size: 38),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Text(
+            (t.subscriberName?.trim().isNotEmpty ?? false)
+                ? t.subscriberName!
+                : ListClarityStrings.unnamedSubscriber,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (presentation.isVisible('description') &&
+              (t.description?.trim().isNotEmpty ?? false)) ...[
+            const SizedBox(height: 6),
+            Text(t.description!, style: quietStyle),
+          ],
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                RecordLocationLabel(location: t.location),
-                Text(
-                  '${t.subscriberName ?? ''}${presentation.isVisible('description') ? ' • ${t.description ?? ''}' : ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${presentation.isVisible('date') ? TransactionsScreen._fmtDate(t.createdAt) : ''}'
-                  '${presentation.isVisible('account') ? ' • ${t.meterId == null ? 'الحساب العام' : 'عداد رقم: ${t.meterId}'}' : ''}'
-                  '${presentation.isVisible('reference') && t.referenceType != null ? ' • مرجع: ${t.referenceType!.split('\\').last.split('.').last}#${t.referenceId}' : ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: BalanceText(t.amount, fontSize: 20),
                   ),
                 ),
+                if (presentation.isVisible('type'))
+                  StatusBadge(label: t.typeLabel, color: tone),
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 12),
+          RecordLocationLabel(location: t.location),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
             children: [
-              if (presentation.isVisible('type'))
-                StatusBadge(label: t.typeLabel, color: tone),
-              const SizedBox(height: 4),
-              BalanceText(t.amount, fontSize: 13),
+              if (presentation.isVisible('date'))
+                Text(
+                  TransactionsScreen._fmtDate(t.createdAt),
+                  style: quietStyle,
+                ),
+              if (presentation.isVisible('account'))
+                Text(
+                  t.meterId == null
+                      ? ListClarityStrings.generalAccount
+                      : ListClarityStrings.meter(t.meterId!),
+                  style: quietStyle,
+                ),
+              if (presentation.isVisible('reference') &&
+                  t.referenceType != null)
+                Text(
+                  ListClarityStrings.reference(t.referenceType!, t.referenceId),
+                  style: quietStyle,
+                ),
             ],
           ),
         ],

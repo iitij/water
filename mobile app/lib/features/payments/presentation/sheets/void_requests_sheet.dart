@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
@@ -206,7 +207,7 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('طلبات الإلغاء المعلّقة'),
+        title: const Text(LaravelScreenStrings.voidRequests),
         actions: <Widget>[
           if (widget.repository is SortedVoidRequestsRepository)
             IgnorePointer(

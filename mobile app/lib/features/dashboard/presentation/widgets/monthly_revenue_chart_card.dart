@@ -14,12 +14,20 @@ class MonthlyRevenueChartCard extends StatelessWidget {
     required this.revenue,
     this.title = 'التحصيل الشهري',
     this.subtitle = 'آخر 6 أشهر • المس أي نقطة لعرض القيمة',
+    this.averageLabel = 'المتوسط الشهري',
+    this.bestLabel = 'أعلى شهر',
+    this.chartHeight = 250,
+    this.showStatistics = true,
     super.key,
   });
 
   final MonthlyRevenue revenue;
   final String title;
   final String subtitle;
+  final String averageLabel;
+  final String bestLabel;
+  final double chartHeight;
+  final bool showStatistics;
 
   @override
   Widget build(BuildContext context) {
@@ -56,37 +64,50 @@ class MonthlyRevenueChartCard extends StatelessWidget {
               message: 'ابدأ بتسجيل المدفوعات لعرض حركة الإيرادات.',
               icon: Icons.query_stats_rounded,
             )
-          else ...<Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _ChartStat(
-                    label: 'إجمالي الفترة',
-                    value: AdminFormat.compactMoney(total),
-                    color: AppColors.neutral,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ChartStat(
-                    label: 'المتوسط الشهري',
-                    value: AdminFormat.compactMoney(average),
-                    color: AppColors.neutral,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ChartStat(
-                    label: 'أعلى شهر',
-                    value: labels[bestIndex].split(' ').first,
-                    color: AppColors.neutral,
-                  ),
-                ),
+          else if (length == 1) ...<Widget>[
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                LtrText(labels.single),
+                LtrText(AdminFormat.money(total)),
               ],
             ),
-            const Gap(AppSpacing.lg),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: total > 0 ? 1 : 0, minHeight: 4),
+          ] else ...<Widget>[
+            if (showStatistics)
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _ChartStat(
+                      label: 'إجمالي الفترة',
+                      value: AdminFormat.compactMoney(total),
+                      color: AppColors.neutral,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _ChartStat(
+                      label: averageLabel,
+                      value: AdminFormat.compactMoney(average),
+                      color: AppColors.neutral,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _ChartStat(
+                      label: bestLabel,
+                      value: labels[bestIndex],
+                      color: AppColors.neutral,
+                    ),
+                  ),
+                ],
+              ),
+            if (showStatistics) const Gap(AppSpacing.lg),
             SizedBox(
-              height: 250,
+              height: chartHeight,
               child: Directionality(
                 textDirection: TextDirection.ltr,
                 child: _RevenueChart(
@@ -106,7 +127,11 @@ class MonthlyRevenueChartCard extends StatelessWidget {
 }
 
 class _ChartStat extends StatelessWidget {
-  const _ChartStat({required this.label, required this.value, required this.color});
+  const _ChartStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final String value;
@@ -118,7 +143,9 @@ class _ChartStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: theme.brightness == Brightness.dark ? .14 : .07),
+        color: color.withValues(
+          alpha: theme.brightness == Brightness.dark ? .14 : .07,
+        ),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Column(
@@ -168,7 +195,10 @@ class _RevenueChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maximum = values.fold<double>(0, (max, value) => value > max ? value : max);
+    final maximum = values.fold<double>(
+      0,
+      (max, value) => value > max ? value : max,
+    );
     final maximumY = maximum <= 0 ? 1.0 : maximum * 1.22;
     final interval = maximumY / 4;
 
@@ -203,7 +233,10 @@ class _RevenueChart extends StatelessWidget {
                   padding: const EdgeInsetsDirectional.only(end: 6),
                   child: Text(
                     AdminFormat.number(value >= 1000 ? value / 1000 : value),
-                    style: TextStyle(fontSize: 10.5, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 );
               },

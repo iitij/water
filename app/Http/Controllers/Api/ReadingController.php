@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Jobs\SendWhatsAppInvoiceJob;
 use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\ServiceRequest;
 use App\Models\Setting;
-use App\Models\Subscriber;
 use App\Models\SubscriptionFee;
+use App\Models\Tariff;
 use App\Services\InvoiceService;
 use App\Services\ReadingService;
 use Carbon\Carbon;
@@ -17,15 +16,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ReadingController extends ApiController
 {
-    public function __construct(private readonly ReadingService $readingService)
-    {
-    }
+    public function __construct(private readonly ReadingService $readingService) {}
 
     public function index(Request $request)
     {
@@ -33,7 +29,7 @@ class ReadingController extends ApiController
         $query = Reading::with([
             'meter:id,unique_code,path_number,subscriber_id,status,tenant_name,tenant_phone',
             'meter.subscriber:id,name,phone,square_id',
-            'meter.subscriber.square:id,name',
+            'meter.subscriber.square:id,name,code',
             'invoice:id,bill_number,status,total_amount',
             'creator:id,name',
         ])->latest('reading_date')->latest('id');
@@ -69,6 +65,7 @@ class ReadingController extends ApiController
             } else {
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('period_start', 'like', "%{$search}%")
+                        ->orWhereHas('meter.subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                         ->orWhere('period_end', 'like', "%{$search}%")
                         ->orWhereHas('meter', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
@@ -83,6 +80,7 @@ class ReadingController extends ApiController
         }
 
         $this->applySorting($query, $request, self::LIST_SORTS['readings']);
+
         return $query->paginate($this->perPage($request))->through(function (Reading $reading) {
             return $this->decorateReading($reading);
         })->appends($request->query());
@@ -126,6 +124,7 @@ class ReadingController extends ApiController
     public function calculateDates(Request $request)
     {
         $data = $request->validate(['meter_id' => ['required', 'integer', 'exists:meters,id']]);
+
         return $this->getMeterPeriod((int) $data['meter_id']);
     }
 
@@ -136,6 +135,7 @@ class ReadingController extends ApiController
         $readings = $meter->readings()->with(['invoice:id,bill_number,status', 'creator:id,name'])
             ->latest('reading_date')->paginate(50)
             ->through(fn (Reading $reading) => $this->decorateReading($reading));
+
         return response()->json(['meter' => $meter, 'readings' => $readings]);
     }
 
@@ -149,6 +149,7 @@ class ReadingController extends ApiController
             throw $exception;
         } catch (\Throwable $exception) {
             Log::error('Mobile reading creation failed', ['exception' => $exception]);
+
             return response()->json(['message' => 'تعذر حفظ القراءة حالياً. حاول مرة أخرى.'], 500);
         }
 
@@ -189,6 +190,7 @@ class ReadingController extends ApiController
             return response()->json(['errors' => ['period_start' => ['توجد قراءة أخرى مسجلة لنفس الفترة.']]], 422);
         }
         $reading->update($data);
+
         return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
     }
 
@@ -200,6 +202,7 @@ class ReadingController extends ApiController
             return response()->json(['message' => 'لا يمكن حذف قراءة مفوترة. احذف الفاتورة المرتبطة بها أولاً.'], 409);
         }
         $reading->delete();
+
         return response()->json(['message' => 'تم حذف القراءة بنجاح.']);
     }
 
@@ -213,12 +216,14 @@ class ReadingController extends ApiController
             foreach (Reading::whereIn('id', $data['ids'])->lockForUpdate()->get() as $reading) {
                 if ($reading->is_invoiced) {
                     $skipped++;
+
                     continue;
                 }
                 $reading->delete();
                 $deleted++;
             }
         });
+
         return response()->json(['deleted_count' => $deleted, 'skipped_count' => $skipped]);
     }
 
@@ -245,6 +250,7 @@ class ReadingController extends ApiController
             $meter = $meterReadings->first()->meter;
             if (! $meter?->subscriber) {
                 $errors[] = ['meter_id' => $meterId, 'message' => 'تعذر العثور على المشترك المرتبط بالعداد.'];
+
                 continue;
             }
             try {
@@ -370,6 +376,7 @@ class ReadingController extends ApiController
                     && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
                     && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
                 abort_unless($sameOwner && $sameReading, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+
                 return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
             }
         }
@@ -379,7 +386,7 @@ class ReadingController extends ApiController
         $current = (float) $data['current_reading'];
         if ($current < $previous) {
             throw ValidationException::withMessages([
-                'current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة (' . $previous . ').'],
+                'current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة ('.$previous.').'],
             ]);
         }
 
@@ -407,7 +414,7 @@ class ReadingController extends ApiController
                 if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
                     $ext = 'jpg';
                 }
-                $storedName = 'readings/' . Str::uuid() . '.' . $ext;
+                $storedName = 'readings/'.Str::uuid().'.'.$ext;
                 Storage::disk('public')->put($storedName, $decodedImage);
                 $imagePath = $storedName;
             }
@@ -461,6 +468,7 @@ class ReadingController extends ApiController
     private function decorateReading(Reading $reading): Reading
     {
         $reading->setAttribute('image_url', $reading->image_path ? url(Storage::disk('public')->url($reading->image_path)) : null);
+
         return $reading;
     }
 
@@ -470,7 +478,8 @@ class ReadingController extends ApiController
         $first = $readings->first();
         $last = $readings->last();
         $units = (int) $readings->sum('consumption_units');
-        $unitPrice = $units > 0 ? round((float) $invoice->consumption_fee / $units, 2) : \App\Models\Tariff::getActivePrice();
+        $unitPrice = $units > 0 ? round((float) $invoice->consumption_fee / $units, 2) : Tariff::getActivePrice();
+
         return [
             'id' => $invoice->id,
             'bill_number' => $invoice->bill_number,

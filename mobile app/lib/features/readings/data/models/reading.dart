@@ -1,3 +1,4 @@
+import '../../../../core/models/square_label.dart';
 class Reading {
   const Reading({
     this.id,
@@ -90,7 +91,7 @@ class Reading {
       squareId: _int(
         json['square_id'] ?? subscriber?['square_id'] ?? square?['id'],
       ),
-      squareName: _string(json['square_name'] ?? square?['name']),
+      squareName: squareLabelOrNull(json['square_name'] ?? square?['name'], json['square_code'] ?? square?['code']),
       subscriberName: _string(json['subscriber_name'] ?? subscriber?['name']),
       tenantName: _string(json['tenant_name'] ?? meter?['tenant_name']),
       imagePath: _string(json['image_path']),

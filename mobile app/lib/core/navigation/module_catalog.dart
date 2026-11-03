@@ -3,6 +3,7 @@ import '../../features/audit/presentation/audit_events_screen.dart';
 import '../../features/cash_sessions/domain/cash_session_review_permissions.dart';
 
 import '../l10n/app_strings.dart';
+import '../l10n/laravel_screen_strings.dart';
 import '../permissions/permission_service.dart';
 import '../router/route_names.dart';
 import '../theme/app_colors.dart';
@@ -24,8 +25,8 @@ extension AppModuleGroupX on AppModuleGroup {
   String get description => switch (this) {
         AppModuleGroup.field => 'القراءات والعدادات والقارئ الميداني',
         AppModuleGroup.billing => 'سندات القبض والفواتير وشرائح التعرفة',
-        AppModuleGroup.crm => 'ملفات المشتركين والمربعات وطلبات الخدمة',
-        AppModuleGroup.insights => 'لوحة القيادة والتقارير والتصدير',
+        AppModuleGroup.crm => 'ملفات المشتركين والمربعات و${LaravelScreenStrings.serviceRequests}',
+        AppModuleGroup.insights => '${LaravelScreenStrings.dashboard} والتقارير والتصدير',
         AppModuleGroup.admin => 'إعدادات المشروع وأدوات الإدارة',
         AppModuleGroup.system => 'المزامنة والملف الشخصي والمظهر',
       };
@@ -107,7 +108,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'meters',
       group: AppModuleGroup.field,
-      title: 'إدارة العدادات',
+      title: LaravelScreenStrings.meters,
       subtitle: 'العدادات والمسارات والأرصدة المعزولة',
       icon: Icons.water_damage_outlined,
       color: AppColors.info,
@@ -117,7 +118,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'readings',
       group: AppModuleGroup.field,
-      title: 'سجل القراءات',
+      title: LaravelScreenStrings.readings,
       subtitle: 'فلترة القراءات والإصدار الجماعي للفواتير',
       icon: Icons.fact_check_outlined,
       color: AppColors.success,
@@ -147,7 +148,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'invoices',
       group: AppModuleGroup.billing,
-      title: 'الفواتير',
+      title: LaravelScreenStrings.invoices,
       subtitle: 'فواتير العدادات والاشتراكات والوايت',
       icon: Icons.receipt_long_rounded,
       color: AppColors.primary,
@@ -157,7 +158,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'payments',
       group: AppModuleGroup.billing,
-      title: 'سندات القبض',
+      title: LaravelScreenStrings.payments,
       subtitle: 'توزيع الدفعات والطباعة والواتساب',
       icon: Icons.payments_outlined,
       color: AppColors.success,
@@ -167,7 +168,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'tariffs',
       group: AppModuleGroup.billing,
-      title: 'التعرفة والتسعير',
+      title: LaravelScreenStrings.tariffs,
       subtitle: 'سعر الوحدة والشرائح النشطة',
       icon: Icons.price_change_outlined,
       color: AppColors.info,
@@ -179,7 +180,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'subscribers',
       group: AppModuleGroup.crm,
-      title: 'المشتركون',
+      title: LaravelScreenStrings.subscribers,
       subtitle: 'الملف الشامل، كشف الحساب والتبويبات الستة',
       icon: Icons.people_alt_rounded,
       color: AppColors.primary,
@@ -189,7 +190,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'squares',
       group: AppModuleGroup.crm,
-      title: 'المربعات السكنية',
+      title: LaravelScreenStrings.squares,
       subtitle: 'الحارات والمربعات ومشتركو كل مربع',
       icon: Icons.grid_view_rounded,
       color: AppColors.info,
@@ -199,7 +200,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'fees',
       group: AppModuleGroup.crm,
-      title: 'رسوم الاشتراك',
+      title: LaravelScreenStrings.subscriptionFees,
       subtitle: 'رسوم التأسيس وإصدار فواتير الأقساط',
       icon: Icons.card_membership_rounded,
       color: AppColors.warning,
@@ -208,7 +209,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'service_requests',
       group: AppModuleGroup.crm,
-      title: 'طلبات الخدمة',
+      title: LaravelScreenStrings.serviceRequests,
       subtitle: 'طلبات الوايت والإنجاز والفوترة',
       icon: Icons.local_shipping_rounded,
       color: AppColors.success,
@@ -217,7 +218,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'transactions',
       group: AppModuleGroup.crm,
-      title: 'دفتر الأستاذ',
+      title: LaravelScreenStrings.transactions,
       subtitle: 'الحركات الدائنة والمدينة المفصلة',
       icon: Icons.account_balance_outlined,
       color: AppColors.violet,
@@ -228,7 +229,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'dashboard',
       group: AppModuleGroup.insights,
-      title: 'لوحة القيادة',
+      title: LaravelScreenStrings.dashboard,
       subtitle: 'مؤشرات الأداء والإيرادات والمتأخرات',
       icon: Icons.space_dashboard_rounded,
       color: AppColors.primary,
@@ -254,7 +255,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'exports',
       group: AppModuleGroup.insights,
-      title: 'مركز التصدير',
+      title: LaravelScreenStrings.exports,
       subtitle: 'تصدير المشتركين والفواتير والقراءات',
       icon: Icons.table_view_rounded,
       color: AppColors.success,
@@ -266,7 +267,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'settings',
       group: AppModuleGroup.admin,
-      title: 'استوديو الإعدادات',
+      title: LaravelScreenStrings.settings,
       subtitle: 'مصمم الفاتورة والسند وإعدادات القراءات',
       icon: Icons.tune_rounded,
       color: AppColors.warning,
@@ -331,7 +332,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'profile',
       group: AppModuleGroup.system,
-      title: 'الملف الشخصي',
+      title: LaravelScreenStrings.profileNavigation,
       subtitle: 'الاسم والبريد وكلمة المرور والصورة',
       icon: Icons.person_rounded,
       color: AppColors.primary,

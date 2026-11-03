@@ -102,8 +102,9 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
                     \Filament\Forms\Components\Select::make('square_id')
                         ->label('المربع السكني')
                         ->relationship('square', 'name')
+                        ->getOptionLabelFromRecordUsing(fn (\App\Models\Square $record): string => $record->display_name)
                         ->required()
-                        ->searchable()
+                        ->searchable(['name', 'code'])
                         ->preload()
                         ->columnSpan(1),
 

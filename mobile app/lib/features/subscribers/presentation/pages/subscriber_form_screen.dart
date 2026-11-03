@@ -167,7 +167,7 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
                     key: ValueKey<int?>(_squareId),
                     initialValue: _squareId,
                     decoration: const InputDecoration(labelText: 'المربع السكني *'),
-                    items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.name))],
+                    items: [for (final s in _squares) DropdownMenuItem(value: s.id, child: Text(s.displayName))],
                     onChanged: (v) => setState(() => _squareId = v),
                     validator: (v) => v == null ? 'اختر المربع السكني' : null,
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/l10n/app_strings.dart';
+import 'package:water_project/core/l10n/laravel_screen_strings.dart';
 import 'package:water_project/core/l10n/list_options_strings.dart';
 import 'package:water_project/features/payments/data/models/payment_model.dart';
 import 'package:water_project/features/payments/domain/repositories/payments_repository.dart';
@@ -27,6 +28,7 @@ void main() {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: VoidRequestsSheet(repository: repository)));
     await tester.pumpAndSettle();
+    expect(find.text(LaravelScreenStrings.voidRequests), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byTooltip(ListOptionsStrings.title), findsOneWidget);
     await tester.tap(find.byTooltip(ListOptionsStrings.title));

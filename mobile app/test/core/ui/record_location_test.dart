@@ -5,6 +5,36 @@ import 'package:water_project/features/payments/data/models/payment_model.dart';
 
 void main() {
   test(
+    'square code survives nested and cached locations without changing name',
+    () {
+      final nested = RecordLocation.fromJson({
+        'meter': {
+          'path_number': 7,
+          'subscriber': {
+            'square_id': 4,
+            'square': {'id': 4, 'name': 'اسم المالك', 'code': 'Ab / الحارة'},
+          },
+        },
+      });
+      expect(nested.squareId, 4);
+      expect(nested.squareName, 'اسم المالك');
+      expect(nested.squareCode, 'Ab / الحارة');
+      expect(nested.squareLabel, 'Ab / الحارة — اسم المالك');
+      expect(nested.paths, [7]);
+      final cached = RecordLocation.fromJson({
+        'square_id': 4,
+        'square_name': 'اسم المالك',
+        'square_code': 'Ab / الحارة',
+      });
+      expect(cached.squareLabel, nested.squareLabel);
+      expect(
+        RecordLocation.fromJson({'square_name': 'قديم'}).squareLabel,
+        'قديم',
+      );
+    },
+  );
+
+  test(
     'linked meter location remains isolated from other subscriber routes',
     () {
       final json = <String, dynamic>{
@@ -22,8 +52,8 @@ void main() {
       expect(location.squareId, 4);
       expect(location.squareName, 'مربع النور');
       expect(location.paths, [10]);
-    json['meter'] = {'path_number': null};
-    expect(RecordLocation.fromJson(json).paths, isEmpty);
+      json['meter'] = {'path_number': null};
+      expect(RecordLocation.fromJson(json).paths, isEmpty);
       json.remove('meter');
       expect(RecordLocation.fromJson(json).paths, [1, 10]);
       expect(RecordLocation.fromJson({}).firstPath, isNull);

@@ -11,7 +11,7 @@ class TransactionController extends ApiController
     {
         $this->authorizeApi(Transaction::class, 'viewAny');
         $query = Transaction::with([
-            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number',
+            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number,tenant_name', 'reference',
         ])->latest('created_at')->latest('id');
         if ($request->filled('subscriber_id')) {
@@ -36,13 +36,22 @@ class TransactionController extends ApiController
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
         }
-        if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->query('from_date'));
-        if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
-        if ($request->filled('from')) $query->whereDate('created_at', '>=', $request->query('from'));
-        if ($request->filled('to')) $query->whereDate('created_at', '<=', $request->query('to'));
+        if ($request->filled('from_date')) {
+            $query->whereDate('created_at', '>=', $request->query('from_date'));
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('created_at', '<=', $request->query('to_date'));
+        }
+        if ($request->filled('from')) {
+            $query->whereDate('created_at', '>=', $request->query('from'));
+        }
+        if ($request->filled('to')) {
+            $query->whereDate('created_at', '<=', $request->query('to'));
+        }
         if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
             $query->where(function ($builder) use ($search) {
                 $builder->where('description', 'like', "%{$search}%")
+                    ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                     ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%"));
             });
@@ -51,12 +60,14 @@ class TransactionController extends ApiController
         if ($request->filled('per_page')) {
             return $query->paginate($this->perPage($request))->appends($request->query());
         }
+
         return $query->get();
     }
 
     public function show(int $id)
     {
         $this->authorizeApi(Transaction::class, 'view');
+
         return response()->json(['transaction' => Transaction::with(['subscriber.square', 'meter', 'reference'])->findOrFail($id)]);
     }
 }

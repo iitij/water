@@ -74,85 +74,40 @@ class AppModuleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (list) {
-      return AppCard(
-        padding: const EdgeInsets.all(13),
-        onTap: onTap,
-        child: Row(
-          children: <Widget>[
-            AppIconBubble(icon: icon, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                      if (badge != null) ...<Widget>[
-                        const SizedBox(width: 8),
-                        badge!,
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.chevron_left_rounded,
-              size: 18,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
-            ),
-          ],
-        ),
-      );
-    }
-
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
+      radius: AppRadius.lg,
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              AppIconBubble(icon: icon, color: color),
-              const Spacer(),
-              if (badge != null) badge!,
-            ],
-          ),
-          const Spacer(),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+          AppIconBubble(icon: icon, color: color, size: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(subtitle, style: theme.textTheme.bodySmall),
+                if (badge != null) ...<Widget>[
+                  const SizedBox(height: 4),
+                  badge!,
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(height: 1.45),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.chevron_left_rounded,
+            textDirection: TextDirection.ltr,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ],
       ),
@@ -165,14 +120,12 @@ class AppModuleGrid extends StatelessWidget {
   const AppModuleGrid({
     super.key,
     required this.children,
-    this.minTileWidth = 200,
-    this.tileHeight = 152,
-    this.spacing = 10,
+    this.minTileWidth = 280,
+    this.spacing = 12,
   });
 
   final List<Widget> children;
   final double minTileWidth;
-  final double tileHeight;
   final double spacing;
 
   @override
@@ -181,17 +134,35 @@ class AppModuleGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
-        final columns = (available / minTileWidth).floor().clamp(1, 4).toInt();
+        final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
+        final minimum = largeText ? minTileWidth * 1.3 : minTileWidth;
+        final columns = ((available + spacing) / (minimum + spacing))
+            .floor()
+            .clamp(1, 4)
+            .toInt();
         final width = (available - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: children
-              .map(
-                (child) =>
-                    SizedBox(width: width, height: tileHeight, child: child),
-              )
-              .toList(growable: false),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (var start = 0; start < children.length; start += columns) ...[
+              if (start > 0) SizedBox(height: spacing),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    for (
+                      var column = 0;
+                      column < columns && start + column < children.length;
+                      column++
+                    ) ...[
+                      if (column > 0) SizedBox(width: spacing),
+                      SizedBox(width: width, child: children[start + column]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
         );
       },
     );
@@ -203,33 +174,39 @@ class AppModuleRail extends StatelessWidget {
   const AppModuleRail({
     super.key,
     required this.children,
-    this.tileWidth = 208,
-    this.tileHeight = 152,
-    this.spacing = 10,
+    this.tileWidth = 304,
+    this.spacing = 12,
   });
 
   final List<Widget> children;
   final double tileWidth;
-  final double tileHeight;
   final double spacing;
 
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: tileHeight,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-        itemCount: children.length,
-        separatorBuilder: (_, __) => SizedBox(width: spacing),
-        itemBuilder: (context, index) => SizedBox(
-          width: tileWidth,
-          height: tileHeight,
-          child: children[index],
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = tileWidth.clamp(0.0, constraints.maxWidth);
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (
+                  var index = 0;
+                  index < children.length;
+                  index++
+                ) ...<Widget>[
+                  if (index > 0) SizedBox(width: spacing),
+                  SizedBox(width: width, child: children[index]),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -383,13 +360,15 @@ class AppMetricCard extends StatelessWidget {
                     ),
                   ),
                   if (unit != null) ...<Widget>[
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 3),
                       child: Text(
                         unit!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurface,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -596,23 +575,34 @@ class AppStatStrip extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     return AppCard(
-      padding: const EdgeInsets.all(10),
+      radius: 12,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final scale = MediaQuery.textScalerOf(
-                context,
-              ).scale(1).clamp(1.0, 2.0);
-              final columns = (constraints.maxWidth / (160 * scale))
+              final scale = MediaQuery.textScalerOf(context).scale(1);
+              // Phones read like a ledger: label and value on one line. Wider
+              // workspaces use columns, without nesting another set of cards.
+              if (constraints.maxWidth < 560 * scale) {
+                return Column(
+                  children: [
+                    for (var index = 0; index < items.length; index++) ...[
+                      if (index > 0) const SizedBox(height: 8),
+                      _StatCell(item: items[index], inline: true),
+                    ],
+                  ],
+                );
+              }
+              final columns = (constraints.maxWidth / (180 * scale))
                   .floor()
                   .clamp(1, items.length.clamp(1, 4));
               final width =
-                  (constraints.maxWidth - 10 * (columns - 1)) / columns;
+                  (constraints.maxWidth - 24 * (columns - 1)) / columns;
               return Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                spacing: 24,
+                runSpacing: 16,
                 children: [
                   for (var index = 0; index < items.length; index++)
                     SizedBox(
@@ -641,42 +631,66 @@ class AppStatStrip extends StatelessWidget {
 }
 
 class _StatCell extends StatelessWidget {
-  const _StatCell({required this.item});
+  const _StatCell({required this.item, this.inline = false});
   final AppStatItem item;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final tone = AppSemantic.resolve(context, item.color);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: .52),
-        borderRadius: BorderRadius.circular(12),
+    final label = Text(
+      item.label,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: scheme.onSurfaceVariant,
       ),
+    );
+    final amount = AppAmount(
+      value: item.value,
+      style: theme.textTheme.titleLarge?.copyWith(
+        color: item.value.trimLeft().startsWith('-')
+            ? AppSemantic.resolve(context, item.color)
+            : scheme.onSurface,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+      ),
+      unitStyle: theme.textTheme.labelSmall?.copyWith(
+        color: scheme.onSurfaceVariant,
+      ),
+    );
+    if (inline) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 28),
+        child: Row(
+          children: [
+            Expanded(flex: 5, child: label),
+            const SizedBox(width: 16),
+            Flexible(
+              flex: 6,
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: amount,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Semantics(
+      container: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(item.label, style: theme.textTheme.labelSmall),
-              ),
-              const SizedBox(width: 6),
-              Icon(item.icon, size: 17, color: tone),
+              Icon(item.icon, size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(child: label),
             ],
           ),
-          const SizedBox(height: 9),
-          AppAmount(
-            value: item.value,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: scheme.onSurface,
-              fontWeight: FontWeight.w700,
-              height: 1.25,
-            ),
-          ),
+          const SizedBox(height: 8),
+          amount,
         ],
       ),
     );
@@ -701,9 +715,11 @@ class AppMetricGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
+    final textScale = (MediaQuery.textScalerOf(context).scale(14) / 14)
+        .clamp(1.0, double.infinity);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = (constraints.maxWidth / minTileWidth)
+        final columns = (constraints.maxWidth / (minTileWidth * textScale))
             .floor()
             .clamp(1, 4)
             .toInt();
@@ -715,7 +731,11 @@ class AppMetricGrid extends StatelessWidget {
           children: children
               .map(
                 (child) =>
-                    SizedBox(width: width, height: tileHeight, child: child),
+                    SizedBox(
+                      width: width,
+                      height: tileHeight * textScale,
+                      child: child,
+                    ),
               )
               .toList(growable: false),
         );

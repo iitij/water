@@ -22,7 +22,7 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'viewAny');
         $query = Payment::with([
-            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number',
+            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number,tenant_name,tenant_phone',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
         ])->latest('payment_date')->latest('id');
@@ -54,6 +54,7 @@ class PaymentController extends ApiController
         if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
             $query->where(function ($builder) use ($search) {
                 $builder->where('receipt_number', 'like', "%{$search}%")
+                    ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                     ->orWhere('reference_number', 'like', "%{$search}%")
                     ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%"))
@@ -63,6 +64,7 @@ class PaymentController extends ApiController
         }
 
         $this->applySorting($query, $request, self::LIST_SORTS['payments']);
+
         return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
             $payment->setAttribute('receipt_data', $this->receiptData($payment));
 
@@ -213,7 +215,7 @@ class PaymentController extends ApiController
 
         $query = Payment::query()
             ->voidRequested()
-            ->with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
+            ->with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
             ->latest('void_requested_at');
         $this->applySorting($query, $request, self::LIST_SORTS['void_requests']);
         $payments = $query->paginate($this->perPage($request))->appends($request->query());
@@ -223,6 +225,7 @@ class PaymentController extends ApiController
             'created_at' => $payment->created_at?->toISOString(),
             'square_id' => $payment->subscriber?->square_id,
             'square_name' => $payment->subscriber?->square?->name,
+            'square_code' => $payment->subscriber?->square?->code,
             'path_numbers' => ($payment->meter_id === null
                 ? ($payment->subscriber?->meters ?? collect())->pluck('path_number')
                 : collect([$payment->meter?->path_number]))->filter(fn ($path) => $path !== null)->map(fn ($path) => (int) $path)->unique()->sort()->values()->all(),

@@ -25,11 +25,12 @@ class ReportsState extends Equatable {
     ReportSnapshot? snapshot,
     String? errorMessage,
     bool clearError = false,
+    bool clearSnapshot = false,
   }) {
     return ReportsState(
       status: status ?? this.status,
       filter: filter ?? this.filter,
-      snapshot: snapshot ?? this.snapshot,
+      snapshot: clearSnapshot ? null : snapshot ?? this.snapshot,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
@@ -39,7 +40,13 @@ class ReportsState extends Equatable {
 }
 
 class ReportsCubit extends Cubit<ReportsState> {
-  ReportsCubit(this._repository) : super(const ReportsState());
+  ReportsCubit(this._repository, {DateTime Function()? now})
+    : super(ReportsState(filter: currentMonth((now ?? DateTime.now)())));
+
+  static ReportFilter currentMonth(DateTime now) => ReportFilter(
+    from: DateTime(now.year, now.month),
+    to: DateTime(now.year, now.month, now.day),
+  );
 
   final DashboardRepository _repository;
 
@@ -61,10 +68,12 @@ class ReportsCubit extends Cubit<ReportsState> {
         status: ReportsRequestStatus.loading,
         filter: effectiveFilter,
         clearError: true,
+        clearSnapshot: effectiveFilter != state.filter,
       ),
     );
     try {
       final snapshot = await _repository.getReport(effectiveFilter);
+      if (isClosed) return;
       emit(
         ReportsState(
           status: ReportsRequestStatus.success,
@@ -73,6 +82,7 @@ class ReportsCubit extends Cubit<ReportsState> {
         ),
       );
     } catch (error) {
+      if (isClosed) return;
       emit(
         state.copyWith(
           status: ReportsRequestStatus.failure,

@@ -1,0 +1,22 @@
+[Unit]
+Description=Water private PDF browser
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/water
+Environment=HOME=/var/lib/water-chromium
+Environment=XDG_CONFIG_HOME=/var/lib/water-chromium/config
+Environment=XDG_CACHE_HOME=/var/lib/water-chromium/cache
+ExecStart=/usr/bin/chromium --headless --no-sandbox --renderer-process-limit=1 --no-zygote --disable-gpu --disable-extensions --disable-background-networking --no-first-run --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=/var/lib/water-chromium/pdf-worker about:blank
+Restart=always
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=10
+MemoryMax=512M
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

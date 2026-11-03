@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/ui/app_surfaces.dart';
+import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../domain/workspace_catalog.dart';
 
@@ -15,98 +15,18 @@ Color workspaceColor(WorkspaceGroup group) => switch (group) {
 };
 
 class WorkspaceTile extends StatelessWidget {
-  const WorkspaceTile({
-    super.key,
-    required this.entry,
-    required this.onTap,
-    this.directory = false,
-    this.compactGrid = false,
-  });
+  const WorkspaceTile({super.key, required this.entry, required this.onTap});
   final WorkspaceEntry entry;
   final VoidCallback onTap;
-  final bool directory;
-  final bool compactGrid;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tone = workspaceColor(entry.group);
-    if (directory) {
-      return AppCard(
-        padding: EdgeInsets.zero,
-        onTap: onTap,
-        radius: AppRadius.lg,
-        child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppGlyph(icon: entry.icon, tone: tone, size: 38),
-              if (compactGrid) const Spacer() else const SizedBox(height: 16),
-              Text(
-                entry.title,
-                maxLines: compactGrid ? 2 : null,
-                overflow: compactGrid ? TextOverflow.ellipsis : null,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                entry.description,
-                maxLines: compactGrid ? 2 : null,
-                overflow: compactGrid ? TextOverflow.ellipsis : null,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return AppCard(
-      padding: EdgeInsets.zero,
+    return AppModuleTile(
+      title: entry.title,
+      subtitle: entry.description,
+      icon: entry.icon,
+      color: workspaceColor(entry.group),
       onTap: onTap,
-      radius: AppRadius.xl,
-      child: Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 10, 12),
-        child: Row(
-          children: <Widget>[
-            AppGlyph(icon: entry.icon, tone: tone, size: 40),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    entry.title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    entry.description,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_left_rounded,
-              size: 18,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: .7),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -122,75 +42,12 @@ class WorkspaceShortcutGrid extends StatelessWidget {
   final ValueChanged<String> onNavigate;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final largeText = MediaQuery.textScalerOf(context).scale(16) > 23;
-      final columns = constraints.maxWidth >= 840
-          ? 4
-          : constraints.maxWidth >= 340 && !largeText
-          ? 2
-          : 1;
-      final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final entry in entries)
-            SizedBox(
-              width: width,
-              child: _ShortcutCard(
-                entry: entry,
-                onTap: () => onNavigate(entry.route),
-              ),
-            ),
-        ],
-      );
-    },
+  Widget build(BuildContext context) => AppModuleGrid(
+    children: [
+      for (final entry in entries)
+        WorkspaceTile(entry: entry, onTap: () => onNavigate(entry.route)),
+    ],
   );
-}
-
-class _ShortcutCard extends StatelessWidget {
-  const _ShortcutCard({required this.entry, required this.onTap});
-  final WorkspaceEntry entry;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AppCard(
-      padding: EdgeInsets.zero,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 14, 13),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            AppGlyph(
-              icon: entry.icon,
-              tone: workspaceColor(entry.group),
-              size: 36,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              entry.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              entry.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(height: 1.5),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class WorkspaceSearchButton extends StatelessWidget {

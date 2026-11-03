@@ -9,8 +9,21 @@ class Square extends Model
 {
     protected $fillable = [
         'name',
+        'code',
         'description',
     ];
+
+    protected $attributes = ['code' => null];
+
+    public function setCodeAttribute(?string $value): void
+    {
+        $this->attributes['code'] = $value === null || trim($value) === '' ? null : trim($value);
+    }
+
+    public function getDisplayNameAttribute(): string
+    {
+        return $this->code === null ? $this->name : $this->code.' — '.$this->name;
+    }
 
     public function subscribers(): HasMany
     {

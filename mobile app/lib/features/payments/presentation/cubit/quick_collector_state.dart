@@ -32,17 +32,21 @@ class QuickCollectorState extends Equatable {
   /// فواتير أُغلقت محلياً بعد التحصيل حتى لا يومض العميل قبل التحديث من الخادم.
   final Set<int> paidIds;
 
-  int get openCount => invoices.where((i) => i.status.isOpenForCollection).length;
+  bool _isOpen(InvoiceModel invoice) =>
+      !invoice.isDeleted &&
+      !paidIds.contains(invoice.id) &&
+      invoice.status.isOpenForCollection;
+
+  int get openCount => invoices.where(_isOpen).length;
 
   double get totalDue => invoices.fold<double>(
-        0,
-        (sum, invoice) =>
-            sum + (invoice.status.isOpenForCollection ? invoice.netPayable : 0),
-      );
+    0,
+    (sum, invoice) => sum + (_isOpen(invoice) ? invoice.ownRemaining : 0),
+  );
 
   double get overdueDue => invoices
-      .where((i) => i.status.wire == 'overdue')
-      .fold<double>(0, (sum, i) => sum + i.netPayable);
+      .where((i) => _isOpen(i) && i.status.wire == 'overdue')
+      .fold<double>(0, (sum, i) => sum + i.ownRemaining);
 
   /// النتائج مرتبة: مطابقة المسار أولاً ثم الأقدم استحقاقاً.
   List<InvoiceModel> get visibleInvoices {
@@ -52,7 +56,9 @@ class QuickCollectorState extends Equatable {
       final aOpen = a.status.isOpenForCollection;
       final bOpen = b.status.isOpenForCollection;
       if (aOpen != bOpen) return aOpen ? -1 : 1;
-      return InvoiceAccounting.totalDue(b).compareTo(InvoiceAccounting.totalDue(a));
+      return InvoiceAccounting.totalDue(
+        b,
+      ).compareTo(InvoiceAccounting.totalDue(a));
     });
     return list;
   }
@@ -72,31 +78,31 @@ class QuickCollectorState extends Equatable {
     bool clearError = false,
     String? lastCollectedBillNumber,
     Set<int>? paidIds,
-  }) =>
-      QuickCollectorState(
-        searchText: searchText ?? this.searchText,
-        selectedSquareId:
-            clearSquare ? null : (selectedSquareId ?? this.selectedSquareId),
-        squares: squares ?? this.squares,
-        invoices: invoices ?? this.invoices,
-        loading: loading ?? this.loading,
-        loadingSquares: loadingSquares ?? this.loadingSquares,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-        lastCollectedBillNumber:
-            lastCollectedBillNumber ?? this.lastCollectedBillNumber,
-        paidIds: paidIds ?? this.paidIds,
-      );
+  }) => QuickCollectorState(
+    searchText: searchText ?? this.searchText,
+    selectedSquareId: clearSquare
+        ? null
+        : (selectedSquareId ?? this.selectedSquareId),
+    squares: squares ?? this.squares,
+    invoices: invoices ?? this.invoices,
+    loading: loading ?? this.loading,
+    loadingSquares: loadingSquares ?? this.loadingSquares,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    lastCollectedBillNumber:
+        lastCollectedBillNumber ?? this.lastCollectedBillNumber,
+    paidIds: paidIds ?? this.paidIds,
+  );
 
   @override
   List<Object?> get props => <Object?>[
-        searchText,
-        selectedSquareId,
-        squares,
-        invoices,
-        loading,
-        loadingSquares,
-        errorMessage,
-        lastCollectedBillNumber,
-        paidIds,
-      ];
+    searchText,
+    selectedSquareId,
+    squares,
+    invoices,
+    loading,
+    loadingSquares,
+    errorMessage,
+    lastCollectedBillNumber,
+    paidIds,
+  ];
 }

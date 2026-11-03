@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:water_project/core/l10n/laravel_screen_strings.dart';
 import 'package:water_project/core/theme/app_theme.dart';
 import 'package:water_project/features/admin_shared/presentation/widgets/admin_widgets.dart';
 import 'package:water_project/features/devices/domain/device_record.dart';
@@ -45,8 +46,8 @@ void main() {
       when(repository.getReadingSettings).thenAnswer((_) async => ReadingSettings.defaults());
       await tester.pumpWidget(_app(SettingsStudioScreen(repository: repository, can: (_) => true)));
       await tester.pumpAndSettle();
-      expect(find.text('القراءات'), findsOneWidget);
-      await tester.tap(find.text('القراءات'));
+      expect(find.text(LaravelScreenStrings.readingSettings), findsOneWidget);
+      await tester.tap(find.text(LaravelScreenStrings.readingSettings));
       await tester.pumpAndSettle();
       expect(find.byType(ReadingSettingsScreen), findsOneWidget);
       expect(tester.takeException(), isNull);

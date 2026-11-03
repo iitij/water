@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_responsive.dart';
+import '../../../../core/l10n/invoice_summary_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
@@ -95,7 +97,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الفواتير'),
+        title: const Text(LaravelScreenStrings.invoices),
         actions: <Widget>[
           BlocBuilder<InvoicesCubit, InvoicesState>(
             builder: (context, state) => IgnorePointer(
@@ -406,6 +408,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
   static String? _statusLabel(String? status) {
     if (status == null) return null;
     return switch (status) {
+      'unpaid' => InvoiceSummaryStrings.unpaid,
       'issued' => 'صادرة',
       'partially_paid' => 'جزئياً',
       'paid' => 'مسددة',

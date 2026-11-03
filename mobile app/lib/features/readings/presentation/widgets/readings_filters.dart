@@ -38,7 +38,7 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
     final id = widget.state.squareFilter;
     if (id == null) return null;
     for (final square in widget.state.squares) {
-      if (square.id == id) return square.name;
+      if (square.id == id) return square.displayName;
     }
     return 'مربع #$id';
   }
@@ -327,7 +327,7 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
     final theme = Theme.of(context);
     final state = widget.state;
     return AppFilterSheet(
-      title: 'تصفية سجل القراءات',
+      title: 'تصفية ${LaravelScreenStrings.readings}',
       resultCountLabel: state.status == ReadingsLoadStatus.loading
           ? 'جارٍ تحديث النتائج…'
           : '${state.readings.length} قراءة مطابقة',
@@ -400,7 +400,7 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
                 const SizedBox(height: 6),
                 for (final square in state.squares) ...<Widget>[
                   AppFilterOptionTile(
-                    label: square.name,
+                    label: square.displayName,
                     icon: Icons.grid_view_rounded,
                     selected: _square == square.id,
                     onTap: () => setState(() => _square = square.id),

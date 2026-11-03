@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/app_strings.dart';
+import '../../../core/l10n/laravel_screen_strings.dart';
 import '../../../core/router/route_names.dart';
 
 enum WorkspaceGroup {
@@ -106,103 +107,103 @@ abstract final class WorkspaceCatalog {
       keywords: 'إنشاء فاتورة يدوية invoice', shortcut: true,
     ),
     WorkspaceEntry(
-      title: 'المشتركون', description: 'البيانات وكشف الحساب والخدمات',
+      title: LaravelScreenStrings.subscribers, description: 'البيانات وكشف الحساب والخدمات',
       icon: Icons.people_alt_outlined, route: RouteNames.subscribers,
       group: WorkspaceGroup.customers, permissions: ['ViewAny:Subscriber'],
       keywords: 'رصيد هاتف مشترك subscriber',
     ),
     WorkspaceEntry(
-      title: 'المربعات', description: 'المناطق والمشتركون في كل مربع',
+      title: LaravelScreenStrings.squares, description: 'المناطق والمشتركون في كل مربع',
       icon: Icons.grid_view_rounded, route: RouteNames.squares,
       group: WorkspaceGroup.customers, permissions: ['ViewAny:Square'],
       keywords: 'حارات مناطق square',
     ),
     WorkspaceEntry(
-      title: 'رسوم الاشتراك', description: 'الاشتراكات والأقساط وفواتيرها',
+      title: LaravelScreenStrings.subscriptionFees, description: 'الاشتراكات والأقساط وفواتيرها',
       icon: Icons.card_membership_outlined, route: RouteNames.subscriptionFees,
       group: WorkspaceGroup.customers, permissions: ['ViewAny:SubscriptionFee'],
       keywords: 'تأسيس رسوم subscription',
     ),
     WorkspaceEntry(
-      title: 'طلبات الخدمة والوايت', description: 'الطلبات والإنجاز والفوترة',
+      title: LaravelScreenStrings.serviceRequests, description: 'الطلبات والإنجاز والفوترة',
       icon: Icons.local_shipping_outlined, route: RouteNames.serviceRequests,
       group: WorkspaceGroup.customers, permissions: ['ViewAny:ServiceRequest'],
       keywords: 'صهريج ناقلة مياه tanker',
     ),
     WorkspaceEntry(
-      title: 'العدادات', description: 'العدادات والمسارات والمستأجرون',
+      title: LaravelScreenStrings.meters, description: 'العدادات والمسارات والمستأجرون',
       icon: Icons.gas_meter_outlined, route: RouteNames.meters,
       group: WorkspaceGroup.field, permissions: ['ViewAny:Meter'],
       keywords: 'عداد مسار meter',
     ),
     WorkspaceEntry(
-      title: 'سجل القراءات', description: 'مراجعة القراءات وإصدار فواتيرها',
+      title: LaravelScreenStrings.readings, description: 'مراجعة القراءات وإصدار فواتيرها',
       icon: Icons.fact_check_outlined, route: RouteNames.readings,
       group: WorkspaceGroup.field, permissions: ['ViewAny:Reading'],
       keywords: 'استهلاك قراءة reading',
     ),
     WorkspaceEntry(
-      title: 'الفواتير', description: 'الفواتير والأرصدة والطباعة',
+      title: LaravelScreenStrings.invoices, description: 'الفواتير والأرصدة والطباعة',
       icon: Icons.receipt_long_outlined, route: RouteNames.invoices,
       group: WorkspaceGroup.finance, permissions: ['ViewAny:Invoice'],
       keywords: 'فاتورة مديونية متأخرات invoice',
     ),
     WorkspaceEntry(
-      title: 'سندات القبض', description: 'المدفوعات والإيصالات والمشاركة',
+      title: LaravelScreenStrings.payments, description: 'المدفوعات والإيصالات والمشاركة',
       icon: Icons.payments_outlined, route: RouteNames.payments,
       group: WorkspaceGroup.finance, permissions: ['ViewAny:Payment'],
       keywords: 'سند قبض receipt payment',
     ),
     WorkspaceEntry(
-      title: 'التعرفة', description: 'أسعار المياه والشرائح',
+      title: LaravelScreenStrings.tariffs, description: 'أسعار المياه والشرائح',
       icon: Icons.price_change_outlined, route: RouteNames.tariffs,
       group: WorkspaceGroup.finance, permissions: ['ViewAny:Tariff'],
       keywords: 'تسعير شريحة tariff',
     ),
     WorkspaceEntry(
-      title: 'الحركات المالية', description: 'دفتر الأستاذ والحركات الدائنة والمدينة',
+      title: LaravelScreenStrings.transactions, description: 'دفتر الأستاذ والحركات الدائنة والمدينة',
       icon: Icons.account_balance_outlined, route: RouteNames.transactions,
       group: WorkspaceGroup.finance, permissions: ['ViewAny:Transaction'],
       keywords: 'دفتر استاذ ledger transaction',
     ),
     WorkspaceEntry(
-      title: 'لوحة المؤشرات', description: 'ملخص المشروع والفواتير المتأخرة',
+      title: LaravelScreenStrings.dashboard, description: 'ملخص المشروع والفواتير المتأخرة',
       icon: Icons.dashboard_outlined, route: RouteNames.dashboard,
       group: WorkspaceGroup.management, permissions: ['ViewAny:Invoice'],
       keywords: 'احصائيات إيرادات dashboard',
     ),
     WorkspaceEntry(
-      title: 'التقارير', description: 'التحصيل والفوترة حسب الفترة',
+      title: 'التقارير المالية', description: 'التحصيل والفوترة حسب الفترة',
       icon: Icons.analytics_outlined, route: RouteNames.reports,
       group: WorkspaceGroup.management, permissions: ['ViewAny:Invoice'],
       keywords: 'تقرير مالي report',
     ),
     WorkspaceEntry(
-      title: 'تصدير Excel', description: 'تنزيل بيانات المشتركين والفواتير والقراءات',
+      title: LaravelScreenStrings.exports, description: 'تنزيل بيانات المشتركين والفواتير والقراءات',
       icon: Icons.table_view_outlined, route: RouteNames.exports,
       group: WorkspaceGroup.management, permissions: ['View:ExportDataPage'],
       keywords: 'اكسل ملفات export xlsx',
     ),
     WorkspaceEntry(
-      title: 'إعدادات القراءات', description: 'فترات القراءة وطريقة احتسابها',
+      title: LaravelScreenStrings.readingSettings, description: 'فترات القراءة وطريقة احتسابها',
       icon: Icons.calendar_month_outlined, route: '${RouteNames.settings}?section=reading',
       group: WorkspaceGroup.settings, permissions: ['View:ReadingSettings'],
       keywords: 'قراءة قراءات reading settings',
     ),
     WorkspaceEntry(
-      title: 'تصميم الفاتورة', description: 'الشعار والحقول وشكل الفاتورة',
+      title: LaravelScreenStrings.invoiceSettings, description: 'الشعار والحقول وشكل الفاتورة',
       icon: Icons.receipt_outlined, route: '${RouteNames.settings}?section=invoice',
       group: WorkspaceGroup.settings, permissions: ['View:InvoiceSettings'],
       keywords: 'إعدادات طباعة invoice settings',
     ),
     WorkspaceEntry(
-      title: 'تصميم سند القبض', description: 'الحقول وشكل الإيصال',
+      title: LaravelScreenStrings.receiptSettings, description: 'الحقول وشكل الإيصال',
       icon: Icons.article_outlined, route: '${RouteNames.settings}?section=receipt',
       group: WorkspaceGroup.settings, permissions: ['View:ReceiptSettings'],
       keywords: 'إعدادات طباعة receipt settings',
     ),
     WorkspaceEntry(
-      title: 'الإعدادات العامة', description: 'بيانات المشروع وإعدادات النظام',
+      title: LaravelScreenStrings.settings, description: 'بيانات المشروع وإعدادات النظام',
       icon: Icons.tune_rounded, route: '${RouteNames.settings}?section=general',
       group: WorkspaceGroup.settings, permissions: ['ViewAny:Setting'],
       keywords: 'اعدادات setting',
@@ -213,7 +214,7 @@ abstract final class WorkspaceCatalog {
       group: WorkspaceGroup.account, keywords: 'اوفلاين اتصال دون انترنت sync offline',
     ),
     WorkspaceEntry(
-      title: 'الملف الشخصي', description: 'الاسم والصورة وكلمة المرور',
+      title: LaravelScreenStrings.profileNavigation, description: 'الاسم والصورة وكلمة المرور',
       icon: Icons.person_outline_rounded, route: RouteNames.profile,
       group: WorkspaceGroup.account, keywords: 'حسابي profile password',
     ),

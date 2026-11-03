@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -105,7 +106,7 @@ class BillingHubScreen extends StatelessWidget {
             action: TextButton(
               onPressed: () => context.push(RouteNames.payments),
               style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
-              child: const Text('مراجعة سندات القبض'),
+              child: const Text('مراجعة ${LaravelScreenStrings.payments}'),
             ),
           ),
         ),

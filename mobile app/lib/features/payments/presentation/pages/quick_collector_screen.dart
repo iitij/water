@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/finance/finance_search.dart';
+import '../../../../core/l10n/collection_ui_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/settings/finance_config.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -36,17 +37,19 @@ class QuickCollectorScreen extends StatelessWidget {
   /// يبني الـ Cubit الخاص بالشاشة — يُستعمل من `finance_routes` عندما يريد
   /// الأب توفير الحالة (مثلاً بعد الرجوع من `SCR-18`).
   static Widget create({required QuickCollectorCubit cubit}) {
-    return BlocProvider<QuickCollectorCubit>.value(value: cubit, child: const QuickCollectorScreen());
+    return BlocProvider<QuickCollectorCubit>.value(
+      value: cubit,
+      child: const QuickCollectorScreen(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider<QuickCollectorCubit>(
       create: (_) => QuickCollectorCubit(
-            invoicesRepository: sl<InvoicesRepository>(),
-            references: sl<ReferencesRemoteDataSource>(),
-          )
-          ..bootstrap(),
+        invoicesRepository: sl<InvoicesRepository>(),
+        references: sl<ReferencesRemoteDataSource>(),
+      )..bootstrap(),
       child: const _QuickCollectorBody(),
     );
   }
@@ -80,7 +83,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
           tooltip: 'تحديث',
           onPressed: cubit.loadUnpaid,
           icon: Icons.refresh_rounded,
-          size: 38,
+          size: 48,
         ),
       ],
       child: SafeArea(
@@ -88,53 +91,55 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
         child: AppReveal(
           child: BlocBuilder<QuickCollectorCubit, QuickCollectorState>(
             builder: (context, state) {
-            final invoices = state.visibleInvoices;
-            final overdueCount = state.invoices
-                .where((i) => i.isOverdue && i.status.isOpenForCollection)
-                .length;
+              final invoices = state.visibleInvoices;
+              final overdueCount = state.invoices
+                  .where((i) => i.isOverdue && i.status.isOpenForCollection)
+                  .length;
 
-            return Column(
-              children: <Widget>[
-                FinanceSearchBar(
-                  controller: _search,
-                  autofocus: true,
-                  onChanged: (value) => cubit.onSearchChanged(value),
-                  onSubmitted: (_) => cubit.searchNow(),
-                  filters: <Widget>[
-                    FilterChipButton(
-                      label: 'المربع',
-                      value: _squareLabel(state),
-                      selected: state.selectedSquareId != null,
-                      onPressed: () => _pickSquare(context, cubit, state),
-                    ),
-                    if (state.isCompoundSearch)
-                      const FilterChipButton(
-                        label: 'بحث مسار',
-                        icon: Icons.alt_route,
-                        selected: true,
+              return Column(
+                children: <Widget>[
+                  FinanceSearchBar(
+                    controller: _search,
+                    autofocus: true,
+                    onChanged: (value) => cubit.onSearchChanged(value),
+                    onSubmitted: (_) => cubit.searchNow(),
+                    filters: <Widget>[
+                      FilterChipButton(
+                        label: 'المربع',
+                        value: _squareLabel(state),
+                        selected: state.selectedSquareId != null,
+                        onPressed: () => _pickSquare(context, cubit, state),
                       ),
-                  ],
-                  trailing: state.searchText.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _search.clear();
-                            cubit.clearSearch();
-                          },
+                      if (state.isCompoundSearch)
+                        const FilterChipButton(
+                          label: 'بحث مسار',
+                          icon: Icons.alt_route,
+                          selected: true,
                         ),
-                ),
-                InvoicesSummaryBar(
-                  count: state.invoices.length,
-                  openCount: state.openCount,
-                  overdueCount: overdueCount,
-                  totalDue: state.totalDue,
-                ),
-                if (state.lastCollectedBillNumber != null)
-                  _LastCollectedBanner(billNumber: state.lastCollectedBillNumber!),
-                Expanded(child: _buildList(context, cubit, state, invoices)),
-              ],
-            );
+                    ],
+                    trailing: state.searchText.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _search.clear();
+                              cubit.clearSearch();
+                            },
+                          ),
+                  ),
+                  InvoicesSummaryBar(
+                    count: state.invoices.length,
+                    openCount: state.openCount,
+                    overdueCount: overdueCount,
+                    totalDue: state.totalDue,
+                  ),
+                  if (state.lastCollectedBillNumber != null)
+                    _LastCollectedBanner(
+                      billNumber: state.lastCollectedBillNumber!,
+                    ),
+                  Expanded(child: _buildList(context, cubit, state, invoices)),
+                ],
+              );
             },
           ),
         ),
@@ -195,11 +200,14 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
         itemCount: invoices.length,
         itemBuilder: (context, index) {
           final invoice = invoices[index];
-          return _CollectorCard(
-            invoice: invoice,
-            siblings: invoices,
-            justCollected: state.paidIds.contains(invoice.id),
-            onCollect: () => _collect(context, cubit, invoice),
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _CollectorCard(
+              invoice: invoice,
+              siblings: state.invoices,
+              justCollected: state.paidIds.contains(invoice.id),
+              onCollect: () => _collect(context, cubit, invoice),
+            ),
           );
         },
       ),
@@ -268,7 +276,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
                   itemBuilder: (context, index) {
                     final square = state.squares[index];
                     return AppFilterOptionTile(
-                      label: square.name,
+                      label: square.displayName,
                       icon: Icons.grid_view_rounded,
                       meta: square.subscribersCount == null
                           ? null
@@ -359,52 +367,73 @@ class _CollectorCard extends StatelessWidget {
   }
 
   void _showDue(BuildContext context) {
-    final due = invoice.netPayable;
+    final due = invoice.payableAmount;
+    final canCollect =
+        !justCollected && canCollectInvoice(invoice, siblings) && due > 0;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                invoice.beneficiaryName,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'فاتورة ${invoice.billNumber} • ${invoice.status.label}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 14),
-              _DetailRow(label: 'إجمالي الفاتورة', value: CurrencyFormatter.withLabel(invoice.totalAmount)),
-              if (invoice.previousBalance > 0)
-                _DetailRow(label: 'متأخرات سابقة', value: CurrencyFormatter.withLabel(invoice.previousBalance)),
-              if (invoice.creditApplied > 0)
-                _DetailRow(
-                  label: 'رصيد دائن مخصوم',
-                  value: '- ${CurrencyFormatter.amount(invoice.creditApplied)}',
-                  tone: AppColors.success,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  invoice.beneficiaryName,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
-              if (invoice.amountPaid > 0)
-                _DetailRow(label: 'المسدد', value: CurrencyFormatter.withLabel(invoice.amountPaid)),
-              _DetailRow(label: 'صافي المستحق', value: CurrencyFormatter.debt(due), bold: true),
-              const SizedBox(height: 16),
-              AppPrimaryButton(
-                label: 'تحصيل ${CurrencyFormatter.amount(due)} ريال',
-                icon: Icons.payments_outlined,
-                height: 48,
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  onCollect();
-                },
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  'فاتورة ${invoice.billNumber} • ${invoice.status.label}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 14),
+                _DetailRow(
+                  label: 'إجمالي الفاتورة',
+                  value: CurrencyFormatter.withLabel(invoice.totalAmount),
+                ),
+                if (invoice.previousBalance > 0)
+                  _DetailRow(
+                    label: 'متأخرات سابقة',
+                    value: CurrencyFormatter.withLabel(invoice.previousBalance),
+                  ),
+                if (invoice.creditApplied > 0)
+                  _DetailRow(
+                    label: 'رصيد دائن مخصوم',
+                    value:
+                        '- ${CurrencyFormatter.amount(invoice.creditApplied)}',
+                    tone: AppColors.success,
+                  ),
+                if (invoice.amountPaid > 0)
+                  _DetailRow(
+                    label: 'المسدد',
+                    value: CurrencyFormatter.withLabel(invoice.amountPaid),
+                  ),
+                _DetailRow(
+                  label: CollectionUiStrings.remaining,
+                  value: CurrencyFormatter.debt(due),
+                  bold: true,
+                ),
+                const SizedBox(height: 16),
+                AppPrimaryButton(
+                  label: CollectionUiStrings.collectPayment,
+                  icon: Icons.payments_outlined,
+                  height: 48,
+                  onPressed: canCollect
+                      ? () {
+                          Navigator.of(sheetContext).pop();
+                          onCollect();
+                        }
+                      : null,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -413,7 +442,12 @@ class _CollectorCard extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value, this.tone, this.bold = false});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.tone,
+    this.bold = false,
+  });
 
   final String label;
   final String value;
@@ -423,16 +457,27 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: bold ? 14 : 12,
-              fontWeight: bold ? FontWeight.w600 : FontWeight.w600,
-              color: tone,
+          Text(label, style: const TextStyle(fontSize: 14)),
+          const SizedBox(height: 2),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                textDirection: TextDirection.ltr,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontSize: bold ? 18 : 14,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+                  color: tone,
+                ),
+              ),
             ),
           ),
         ],

@@ -7,6 +7,7 @@ import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
@@ -382,7 +383,7 @@ class _SubscriptionFeesView extends StatelessWidget {
       builder: (context, state) {
         final scheme = Theme.of(context).colorScheme;
         return SubPageScaffold(
-          title: 'رسوم الاشتراك',
+          title: LaravelScreenStrings.subscriptionFees,
           subtitle: 'رسوم الربط السكني ومفوتراتها',
           actions: [
             if (state.selectedIds.isNotEmpty) ...[
@@ -509,7 +510,7 @@ class _SubscriptionFeesView extends StatelessWidget {
                     ),
                     'square_name': (
                       label: ListOptionsStrings.square,
-                      value: (fee) => fee.location.squareName,
+                      value: (fee) => fee.location.squareLabel,
                     ),
                     'path_number': (
                       label: ListOptionsStrings.path,
@@ -764,18 +765,9 @@ class _SubscriptionFeesView extends StatelessWidget {
                                           ),
                                         ],
                                         const Gap(10),
-                                        Container(
+                                        Padding(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
                                             vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: scheme
-                                                .surfaceContainerHighest
-                                                .withValues(alpha: .45),
-                                            borderRadius: BorderRadius.circular(
-                                              AppRadius.lg,
-                                            ),
                                           ),
                                           child: Row(
                                             children: [
@@ -786,13 +778,12 @@ class _SubscriptionFeesView extends StatelessWidget {
                                                 ).textTheme.labelSmall,
                                               ),
                                               const Gap(8),
-                                              Directionality(
-                                                textDirection:
-                                                    TextDirection.ltr,
-                                                child: Text(
-                                                  CurrencyFormatter.format(
-                                                    f.amount,
-                                                  ),
+                                              Expanded(
+                                                child: AppAmount(
+                                                  value:
+                                                      CurrencyFormatter.format(
+                                                        f.amount,
+                                                      ),
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.w600,
                                                     fontSize: 15,
@@ -802,7 +793,6 @@ class _SubscriptionFeesView extends StatelessWidget {
                                                   ),
                                                 ),
                                               ),
-                                              const Spacer(),
                                               if (f.canInvoice)
                                                 AppIconButton(
                                                   icon: Icons

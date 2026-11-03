@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -114,7 +115,7 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
             return Scaffold(body: body, bottomNavigationBar: saveBar);
           }
           return SubPageScaffold(
-            title: _isInvoice ? 'إعدادات وتصميم الفاتورة' : 'إعدادات وتصميم سند القبض',
+            title: _isInvoice ? LaravelScreenStrings.invoiceSettings : LaravelScreenStrings.receiptSettings,
             subtitle: _isInvoice ? 'نصوص الفاتورة وشعاراتها وحقولها' : 'نصوص السند وشعاراته وحقوله',
             child: Column(
               children: [

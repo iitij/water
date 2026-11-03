@@ -149,7 +149,12 @@ class FouadModule {
               child: MultiBlocProvider(
                 providers: [
                   BlocProvider<SubscribersCubit>(
-                    create: (_) => SubscribersCubit(d.subscribers)..init(),
+                    create: (_) => SubscribersCubit(
+                      d.subscribers,
+                      initialStatus: state.uri.queryParameters['status'] == 'active'
+                          ? SubscriberStatus.active
+                          : null,
+                    )..init(),
                   ),
                   BlocProvider<ServiceRequestsCubit>(
                     create: (_) => ServiceRequestsCubit(d.requests),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -104,7 +105,7 @@ class _DashboardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SubPageScaffold(
-      title: 'لوحة القيادة',
+      title: LaravelScreenStrings.dashboard,
       subtitle: 'مؤشرات حية من الخادم',
       actions: <Widget>[
         if (onOpenReports != null) ...<Widget>[
@@ -140,7 +141,7 @@ class _DashboardView extends StatelessWidget {
           }
           if (state.status == DashboardRequestStatus.failure && state.snapshot == null) {
             return AdminErrorView(
-              message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل لوحة القيادة.'),
+              message: adminErrorMessage(state.errorMessage ?? 'تعذر تحميل ${LaravelScreenStrings.dashboard}.'),
               onRetry: () => context.read<DashboardCubit>().load(forceRefresh: true),
             );
           }
@@ -188,7 +189,7 @@ class _DashboardView extends StatelessWidget {
                     AdminPermissionGuard(
                       permission: AdminPermissions.viewStats,
                       can: can,
-                      child: StatsOverviewGrid(stats: data.stats),
+                      child: StatsOverviewGrid(stats: data.stats, can: can),
                     ),
                   ],
                 ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -131,6 +133,22 @@ void main() {
     expect(requests.last.uri.path, '/invoices/5/print');
   });
 
+  test(
+    'busy PDF response keeps the Arabic server message without retry',
+    () async {
+      status = 503;
+      const message = 'الطباعة مشغولة حالياً. انتظر قليلاً ثم أعد المحاولة.';
+      body = Uint8List.fromList(utf8.encode(jsonEncode({'message': message})));
+      await expectLater(
+        service.fetchPdf('invoices/5/pdf'),
+        throwsA(
+          isA<ServerFailure>().having((e) => e.message, 'message', message),
+        ),
+      );
+      expect(requests, hasLength(1));
+    },
+  );
+
   test('rejects duplicate, foreign and malformed fallback URLs', () async {
     status = 404;
     for (final fallback in [
@@ -166,6 +184,12 @@ void main() {
     completed = true;
     await service.printBytes(pdf);
     expect(prints, 2);
+  });
+
+  test('report printing preserves its A4 page format', () async {
+    await PdfPrintService.printDocument(pdf, format: PdfPageFormat.a4);
+    expect(printArgs['width'], PdfPageFormat.a4.width);
+    expect(printArgs['height'], PdfPageFormat.a4.height);
   });
 
   test(

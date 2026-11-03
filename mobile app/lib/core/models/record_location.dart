@@ -1,13 +1,21 @@
 import 'package:equatable/equatable.dart';
+import 'square_label.dart';
 
 /// Location of the linked meter, or all subscriber routes for general records.
 class RecordLocation extends Equatable {
-  const RecordLocation({this.squareId, this.squareName, this.paths = const []});
+  const RecordLocation({
+    this.squareId,
+    this.squareName,
+    this.squareCode,
+    this.paths = const [],
+  });
   final int? squareId;
   final String? squareName;
+  final String? squareCode;
+  String? get squareLabel => squareLabelOrNull(squareName, squareCode);
   final List<int> paths;
   @override
-  List<Object?> get props => [squareId, squareName, paths];
+  List<Object?> get props => [squareId, squareName, squareCode, paths];
 
   int? get firstPath =>
       paths.isEmpty ? null : paths.reduce((a, b) => a < b ? a : b);
@@ -15,9 +23,11 @@ class RecordLocation extends Equatable {
   factory RecordLocation.fromJson(Map<String, dynamic> json) {
     Map<dynamic, dynamic> map(dynamic value) => value is Map ? value : const {};
     int? number(dynamic value) => int.tryParse(value?.toString() ?? '');
-    final subscriber = map(json['subscriber']);
     final meter = map(json['meter']);
-    final square = map(json['square'] ?? subscriber['square']);
+    final subscriber = map(json['subscriber'] ?? meter['subscriber']);
+    final square = map(
+      json['square'] ?? subscriber['square'] ?? meter['square'],
+    );
     final values = <dynamic>[
       if (meter['path_number'] != null)
         meter['path_number']
@@ -39,6 +49,7 @@ class RecordLocation extends Equatable {
         json['square_id'] ?? subscriber['square_id'] ?? square['id'],
       ),
       squareName: (json['square_name'] ?? square['name'])?.toString(),
+      squareCode: (json['square_code'] ?? square['code'])?.toString(),
       paths: List.unmodifiable(paths),
     );
   }

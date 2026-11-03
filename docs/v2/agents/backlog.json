@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-11-03",
+  "updated_at": "2026-11-04",
   "ux_revert": "بطلب المستخدم ألغيت دفعة UX-01 إلى UX-05 واستعيدت ملفاتها من 7feff2f؛ حُفظت أعمال UX-SIMPLIFY وإصلاح Dashboard المستقلة. flutter test --no-pub --concurrency=1: 468 PASS؛ flutter analyze --no-pub: No issues found!؛ السجلان mobile app/build/ux-revert-tests.log وux-revert-analyze.log.",
   "branch": "arena/9da3be61-water",
   "status_values": [
@@ -30,6 +30,71 @@
   }
  },
  "tasks": [
+  {
+   "id": "MODULE-EQUAL-SIZE-20261104-01",
+   "sprint": "S9",
+   "agent": "A1+A9+A10",
+   "task": "توحيد عرض وارتفاع بطاقات الشريط الأفقي وبطاقات كل صف من الشبكة دون قص النص أو العودة للارتفاعات الكبيرة",
+   "files": "mobile app/lib/core/ui/app_tiles.dart; mobile app/test/ui/module_card_density_test.dart; docs/v2/qa/MODULE_CARD_DENSITY_2026-11-04_AR.md",
+   "status": "done",
+   "verification_status": "full_tests_analyze_and_platform_builds_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "اختبار إعادة الإنتاج فشل قبل الإصلاح بارتفاع 143 مقابل 180 عند تكبير النص مرتين. بعد توحيد ارتفاع بطاقات الشريط وكل صف من الشبكة حسب أطول محتوى: 33 اختباراً مركزاً ناجحاً تشمل تطابق العرض والارتفاع والمقاسات والوصول والتنقل. الفحص الكامل: 724 PASS / 27 SKIP، exit 0، 5m24s؛ flutter analyze --no-pub: No issues found، exit 0؛ Windows release: exit 0، 137.2s؛ Android debug: exit 0، 51.1s. السجلات build/module-equal-{before,focused,full,analyze,windows,android}.log والمعاينة build/module-density-preview/1280.0-dark.png. النتائج لقطة للشجرة المشتركة؛ لا تثبيت أو قبول جهاز. التفاصيل docs/v2/qa/MODULE_CARD_DENSITY_2026-11-04_AR.md."
+  },
+  {
+   "id": "MODULE-DENSITY-20261104-01",
+   "sprint": "S9",
+   "agent": "A1+A9+A10",
+   "task": "إزالة الارتفاعات والمساحات الزائدة من بطاقات الأدوات المشتركة ودليل الخدمات واختصارات الرئيسية مع تمدد النص وإمكانية الوصول",
+   "files": "mobile app/lib/core/ui/app_tiles.dart; mobile app/lib/features/navigation/presentation/widgets/module_section.dart; mobile app/lib/features/home/presentation/{services_screen.dart,widgets/workspace_widgets.dart}; mobile app/test/{ui/module_card_density_test.dart,home/workspace_views_test.dart}; docs/v2/qa/MODULE_CARD_DENSITY_2026-11-04_AR.md",
+   "status": "done",
+   "verification_status": "focused_tests_analyze_and_builds_passed_full_suite_has_four_failures",
+   "owner_acceptance": "not_tested",
+   "evidence": "33 اختباراً مركزاً ناجحاً مع معاينات Flutter بخطي العربية وMaterialIcons، وعروض 320/390/768/1280 وتكبير النص حتى 2x في الرئيسية والدليل. flutter analyze --no-pub: No issues found، exit 0؛ Windows Release: exit 0، 15s؛ Android debug: exit 0، 71s. الفحص الشامل: 720 PASS / 27 SKIP / 4 FAIL، exit 1؛ فشلان في home_invoice_counts_test.dart عند فتح الفواتير بتجاوز رأسي 8px، وفشلان في screen_smoke_test.dart بسبب عدم العثور على نص القراءات بالإعدادات بعرضي 320/1440. لم تعدل ملفات هذه الاختبارات أو شاشتا الفواتير والإعدادات ضمن هذه المهمة؛ لا قبول جهاز أو تثبيت. السجلات build/module-density-{focused-final,analyze-final,windows-final,android-final,full-final}.log والتفاصيل docs/v2/qa/MODULE_CARD_DENSITY_2026-11-04_AR.md."
+  },
+  {
+   "id": "SCREEN-NAMES-PARITY-20261104-01",
+   "sprint": "S9",
+   "agent": "A1+A7+A8+A9+A10",
+   "task": "توحيد أسماء شاشات Flutter وقوائم التنقل والخدمات مع التسميات المعتمدة في Laravel وإضافة فحص يمنع اختلافها",
+   "files": "mobile app/lib/core/l10n/{laravel_screen_strings,app_strings,subscriber_experience_strings,list_clarity_strings}.dart; mobile app/lib/core/navigation/module_catalog.dart; mobile app/lib/features/home/domain/workspace_catalog.dart; عناوين الشاشات وروابطها والإعدادات؛ mobile app/lib/core/widgets/empty_state_widget.dart; mobile app/test/core/l10n/laravel_screen_strings_test.dart; اختبارات الشاشات والتبويبات؛ docs/v2/qa/SCREEN_NAMES_PARITY_2026-11-04_AR.md",
+   "status": "done",
+   "verification_status": "full_tests_analyze_and_platform_builds_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "Flutter final: 724 PASS / 27 SKIP، exit 0، 217.0s؛ analyze: No issues found، exit 0؛ Windows release: exit 0، 25.7s؛ Android debug: exit 0، 29.6s. تشمل المجموعة 23 اختبار مطابقة وعرض جديداً: 19 تسمية من مصادر Laravel الفعلية، تبويبات المشترك الخمسة، لوحة التحكم، وفتح 17 وجهة عند 320/1280 مع تكبير النص مرتين. الجولة الأولى كشفت توقعَي اسم قديم وتجاوزاً رأسياً 8px في EmptyStateWidget؛ صُححت التوقعات وأصبحت الحالة الفارغة قابلة للتمرير، ثم نجحت المجموعة كاملة. السجلات mobile app/build/screen-names-{full-tests,analyze,windows,android}-verified.log والتفاصيل docs/v2/qa/SCREEN_NAMES_PARITY_2026-11-04_AR.md. نتائج للشجرة المشتركة وقت الفحص؛ لا تغيير API أو قاعدة بيانات أو تحديث للنسخة المثبتة أو قبول جهاز."
+  },
+  {
+   "id": "LIST-DESIGN-20261104-01",
+   "sprint": "S9",
+   "agent": "A1+A7+A9+A10",
+   "task": "تخفيف تصميم رؤوس القوائم والبحث والفلاتر والإحصاءات المشتركة بناءً على صور المشتركين ورسوم الاشتراك، وإصلاح تجاوز مبلغ الرسم مع تكبير النص",
+   "files": "mobile app/lib/core/ui/{app_controls.dart,app_filters.dart,app_tiles.dart}; mobile app/lib/features/subscription_fees/presentation/pages/subscription_fees_screen.dart; mobile app/test/ui/water_experience_test.dart; docs/v2/qa/LIST_DESIGN_2026-11-04_AR.md",
+   "status": "done",
+   "verification_status": "ui_tests_passed_latest_full_checks_unconfirmed_during_concurrent_edits",
+   "owner_acceptance": "not_tested",
+   "evidence": "اختبار الواجهة الموسع: 32 PASS، exit 0؛ المصفوفة 320/390/1280 وRTL والوضعان الفاتح والداكن وتكبير النص، مع 10 اختبارات جديدة وإصلاح تجاوز مبلغ الرسم. معاينات فعلية في mobile app/build/redesign-preview/list-*.png. نجح analyze وبناء Android debug وWindows release خلال الجلسة. الفحص الشامل الأول 644 PASS و26 SKIP وفشلان في فتح الفواتير، ثم نجح اختبار المسارات التساعي بعد الإصلاح المتزامن. إعادة الفحص والبناء على أحدث الشجرة لم تثبت نجاحاً كاملاً بسبب تغييرات متزامنة خارج التصميم وخروج مترجم Dart في محاولة معزولة؛ لا ندّعي نجاح جميع الفحوص النهائية. السجلات mobile app/build/list-design-*.log والتفاصيل docs/v2/qa/LIST_DESIGN_2026-11-04_AR.md. APK معاينة محفوظ باسم water-list-design-preview.apk؛ الهاتف انفصل، فلا تثبيت أو قبول جهاز أو مستخدم."
+  },
+  {
+   "id": "LEDGER-LAYOUT-20261104-01",
+   "sprint": "S9",
+   "agent": "A1 (urgent integration across A9/A10)",
+   "task": "إصلاح تعطل فتح دفتر الأستاذ بسبب العرض غير المحدود لقائمتي فلترة الحساب ونوع القيد",
+   "files": "mobile app/lib/features/transactions/presentation/pages/transactions_screen.dart; mobile app/test/features/transactions/transactions_screen_test.dart; docs/v2/qa/LEDGER_LAYOUT_2026-11-04_AR.md",
+   "status": "done",
+   "verification_status": "focused_tests_analyze_android_passed_full_suite_has_two_fees_layout_failures",
+   "owner_acceptance": "not_tested",
+   "evidence": "قبل الإصلاح: اختبار فتح دفتر الأستاذ بعرض 390 فشل برسالة InputDecorator cannot have an unbounded width؛ build/ledger-before.log. بعد ضبط عرض القائمتين: الاختبارات المركزة 3 PASS، exit 0؛ تغطي الانتقال والتحميل وعرض الحركات والماوس وتغيير الحساب والنوع وإغلاق الشاشة بعروض 320/390/1280. flutter analyze --no-pub: No issues found، exit 0. flutter build apk --debug --no-pub: PASS، exit 0 (56.6s). flutter test --no-pub --concurrency=1 --reporter expanded: 635 PASS / 26 SKIP / 2 FAIL، exit 1؛ الفشلان في water_experience_test.dart لشاشة رسوم الاشتراك بعرض 320 وتكبير النص 1.6 (RenderFlex overflow 17px، فاتح/داكن)، لا يفتحان دفتر الأستاذ. السجلات mobile app/build/ledger-{focused,full-tests,analyze,android}.log والتفاصيل docs/v2/qa/LEDGER_LAYOUT_2026-11-04_AR.md. نتائج للشجرة المشتركة وقت الفحص؛ لا تثبيت أو قبول جهاز."
+  },
+  {
+   "id": "SQUARE-CODE-20261104-01",
+   "sprint": "S9",
+   "agent": "A1+A5+A6+A8+A9+A10",
+   "task": "إضافة حقل اختياري لمعرّف المربع يكتبه المستخدم بنفسه في Laravel وFlutter وربطه بالبحث والفلترة دون توليد معرّفات أو تغيير أسماء المربعات الحالية",
+   "status": "done",
+   "verification_status": "full_tests_analyze_and_platform_builds_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "حقل code اختياري وفريد يكتبه المستخدم؛ لا توليد أو إعادة تسمية أو تعبئة تلقائية. Flutter: 624 PASS و26 SKIP، exit 0؛ PHPUnit مع تحميل pdo_sqlite/sqlite3: 103 PASS و2601 assertions، exit 0؛ تتضمن 9 اختبارات API/Filament و14 اختبار Flutter مركّزًا والإضافة والتعديل بعرضي 390/1280 والترحيل المحلي v1/v3 إلى v4 وحفظ النسخ الاحتياطية. Windows release: exit 0، 117.6s؛ Android debug: exit 0، 83.4s. السجلات mobile app/build/square-code-*.log والتفاصيل docs/v2/qa/SQUARE_CODE_2026-11-04_AR.md. ترحيل Laravel الإضافي جاهز ولم يطبّق: MySQL المحلية 127.0.0.1:3306 لا تقبل الاتصال؛ لا نشر خادم أو تثبيت جهاز أو قبول مستخدم."
+  },
   {
    "id": "HOME-INVOICE-DRILLDOWN-20261103-01",
    "sprint": "S9",
@@ -1416,6 +1481,53 @@
   "verification_status": "local_widget_test_passed_analyze_existing_infos",
   "owner_acceptance": "not_tested",
   "evidence": "flutter test --no-pub test/features/auth/login_screen_test.dart --reporter expanded: 1 PASS؛ يثبت البريد الافتراضي، إمكانية تغييره واستمرار التغيير بعد إعادة البناء، وبقاء كلمة المرور فارغة. flutter analyze --no-pub: exit 1 بسبب 3 ملاحظات info في ملفات PDF/القراءات المعدلة مسبقاً، دون ملاحظات على ملفي هذا التغيير."
+},
+{
+  "id": "INVOICE-PRINTING-20261104",
+  "sprint": "S9",
+  "agent": "A1 (urgent integration across A3/A6/A7/A8/A9/A10)",
+  "task": "إصلاح طباعة الفواتير بكل المسارات المشتركة وتثبيت عامل PDF مستمر وتحديث نسخة Windows",
+  "files": "app/Services/Pdf/SerialBrowsershotDriver.php; app/Providers/PdfServiceProvider.php; bootstrap/providers.php; config/water-pdf.php; docker/production/*pdf*; resources/{fonts/tajawal,views/pdf}/**; mobile app/lib/core/{services/pdf_print_service.dart,finance/finance_api_client.dart,widgets/pdf_preview_sheet.dart,l10n/printing_strings.dart}; mobile app/lib/features/readings/**; mobile app/lib/features/cash_sessions/presentation/widgets/cash_session_report.dart; tests/Feature/Pdf*Test.php; mobile app/test/core/services/pdf_print_service_test.dart; docs/v2/qa/INVOICE_PRINTING_2026-11-04_AR.md",
+  "status": "done",
+  "verification_status": "full_checks_platform_builds_live_http_and_installed_windows_updated",
+  "owner_acceptance": "not_tested",
+  "evidence": "Flutter 615 PASS / 26 SKIP؛ analyze نهائي No issues found؛ PHPUnit 102 PASS / 2587 assertions؛ Windows Release وAndroid Debug PASS. فحص HTTP حي: الفاتورة والسند 200 application/pdf في 5.25/3.02 ثانية؛ بلا توكن401. نُشرت ملفات الطباعة فقط بنسخة احتياطية /var/backups/water/printing-20261103T212938Z-299800، وكل الخدمات active. حُدّثت نسخة Windows المثبتة بنسخة احتياطية ومطابقة SHA256. أوقف المستخدم Computer Use بضغط Esc قبل اختبار حوار الطباعة؛ لا قبول ورقي أو بلوتوث. التفاصيل والأوامر والسجلات في docs/v2/qa/INVOICE_PRINTING_2026-11-04_AR.md."
+},
+{
+  "id": "DASHBOARD-METRIC-NAVIGATION-20261104",
+  "sprint": "S9",
+  "agent": "A1 (urgent integration across A9/A10, subscriber and payment filters)",
+  "task": "تفعيل ضغط بطاقات الرئيسية ولوحة القيادة وفتح قوائم المشتركين النشطين والفواتير غير المسددة والمتأخرة وتحصيلات الشهر مع فلاتر وصلاحيات الوجهة",
+  "files": "mobile app/lib/features/{dashboard,home}/presentation/**; mobile app/lib/core/{fouad/fouad_module.dart,l10n/dashboard_metric_strings.dart}; mobile app/lib/features/subscribers/presentation/cubit/subscribers_cubit.dart; mobile app/lib/features/payments/presentation/pages/payments_list_screen.dart; mobile app/lib/features/invoices/presentation/widgets/invoice_card.dart; mobile app/test/dashboard/stats_navigation_test.dart; docs/v2/qa/DASHBOARD_METRIC_NAVIGATION_2026-11-04_AR.md",
+  "status": "done",
+  "verification_status": "targeted_tests_and_installed_windows_navigation_passed_full_checks_incomplete",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub test/dashboard/stats_navigation_test.dart --reporter expanded: 9 PASS، وأعيد على المصدر المتغير: 9 PASS. Windows Release أولي PASS 112.7s، مع تثبيت النسخة بنسخة احتياطية وتصحيح محرك Release ومطابقة SHA256؛ Computer Use أثبت فتح 253 مشتركاً نشطاً و106 فواتير غير مسددة فعلياً. أوقف المستخدم Computer Use بزر Esc قبل بقية الفحص. الفحص الشامل وصل 519 PASS / 26 SKIP ثم علق عند تحميل screen_smoke_test وأوقف؛ لا نجاح شامل. analyze أولي بلا ملاحظات، والأخير أظهر ملاحظات بتعديلات متزامنة. إعادة Windows وAndroid اللاحقة فشلت أثناء kernel_snapshot/MSBuild وسط تغيّر المصدر؛ لم تستبدل النسخة المثبتة الناجحة. تفاصيل وسجلات في docs/v2/qa/DASHBOARD_METRIC_NAVIGATION_2026-11-04_AR.md."
+},
+{
+  "id": "FIELD-FINANCE-CLARITY-20261104",
+  "sprint": "S9",
+  "agent": "A1 (urgent integration across A6/A7/A8/A9/A10)",
+  "task": "تبسيط واجهات الفواتير والمحصل والقارئ والسندات ودفتر الأستاذ وإصلاح أصفار التقرير وعقد بياناته ومبلغ التحصيل المقترح",
+  "files": "app/Http/Controllers/Api/AdminController.php; tests/Feature/FinancialReportsTest.php; mobile app/lib/features/{dashboard,invoices,payments,readings,transactions}/**; mobile app/lib/core/l10n/{report,collection_ui,field_reader,list_clarity}_strings.dart; mobile app/test/{dashboard,features}/**; docs/V2_S1_HANDOVER.md; docs/v2/qa/FIELD_FINANCE_CLARITY_2026-11-04_AR.md",
+  "status": "done",
+  "verification_status": "full_local_tests_analyze_platform_builds_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "Flutter full:724 PASS /27 SKIP /0 FAIL (concurrency2,124s)؛ analyze No issues found (13.5s)؛ PHPUnit108 PASS /2656 assertions؛ Windows Release72.1s وAndroid Debug46.1s PASS؛ ZIP integrity وgit diff --check PASS. معاينات عربية عند320/390/1280px وتكبير2x؛ الحزم build/usability-release-20261104/. لا نشر خادم أو استبدال النسخة المثبتة أو قبول هاتف. ملاحظة محاولة PHPUnit التشخيصية غير المعزولة أولاً ونتيجة فحصها موثقة بصراحة في docs/v2/qa/FIELD_FINANCE_CLARITY_2026-11-04_AR.md.",
+  "server_deployed": false,
+  "physical_device_tested": false
+},
+{
+  "id": "CURRENCY-READABILITY-20261104",
+  "sprint": "S9",
+  "agent": "A1+A9+A10",
+  "task": "الإبقاء على ر.ي مع تكبيرها وجعلها Bold في الرئيسية وبطاقات المبالغ، ومراعاة تكبير النص في شبكة المؤشرات",
+  "files": "mobile app/lib/core/{l10n/dashboard_metric_strings.dart,ui/app_tiles.dart}; mobile app/lib/features/home/presentation/{home_screen.dart,widgets/home_panels.dart}; mobile app/lib/features/dashboard/presentation/widgets/stats_overview_grid.dart; mobile app/test/dashboard/currency_readability_test.dart; docs/v2/qa/CURRENCY_READABILITY_2026-11-04_AR.md",
+  "status": "done",
+  "verification_status": "full_local_tests_analyze_and_visual_review_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub test/dashboard/currency_readability_test.dart --dart-define=WRITE_CURRENCY_PREVIEWS=true --reporter expanded: 12 PASS، عند320/390/1280 والثيمين وتكبير1x/2x. الفحص الشامل flutter test --no-pub --concurrency=2 --reporter expanded:736 PASS /27 SKIP /0 FAIL في131ثانية. flutter analyze --no-pub: No issues found، exit0،85.5ثانية. تمت مراجعة صور390داكن1x و320داكن2x. git diff --check وJSON PASS. السجلات mobile app/build/currency-{targeted,full-tests,analyze}.log. لم تستبدل النسخة المثبتة ولم ينفذ قبول هاتف.",
+  "physical_device_tested": false
 }
 ]
 }

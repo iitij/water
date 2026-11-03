@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import '../error/failures.dart';
@@ -17,11 +18,13 @@ class PdfPreviewSheet extends StatelessWidget {
     required this.title,
     required this.bytes,
     this.fileName = 'document.pdf',
+    this.printFormat,
   });
 
   final String title;
   final Uint8List bytes;
   final String fileName;
+  final PdfPageFormat? printFormat;
 
   static Future<void> open(
     BuildContext context, {
@@ -29,6 +32,7 @@ class PdfPreviewSheet extends StatelessWidget {
     required PdfPrintService service,
     required Future<Uint8List> Function() loader,
     String fileName = 'document.pdf',
+    PdfPageFormat? printFormat,
   }) async {
     try {
       final bytes = await loader();
@@ -38,8 +42,12 @@ class PdfPreviewSheet extends StatelessWidget {
         isScrollControlled: true,
         useSafeArea: true,
         showDragHandle: true,
-        builder: (_) =>
-            PdfPreviewSheet(title: title, bytes: bytes, fileName: fileName),
+        builder: (_) => PdfPreviewSheet(
+          title: title,
+          bytes: bytes,
+          fileName: fileName,
+          printFormat: printFormat,
+        ),
       );
     } on AppFailure catch (failure) {
       if (context.mounted) AppFeedback.error(context, failure.message);
@@ -133,7 +141,11 @@ class PdfPreviewSheet extends StatelessWidget {
 
   Future<void> _print(BuildContext context) async {
     try {
-      await PdfPrintService.printDocument(bytes, name: fileName);
+      await PdfPrintService.printDocument(
+        bytes,
+        name: fileName,
+        format: printFormat,
+      );
     } catch (error) {
       if (context.mounted) AppFeedback.error(context, 'تعذّرت الطباعة: $error');
     }

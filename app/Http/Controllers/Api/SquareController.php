@@ -11,6 +11,7 @@ use App\Models\SubscriptionFee;
 use App\Services\ReadingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SquareController extends ApiController
 {
@@ -22,6 +23,7 @@ class SquareController extends ApiController
         if ($search = trim((string) $request->query('search', $request->query('q', '')))) {
             $query->where(function ($builder) use ($search) {
                 $builder->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%");
             });
         }
@@ -37,12 +39,18 @@ class SquareController extends ApiController
     public function store(Request $request)
     {
         $this->authorizeApi(Square::class, 'create');
+        if (is_string($request->input('code'))) {
+            $code = trim($request->input('code'));
+            $request->merge(['code' => $code === '' ? null : $code]);
+        }
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
+            'code' => ['nullable', 'string', 'max:100', Rule::unique('squares', 'code')],
             'description' => ['nullable', 'string'],
-        ]);
+        ], ['code.string' => 'أدخل معرّف المربع كنص.', 'code.unique' => 'معرّف المربع مستخدم مسبقاً. اختر معرّفاً آخر.', 'code.max' => 'معرّف المربع يجب ألا يتجاوز 100 حرف.']);
 
         $square = Square::create($data)->loadCount('subscribers');
+
         return response()->json(['message' => 'تم إنشاء المربع بنجاح.', 'square' => $square], 201);
     }
 
@@ -65,6 +73,7 @@ class SquareController extends ApiController
             $subscriber->setAttribute('credit_balance', round($credit, 2));
             $subscriber->setAttribute('debit_balance', round($debit, 2));
             $subscriber->setAttribute('account_balance', round($credit - $debit, 2));
+
             return $subscriber;
         }));
 
@@ -76,10 +85,15 @@ class SquareController extends ApiController
     {
         $this->authorizeApi(Square::class, 'update');
         $square = Square::findOrFail($id);
+        if (is_string($request->input('code'))) {
+            $code = trim($request->input('code'));
+            $request->merge(['code' => $code === '' ? null : $code]);
+        }
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
+            'code' => ['nullable', 'string', 'max:100', Rule::unique('squares', 'code')->ignore($square->id)],
             'description' => ['nullable', 'string'],
-        ]);
+        ], ['code.string' => 'أدخل معرّف المربع كنص.', 'code.unique' => 'معرّف المربع مستخدم مسبقاً. اختر معرّفاً آخر.', 'code.max' => 'معرّف المربع يجب ألا يتجاوز 100 حرف.']);
         $square->update($data);
 
         return response()->json(['message' => 'تم تحديث المربع بنجاح.', 'square' => $square->loadCount('subscribers')]);
@@ -108,6 +122,7 @@ class SquareController extends ApiController
             foreach (Square::whereIn('id', $data['ids'])->lockForUpdate()->get() as $square) {
                 if ($square->subscribers()->exists()) {
                     $skipped[] = $square->id;
+
                     continue;
                 }
                 $square->delete();
@@ -127,7 +142,7 @@ class SquareController extends ApiController
             ->orderBy('name')
             ->get();
 
-        $meters = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name'])
+        $meters = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code'])
             ->withCount('readings')
             ->whereHas('subscriber', fn ($q) => $q->where('square_id', $square->id))
             ->orderBy('path_number')
@@ -151,6 +166,7 @@ class SquareController extends ApiController
                     'has_tanker_fee' => $tankerFee > 0,
                     'tanker_installment' => $tankerFee,
                 ]);
+
                 return $meter;
             });
 

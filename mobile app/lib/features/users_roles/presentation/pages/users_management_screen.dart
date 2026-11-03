@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -61,7 +62,7 @@ class _UsersView extends StatelessWidget {
       },
       builder: (context, state) {
         return SubPageScaffold(
-          title: 'إدارة المستخدمين',
+          title: LaravelScreenStrings.users,
           subtitle: 'الحسابات والأدوار وحالة الوصول',
           actions: [
             AppIconButton(

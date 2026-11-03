@@ -65,7 +65,7 @@ get _profileSortValues => {
   ),
   'square_name': (
     label: ListOptionsStrings.square,
-    value: (row) => RecordLocation.fromJson(row).squareName,
+    value: (row) => RecordLocation.fromJson(row).squareLabel,
   ),
   'path_number': (
     label: ListOptionsStrings.path,

@@ -223,8 +223,8 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
                   value: square.id,
                   child: Text(
                     square.subscribersCount == null
-                        ? square.name
-                        : '${square.name} (${square.subscribersCount})',
+                        ? square.displayName
+                        : '${square.displayName} (${square.subscribersCount})',
                   ),
                 ),
               ),

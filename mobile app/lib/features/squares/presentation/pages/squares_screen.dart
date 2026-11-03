@@ -8,7 +8,9 @@ import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/app_colors.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
+import '../../../../core/l10n/square_strings.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
@@ -46,19 +48,79 @@ class SquaresScreen extends StatelessWidget {
     return const _SquaresView();
   }
 
-  static Future<void> _showForm(BuildContext context, {Square? square}) async {
-    final nameCtrl = TextEditingController(text: square?.name ?? '');
-    final descCtrl = TextEditingController(text: square?.description ?? '');
-    final cubit = context.read<SquaresCubit>();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(square == null ? 'إضافة مربع سكني' : 'تعديل المربع'),
-        content: Column(
+  static Future<void> _showForm(BuildContext context, {Square? square}) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => _SquareFormDialog(
+          square: square,
+          cubit: context.read<SquaresCubit>(),
+        ),
+      );
+}
+
+class _SquareFormDialog extends StatefulWidget {
+  const _SquareFormDialog({this.square, required this.cubit});
+  final Square? square;
+  final SquaresCubit cubit;
+
+  @override
+  State<_SquareFormDialog> createState() => _SquareFormDialogState();
+}
+
+class _SquareFormDialogState extends State<_SquareFormDialog> {
+  late final _name = TextEditingController(text: widget.square?.name ?? '');
+  late final _code = TextEditingController(text: widget.square?.code ?? '');
+  late final _description = TextEditingController(
+    text: widget.square?.description ?? '',
+  );
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving || _name.text.trim().isEmpty) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final saved = await widget.cubit.save(
+      id: widget.square?.id,
+      name: _name.text.trim(),
+      code: _code.text.trim().isEmpty ? null : _code.text.trim(),
+      description: _description.text.trim().isEmpty
+          ? null
+          : _description.text.trim(),
+    );
+    if (!mounted) return;
+    if (saved) {
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _saving = false;
+        _error = widget.cubit.state.error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_saving,
+    child: AlertDialog(
+      title: Text(widget.square == null ? 'إضافة مربع سكني' : 'تعديل المربع'),
+      content: SingleChildScrollView(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: nameCtrl,
+              controller: _name,
+              enabled: !_saving,
               decoration: const InputDecoration(
                 labelText: 'اسم المربع * (100 حرف كحد أقصى)',
               ),
@@ -66,35 +128,45 @@ class SquaresScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             TextField(
-              controller: descCtrl,
+              key: const ValueKey('square-code'),
+              controller: _code,
+              enabled: !_saving,
+              maxLength: 100,
+              decoration: const InputDecoration(
+                labelText: SquareStrings.code,
+                helperText: SquareStrings.codeHelp,
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _description,
+              enabled: !_saving,
               decoration: const InputDecoration(labelText: 'الوصف (3 أسطر)'),
               maxLines: 3,
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (nameCtrl.text.trim().isEmpty) return;
-              cubit.save(
-                id: square?.id,
-                name: nameCtrl.text.trim(),
-                description: descCtrl.text.trim().isEmpty
-                    ? null
-                    : descCtrl.text.trim(),
-              );
-              Navigator.pop(ctx);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SquaresView extends StatelessWidget {
@@ -119,7 +191,7 @@ class _SquaresView extends StatelessWidget {
         final isCompact = MediaQuery.sizeOf(context).width < 840;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('المربعات السكنية'),
+            title: const Text(LaravelScreenStrings.squares),
             actions: [
               if (state.selectedIds.isNotEmpty)
                 IconButton(
@@ -198,7 +270,7 @@ class _MasterList extends StatelessWidget {
           child: TextField(
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
-              hintText: 'بحث باسم المربع...',
+              hintText: SquareStrings.searchHint,
             ),
             onChanged: (v) => context.read<SquaresCubit>().load(search: v),
           ),
@@ -238,6 +310,10 @@ class _MasterList extends StatelessWidget {
               'name': (
                 label: ListOptionsStrings.name,
                 value: (square) => square.name,
+              ),
+              'code': (
+                label: SquareStrings.code,
+                value: (square) => square.code,
               ),
               'id': (
                 label: ListOptionsStrings.id,
@@ -300,7 +376,7 @@ class _MasterList extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            title: Text(sq.name),
+                            title: Text(sq.displayName),
                             subtitle: options.isVisible('description')
                                 ? Text(sq.description ?? '')
                                 : null,
@@ -332,7 +408,7 @@ class _MasterList extends StatelessWidget {
                                       if (await confirmAction(
                                         context,
                                         'حذف المربع',
-                                        'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
+                                        'حذف «${sq.displayName}»؟ لا يمكن الحذف إن كان له مشتركون.',
                                       )) {
                                         if (context.mounted) {
                                           await context
@@ -522,7 +598,7 @@ class _SquareDetail extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'مشتركو: ${sq.name} (${state.selectedSubscribers.length})',
+                  'مشتركو: ${sq.displayName} (${state.selectedSubscribers.length})',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 17,

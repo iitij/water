@@ -1,3 +1,4 @@
+import 'laravel_screen_strings.dart';
 /// Arabic copy for the subscriber experience and exported statements.
 abstract final class SubscriberExperienceStrings {
   static const searchHint = 'اسم، هاتف، كود عداد أو مسار';
@@ -25,9 +26,9 @@ abstract final class SubscriberExperienceStrings {
   static const currency = 'ريال';
   static const meters = 'العدادات';
   static const invoices = 'الفواتير';
-  static const payments = 'المدفوعات';
-  static const fees = 'الاشتراكات';
-  static const tankers = 'طلبات الوايت';
+  static const payments = LaravelScreenStrings.payments;
+  static const fees = 'رسوم الاشتراك';
+  static const tankers = LaravelScreenStrings.serviceRequests;
   static const statement = 'كشف الحساب';
   static const statementTitle = 'كشف حساب مشترك';
   static const project = 'مشروع مياه الوشاح';

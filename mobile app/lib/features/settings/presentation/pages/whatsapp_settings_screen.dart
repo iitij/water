@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
@@ -124,7 +125,7 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
           return Scaffold(body: body, bottomNavigationBar: saveBar);
         }
         return SubPageScaffold(
-          title: 'إعدادات تنبيهات الواتساب',
+          title: LaravelScreenStrings.whatsappSettings,
           subtitle: 'محرك الإرسال وقوالب الرسائل',
           child: Column(
             children: [

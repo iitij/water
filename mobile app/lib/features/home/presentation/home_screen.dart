@@ -4,6 +4,8 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_service.dart';
+import '../../../core/l10n/dashboard_metric_strings.dart';
+import '../../../core/l10n/laravel_screen_strings.dart';
 import '../../../core/navigation/module_catalog.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../core/router/route_names.dart';
@@ -15,11 +17,11 @@ import '../../../core/ui/app_tiles.dart';
 import '../../../core/ui/app_tokens.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/widgets/shimmer_skeleton.dart';
-import '../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../dashboard/domain/repositories/dashboard_repository.dart';
 import '../../dashboard/presentation/cubit/dashboard_cubit.dart';
 import '../../dashboard/presentation/widgets/collection_progress_card.dart';
 import '../../dashboard/presentation/widgets/monthly_revenue_chart_card.dart';
+import '../../dashboard/presentation/widgets/stats_overview_grid.dart';
 import '../../navigation/presentation/widgets/module_section.dart';
 import '../../offline_sync/services/sync_queue_manager.dart';
 import '../domain/workspace_catalog.dart';
@@ -161,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 trailing: _canViewDashboard
                     ? TextButton(
                         onPressed: () => context.push(RouteNames.dashboard),
-                        child: const Text('لوحة القيادة'),
+                        child: const Text(LaravelScreenStrings.dashboard),
                       )
                     : null,
               ),
@@ -170,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (cubit == null)
               _WorkspaceMetrics(queue: queue)
             else
-              _LiveMetrics(cubit: cubit, canViewRevenue: _canViewRevenue),
+              _LiveMetrics(cubit: cubit),
             if (cubit != null) ...<Widget>[
               const Gap(AppSpacing.md),
               _DashboardExtras(

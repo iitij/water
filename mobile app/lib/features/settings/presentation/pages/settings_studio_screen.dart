@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
@@ -40,7 +41,7 @@ class SettingsStudioScreen extends StatelessWidget {
       if (can(AdminPermissions.viewReadingSettings))
         _SettingsCenter(
           id: 'reading',
-          title: 'القراءات',
+          title: LaravelScreenStrings.readingSettings,
           description: 'دورة القراءات والفوترة الآلية',
           icon: Icons.calendar_month_outlined,
           builder: () => ReadingSettingsScreen(repository: repository),
@@ -48,7 +49,7 @@ class SettingsStudioScreen extends StatelessWidget {
       if (can(AdminPermissions.viewInvoiceSettings))
         _SettingsCenter(
           id: 'invoice',
-          title: 'الفاتورة',
+          title: LaravelScreenStrings.invoiceSettings,
           description: 'نصوص الفاتورة وشعاراتها وحقولها',
           icon: Icons.receipt_long_outlined,
           builder: () => InvoiceSettingsStudioScreen(
@@ -60,7 +61,7 @@ class SettingsStudioScreen extends StatelessWidget {
       if (can(AdminPermissions.viewReceiptSettings))
         _SettingsCenter(
           id: 'receipt',
-          title: 'سند القبض',
+          title: LaravelScreenStrings.receiptSettings,
           description: 'نصوص السند وشعاراته وحقوله',
           icon: Icons.payments_outlined,
           builder: () => ReceiptSettingsStudioScreen(
@@ -72,7 +73,7 @@ class SettingsStudioScreen extends StatelessWidget {
       if (can(AdminPermissions.viewSettings))
         _SettingsCenter(
           id: 'general',
-          title: 'الإعدادات العامة',
+          title: LaravelScreenStrings.settings,
           description: 'مفاتيح الإعداد النصية وصور النظام',
           icon: Icons.tune_rounded,
           builder: () => GeneralSettingsResourceScreen(
@@ -85,14 +86,14 @@ class SettingsStudioScreen extends StatelessWidget {
     ];
     if (centers.isEmpty) {
       return const SubPageScaffold(
-        title: 'الإعدادات',
+        title: LaravelScreenStrings.settings,
         child: AdminErrorView(
           message: 'لا تملك صلاحية الوصول إلى أي مركز من مراكز الإعدادات.',
         ),
       );
     }
     return SubPageScaffold(
-      title: 'الإعدادات',
+      title: LaravelScreenStrings.settings,
       subtitle: 'مراكز ضبط القراءات والفوترة والتنبيهات',
       child: AppPageBody(
         maxWidth: 760,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
@@ -187,7 +188,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
           return Scaffold(body: body, bottomNavigationBar: saveBar);
         }
         return SubPageScaffold(
-          title: 'إعدادات فترة القراءات',
+          title: LaravelScreenStrings.readingSettings,
           subtitle: 'دورة القراءات والفوترة الآلية',
           child: Column(
             children: [
