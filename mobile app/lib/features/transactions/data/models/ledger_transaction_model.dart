@@ -1,4 +1,5 @@
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/models/record_location.dart';
 import '../../domain/entities/ledger_transaction.dart';
 
 class LedgerTransactionModel extends LedgerTransaction {
@@ -11,6 +12,7 @@ class LedgerTransactionModel extends LedgerTransaction {
     super.meterId,
     super.description,
     super.createdAt,
+    super.location,
     super.referenceType,
     super.referenceId,
   });
@@ -19,6 +21,7 @@ class LedgerTransactionModel extends LedgerTransaction {
     final sub = jMapOrNull(j['subscriber']);
     return LedgerTransactionModel(
       id: jInt(j['id']),
+      location: RecordLocation.fromJson(j),
       type: jStr(j['type']) ?? '',
       amount: jDouble(j['amount']),
       subscriberId: jIntOrNull(j['subscriber_id']),

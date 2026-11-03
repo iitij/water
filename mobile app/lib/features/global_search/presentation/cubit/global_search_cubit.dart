@@ -7,6 +7,9 @@ import '../../../../core/fouad/api_client.dart';
 import '../../data/global_search_repository.dart';
 import '../../data/models/global_search_models.dart';
 
+bool _canSearch(String query) =>
+    query.length >= 2 || RegExp(r'^[0-9٠-٩۰-۹]+$').hasMatch(query);
+
 class GlobalSearchState extends Equatable {
   const GlobalSearchState({
     this.query = '',
@@ -26,9 +29,11 @@ class GlobalSearchState extends Equatable {
 
   bool get hasResults => groups.any((group) => group.items.isNotEmpty);
 
-  bool get needsMoreCharacters => query.trim().isNotEmpty && query.trim().length < 2;
+  bool get needsMoreCharacters =>
+      query.trim().isNotEmpty && !_canSearch(query.trim());
 
-  int get resultCount => groups.fold<int>(0, (sum, group) => sum + group.items.length);
+  int get resultCount =>
+      groups.fold<int>(0, (sum, group) => sum + group.items.length);
 
   GlobalSearchState copyWith({
     String? query,
@@ -59,24 +64,51 @@ class GlobalSearchCubit extends Cubit<GlobalSearchState> {
   final GlobalSearchRepository _repository;
   Timer? _debounce;
   int _requestId = 0;
+  DateTime? _addedFrom, _addedTo;
+  String? _sortBy;
+  bool _descending = true;
+
+  Future<void> applyFacets({
+    DateTime? addedFrom,
+    DateTime? addedTo,
+    String? sortBy,
+    bool descending = true,
+  }) async {
+    _addedFrom = addedFrom;
+    _addedTo = addedTo;
+    _sortBy = sortBy;
+    _descending = descending;
+    _debounce?.cancel();
+    await retry();
+  }
 
   void search(String raw) {
     _debounce?.cancel();
     final trimmed = raw.trim();
+    _requestId++;
 
-    if (trimmed.length < 2) {
-      _requestId++;
+    if (!_canSearch(trimmed)) {
       emit(GlobalSearchState(query: raw));
       return;
     }
 
-    emit(state.copyWith(query: raw, loading: true, clearError: true, searched: true));
-    _debounce = Timer(const Duration(milliseconds: 320), () => unawaited(_load(trimmed)));
+    emit(
+      state.copyWith(
+        query: raw,
+        loading: true,
+        clearError: true,
+        searched: true,
+      ),
+    );
+    _debounce = Timer(
+      const Duration(milliseconds: 320),
+      () => unawaited(_load(trimmed)),
+    );
   }
 
   Future<void> retry() async {
     final trimmed = state.query.trim();
-    if (trimmed.length < 2) return;
+    if (!_canSearch(trimmed)) return;
     emit(state.copyWith(loading: true, clearError: true, searched: true));
     await _load(trimmed);
   }
@@ -84,7 +116,15 @@ class GlobalSearchCubit extends Cubit<GlobalSearchState> {
   Future<void> _load(String query) async {
     final requestId = ++_requestId;
     try {
-      final response = await _repository.search(query);
+      final response = _addedFrom == null && _addedTo == null && _sortBy == null
+          ? await _repository.search(query)
+          : await _repository.search(
+              query,
+              addedFrom: _addedFrom,
+              addedTo: _addedTo,
+              sortBy: _sortBy,
+              descending: _descending,
+            );
       if (isClosed || requestId != _requestId) return;
       emit(
         state.copyWith(

@@ -11,7 +11,7 @@ class TransactionController extends ApiController
     {
         $this->authorizeApi(Transaction::class, 'viewAny');
         $query = Transaction::with([
-            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name',
+            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number,tenant_name', 'reference',
         ])->latest('created_at')->latest('id');
         if ($request->filled('subscriber_id')) {

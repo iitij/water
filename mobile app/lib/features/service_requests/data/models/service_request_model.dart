@@ -1,4 +1,5 @@
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/models/record_location.dart';
 import '../../domain/entities/service_request.dart';
 
 class ServiceRequestModel extends ServiceRequest {
@@ -12,6 +13,8 @@ class ServiceRequestModel extends ServiceRequest {
     super.invoiceId,
     super.invoiceNumber,
     super.notes,
+    super.createdAt,
+    super.location,
   });
 
   factory ServiceRequestModel.fromJson(Map<String, dynamic> j) {
@@ -20,6 +23,7 @@ class ServiceRequestModel extends ServiceRequest {
     final date = jStr(j['service_date']) ?? '';
     return ServiceRequestModel(
       id: jInt(j['id']),
+      location: RecordLocation.fromJson(j),
       subscriberId: jInt(j['subscriber_id']),
       subscriberName: jStr(sub?['name'] ?? j['subscriber_name']),
       amount: jDouble(j['amount']),
@@ -28,6 +32,7 @@ class ServiceRequestModel extends ServiceRequest {
       invoiceId: jIntOrNull(j['invoice_id']),
       invoiceNumber: jStr(inv?['bill_number']),
       notes: jStr(j['notes']),
+      createdAt: DateTime.tryParse(jStr(j['created_at']) ?? ''),
     );
   }
 }

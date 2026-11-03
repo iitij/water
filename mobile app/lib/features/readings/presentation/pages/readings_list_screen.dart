@@ -7,7 +7,10 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/field_experience_strings.dart';
+import '../../../../core/l10n/field_list_options_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
+import '../../../../core/models/record_location.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_filters.dart';
@@ -15,6 +18,7 @@ import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../../core/widgets/status_badge.dart';
@@ -226,6 +230,14 @@ class _ReadingsListView extends StatelessWidget {
                 descending: false,
               ),
               sortValues: {
+                'created_at': (
+                  label: ListOptionsStrings.createdAt,
+                  value: (reading) => reading.createdAt,
+                ),
+                'square_id': (
+                  label: ListOptionsStrings.square,
+                  value: (reading) => reading.squareId,
+                ),
                 'default': (
                   label: ListOptionsStrings.reset,
                   value: (reading) => defaultPositions[reading],
@@ -241,6 +253,22 @@ class _ReadingsListView extends StatelessWidget {
                 'subscriber_name': (
                   label: ListOptionsStrings.subscriber,
                   value: (reading) => reading.subscriberName,
+                ),
+                'path_number': (
+                  label: FieldListOptionsStrings.pathNumber,
+                  value: (reading) => reading.pathNumber,
+                ),
+                'square_name': (
+                  label: ListOptionsStrings.square,
+                  value: (reading) => reading.squareName,
+                ),
+                'tenant_name': (
+                  label: FieldExperienceStrings.tenant,
+                  value: (reading) => reading.tenantName,
+                ),
+                'is_invoiced': (
+                  label: FieldListOptionsStrings.invoicingStatus,
+                  value: (reading) => reading.isInvoiced ? 1 : 0,
                 ),
                 'reading_date': (
                   label: ListOptionsStrings.readingDate,
@@ -350,16 +378,13 @@ class _ReadingsListView extends StatelessWidget {
                         hasScrollBody: false,
                         child: EmptyStateWidget(
                           icon: Icons.speed_rounded,
-                          title:
-                              state.query.isEmpty && state.squareFilter == null
+                          title: !state.hasFilters
                               ? 'لا توجد قراءات بعد'
                               : 'لا نتائج مطابقة',
-                          message:
-                              state.query.isEmpty && state.squareFilter == null
+                          message: !state.hasFilters
                               ? 'سجّل أول قراءة لعداد من زر الإضافة.'
                               : 'جرّب تعديل البحث أو إزالة بعض الفلاتر.',
-                          action:
-                              state.query.isEmpty && state.squareFilter == null
+                          action: !state.hasFilters
                               ? null
                               : TextButton(
                                   onPressed: cubit.clearAllFilters,

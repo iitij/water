@@ -3,16 +3,17 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/l10n/reading_invoice_strings.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/services/pdf_print_service.dart';
-import '../../../../core/services/whatsapp_launcher_service.dart';
 import '../models/reading.dart';
 
 /// Integration bridge between Dev 2's reading auto-invoice flow and Dev 3's
-/// shared PDF print + WhatsApp engines (`PdfPrintService` & `WhatsAppLauncherService`).
+/// official PDF printing and image sharing. Messaging remains user-confirmed.
 class ReadingInvoiceActionsService {
   const ReadingInvoiceActionsService(this._dio);
 
@@ -63,7 +64,8 @@ class ReadingInvoiceActionsService {
       final baseUri = Uri.tryParse(_dio.options.baseUrl);
       if (baseUri != null) printUri = baseUri.resolveUri(printUri);
     }
-    if (printUri == null || !await launchUrl(printUri, mode: LaunchMode.externalApplication)) {
+    if (printUri == null ||
+        !await launchUrl(printUri, mode: LaunchMode.externalApplication)) {
       throw StateError('تعذر فتح ملف الفاتورة للطباعة.');
     }
   }
@@ -71,38 +73,91 @@ class ReadingInvoiceActionsService {
   Future<void> shareOnWhatsApp(InvoiceSummary invoice) async {
     final invoiceId = invoice.id;
     final phone = _normalizeYemeniPhone(invoice.subscriberPhone);
-    final message = <String>[
-      'فاتورة استهلاك مياه',
-      if (invoice.billNumber != null) 'رقم الفاتورة: ${invoice.billNumber}',
-      if (invoice.periodStart != null && invoice.periodEnd != null)
-        'الفترة: ${_date(invoice.periodStart!)} — ${_date(invoice.periodEnd!)}',
-      if (invoice.meterCode != null) 'العداد: ${invoice.meterCode}',
-      if (invoice.consumptionUnits != null) 'الاستهلاك: ${invoice.consumptionUnits} وحدة',
-      'الإجمالي المستحق: ${invoice.totalAmount} ريال',
-      if (invoice.pdfUrl != null) 'رابط الفاتورة: ${invoice.pdfUrl}',
-    ].join('\n');
-
-    if (invoiceId != null && phone != null) {
-      try {
-        final whatsapp = sl<WhatsAppLauncherService>();
-        final result = await whatsapp.dispatch(
-          recipientPhone: phone,
-          message: message,
-          serverEndpoint: 'invoices/$invoiceId/send-whatsapp',
-          payload: <String, dynamic>{'invoice_id': invoiceId},
-        );
-        if (result.ok) return;
-      } catch (_) {
-        // Fallback to direct wa.me link below.
-      }
+    if (phone == null) throw StateError(ReadingInvoiceStrings.missingPhone);
+    if (invoiceId == null) {
+      throw StateError(ReadingInvoiceStrings.missingInvoice);
     }
 
-    if (phone == null) throw StateError('رقم هاتف المشترك غير متاح لإرسال الفاتورة.');
-    final uri = Uri.https('wa.me', '/$phone', {'text': message});
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      throw StateError('تعذر فتح تطبيق واتساب على هذا الجهاز.');
+    // Use the authenticated API; the PDF URL alone may require a session.
+    final response = await _dio.get<List<int>>(
+      ApiEndpoints.invoicePdf(invoiceId),
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = response.data;
+    if (bytes == null || !_isPdf(bytes)) {
+      throw StateError(ReadingInvoiceStrings.invalidPdf);
+    }
+
+    final images = <XFile>[];
+    final names = <String>[];
+    final safeNumber = (invoice.billNumber ?? '$invoiceId').replaceAll(
+      RegExp(r'[^A-Za-z0-9._-]'),
+      '_',
+    );
+    try {
+      // Keep every page, including any continuation of the invoice details.
+      await for (final page in Printing.raster(
+        Uint8List.fromList(bytes),
+        dpi: 144,
+      )) {
+        final name = 'invoice-$safeNumber-${images.length + 1}.png';
+        images.add(
+          XFile.fromData(await page.toPng(), mimeType: 'image/png', name: name),
+        );
+        names.add(name);
+      }
+    } catch (_) {
+      throw StateError(ReadingInvoiceStrings.imageFailed);
+    }
+    if (images.isEmpty) throw StateError(ReadingInvoiceStrings.imageFailed);
+
+    // A wa.me URL cannot attach a local image. Use the native share sheet;
+    // selecting WhatsApp, the recipient and sending are explicit user actions.
+    try {
+      await Share.shareXFiles(
+        images,
+        fileNameOverrides: names,
+        subject: invoice.billNumber ?? ReadingInvoiceStrings.invoiceTitle,
+        text:
+            '${ReadingInvoiceStrings.recipient(invoice.subscriberName, phone)}\n${_message(invoice)}',
+      );
+    } catch (_) {
+      throw StateError(ReadingInvoiceStrings.shareFailed);
     }
   }
+
+  Future<void> sendSms(InvoiceSummary invoice) async {
+    final phone = _normalizeYemeniPhone(invoice.subscriberPhone);
+    if (phone == null) throw StateError(ReadingInvoiceStrings.missingPhone);
+    final uri = Uri(
+      scheme: 'sms',
+      path: '+$phone',
+      // Non-HTTP URI bodies must use percent-encoded spaces, not '+'.
+      query: 'body=${Uri.encodeComponent(_message(invoice))}',
+    );
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {
+      // Report unsupported SMS handlers without claiming that a message sent.
+    }
+    throw StateError(ReadingInvoiceStrings.smsUnavailable);
+  }
+
+  String _message(InvoiceSummary invoice) => <String>[
+    ReadingInvoiceStrings.invoiceTitle,
+    if (invoice.billNumber != null)
+      ReadingInvoiceStrings.number(invoice.billNumber!),
+    if (invoice.periodStart != null && invoice.periodEnd != null)
+      ReadingInvoiceStrings.period(
+        _date(invoice.periodStart!),
+        _date(invoice.periodEnd!),
+      ),
+    if (invoice.meterCode != null)
+      ReadingInvoiceStrings.meter(invoice.meterCode!),
+    if (invoice.consumptionUnits != null)
+      ReadingInvoiceStrings.consumption(invoice.consumptionUnits!),
+    ReadingInvoiceStrings.total(invoice.totalAmount),
+  ].join('\n');
 
   bool _isPdf(List<int> bytes) =>
       bytes.length >= 4 && String.fromCharCodes(bytes.take(4)) == '%PDF';

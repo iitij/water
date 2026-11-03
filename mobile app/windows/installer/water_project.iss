@@ -17,6 +17,9 @@
 #if !FileExists(BuildDir + "\flutter_windows.dll") || !FileExists(BuildDir + "\data\app.so") || !FileExists(BuildDir + "\data\icudtl.dat")
   #error Incomplete Flutter release bundle.
 #endif
+#if FileSize(BuildDir + "\flutter_windows.dll") > 35000000
+  #error Debug flutter_windows.dll detected. Run windows\installer\build-installer.ps1 to stage the release engine.
+#endif
 #if !FileExists(BuildDir + "\vcruntime140.dll") || !FileExists(BuildDir + "\vcruntime140_1.dll") || !FileExists(BuildDir + "\msvcp140.dll")
   #error Microsoft x64 CRT is missing. Run build-installer.ps1 to stage it.
 #endif
@@ -71,6 +74,6 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{ap
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "تشغيل مشروع مياه الوشاح"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "تشغيل مشروع مياه الوشاح"; Flags: nowait postinstall skipifsilent; WorkingDir: "{app}"
 
 ; Do not delete AppData, databases, account settings or backups on uninstall.

@@ -5,6 +5,8 @@ import '../../admin_shared/data/admin_api_client.dart';
 class AuditEventFilters {
   const AuditEventFilters({
     this.query = '',
+    this.addedFrom,
+    this.addedTo,
     this.event,
     this.source,
     this.actorId,
@@ -17,6 +19,7 @@ class AuditEventFilters {
     this.descending = true,
   });
   final String query;
+  final DateTime? addedFrom, addedTo;
   final String? event, source, entityType, entityId;
   final int? actorId;
   final DateTime? fromDate, toDate;
@@ -28,6 +31,8 @@ class AuditEventFilters {
       fromDate == null || toDate == null || !fromDate!.isAfter(toDate!);
   Map<String, dynamic> toQuery({int page = 1}) => {
     'page': page,
+    if (addedFrom != null) 'added_from': _date(addedFrom!),
+    if (addedTo != null) 'added_to': _date(addedTo!),
     'per_page': pageSize,
     if (sortBy != null) 'sort_by': sortBy,
     if (sortBy != null) 'sort_direction': descending ? 'desc' : 'asc',

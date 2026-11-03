@@ -13,8 +13,9 @@ class _ReadingsFilters extends StatefulWidget {
 }
 
 class _ReadingsFiltersState extends State<_ReadingsFilters> {
-  late final TextEditingController _search =
-      TextEditingController(text: widget.state.query);
+  late final TextEditingController _search = TextEditingController(
+    text: widget.state.query,
+  );
 
   @override
   void didUpdateWidget(covariant _ReadingsFilters oldWidget) {
@@ -45,7 +46,10 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
   bool get _hasDates =>
       widget.state.fromDate != null || widget.state.toDate != null;
 
-  int get _sheetFacets => (_squareName == null ? 0 : 1) + (_hasDates ? 1 : 0);
+  int get _sheetFacets =>
+      (_squareName == null ? 0 : 1) +
+      (_hasDates ? 1 : 0) +
+      (widget.state.pathFilter == null ? 0 : 1);
 
   String get _dateSummary {
     String fmt(DateTime? value) => value == null ? '…' : _date(value);
@@ -54,7 +58,9 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
 
   /// حفظ الفلاتر الحالية باسم يكتبه القارئ (أو الاسم المقترح).
   Future<void> _savePreset(BuildContext context) async {
-    final controller = TextEditingController(text: widget.cubit.suggestPresetName());
+    final controller = TextEditingController(
+      text: widget.cubit.suggestPresetName(),
+    );
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -83,7 +89,11 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(saved ? 'حُفظ الفلتر «${name.trim()}».' : 'تعذّر حفظ الفلتر على الجهاز.'),
+        content: Text(
+          saved
+              ? 'حُفظ الفلتر «${name.trim()}».'
+              : 'تعذّر حفظ الفلتر على الجهاز.',
+        ),
       ),
     );
   }
@@ -91,7 +101,8 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
   Future<void> _openSheet() async {
     await AppFilterSheet.show<void>(
       context: context,
-      builder: (_) => _ReadingsFilterSheet(state: widget.state, cubit: widget.cubit),
+      builder: (_) =>
+          _ReadingsFilterSheet(state: widget.state, cubit: widget.cubit),
     );
   }
 
@@ -100,6 +111,13 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
     final state = widget.state;
     final cubit = widget.cubit;
     final active = <Widget>[
+      if (state.pathFilter != null)
+        AppFilterChip(
+          label: FieldListOptionsStrings.pathFilter(state.pathFilter!),
+          icon: Icons.route_outlined,
+          selected: true,
+          onRemove: () => cubit.setPathFilter(null),
+        ),
       if (_squareName != null)
         AppFilterChip(
           label: _squareName!,
@@ -130,7 +148,7 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
         const SizedBox(height: 10),
         AppFilterBar(
           controller: _search,
-          hint: 'كود العداد، المشترك، أو المربع/المسار',
+          hint: FieldListOptionsStrings.searchHint,
           activeCount: _sheetFacets,
           onOpenFilters: _openSheet,
           onChanged: cubit.setQuery,
@@ -138,6 +156,13 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
             tooltip: 'حفظ الفلاتر الحالية',
             icon: const Icon(Icons.bookmark_add_outlined),
             onPressed: () => _savePreset(context),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Text(
+            FieldListOptionsStrings.searchHelp,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
         const SizedBox(height: 8),
@@ -151,12 +176,14 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
             AppFilterChip(
               label: 'مفوترة',
               selected: state.invoiceFilter == ReadingInvoiceFilter.invoiced,
-              onTap: () => cubit.setInvoiceFilter(ReadingInvoiceFilter.invoiced),
+              onTap: () =>
+                  cubit.setInvoiceFilter(ReadingInvoiceFilter.invoiced),
             ),
             AppFilterChip(
               label: 'غير مفوترة',
               selected: state.invoiceFilter == ReadingInvoiceFilter.notInvoiced,
-              onTap: () => cubit.setInvoiceFilter(ReadingInvoiceFilter.notInvoiced),
+              onTap: () =>
+                  cubit.setInvoiceFilter(ReadingInvoiceFilter.notInvoiced),
             ),
           ],
         ),
@@ -177,12 +204,15 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
         ],
         AppActiveFilters(filters: active, onClearAll: cubit.clearAllFilters),
         if (state.isMutating ||
-            (state.status == ReadingsLoadStatus.loading && state.readings.isNotEmpty))
+            (state.status == ReadingsLoadStatus.loading &&
+                state.readings.isNotEmpty))
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(
               minHeight: 1.5,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: .5),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: .5),
             ),
           ),
         Padding(
@@ -200,8 +230,8 @@ class _ReadingsFiltersState extends State<_ReadingsFilters> {
                 Text(
                   'وضع التحديد',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
             ],
           ),
@@ -225,6 +255,16 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
   late int? _square = widget.state.squareFilter;
   late DateTime? _from = widget.state.fromDate;
   late DateTime? _to = widget.state.toDate;
+  late final _path = TextEditingController(
+    text: widget.state.pathFilter?.toString() ?? '',
+  );
+  String? _pathError;
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
 
   Future<void> _pick({required bool from}) async {
     final now = DateTime.now();
@@ -235,8 +275,8 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
     final initial = requested.isBefore(firstDate)
         ? firstDate
         : requested.isAfter(lastDate)
-            ? lastDate
-            : requested;
+        ? lastDate
+        : requested;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -255,7 +295,19 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
   }
 
   void _apply() {
-    widget.cubit.applyFilters(squareId: _square, fromDate: _from, toDate: _to);
+    final text = CompoundSearchQuery.normalizeDigits(_path.text.trim());
+    final pathNumber = int.tryParse(text);
+    if (text.isNotEmpty && (pathNumber == null || pathNumber < 0)) {
+      setState(() => _pathError = FieldListOptionsStrings.invalidPath);
+      return;
+    }
+    widget.cubit.applyFilters(
+      squareId: _square,
+      fromDate: _from,
+      toDate: _to,
+      pathNumber: pathNumber,
+      clearPath: pathNumber == null,
+    );
     Navigator.of(context).maybePop();
   }
 
@@ -265,6 +317,8 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
       _square = null;
       _from = null;
       _to = null;
+      _path.clear();
+      _pathError = null;
     });
   }
 
@@ -279,21 +333,49 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
           : '${state.readings.length} قراءة مطابقة',
       onApply: _apply,
       onReset: _reset,
-      resetEnabled: _square != null ||
+      resetEnabled:
+          _square != null ||
+          _path.text.isNotEmpty ||
           _from != null ||
           _to != null ||
           state.invoiceFilter != ReadingInvoiceFilter.all,
       sections: <Widget>[
         AppFilterSection(
+          title: FieldListOptionsStrings.pathNumber,
+          child: TextField(
+            key: const ValueKey('readings-path-filter'),
+            controller: _path,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => setState(() => _pathError = null),
+            decoration: InputDecoration(
+              labelText: FieldListOptionsStrings.pathNumber,
+              helperText: FieldListOptionsStrings.pathHelp,
+              errorText: _pathError,
+              prefixIcon: const Icon(Icons.route_outlined),
+            ),
+          ),
+        ),
+        AppFilterSection(
           title: 'حالة الفوترة',
           child: AppSegmentedFilter<ReadingInvoiceFilter>(
             value: state.invoiceFilter,
             onChanged: widget.cubit.setInvoiceFilter,
-            options: const <({ReadingInvoiceFilter value, String label, IconData? icon})>[
-              (value: ReadingInvoiceFilter.all, label: 'الكل', icon: null),
-              (value: ReadingInvoiceFilter.invoiced, label: 'مفوترة', icon: null),
-              (value: ReadingInvoiceFilter.notInvoiced, label: 'غير مفوترة', icon: null),
-            ],
+            options:
+                const <
+                  ({ReadingInvoiceFilter value, String label, IconData? icon})
+                >[
+                  (value: ReadingInvoiceFilter.all, label: 'الكل', icon: null),
+                  (
+                    value: ReadingInvoiceFilter.invoiced,
+                    label: 'مفوترة',
+                    icon: null,
+                  ),
+                  (
+                    value: ReadingInvoiceFilter.notInvoiced,
+                    label: 'غير مفوترة',
+                    icon: null,
+                  ),
+                ],
           ),
         ),
         AppFilterSection(
@@ -340,9 +422,9 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
             onClear: _from == null && _to == null
                 ? null
                 : () => setState(() {
-                      _from = null;
-                      _to = null;
-                    }),
+                    _from = null;
+                    _to = null;
+                  }),
           ),
         ),
         const SizedBox(height: 20),
@@ -350,4 +432,3 @@ class _ReadingsFilterSheetState extends State<_ReadingsFilterSheet> {
     );
   }
 }
-

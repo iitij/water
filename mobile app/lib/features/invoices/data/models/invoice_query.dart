@@ -7,6 +7,9 @@ import '../../../../core/utils/json_utils.dart';
 class InvoiceQuery extends Equatable {
   const InvoiceQuery({
     this.search = '',
+    this.pathNumber,
+    this.addedFrom,
+    this.addedTo,
     this.squareId,
     this.status,
     this.subscriberId,
@@ -20,6 +23,8 @@ class InvoiceQuery extends Equatable {
   });
 
   final String search;
+  final int? pathNumber;
+  final DateTime? addedFrom, addedTo;
 
   /// `without` | `with` | `only` — لمطابقة `TrashedFilter` في Filament.
   final String trashed;
@@ -52,10 +57,16 @@ class InvoiceQuery extends Equatable {
       if (status != null) 'status': status,
       if (subscriberId != null) 'subscriber_id': subscriberId,
       if (invoiceType != null) 'invoice_type': invoiceType,
-      if (billingPeriod != null) 'billing_period': _wireBillingPeriod(billingPeriod!),
+      if (billingPeriod != null)
+        'billing_period': _wireBillingPeriod(billingPeriod!),
       if (trashed != 'without') 'trashed': trashed,
       if (limit != null) 'per_page': limit,
       'page': page,
+      if (pathNumber != null) 'path_number': pathNumber,
+      if (addedFrom != null)
+        'added_from': addedFrom!.toIso8601String().split('T').first,
+      if (addedTo != null)
+        'added_to': addedTo!.toIso8601String().split('T').first,
       'sort_by': sortBy,
       'sort_direction': sortDirection,
     };
@@ -65,12 +76,18 @@ class InvoiceQuery extends Equatable {
   /// the API's documented `YYYY-MM-DD|YYYY-MM-DD` wire representation.
   static String _wireBillingPeriod(String value) => value
       .split('|')
-      .map((part) => DateTime.tryParse(part)?.toIso8601String().split('T').first ?? part)
+      .map(
+        (part) =>
+            DateTime.tryParse(part)?.toIso8601String().split('T').first ?? part,
+      )
       .join('|');
 
   /// بصمة للكيوبت: تمنع إعادة الجلب عند نفس الحالة.
   String get signature => <String>[
     search,
+    '$pathNumber',
+    '$addedFrom',
+    '$addedTo',
     '$squareId',
     '$status',
     '$subscriberId',
@@ -85,6 +102,10 @@ class InvoiceQuery extends Equatable {
 
   InvoiceQuery copyWith({
     String? search,
+    int? pathNumber,
+    DateTime? addedFrom,
+    DateTime? addedTo,
+    bool clearListFilters = false,
     int? squareId,
     bool clearSquare = false,
     String? status,
@@ -102,6 +123,9 @@ class InvoiceQuery extends Equatable {
     String? sortDirection,
   }) => InvoiceQuery(
     search: search ?? this.search,
+    pathNumber: clearListFilters ? pathNumber : pathNumber ?? this.pathNumber,
+    addedFrom: clearListFilters ? addedFrom : addedFrom ?? this.addedFrom,
+    addedTo: clearListFilters ? addedTo : addedTo ?? this.addedTo,
     squareId: clearSquare ? null : (squareId ?? this.squareId),
     status: clearStatus ? null : (status ?? this.status),
     subscriberId: clearSubscriber ? null : (subscriberId ?? this.subscriberId),
@@ -128,6 +152,9 @@ class InvoiceQuery extends Equatable {
   @override
   List<Object?> get props => <Object?>[
     search,
+    pathNumber,
+    addedFrom,
+    addedTo,
     squareId,
     status,
     subscriberId,

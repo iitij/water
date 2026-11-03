@@ -22,7 +22,7 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'viewAny');
         $query = Payment::with([
-            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name',
+            'subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number,tenant_name,tenant_phone',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
         ])->latest('payment_date')->latest('id');
@@ -213,13 +213,19 @@ class PaymentController extends ApiController
 
         $query = Payment::query()
             ->voidRequested()
-            ->with(['subscriber:id,name,phone', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
+            ->with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
             ->latest('void_requested_at');
         $this->applySorting($query, $request, self::LIST_SORTS['void_requests']);
         $payments = $query->paginate($this->perPage($request))->appends($request->query());
 
         return $payments->through(fn (Payment $payment) => [
             'id' => $payment->id,
+            'created_at' => $payment->created_at?->toISOString(),
+            'square_id' => $payment->subscriber?->square_id,
+            'square_name' => $payment->subscriber?->square?->name,
+            'path_numbers' => ($payment->meter_id === null
+                ? ($payment->subscriber?->meters ?? collect())->pluck('path_number')
+                : collect([$payment->meter?->path_number]))->filter(fn ($path) => $path !== null)->map(fn ($path) => (int) $path)->unique()->sort()->values()->all(),
             'receipt_number' => $payment->receipt_number,
             'amount' => number_format((float) $payment->amount, 2, '.', ''),
             'subscriber' => $payment->subscriber?->name,

@@ -99,6 +99,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                             ),
                             const AppDivider(),
                             DropdownButtonFormField<String>(
+                              isExpanded: true,
                               key: ValueKey(settings.readingPeriod),
                               initialValue: settings.readingPeriod,
                               decoration: const InputDecoration(
@@ -118,6 +119,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                             if (settings.readingPeriod == 'monthly') ...[
                               const SizedBox(height: 16),
                               DropdownButtonFormField<String>(
+                                isExpanded: true,
                                 key: ValueKey(settings.readingDay),
                                 initialValue: settings.readingDay,
                                 decoration: const InputDecoration(

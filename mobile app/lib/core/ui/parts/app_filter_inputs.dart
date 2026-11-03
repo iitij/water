@@ -199,8 +199,9 @@ class AppFilterOptionTile extends StatelessWidget {
                     Text(
                       label,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
                       ),
                     ),
                     if (meta != null) ...<Widget>[
@@ -353,8 +354,9 @@ class _DateBox extends StatelessWidget {
                         color: hasValue
                             ? scheme.onSurface
                             : scheme.onSurfaceVariant,
-                        fontWeight:
-                            hasValue ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: hasValue
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         fontFeatures: const <FontFeature>[
                           FontFeature.tabularFigures(),
                         ],
@@ -638,7 +640,11 @@ class _SheetFooter extends StatelessWidget {
             AppSpacing.md,
             AppSpacing.sm,
           ),
-          child: Row(
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
               if (onReset != null)
                 TextButton(
@@ -650,7 +656,6 @@ class _SheetFooter extends StatelessWidget {
                   ),
                   child: const Text('إعادة تعيين'),
                 ),
-              const Spacer(),
               SizedBox(
                 height: 44,
                 child: FilledButton(

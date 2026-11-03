@@ -14,8 +14,10 @@ class DeviceRecord extends Equatable {
     this.lastSeenAt,
     this.revokedAt,
     this.isCurrent = false,
+    this.createdAt,
   });
 
+  final DateTime? createdAt;
   final int id;
   final String deviceUuid;
   final String? name;
@@ -50,12 +52,16 @@ class DeviceRecord extends Equatable {
     return platform;
   }
 
-  factory DeviceRecord.fromJson(Map<String, dynamic> json, {String? currentDeviceUuid}) {
+  factory DeviceRecord.fromJson(
+    Map<String, dynamic> json, {
+    String? currentDeviceUuid,
+  }) {
     final uuid = json['device_uuid']?.toString() ?? '';
     return DeviceRecord(
       id: (json['id'] as num?)?.toInt() ?? 0,
       deviceUuid: uuid,
       name: json['name']?.toString(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
       platform: json['platform']?.toString(),
       appVersion: json['app_version']?.toString(),
       lastSeenAt: DateTime.tryParse(json['last_seen_at']?.toString() ?? ''),
@@ -65,19 +71,27 @@ class DeviceRecord extends Equatable {
   }
 
   DeviceRecord asRevoked(DateTime when) => DeviceRecord(
-        id: id,
-        deviceUuid: deviceUuid,
-        name: name,
-        platform: platform,
-        appVersion: appVersion,
-        lastSeenAt: lastSeenAt,
-        revokedAt: when,
-        isCurrent: isCurrent,
-      );
+    id: id,
+    createdAt: createdAt,
+    deviceUuid: deviceUuid,
+    name: name,
+    platform: platform,
+    appVersion: appVersion,
+    lastSeenAt: lastSeenAt,
+    revokedAt: when,
+    isCurrent: isCurrent,
+  );
 
   @override
-  List<Object?> get props =>
-      <Object?>[id, deviceUuid, name, platform, lastSeenAt, revokedAt, isCurrent];
+  List<Object?> get props => <Object?>[
+    id,
+    deviceUuid,
+    name,
+    platform,
+    lastSeenAt,
+    revokedAt,
+    isCurrent,
+  ];
 }
 
 /// ترتيب الأجهزة للعرض: النشطة أولاً، والأحدث استخداماً أولاً.

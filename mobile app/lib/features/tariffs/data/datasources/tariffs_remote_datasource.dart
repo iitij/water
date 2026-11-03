@@ -19,6 +19,8 @@ class TariffsRemoteDataSource {
     int pageSize = 25,
     String sortBy = 'start_date',
     String sortDirection = 'desc',
+    DateTime? addedFrom,
+    DateTime? addedTo,
   }) async => TariffsPage.fromJson(
     await _client.getRaw(
       FinanceEndpoints.tariffs,
@@ -29,6 +31,10 @@ class TariffsRemoteDataSource {
         'per_page': pageSize,
         'sort_by': sortBy,
         'sort_direction': sortDirection,
+        if (addedFrom != null)
+          'added_from': addedFrom.toIso8601String().split('T').first,
+        if (addedTo != null)
+          'added_to': addedTo.toIso8601String().split('T').first,
       },
     ),
   );

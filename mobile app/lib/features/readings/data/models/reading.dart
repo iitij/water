@@ -22,6 +22,7 @@ class Reading {
     this.imageUrl,
     this.isSynced = true,
     this.syncError,
+    this.createdAt,
   });
 
   /// Server-side primary key. Null for a locally queued reading.
@@ -47,38 +48,48 @@ class Reading {
   final String? imageUrl;
   final bool isSynced;
   final String? syncError;
+  final DateTime? createdAt;
 
   bool get hasPhoto =>
       (imageUrl != null && imageUrl!.trim().isNotEmpty) ||
       (imagePath != null && imagePath!.trim().isNotEmpty);
 
-  String get selectionKey => id == null ? 'local:${localId ?? ''}' : 'server:$id';
+  String get selectionKey =>
+      id == null ? 'local:${localId ?? ''}' : 'server:$id';
 
   factory Reading.fromJson(Map<String, dynamic> json) {
     final meter = _map(json['meter']);
     final subscriber = _map(meter?['subscriber']);
     final square = _map(subscriber?['square'] ?? meter?['square']);
-    final periodStart = _date(json['period_start'] ?? json['reading_date']) ?? DateTime.now();
-    final periodEnd = _date(json['period_end'] ?? json['reading_date']) ?? periodStart;
+    final periodStart =
+        _date(json['period_start'] ?? json['reading_date']) ?? DateTime.now();
+    final periodEnd =
+        _date(json['period_end'] ?? json['reading_date']) ?? periodStart;
     final readingId = _int(json['id'] ?? json['server_id']);
     return Reading(
       id: readingId,
+      createdAt: _date(json['created_at']),
       localId: _string(json['local_id'] ?? json['client_action_id']),
       meterId: _int(json['meter_id'] ?? meter?['id']) ?? 0,
-      readingDate: _date(json['reading_date'] ?? json['actual_reading_date']) ?? periodEnd,
+      readingDate:
+          _date(json['reading_date'] ?? json['actual_reading_date']) ??
+          periodEnd,
       actualReadingDate: _date(json['actual_reading_date']),
       periodStart: periodStart,
       periodEnd: periodEnd,
       previousReading: _double(json['previous_reading']) ?? 0,
       currentReading: _double(json['current_reading']) ?? 0,
-      consumptionUnits: _double(json['consumption_units']) ??
+      consumptionUnits:
+          _double(json['consumption_units']) ??
           ((_double(json['current_reading']) ?? 0) -
               (_double(json['previous_reading']) ?? 0)),
       isInvoiced: json['is_invoiced'] == true || json['is_invoiced'] == 1,
       invoiceId: _int(json['invoice_id']),
       meterCode: _string(json['meter_code'] ?? meter?['unique_code']),
       pathNumber: _int(json['path_number'] ?? meter?['path_number']),
-      squareId: _int(json['square_id'] ?? subscriber?['square_id'] ?? square?['id']),
+      squareId: _int(
+        json['square_id'] ?? subscriber?['square_id'] ?? square?['id'],
+      ),
       squareName: _string(json['square_name'] ?? square?['name']),
       subscriberName: _string(json['subscriber_name'] ?? subscriber?['name']),
       tenantName: _string(json['tenant_name'] ?? meter?['tenant_name']),
@@ -90,43 +101,44 @@ class Reading {
   }
 
   factory Reading.fromLocalRow(Map<String, Object?> row) => Reading(
-        id: _int(row['server_id']),
-        localId: _string(row['local_id']),
-        meterId: _int(row['meter_id']) ?? 0,
-        readingDate: _date(row['reading_date']) ?? DateTime.now(),
-        actualReadingDate: _date(row['actual_reading_date']),
-        periodStart: _date(row['period_start']) ?? DateTime.now(),
-        periodEnd: _date(row['period_end']) ?? DateTime.now(),
-        previousReading: _double(row['previous_reading']) ?? 0,
-        currentReading: _double(row['current_reading']) ?? 0,
-        consumptionUnits: _double(row['consumption_units']) ?? 0,
-        isInvoiced: row['is_invoiced'] == 1 || row['is_invoiced'] == true,
-        invoiceId: _int(row['invoice_id']),
-        meterCode: _string(row['unique_code'] ?? row['meter_code']),
-        pathNumber: _int(row['path_number']),
-        squareId: _int(row['square_id']),
-        squareName: _string(row['square_name']),
-        subscriberName: _string(row['subscriber_name']),
-        tenantName: _string(row['tenant_name']),
-        imagePath: _string(row['image_path']),
-        isSynced: row['server_id'] != null,
-        syncError: _string(row['sync_error']),
-      );
+    id: _int(row['server_id']),
+    localId: _string(row['local_id']),
+    meterId: _int(row['meter_id']) ?? 0,
+    readingDate: _date(row['reading_date']) ?? DateTime.now(),
+    actualReadingDate: _date(row['actual_reading_date']),
+    periodStart: _date(row['period_start']) ?? DateTime.now(),
+    periodEnd: _date(row['period_end']) ?? DateTime.now(),
+    previousReading: _double(row['previous_reading']) ?? 0,
+    currentReading: _double(row['current_reading']) ?? 0,
+    consumptionUnits: _double(row['consumption_units']) ?? 0,
+    isInvoiced: row['is_invoiced'] == 1 || row['is_invoiced'] == true,
+    invoiceId: _int(row['invoice_id']),
+    meterCode: _string(row['unique_code'] ?? row['meter_code']),
+    pathNumber: _int(row['path_number']),
+    squareId: _int(row['square_id']),
+    squareName: _string(row['square_name']),
+    subscriberName: _string(row['subscriber_name']),
+    tenantName: _string(row['tenant_name']),
+    imagePath: _string(row['image_path']),
+    isSynced: row['server_id'] != null,
+    syncError: _string(row['sync_error']),
+    createdAt: _date(row['created_at']),
+  );
 
   Map<String, dynamic> toSyncJson({String? imageBase64}) => {
-        'client_action_id': localId,
-        'sync_uuid': localId,
-        'meter_id': meterId,
-        'reading_date': _dateOnly(readingDate),
-        'actual_reading_date': _dateOnly(actualReadingDate ?? readingDate),
-        'period_start': _dateOnly(periodStart),
-        'period_end': _dateOnly(periodEnd),
-        'previous_reading': previousReading,
-        'current_reading': currentReading,
-        'consumption_units': consumptionUnits,
-        if (imageBase64 != null) 'image_base64': imageBase64,
-        if (imagePath != null) 'image_filename': imagePath!.split('/').last,
-      };
+    'client_action_id': localId,
+    'sync_uuid': localId,
+    'meter_id': meterId,
+    'reading_date': _dateOnly(readingDate),
+    'actual_reading_date': _dateOnly(actualReadingDate ?? readingDate),
+    'period_start': _dateOnly(periodStart),
+    'period_end': _dateOnly(periodEnd),
+    'previous_reading': previousReading,
+    'current_reading': currentReading,
+    'consumption_units': consumptionUnits,
+    if (imageBase64 != null) 'image_base64': imageBase64,
+    if (imagePath != null) 'image_filename': imagePath!.split('/').last,
+  };
 }
 
 class MeterPeriodResponse {
@@ -166,27 +178,27 @@ class MeterPeriodResponse {
   }
 
   MeterPeriodResponse asOfflineEstimate() => MeterPeriodResponse(
-        lastReading: lastReading,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
-        autoIssueInvoice: autoIssueInvoice,
-        hasSubscriptionFee: hasSubscriptionFee,
-        subscriptionInstallment: subscriptionInstallment,
-        hasTankerFee: hasTankerFee,
-        tankerInstallment: tankerInstallment,
-        isOfflineEstimate: true,
-      );
+    lastReading: lastReading,
+    periodStart: periodStart,
+    periodEnd: periodEnd,
+    autoIssueInvoice: autoIssueInvoice,
+    hasSubscriptionFee: hasSubscriptionFee,
+    subscriptionInstallment: subscriptionInstallment,
+    hasTankerFee: hasTankerFee,
+    tankerInstallment: tankerInstallment,
+    isOfflineEstimate: true,
+  );
 
   Map<String, dynamic> toJson() => {
-        'last_reading': lastReading,
-        'period_start': _dateOnly(periodStart),
-        'period_end': _dateOnly(periodEnd),
-        'auto_issue_invoice': autoIssueInvoice,
-        'has_subscription_fee': hasSubscriptionFee,
-        'subscription_installment': subscriptionInstallment,
-        'has_tanker_fee': hasTankerFee,
-        'tanker_installment': tankerInstallment,
-      };
+    'last_reading': lastReading,
+    'period_start': _dateOnly(periodStart),
+    'period_end': _dateOnly(periodEnd),
+    'auto_issue_invoice': autoIssueInvoice,
+    'has_subscription_fee': hasSubscriptionFee,
+    'subscription_installment': subscriptionInstallment,
+    'has_tanker_fee': hasTankerFee,
+    'tanker_installment': tankerInstallment,
+  };
 }
 
 class ReadingSubmission {
@@ -221,24 +233,24 @@ class ReadingSubmission {
   double get consumption => currentReading - previousReading;
 
   Map<String, dynamic> toJson({String? localId}) => {
-        if (localId != null) 'client_action_id': localId,
-        if (localId != null) 'sync_uuid': localId,
-        'meter_id': meterId,
-        'reading_date': _dateOnly(readingDate),
-        'actual_reading_date': _dateOnly(readingDate),
-        'period_start': _dateOnly(periodStart),
-        'period_end': _dateOnly(periodEnd),
-        'previous_reading': previousReading,
-        'current_reading': currentReading,
-        // Kept in the local queue payload so offline rows show the real
-        // consumption before the server recalculates it on sync.
-        'consumption_units': consumption,
-        'has_subscription_fee': hasSubscriptionFee,
-        'subscription_installment': subscriptionInstallment,
-        'has_tanker_fee': hasTankerFee,
-        'tanker_installment': tankerInstallment,
-        'auto_issue_invoice': autoIssueInvoice,
-      };
+    if (localId != null) 'client_action_id': localId,
+    if (localId != null) 'sync_uuid': localId,
+    'meter_id': meterId,
+    'reading_date': _dateOnly(readingDate),
+    'actual_reading_date': _dateOnly(readingDate),
+    'period_start': _dateOnly(periodStart),
+    'period_end': _dateOnly(periodEnd),
+    'previous_reading': previousReading,
+    'current_reading': currentReading,
+    // Kept in the local queue payload so offline rows show the real
+    // consumption before the server recalculates it on sync.
+    'consumption_units': consumption,
+    'has_subscription_fee': hasSubscriptionFee,
+    'subscription_installment': subscriptionInstallment,
+    'has_tanker_fee': hasTankerFee,
+    'tanker_installment': tankerInstallment,
+    'auto_issue_invoice': autoIssueInvoice,
+  };
 }
 
 class InvoiceSummary {
@@ -287,27 +299,27 @@ class InvoiceSummary {
   final double? creditApplied;
 
   factory InvoiceSummary.fromJson(Map<String, dynamic> json) => InvoiceSummary(
-        id: _int(json['id']),
-        billNumber: _string(json['bill_number']),
-        billDate: _date(json['bill_date']),
-        totalAmount: _double(json['total_amount']) ?? 0,
-        subscriberName: _string(json['subscriber_name']),
-        subscriberPhone: _string(json['subscriber_phone']),
-        meterCode: _string(json['meter_code']),
-        squareName: _string(json['square']),
-        pdfUrl: _string(json['pdf_url']),
-        periodStart: _date(json['period_start']),
-        periodEnd: _date(json['period_end']),
-        previousReading: _double(json['previous_reading']),
-        currentReading: _double(json['current_reading']),
-        consumptionUnits: _double(json['consumption_units']),
-        unitPrice: _double(json['unit_price']),
-        consumptionFee: _double(json['consumption_fee']),
-        subscriptionInstallment: _double(json['subscription_installment']),
-        tankerCharges: _double(json['tanker_charges']),
-        previousBalance: _double(json['previous_balance']),
-        creditApplied: _double(json['credit_applied']),
-      );
+    id: _int(json['id']),
+    billNumber: _string(json['bill_number']),
+    billDate: _date(json['bill_date']),
+    totalAmount: _double(json['total_amount']) ?? 0,
+    subscriberName: _string(json['subscriber_name']),
+    subscriberPhone: _string(json['subscriber_phone']),
+    meterCode: _string(json['meter_code']),
+    squareName: _string(json['square']),
+    pdfUrl: _string(json['pdf_url']),
+    periodStart: _date(json['period_start']),
+    periodEnd: _date(json['period_end']),
+    previousReading: _double(json['previous_reading']),
+    currentReading: _double(json['current_reading']),
+    consumptionUnits: _double(json['consumption_units']),
+    unitPrice: _double(json['unit_price']),
+    consumptionFee: _double(json['consumption_fee']),
+    subscriptionInstallment: _double(json['subscription_installment']),
+    tankerCharges: _double(json['tanker_charges']),
+    previousBalance: _double(json['previous_balance']),
+    creditApplied: _double(json['credit_applied']),
+  );
 }
 
 class ReadingSaveResult {

@@ -34,15 +34,20 @@ class _SubscriberCard extends StatelessWidget {
         padding: EdgeInsets.zero,
         radius: 16,
         borderColor: selected ? scheme.primary : null,
-        onTap: onTap,
         child: InkWell(
+          onTap: onTap,
           onLongPress: onToggleSelect,
           borderRadius: BorderRadius.circular(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(12, presentation.compact ? 8 : 14, 8, 8),
+                padding: EdgeInsetsDirectional.fromSTEB(
+                  12,
+                  presentation.compact ? 8 : 14,
+                  8,
+                  8,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -64,12 +69,24 @@ class _SubscriberCard extends StatelessWidget {
                             ),
                           ),
                           const Gap(5),
-                          if (presentation.isVisible('square') || presentation.isVisible('meters')) Text(
-                            '${presentation.isVisible('square') ? s.squareName ?? SubscriberExperienceStrings.noSquare : ''}'
-                            '${presentation.isVisible('meters') ? ' • ${SubscriberExperienceStrings.meterCount(s.metersCount)}' : ''}',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          if (presentation.isVisible('phone') && s.phone?.isNotEmpty == true) ...[
+                          if (presentation.isVisible('path'))
+                            Text(
+                              s.pathNumbers.isEmpty
+                                  ? SubscriberExperienceStrings.noPath
+                                  : SubscriberExperienceStrings.pathsLabel(
+                                      s.pathNumbers,
+                                    ),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          if (presentation.isVisible('square') ||
+                              presentation.isVisible('meters'))
+                            Text(
+                              '${presentation.isVisible('square') ? s.squareName ?? SubscriberExperienceStrings.noSquare : ''}'
+                              '${presentation.isVisible('meters') ? ' • ${SubscriberExperienceStrings.meterCount(s.metersCount)}' : ''}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          if (presentation.isVisible('phone') &&
+                              s.phone?.isNotEmpty == true) ...[
                             const Gap(4),
                             Directionality(
                               textDirection: TextDirection.ltr,
@@ -113,19 +130,22 @@ class _SubscriberCard extends StatelessWidget {
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (presentation.isVisible('status')) StatusBadge(
-                      label: s.status.label,
-                      color: switch (s.status) {
-                        SubscriberStatus.active => AppColors.success,
-                        SubscriberStatus.suspended => AppColors.warning,
-                        SubscriberStatus.inactive => AppColors.danger,
-                      },
-                    ),
-                    if (presentation.isVisible('balance')) Text(
-                      SubscriberExperienceStrings.balance,
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    if (presentation.isVisible('balance')) _SubscriberCardMoney(amount: s.netBalance),
+                    if (presentation.isVisible('status'))
+                      StatusBadge(
+                        label: s.status.label,
+                        color: switch (s.status) {
+                          SubscriberStatus.active => AppColors.success,
+                          SubscriberStatus.suspended => AppColors.warning,
+                          SubscriberStatus.inactive => AppColors.danger,
+                        },
+                      ),
+                    if (presentation.isVisible('balance'))
+                      Text(
+                        SubscriberExperienceStrings.balance,
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    if (presentation.isVisible('balance'))
+                      _SubscriberCardMoney(amount: s.netBalance),
                   ],
                 ),
               ),
@@ -289,6 +309,13 @@ class _SubscriberPeek extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(subscriber.name, style: theme.textTheme.headlineSmall),
+            RecordLocationLabel(
+              location: RecordLocation(
+                squareId: subscriber.squareId,
+                squareName: subscriber.squareName,
+                paths: subscriber.pathNumbers,
+              ),
+            ),
             const Gap(4),
             Text('ملخص سريع لملف المشترك', style: theme.textTheme.bodySmall),
             const Gap(14),

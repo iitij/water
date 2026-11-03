@@ -87,6 +87,11 @@ try {
         }
     }
 
+    $releaseDll = Join-Path $releaseDirectory 'flutter_windows.dll'
+    if ((Get-Item -LiteralPath $releaseDll).Length -gt 35MB) {
+        throw "Debug flutter_windows.dll detected in $releaseDirectory. Run without -SkipBuild to compile a release engine."
+    }
+
     $pubspecText = Get-Content -LiteralPath (Join-Path $projectDirectory 'pubspec.yaml') -Raw
     $versionMatch = [regex]::Match($pubspecText, '(?m)^version:\s*(\d+\.\d+\.\d+)(?:-([0-9A-Za-z.-]+))?(?:\+(\d+))?\s*$')
     if (-not $versionMatch.Success) { throw 'pubspec.yaml must contain a numeric x.y.z version with an optional prerelease and numeric build number.' }

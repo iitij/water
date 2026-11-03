@@ -12,6 +12,7 @@ class _SummarySlot extends StatelessWidget {
     required this.primaryIcon,
     required this.onPrimary,
     required this.canViewDashboard,
+    required this.canViewInvoices,
     required this.onDashboard,
   });
 
@@ -23,6 +24,7 @@ class _SummarySlot extends StatelessWidget {
   final IconData primaryIcon;
   final VoidCallback onPrimary;
   final bool canViewDashboard;
+  final bool canViewInvoices;
   final VoidCallback onDashboard;
 
   @override
@@ -37,6 +39,7 @@ class _SummarySlot extends StatelessWidget {
         primaryIcon: primaryIcon,
         onPrimary: onPrimary,
         canViewDashboard: canViewDashboard,
+        canViewInvoices: canViewInvoices,
         onDashboard: onDashboard,
       );
     }
@@ -52,6 +55,7 @@ class _SummarySlot extends StatelessWidget {
           primaryIcon: primaryIcon,
           onPrimary: onPrimary,
           canViewDashboard: canViewDashboard,
+          canViewInvoices: canViewInvoices,
           onDashboard: onDashboard,
           outstanding: stats?.outstandingAmount,
           collected: stats?.monthlyCollection,
@@ -76,6 +80,7 @@ class _BalancePanel extends StatelessWidget {
     required this.primaryIcon,
     required this.onPrimary,
     required this.canViewDashboard,
+    required this.canViewInvoices,
     required this.onDashboard,
     this.outstanding,
     this.collected,
@@ -90,6 +95,7 @@ class _BalancePanel extends StatelessWidget {
   final IconData primaryIcon;
   final VoidCallback onPrimary;
   final bool canViewDashboard;
+  final bool canViewInvoices;
   final VoidCallback onDashboard;
   final double? outstanding;
   final double? collected;
@@ -177,11 +183,10 @@ class _BalancePanel extends StatelessWidget {
             ),
           if (_hasNumbers) ...<Widget>[
             const SizedBox(height: 3),
-            Text(
-              '${unpaidInvoices ?? 0} فاتورة غير مسددة · ${overdueInvoices ?? 0} متأخرة',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: _onPanelMuted, fontSize: 10.5, height: 1.4),
+            HomeInvoiceCounts(
+              unpaid: unpaidInvoices ?? 0,
+              overdue: overdueInvoices ?? 0,
+              canViewInvoices: canViewInvoices,
             ),
             const SizedBox(height: 14),
             ClipRRect(

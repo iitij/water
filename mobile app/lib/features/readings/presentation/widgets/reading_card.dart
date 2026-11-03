@@ -110,6 +110,15 @@ class _ReadingCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                RecordLocationLabel(
+                  location: RecordLocation(
+                    squareId: reading.squareId,
+                    squareName: reading.squareName,
+                    paths: [
+                      if (reading.pathNumber != null) reading.pathNumber!,
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 11),
                 Row(
                   children: <Widget>[

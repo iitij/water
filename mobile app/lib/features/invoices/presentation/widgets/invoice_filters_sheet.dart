@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/l10n/invoice_summary_strings.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../data/datasources/references_remote_datasource.dart';
 import '../../data/models/invoice_model.dart';
@@ -79,6 +80,7 @@ class InvoiceFiltersSheet extends StatefulWidget {
 class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
   static const List<(String, String)> _statusOptions = <(String, String)>[
     ('', 'كل الحالات'),
+    ('unpaid', InvoiceSummaryStrings.unpaid),
     ('issued', 'صادرة'),
     ('partially_paid', 'مسددة جزئياً'),
     ('paid', 'مسددة'),

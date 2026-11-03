@@ -1,4 +1,5 @@
 import '../../../../core/fouad/json_read.dart';
+import '../../../../core/models/record_location.dart';
 import '../../domain/entities/subscription_fee.dart';
 
 class SubscriptionFeeModel extends SubscriptionFee {
@@ -14,6 +15,7 @@ class SubscriptionFeeModel extends SubscriptionFee {
     super.invoiceNumber,
     super.notes,
     super.createdAt,
+    super.location,
   });
 
   factory SubscriptionFeeModel.fromJson(Map<String, dynamic> j) {
@@ -22,6 +24,7 @@ class SubscriptionFeeModel extends SubscriptionFee {
     final inv = jMapOrNull(j['invoice']);
     return SubscriptionFeeModel(
       id: jInt(j['id']),
+      location: RecordLocation.fromJson(j),
       subscriberId: jInt(j['subscriber_id']),
       subscriberName: jStr(sub?['name'] ?? j['subscriber_name']),
       meterId: jIntOrNull(j['meter_id']),

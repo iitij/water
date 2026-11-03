@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/reading_invoice_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -438,7 +439,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     if (invoice == null) return;
     final service = widget.invoiceActions;
     if (service == null) {
-      _showMessage('خدمة الطباعة والواتساب ستُربط من وحدة الفواتير.');
+      _showMessage(ReadingInvoiceStrings.unavailable);
       return;
     }
     setState(() => _isRunningInvoiceAction = true);
@@ -470,9 +471,9 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -1133,35 +1134,60 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                 ),
                 const SizedBox(height: 14),
                 if (invoice != null && result.invoiceIssued) ...[
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: AppSecondaryButton(
-                          label: 'طباعة الفاتورة',
-                          icon: Icons.print_outlined,
-                          onPressed: _isRunningInvoiceAction
-                              ? null
-                              : () => _runInvoiceAction(
-                                  (item) =>
-                                      widget.invoiceActions!.printInvoice(item),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: AppSecondaryButton(
-                          label: 'واتساب',
-                          icon: Icons.chat_outlined,
-                          onPressed: _isRunningInvoiceAction
-                              ? null
-                              : () => _runInvoiceAction(
-                                  (item) => widget.invoiceActions!
-                                      .shareOnWhatsApp(item),
-                                ),
-                        ),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth >= 600
+                          ? (constraints.maxWidth - 20) / 3
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: <Widget>[
+                          SizedBox(
+                            width: width,
+                            child: AppSecondaryButton(
+                              label: 'طباعة الفاتورة',
+                              icon: Icons.print_outlined,
+                              onPressed: _isRunningInvoiceAction
+                                  ? null
+                                  : () => _runInvoiceAction(
+                                      (item) => widget.invoiceActions!
+                                          .printInvoice(item),
+                                    ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: AppSecondaryButton(
+                              label: ReadingInvoiceStrings.whatsapp,
+                              icon: Icons.chat_outlined,
+                              onPressed: _isRunningInvoiceAction
+                                  ? null
+                                  : () => _runInvoiceAction(
+                                      (item) => widget.invoiceActions!
+                                          .shareOnWhatsApp(item),
+                                    ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: AppSecondaryButton(
+                              label: ReadingInvoiceStrings.sms,
+                              icon: Icons.sms_outlined,
+                              onPressed: _isRunningInvoiceAction
+                                  ? null
+                                  : () => _runInvoiceAction(
+                                      (item) =>
+                                          widget.invoiceActions!.sendSms(item),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
+                  const SizedBox(height: 8),
+                  const InfoNotice(text: ReadingInvoiceStrings.sharingHelp),
                   if (_isRunningInvoiceAction) ...<Widget>[
                     const SizedBox(height: 8),
                     const ShimmerSkeleton(height: 4),
@@ -1265,14 +1291,20 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: <Widget>[
-          Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-          if (ltr)
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(value, style: style),
-            )
-          else
-            Text(value, style: style),
+          Expanded(
+            flex: 2,
+            child: Text(label, style: theme.textTheme.bodySmall),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              style: style,
+              textDirection: ltr ? TextDirection.ltr : null,
+              textAlign: TextAlign.left,
+            ),
+          ),
         ],
       ),
     );

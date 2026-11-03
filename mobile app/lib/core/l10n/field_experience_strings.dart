@@ -4,6 +4,14 @@ abstract final class FieldExperienceStrings {
   static const subtitle = 'العداد، القراءة، ثم التالي';
   static const searchHint = 'ابحث بالاسم أو رقم العداد أو المسار';
   static const searchHelp = 'للبحث بالمربع والمسار استخدم 4/1';
+  static const searchByPath = 'المسار';
+  static const searchByMeter = 'الاسم أو رقم العداد';
+  static const pathSearchHint = 'أدخل رقم المسار أو المربع/المسار';
+  static const pathSearchHelp =
+      'اكتب 6 لعرض المسار 6 فقط، أو 4/6 للمسار 6 في المربع 4.';
+  static const meterSearchHint = 'ابحث باسم المشترك أو رقم العداد';
+  static const meterSearchHelp =
+      'اكتب الاسم أو رقم العداد كاملًا أو جزءًا منه.';
   static const downloadPack = 'تنزيل حزمة العمل أوفلاين';
   static const scanMeter = 'مسح باركود العداد';
   static const scanHint = 'وجّه الكاميرا إلى باركود أو QR الموجود على العداد.';

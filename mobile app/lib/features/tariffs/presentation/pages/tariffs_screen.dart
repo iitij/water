@@ -48,9 +48,13 @@ class _TariffsBodyState extends State<_TariffsBody> {
     setState(() => _presentation = value);
     if (previous.sortBy != value.sortBy ||
         previous.descending != value.descending ||
-        previous.pageSize != value.pageSize) {
+        previous.pageSize != value.pageSize ||
+        previous.createdFrom != value.createdFrom ||
+        previous.createdTo != value.createdTo) {
       context.read<TariffsCubit>().setPresentation(
         pageSize: value.pageSize,
+        addedFrom: value.createdFrom,
+        addedTo: value.createdTo,
         sortBy: value.sortBy,
         sortDirection: value.descending ? 'desc' : 'asc',
       );
@@ -76,12 +80,17 @@ class _TariffsBodyState extends State<_TariffsBody> {
               ignoring: state.isLoading,
               child: ListPresentationControls(
                 settings: _presentation,
+                filterOptions: const ListFilterOptions(
+                  hasCreatedAt: true,
+                  search: false,
+                ),
                 sortOptions: const {
                   'start_date': ListOptionsStrings.startDate,
                   'end_date': ListOptionsStrings.endDate,
                   'name': ListOptionsStrings.name,
                   'unit_price': ListOptionsStrings.unitPrice,
                   'id': ListOptionsStrings.id,
+                  'created_at': ListOptionsStrings.createdAt,
                 },
                 fields: const {'period': ListOptionsStrings.period},
                 onChanged: _applyPresentation,

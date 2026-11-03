@@ -19,6 +19,7 @@ import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../shared/widgets/subscriber_meter_selector.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
@@ -38,10 +39,15 @@ bool _hasSubscriptionFeesCubit(BuildContext context) {
 
 /// SCR-19 — رسوم الاشتراك: Sum Summarizer + فلتر حالة + إضافة/تعديل/حذف/حذف جماعي + إصدار فاتورة.
 class SubscriptionFeesScreen extends StatelessWidget {
-  const SubscriptionFeesScreen({super.key, this.onAddFee, this.onGenerateInvoice});
+  const SubscriptionFeesScreen({
+    super.key,
+    this.onAddFee,
+    this.onGenerateInvoice,
+  });
 
   final VoidCallback? onAddFee;
-  final Future<void> Function(BuildContext context, SubscriptionFee? fee)? onGenerateInvoice;
+  final Future<void> Function(BuildContext context, SubscriptionFee? fee)?
+  onGenerateInvoice;
 
   @override
   Widget build(BuildContext context) {
@@ -65,15 +71,20 @@ class _SubscriptionFeesView extends StatelessWidget {
   const _SubscriptionFeesView({this.onAddFee, this.onGenerateInvoice});
 
   final VoidCallback? onAddFee;
-  final Future<void> Function(BuildContext context, SubscriptionFee? fee)? onGenerateInvoice;
+  final Future<void> Function(BuildContext context, SubscriptionFee? fee)?
+  onGenerateInvoice;
 
-  Future<void> _openGenerateInvoiceSheet(BuildContext context, {SubscriptionFee? fee}) async {
+  Future<void> _openGenerateInvoiceSheet(
+    BuildContext context, {
+    SubscriptionFee? fee,
+  }) async {
     if (onGenerateInvoice != null) {
       await onGenerateInvoice!(context, fee);
       return;
     }
     final cubit = context.read<SubscriptionFeesCubit>();
-    final canUseFinanceSheet = GetIt.I.isRegistered<InvoicesRepository>() ||
+    final canUseFinanceSheet =
+        GetIt.I.isRegistered<InvoicesRepository>() ||
         GetIt.I.isRegistered<DioClient>();
     if (canUseFinanceSheet) {
       await GenerateSubscriptionInvoiceSheet.show(
@@ -88,14 +99,17 @@ class _SubscriptionFeesView extends StatelessWidget {
     if (fee != null) {
       final bill = await cubit.invoice(fee.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('صدرت فاتورة الاشتراك: $bill')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('صدرت فاتورة الاشتراك: $bill')));
       }
     }
   }
 
-  Future<void> _openFeeDialog(BuildContext context, {SubscriptionFee? existing}) async {
+  Future<void> _openFeeDialog(
+    BuildContext context, {
+    SubscriptionFee? existing,
+  }) async {
     if (existing == null && onAddFee != null) {
       onAddFee!();
       return;
@@ -127,7 +141,9 @@ class _SubscriptionFeesView extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(existing == null ? 'إضافة رسوم اشتراك' : 'تعديل رسوم الاشتراك'),
+          title: Text(
+            existing == null ? 'إضافة رسوم اشتراك' : 'تعديل رسوم الاشتراك',
+          ),
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
@@ -148,48 +164,81 @@ class _SubscriptionFeesView extends StatelessWidget {
                     )
                   else ...[
                     InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'المشترك',
+                      decoration: const InputDecoration(labelText: 'المشترك'),
+                      child: Text(
+                        pickedSub?.name ??
+                            existing.subscriberName ??
+                            'مشترك #${existing.subscriberId}',
                       ),
-                      child: Text(pickedSub?.name ?? existing.subscriberName ?? 'مشترك #${existing.subscriberId}'),
                     ),
                     if (existing.invoiceId == null)
                       TextButton.icon(
                         icon: const Icon(Icons.person_search_outlined),
                         label: Text(AppStrings.of(context).feeChangeSubscriber),
-                        onPressed: saving ? null : () => setDialogState(() => changingSubscriber = !changingSubscriber),
+                        onPressed: saving
+                            ? null
+                            : () => setDialogState(
+                                () => changingSubscriber = !changingSubscriber,
+                              ),
                       ),
-                    if (changingSubscriber) SizedBox(
-                      height: 220,
-                      child: SubscriberMeterSelectorWidget(repository: repo, showMeterPicker: false,
-                        onSelected: (subscriber, _) async {
-                          setDialogState(() {
-                            pickedSub = subscriber; pickedMeterId = null;
-                            metersForExisting = []; changingSubscriber = false;
-                          });
-                          try {
-                            final detail = await repo.getSubscriber360(subscriber.id);
-                            if (ctx.mounted && pickedSub?.id == subscriber.id) {
-                              setDialogState(() => metersForExisting = detail.summary.meterBalances);
+                    if (changingSubscriber)
+                      SizedBox(
+                        height: 220,
+                        child: SubscriberMeterSelectorWidget(
+                          repository: repo,
+                          showMeterPicker: false,
+                          onSelected: (subscriber, _) async {
+                            setDialogState(() {
+                              pickedSub = subscriber;
+                              pickedMeterId = null;
+                              metersForExisting = [];
+                              changingSubscriber = false;
+                            });
+                            try {
+                              final detail = await repo.getSubscriber360(
+                                subscriber.id,
+                              );
+                              if (ctx.mounted &&
+                                  pickedSub?.id == subscriber.id) {
+                                setDialogState(
+                                  () => metersForExisting =
+                                      detail.summary.meterBalances,
+                                );
+                              }
+                            } catch (error) {
+                              if (ctx.mounted) {
+                                setDialogState(() => saveError = '$error');
+                              }
                             }
-                          } catch (error) {
-                            if (ctx.mounted) setDialogState(() => saveError = '$error');
-                          }
-                        }),
-                    ),
+                          },
+                        ),
+                      ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<int?>(
-                      key: ValueKey('fee-meter-${pickedSub?.id}-$pickedMeterId'),
-                      initialValue: metersForExisting.any((m) => m.meterId == pickedMeterId) ? pickedMeterId : null,
-                      decoration: const InputDecoration(
-                        labelText: 'العداد',
+                      key: ValueKey(
+                        'fee-meter-${pickedSub?.id}-$pickedMeterId',
                       ),
+                      initialValue:
+                          metersForExisting.any(
+                            (m) => m.meterId == pickedMeterId,
+                          )
+                          ? pickedMeterId
+                          : null,
+                      decoration: const InputDecoration(labelText: 'العداد'),
                       items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('بدون عداد محدد')),
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('بدون عداد محدد'),
+                        ),
                         for (final m in metersForExisting)
-                          DropdownMenuItem<int?>(value: m.meterId, child: Text(m.title)),
+                          DropdownMenuItem<int?>(
+                            value: m.meterId,
+                            child: Text(m.title),
+                          ),
                       ],
-                      onChanged: saving ? null : (v) => setDialogState(() => pickedMeterId = v),
+                      onChanged: saving
+                          ? null
+                          : (v) => setDialogState(() => pickedMeterId = v),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -204,23 +253,25 @@ class _SubscriptionFeesView extends StatelessWidget {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<FeeStatus>(
                     initialValue: selectedStatus,
-                    decoration: const InputDecoration(
-                      labelText: 'الحالة',
-                    ),
+                    decoration: const InputDecoration(labelText: 'الحالة'),
                     items: [
                       for (final s in FeeStatus.values)
                         DropdownMenuItem(value: s, child: Text(s.label)),
                     ],
-                    onChanged: (v) => setDialogState(() => selectedStatus = v ?? selectedStatus),
+                    onChanged: (v) => setDialogState(
+                      () => selectedStatus = v ?? selectedStatus,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: notesCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'ملاحظات',
-                    ),
+                    decoration: const InputDecoration(labelText: 'ملاحظات'),
                   ),
-                  if (saveError != null) Text(saveError!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                  if (saveError != null)
+                    Text(
+                      saveError!,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                    ),
                   if (saving) const LinearProgressIndicator(),
                 ],
               ),
@@ -232,42 +283,62 @@ class _SubscriptionFeesView extends StatelessWidget {
               child: const Text('إلغاء'),
             ),
             FilledButton(
-              onPressed: saving ? null : () async {
-                final amount = double.tryParse(normalizeDigits(amountCtrl.text));
-                if (amount == null || !amount.isFinite || amount <= 0) {
-                  setDialogState(() => saveError = AppStrings.of(ctx).setupAmountInvalid);
-                  return;
-                }
-                final notes = notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim();
-                if (existing == null && pickedSub == null) return;
-                setDialogState(() { saving = true; saveError = null; });
-                bool success;
-                if (existing == null) {
-                  final sub = pickedSub;
-                  if (sub == null) return;
-                  success = await cubit.create(
-                    subscriberId: sub.id,
-                    meterId: pickedMeterId,
-                    amount: amount,
-                    status: selectedStatus,
-                    notes: notes,
-                  );
-                } else {
-                  success = await cubit.update(SubscriptionFee(
-                    id: existing.id,
-                    subscriberId: pickedSub?.id ?? existing.subscriberId,
-                    meterId: pickedMeterId,
-                    amount: amount,
-                    status: selectedStatus,
-                    invoiceId: existing.invoiceId,
-                    notes: notes,
-                  ));
-                }
-                if (!ctx.mounted) return;
-                if (success) { Navigator.pop(ctx); } else {
-                  setDialogState(() { saving = false; saveError = cubit.state.error; });
-                }
-              },
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final amount = double.tryParse(
+                        normalizeDigits(amountCtrl.text),
+                      );
+                      if (amount == null || !amount.isFinite || amount <= 0) {
+                        setDialogState(
+                          () =>
+                              saveError = AppStrings.of(ctx).setupAmountInvalid,
+                        );
+                        return;
+                      }
+                      final notes = notesCtrl.text.trim().isEmpty
+                          ? null
+                          : notesCtrl.text.trim();
+                      if (existing == null && pickedSub == null) return;
+                      setDialogState(() {
+                        saving = true;
+                        saveError = null;
+                      });
+                      bool success;
+                      if (existing == null) {
+                        final sub = pickedSub;
+                        if (sub == null) return;
+                        success = await cubit.create(
+                          subscriberId: sub.id,
+                          meterId: pickedMeterId,
+                          amount: amount,
+                          status: selectedStatus,
+                          notes: notes,
+                        );
+                      } else {
+                        success = await cubit.update(
+                          SubscriptionFee(
+                            id: existing.id,
+                            subscriberId:
+                                pickedSub?.id ?? existing.subscriberId,
+                            meterId: pickedMeterId,
+                            amount: amount,
+                            status: selectedStatus,
+                            invoiceId: existing.invoiceId,
+                            notes: notes,
+                          ),
+                        );
+                      }
+                      if (!ctx.mounted) return;
+                      if (success) {
+                        Navigator.pop(ctx);
+                      } else {
+                        setDialogState(() {
+                          saving = false;
+                          saveError = cubit.state.error;
+                        });
+                      }
+                    },
               child: const Text('حفظ'),
             ),
           ],
@@ -287,20 +358,24 @@ class _SubscriptionFeesView extends StatelessWidget {
     if (!context.mounted) return;
     final deleted = await context.read<SubscriptionFeesCubit>().bulkDelete();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حذف $deleted سجل رسوم بنجاح')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('تم حذف $deleted سجل رسوم بنجاح')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<SubscriptionFeesCubit, SubscriptionFeesState>(
-      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listenWhen: (prev, curr) =>
+          curr.error != null && prev.error != curr.error,
       listener: (context, state) {
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.error!), backgroundColor: AppColors.danger),
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
+            ),
           );
         }
       },
@@ -321,7 +396,8 @@ class _SubscriptionFeesView extends StatelessWidget {
                 icon: Icons.delete_sweep_outlined,
                 tooltip: 'حذف المحدد (${state.selectedIds.length})',
                 size: 38,
-                onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
+                onPressed: () =>
+                    _handleBulkDelete(context, state.selectedIds.length),
               ),
             ],
             AppIconButton(
@@ -337,256 +413,424 @@ class _SubscriptionFeesView extends StatelessWidget {
               onPressed: () => _openFeeDialog(context),
             ),
           ],
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
-              child: AppStatStrip(
-                items: [
-                  AppStatItem(
-                    label: 'إجمالي الرسوم',
-                    value: CurrencyFormatter.format(state.totalSum),
-                    icon: Icons.payments_outlined,
-                    color: scheme.primary,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 0),
+                child: AppStatStrip(
+                  items: [
+                    AppStatItem(
+                      label: 'إجمالي الرسوم',
+                      value: CurrencyFormatter.format(state.totalSum),
+                      icon: Icons.payments_outlined,
+                      color: scheme.primary,
+                    ),
+                    AppStatItem(
+                      label: 'المفوتر',
+                      value: CurrencyFormatter.format(state.invoicedSum),
+                      icon: Icons.receipt_long_rounded,
+                      color: AppColors.success,
+                    ),
+                    AppStatItem(
+                      label: 'المتبقي غير المفوتر',
+                      value: CurrencyFormatter.format(state.remainingSum),
+                      icon: Icons.hourglass_bottom_rounded,
+                      color: AppColors.warning,
+                    ),
+                  ],
+                ),
+              ),
+              AppFilterChips(
+                children: <Widget>[
+                  AppFilterChip(
+                    label: 'الكل',
+                    selected: state.status == null,
+                    onTap: () => context
+                        .read<SubscriptionFeesCubit>()
+                        .filterStatus(null),
                   ),
-                  AppStatItem(
-                    label: 'المفوتر',
-                    value: CurrencyFormatter.format(state.invoicedSum),
-                    icon: Icons.receipt_long_rounded,
-                    color: AppColors.success,
-                  ),
-                  AppStatItem(
-                    label: 'المتبقي غير المفوتر',
-                    value: CurrencyFormatter.format(state.remainingSum),
-                    icon: Icons.hourglass_bottom_rounded,
-                    color: AppColors.warning,
-                  ),
+                  for (final status in FeeStatus.values)
+                    AppFilterChip(
+                      label: status.label,
+                      selected: state.status == status,
+                      onTap: () => context
+                          .read<SubscriptionFeesCubit>()
+                          .filterStatus(status),
+                    ),
                 ],
               ),
-            ),
-            AppFilterChips(
-              children: <Widget>[
-                AppFilterChip(
-                  label: 'الكل',
-                  selected: state.status == null,
-                  onTap: () => context.read<SubscriptionFeesCubit>().filterStatus(null),
-                ),
-                for (final status in FeeStatus.values)
-                  AppFilterChip(
-                    label: status.label,
-                    selected: state.status == status,
-                    onTap: () => context.read<SubscriptionFeesCubit>().filterStatus(status),
-                  ),
-              ],
-            ),
-            if (state.selectedIds.isNotEmpty)
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
-                child: Container(
-                  padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentSoft,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.checklist, size: 18, color: scheme.primary),
-                      const Gap(8),
-                      Expanded(
-                        child: Text(
-                          'تم تحديد ${state.selectedIds.length} رسوم اشتراك',
-                          style: Theme.of(context).textTheme.labelMedium,
+              if (state.selectedIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 0),
+                  child: Container(
+                    padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 12, 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentSoft,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.checklist, size: 18, color: scheme.primary),
+                        const Gap(8),
+                        Expanded(
+                          child: Text(
+                            'تم تحديد ${state.selectedIds.length} رسوم اشتراك',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: context.read<SubscriptionFeesCubit>().clearSelection,
-                        child: const Text('إلغاء'),
-                      ),
-                      TextButton(
-                        onPressed: () => _handleBulkDelete(context, state.selectedIds.length),
-                        child: const Text('حذف المحدد'),
-                      ),
-                    ],
+                        TextButton(
+                          onPressed: context
+                              .read<SubscriptionFeesCubit>()
+                              .clearSelection,
+                          child: const Text('إلغاء'),
+                        ),
+                        TextButton(
+                          onPressed: () => _handleBulkDelete(
+                            context,
+                            state.selectedIds.length,
+                          ),
+                          child: const Text('حذف المحدد'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            if (state.loading) const LinearProgressIndicator(),
-            Expanded(
-              child: ListPresentation<SubscriptionFee>(
-                items: state.fees,
-                initialSettings: const ListPresentationSettings(sortBy: 'id'),
-                sortValues: {
-                  'id': (label: ListOptionsStrings.id, value: (fee) => fee.id),
-                  'subscriber': (label: ListOptionsStrings.subscriber, value: (fee) => fee.subscriberName ?? ''),
-                  'amount': (label: ListOptionsStrings.amount, value: (fee) => fee.amount),
-                  'status': (label: ListOptionsStrings.status, value: (fee) => fee.status.index),
-                  'date': (label: ListOptionsStrings.date, value: (fee) => fee.createdAt ?? ''),
-                },
-                fields: const {'meter': ListOptionsStrings.meter, 'date': ListOptionsStrings.date,
-                  'invoice': ListOptionsStrings.invoice, 'notes': ListOptionsStrings.notes},
-                builder: (context, fees, options) => fees.isEmpty && !state.loading
-                  ? const Center(child: AdminEmptyView(title: 'لا توجد رسوم اشتراك مطابقة'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(top: 10, bottom: 24),
-                      itemCount: fees.length,
-                      itemBuilder: (_, i) {
-                        final f = fees[i];
-                        final checked = state.selectedIds.contains(f.id);
-                        return Padding(
-                          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
-                          child: AppCard(
-                            padding: EdgeInsets.zero,
-                            color: checked ? scheme.primary.withValues(alpha: .04) : null,
-                            borderColor: checked ? scheme.primary.withValues(alpha: .4) : null,
-                            child: InkWell(
-                              onLongPress: () => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
-                              borderRadius: BorderRadius.circular(AppRadius.xl),
-                              child: Padding(
-                                padding: EdgeInsets.all(options.compact ? 8 : 12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+              if (state.loading) const LinearProgressIndicator(),
+              Expanded(
+                child: ListPresentation<SubscriptionFee>(
+                  items: state.fees,
+                  pathNumbers: (fee) => fee.location.paths,
+                  initialSettings: const ListPresentationSettings(sortBy: 'id'),
+                  sortValues: {
+                    'square_id': (
+                      label: ListOptionsStrings.square,
+                      value: (fee) => fee.location.squareId,
+                    ),
+                    'square_name': (
+                      label: ListOptionsStrings.square,
+                      value: (fee) => fee.location.squareName,
+                    ),
+                    'path_number': (
+                      label: ListOptionsStrings.path,
+                      value: (fee) => fee.location.firstPath,
+                    ),
+                    'created_at': (
+                      label: ListOptionsStrings.createdAt,
+                      value: (fee) => fee.createdAt,
+                    ),
+                    'id': (
+                      label: ListOptionsStrings.id,
+                      value: (fee) => fee.id,
+                    ),
+                    'subscriber': (
+                      label: ListOptionsStrings.subscriber,
+                      value: (fee) => fee.subscriberName ?? '',
+                    ),
+                    'amount': (
+                      label: ListOptionsStrings.amount,
+                      value: (fee) => fee.amount,
+                    ),
+                    'status': (
+                      label: ListOptionsStrings.status,
+                      value: (fee) => fee.status.index,
+                    ),
+                    'date': (
+                      label: ListOptionsStrings.date,
+                      value: (fee) => fee.createdAt ?? '',
+                    ),
+                  },
+                  fields: const {
+                    'meter': ListOptionsStrings.meter,
+                    'date': ListOptionsStrings.date,
+                    'invoice': ListOptionsStrings.invoice,
+                    'notes': ListOptionsStrings.notes,
+                  },
+                  builder: (context, fees, options) =>
+                      fees.isEmpty && !state.loading
+                      ? const Center(
+                          child: AdminEmptyView(
+                            title: 'لا توجد رسوم اشتراك مطابقة',
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.only(top: 10, bottom: 24),
+                          itemCount: fees.length,
+                          itemBuilder: (_, i) {
+                            final f = fees[i];
+                            final checked = state.selectedIds.contains(f.id);
+                            return Padding(
+                              padding: const EdgeInsetsDirectional.fromSTEB(
+                                16,
+                                0,
+                                16,
+                                8,
+                              ),
+                              child: AppCard(
+                                padding: EdgeInsets.zero,
+                                color: checked
+                                    ? scheme.primary.withValues(alpha: .04)
+                                    : null,
+                                borderColor: checked
+                                    ? scheme.primary.withValues(alpha: .4)
+                                    : null,
+                                child: InkWell(
+                                  onLongPress: () => context
+                                      .read<SubscriptionFeesCubit>()
+                                      .toggleSelect(f.id),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.xl,
+                                  ),
+                                  child: Padding(
+                                    padding: EdgeInsets.all(
+                                      options.compact ? 8 : 12,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Checkbox(
-                                          value: checked,
-                                          onChanged: (_) => context.read<SubscriptionFeesCubit>().toggleSelect(f.id),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                f.subscriberName ?? 'مشترك #${f.subscriberId}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.3),
-                                              ),
-                                              const Gap(2),
-                                              Text(
-                                                '${options.isVisible('meter') ? f.meterCode ?? 'بدون عداد' : ''}'
-                                                '${options.isVisible('date') ? ' • ${f.createdAt ?? ''}' : ''}'
-                                                '${options.isVisible('invoice') && f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context).textTheme.labelSmall,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        StatusBadge(
-                                          label: f.status.label,
-                                          color: switch (f.status) {
-                                            FeeStatus.uninvoiced => AppColors.danger,
-                                            FeeStatus.invoiced => AppColors.warning,
-                                            FeeStatus.partiallyPaid => AppColors.info,
-                                            FeeStatus.paid => AppColors.success,
-                                          },
-                                        ),
-                                        PopupMenuButton<String>(
-                                          tooltip: 'إجراءات الرسوم',
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(AppRadius.lg),
-                                          ),
-                                          onSelected: (value) {
-                                            if (value == 'invoice') {
-                                              _openGenerateInvoiceSheet(context, fee: f);
-                                            }
-                                            if (value == 'edit') _openFeeDialog(context, existing: f);
-                                            if (value == 'delete') asyncDeleteFee(context, f);
-                                          },
-                                          itemBuilder: (context) => [
-                                            if (f.canInvoice)
-                                              const PopupMenuItem(
-                                                value: 'invoice',
-                                                child: Row(children: [
-                                                  Icon(Icons.receipt_long, size: 18),
-                                                  SizedBox(width: 10),
-                                                  Text('إصدار فاتورة اشتراك'),
-                                                ]),
-                                              ),
-                                            const PopupMenuItem(
-                                              value: 'edit',
-                                              child: Row(children: [
-                                                Icon(Icons.edit_outlined, size: 18),
-                                                SizedBox(width: 10),
-                                                Text('تعديل الرسوم'),
-                                              ]),
+                                        Row(
+                                          children: [
+                                            Checkbox(
+                                              value: checked,
+                                              onChanged: (_) => context
+                                                  .read<SubscriptionFeesCubit>()
+                                                  .toggleSelect(f.id),
+                                              visualDensity:
+                                                  VisualDensity.compact,
                                             ),
-                                            const PopupMenuItem(
-                                              value: 'delete',
-                                              child: Row(children: [
-                                                Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
-                                                SizedBox(width: 10),
-                                                Text('حذف الرسوم', style: TextStyle(color: AppColors.danger)),
-                                              ]),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    f.subscriberName ??
+                                                        'مشترك #${f.subscriberId}',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 14.5,
+                                                      height: 1.3,
+                                                    ),
+                                                  ),
+                                                  RecordLocationLabel(
+                                                    location: f.location,
+                                                  ),
+                                                  const Gap(2),
+                                                  Text(
+                                                    '${options.isVisible('meter') ? f.meterCode ?? 'بدون عداد' : ''}'
+                                                    '${options.isVisible('date') ? ' • ${f.createdAt ?? ''}' : ''}'
+                                                    '${options.isVisible('invoice') && f.invoiceNumber != null ? ' • فاتورة: ${f.invoiceNumber}' : ''}',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.labelSmall,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            StatusBadge(
+                                              label: f.status.label,
+                                              color: switch (f.status) {
+                                                FeeStatus.uninvoiced =>
+                                                  AppColors.danger,
+                                                FeeStatus.invoiced =>
+                                                  AppColors.warning,
+                                                FeeStatus.partiallyPaid =>
+                                                  AppColors.info,
+                                                FeeStatus.paid =>
+                                                  AppColors.success,
+                                              },
+                                            ),
+                                            PopupMenuButton<String>(
+                                              tooltip: 'إجراءات الرسوم',
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                      AppRadius.lg,
+                                                    ),
+                                              ),
+                                              onSelected: (value) {
+                                                if (value == 'invoice') {
+                                                  _openGenerateInvoiceSheet(
+                                                    context,
+                                                    fee: f,
+                                                  );
+                                                }
+                                                if (value == 'edit') {
+                                                  _openFeeDialog(
+                                                    context,
+                                                    existing: f,
+                                                  );
+                                                }
+                                                if (value == 'delete') {
+                                                  asyncDeleteFee(context, f);
+                                                }
+                                              },
+                                              itemBuilder: (context) => [
+                                                if (f.canInvoice)
+                                                  const PopupMenuItem(
+                                                    value: 'invoice',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.receipt_long,
+                                                          size: 18,
+                                                        ),
+                                                        SizedBox(width: 10),
+                                                        Text(
+                                                          'إصدار فاتورة اشتراك',
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 18,
+                                                      ),
+                                                      SizedBox(width: 10),
+                                                      Text('تعديل الرسوم'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.delete_outline,
+                                                        size: 18,
+                                                        color: AppColors.danger,
+                                                      ),
+                                                      SizedBox(width: 10),
+                                                      Text(
+                                                        'حذف الرسوم',
+                                                        style: TextStyle(
+                                                          color:
+                                                              AppColors.danger,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    ),
-                                    if (options.isVisible('invoice') && f.invoiceId != null && GetIt.I.isRegistered<PermissionService>() &&
-                                        GetIt.I<PermissionService>().can('View:Invoice'))
-                                      TextButton.icon(
-                                        onPressed: () => context.push('${RouteNames.invoices}/${f.invoiceId}'),
-                                        icon: const Icon(Icons.receipt_long_outlined),
-                                        label: Text(AppStrings.of(context).openLinkedInvoice),
-                                      ),
-                                    if (options.isVisible('notes') && f.notes != null && f.notes!.isNotEmpty) ...[
-                                      const Gap(6),
-                                      Text(
-                                        f.notes!,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ],
-                                    const Gap(10),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: scheme.surfaceContainerHighest.withValues(alpha: .45),
-                                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Text('مبلغ الرسم', style: Theme.of(context).textTheme.labelSmall),
-                                          const Gap(8),
-                                          Directionality(
-                                            textDirection: TextDirection.ltr,
-                                            child: Text(
-                                              CurrencyFormatter.format(f.amount),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 15,
-                                                fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                                              ),
+                                        if (options.isVisible('invoice') &&
+                                            f.invoiceId != null &&
+                                            GetIt.I
+                                                .isRegistered<
+                                                  PermissionService
+                                                >() &&
+                                            GetIt.I<PermissionService>().can(
+                                              'View:Invoice',
+                                            ))
+                                          TextButton.icon(
+                                            onPressed: () => context.push(
+                                              '${RouteNames.invoices}/${f.invoiceId}',
+                                            ),
+                                            icon: const Icon(
+                                              Icons.receipt_long_outlined,
+                                            ),
+                                            label: Text(
+                                              AppStrings.of(
+                                                context,
+                                              ).openLinkedInvoice,
                                             ),
                                           ),
-                                          const Spacer(),
-                                          if (f.canInvoice)
-                                            AppIconButton(
-                                              icon: Icons.receipt_long_rounded,
-                                              tooltip: 'إصدار فاتورة اشتراك',
-                                              size: 38,
-                                              onPressed: () => _openGenerateInvoiceSheet(context, fee: f),
-                                            ),
+                                        if (options.isVisible('notes') &&
+                                            f.notes != null &&
+                                            f.notes!.isNotEmpty) ...[
+                                          const Gap(6),
+                                          Text(
+                                            f.notes!,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
+                                          ),
                                         ],
-                                      ),
+                                        const Gap(10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: scheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: .45),
+                                            borderRadius: BorderRadius.circular(
+                                              AppRadius.lg,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                'مبلغ الرسم',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.labelSmall,
+                                              ),
+                                              const Gap(8),
+                                              Directionality(
+                                                textDirection:
+                                                    TextDirection.ltr,
+                                                child: Text(
+                                                  CurrencyFormatter.format(
+                                                    f.amount,
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 15,
+                                                    fontFeatures: <FontFeature>[
+                                                      FontFeature.tabularFigures(),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                              if (f.canInvoice)
+                                                AppIconButton(
+                                                  icon: Icons
+                                                      .receipt_long_rounded,
+                                                  tooltip:
+                                                      'إصدار فاتورة اشتراك',
+                                                  size: 38,
+                                                  onPressed: () =>
+                                                      _openGenerateInvoiceSheet(
+                                                        context,
+                                                        fee: f,
+                                                      ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         );
       },
     );
@@ -594,7 +838,11 @@ class _SubscriptionFeesView extends StatelessWidget {
 
   /// حذف رسوم بعد تأكيد — نفس منطق الزر الأحمر السابق دون تغيير سلوك الـ cubit.
   Future<void> asyncDeleteFee(BuildContext context, SubscriptionFee f) async {
-    if (await confirmAction(context, 'حذف رسوم', 'حذف رسوم الاشتراك بقيمة ${f.amount}؟')) {
+    if (await confirmAction(
+      context,
+      'حذف رسوم',
+      'حذف رسوم الاشتراك بقيمة ${f.amount}؟',
+    )) {
       if (context.mounted) {
         await context.read<SubscriptionFeesCubit>().delete(f.id);
       }

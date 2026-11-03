@@ -134,6 +134,8 @@ class _CashSessionReviewScreenState extends State<CashSessionReviewScreen> {
     }
     _filters = CashSessionFilters(
       state: _state,
+      addedFrom: _presentation.createdFrom,
+      addedTo: _presentation.createdTo,
       collectorId: collectorId,
       fromDate: _fromDate,
       toDate: _toDate,
@@ -149,11 +151,15 @@ class _CashSessionReviewScreenState extends State<CashSessionReviewScreen> {
     final reload =
         _presentation.sortBy != settings.sortBy ||
         _presentation.descending != settings.descending ||
-        _presentation.pageSize != settings.pageSize;
+        _presentation.pageSize != settings.pageSize ||
+        _presentation.createdFrom != settings.createdFrom ||
+        _presentation.createdTo != settings.createdTo;
     setState(() => _presentation = settings);
     if (!reload) return;
     _filters = _filters.withPresentation(
       pageSize: settings.pageSize,
+      addedFrom: settings.createdFrom,
+      addedTo: settings.createdTo,
       sortBy: settings.sortBy,
       sortDirection: settings.descending ? 'desc' : 'asc',
     );
@@ -292,8 +298,13 @@ class _CashSessionReviewScreenState extends State<CashSessionReviewScreen> {
             ignoring: _loading,
             child: ListPresentationControls(
               settings: _presentation,
+              filterOptions: const ListFilterOptions(
+                hasCreatedAt: true,
+                search: false,
+              ),
               sortOptions: const {
                 'id': ListOptionsStrings.id,
+                'created_at': ListOptionsStrings.createdAt,
                 'session_date': ListOptionsStrings.date,
                 'collector_name': ListOptionsStrings.collector,
                 'expected_amount': ListOptionsStrings.expected,

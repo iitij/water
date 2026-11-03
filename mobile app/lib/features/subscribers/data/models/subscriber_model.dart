@@ -18,6 +18,8 @@ class SubscriberModel extends Subscriber {
     super.debitBalance,
     super.generalBalance,
     super.meterNumber,
+    super.pathNumbers,
+    super.createdAt,
   });
 
   factory SubscriberModel.fromJson(Map<String, dynamic> j) {
@@ -31,23 +33,38 @@ class SubscriberModel extends Subscriber {
       squareName: jStr(square?['name'] ?? j['square_name']),
       status: SubscriberStatusX.fromApi(jStr(j['status'])),
       subscriptionStartDate: jStr(j['subscription_start_date']),
-      metersCount: jIntOrNull(j['meters_count']) ??
+      metersCount:
+          jIntOrNull(j['meters_count']) ??
           ((j['meters'] is List) ? (j['meters'] as List).length : 0),
       creditBalance: _d(j['credit_balance']),
       debitBalance: _d(j['debit_balance'] ?? j['balance']),
       generalBalance: _d(j['account_balance'] ?? j['balance']),
       meterNumber: jStr(j['meter_number']),
+      pathNumbers: _pathNumbers(j),
+      createdAt: DateTime.tryParse(jStr(j['created_at']) ?? ''),
     );
   }
 
+  static List<int> _pathNumbers(Map<String, dynamic> json) {
+    final values = json['path_numbers'];
+    final numbers = <int>{
+      if (values is List)
+        for (final value in values)
+          if (jIntOrNull(value) case final int number) number,
+      for (final meter in jMapList(json['meters']))
+        if (jIntOrNull(meter['path_number']) case final int number) number,
+    }.toList()..sort();
+    return List.unmodifiable(numbers);
+  }
+
   Map<String, dynamic> toPayload() => {
-        'name': name,
-        'phone': phone,
-        'square_id': squareId,
-        'status': status.apiValue,
-        'subscription_start_date': subscriptionStartDate,
-        'address': address,
-      };
+    'name': name,
+    'phone': phone,
+    'square_id': squareId,
+    'status': status.apiValue,
+    'subscription_start_date': subscriptionStartDate,
+    'address': address,
+  };
 }
 
 class MeterBalanceModel extends MeterBalance {
@@ -62,7 +79,8 @@ class MeterBalanceModel extends MeterBalance {
     super.pathNumber,
   });
 
-  factory MeterBalanceModel.fromJson(Map<String, dynamic> j) => MeterBalanceModel(
+  factory MeterBalanceModel.fromJson(Map<String, dynamic> j) =>
+      MeterBalanceModel(
         meterId: jInt(j['id']),
         uniqueCode: jStr(j['unique_code']) ?? '',
         tenantName: jStr(j['tenant_name']),
@@ -87,13 +105,13 @@ class LedgerEntryModel extends LedgerEntry {
   });
 
   factory LedgerEntryModel.fromJson(Map<String, dynamic> j) => LedgerEntryModel(
-        id: jInt(j['id']),
-        type: jStr(j['type']) ?? '',
-        amount: _d(j['amount']),
-        meterId: jIntOrNull(j['meter_id']),
-        party: jStr(j['party']) ?? 'الحساب العام للمشترك',
-        description: jStr(j['description']),
-        createdAt: jStr(j['created_at']),
-        runningBalance: _d(j['running_balance']),
-      );
+    id: jInt(j['id']),
+    type: jStr(j['type']) ?? '',
+    amount: _d(j['amount']),
+    meterId: jIntOrNull(j['meter_id']),
+    party: jStr(j['party']) ?? 'الحساب العام للمشترك',
+    description: jStr(j['description']),
+    createdAt: jStr(j['created_at']),
+    runningBalance: _d(j['running_balance']),
+  );
 }

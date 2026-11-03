@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/l10n/field_experience_strings.dart';
+import '../../../../core/l10n/field_list_options_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/ui/app_controls.dart';
@@ -11,6 +12,7 @@ import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../../readings/data/services/reading_invoice_actions_service.dart';
 import '../../../readings/domain/readings_repository.dart';
@@ -165,12 +167,17 @@ class _MetersListView extends StatelessWidget {
             };
             return ListPresentation<Meter>(
               items: state.meters,
+              onVisibleItemsChanged: cubit.setVisibleMeters,
               initialSettings: const ListPresentationSettings(
                 sortBy: 'default',
                 descending: false,
                 hiddenFields: {'created_at'},
               ),
               sortValues: {
+                'square_id': (
+                  label: ListOptionsStrings.square,
+                  value: (meter) => meter.squareId,
+                ),
                 'default': (
                   label: ListOptionsStrings.reset,
                   value: (meter) => defaultPositions[meter],
@@ -190,6 +197,18 @@ class _MetersListView extends StatelessWidget {
                 'subscriber_name': (
                   label: ListOptionsStrings.subscriber,
                   value: (meter) => meter.subscriberName,
+                ),
+                'subscriber_added_order': (
+                  label: FieldListOptionsStrings.subscriberAddedOrder,
+                  value: (meter) => meter.subscriberId,
+                ),
+                'subscription_start_date': (
+                  label: FieldListOptionsStrings.subscriptionStart,
+                  value: (meter) => meter.subscriptionStartDate,
+                ),
+                'installed_at': (
+                  label: FieldListOptionsStrings.installedAt,
+                  value: (meter) => meter.installedAt,
                 ),
                 'square_name': (
                   label: ListOptionsStrings.square,
@@ -212,7 +231,7 @@ class _MetersListView extends StatelessWidget {
                   value: (meter) => meter.lastReading,
                 ),
                 'created_at': (
-                  label: ListOptionsStrings.createdAt,
+                  label: FieldListOptionsStrings.meterCreatedAt,
                   value: (meter) => meter.createdAt,
                 ),
               },
@@ -343,8 +362,11 @@ class _MetersListView extends StatelessWidget {
                           action: TextButton.icon(
                             onPressed: () {
                               cubit.setQuery('');
-                              cubit.setSquareFilter(null);
-                              cubit.setStatusFilter(null);
+                              cubit.applyFilters(
+                                squareId: null,
+                                status: null,
+                                pathNumber: null,
+                              );
                             },
                             icon: const Icon(
                               Icons.restart_alt_rounded,
@@ -410,7 +432,8 @@ class _MetersListView extends StatelessWidget {
   Widget _filters(BuildContext context, MetersState state, MetersCubit cubit) {
     final activeCount =
         (state.squareFilter == null ? 0 : 1) +
-        (state.statusFilter == null ? 0 : 1);
+        (state.statusFilter == null ? 0 : 1) +
+        (state.pathFilter == null ? 0 : 1);
     final squareName = _meterSquareName(state);
 
     return Column(
@@ -419,10 +442,17 @@ class _MetersListView extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
         AppFilterBar(
           query: state.query,
-          hint: 'ابحث بالعداد أو المشترك أو المربع/المسار 4/1',
+          hint: FieldListOptionsStrings.searchHint,
           activeCount: activeCount,
           onOpenFilters: () => _openFilterSheet(context, state, cubit),
           onChanged: cubit.setQuery,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Text(
+            FieldListOptionsStrings.searchHelp,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
         AppFilterChips(
           children: <Widget>[
@@ -449,6 +479,13 @@ class _MetersListView extends StatelessWidget {
         ),
         AppActiveFilters(
           filters: <Widget>[
+            if (state.pathFilter != null)
+              AppFilterChip(
+                label: FieldListOptionsStrings.pathFilter(state.pathFilter!),
+                icon: Icons.route_outlined,
+                selected: true,
+                onRemove: () => cubit.setPathFilter(null),
+              ),
             if (squareName != null)
               AppFilterChip(
                 label: squareName,
@@ -466,10 +503,11 @@ class _MetersListView extends StatelessWidget {
           ],
           onClearAll: activeCount == 0
               ? null
-              : () {
-                  cubit.setSquareFilter(null);
-                  cubit.setStatusFilter(null);
-                },
+              : () => cubit.applyFilters(
+                  squareId: null,
+                  status: null,
+                  pathNumber: null,
+                ),
         ),
         if ((state.status == MetersLoadStatus.loading &&
                 state.meters.isNotEmpty) ||
@@ -631,20 +669,37 @@ class _MetersFilterSheet extends StatefulWidget {
 class _MetersFilterSheetState extends State<_MetersFilterSheet> {
   late int? _square = widget.state.squareFilter;
   late String? _status = widget.state.statusFilter;
+  late final _path = TextEditingController(
+    text: widget.state.pathFilter?.toString() ?? '',
+  );
+  String? _pathError;
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
 
   void _apply() {
-    if (_square != widget.state.squareFilter) {
-      widget.cubit.setSquareFilter(_square);
+    final text = CompoundSearchQuery.normalizeDigits(_path.text.trim());
+    final pathNumber = int.tryParse(text);
+    if (text.isNotEmpty && (pathNumber == null || pathNumber < 0)) {
+      setState(() => _pathError = FieldListOptionsStrings.invalidPath);
+      return;
     }
-    if (_status != widget.state.statusFilter) {
-      widget.cubit.setStatusFilter(_status);
-    }
+    widget.cubit.applyFilters(
+      squareId: _square,
+      status: _status,
+      pathNumber: pathNumber,
+    );
     Navigator.of(context).maybePop();
   }
 
   void _reset() => setState(() {
     _square = null;
     _status = null;
+    _path.clear();
+    _pathError = null;
   });
 
   @override
@@ -654,8 +709,23 @@ class _MetersFilterSheetState extends State<_MetersFilterSheet> {
       resultCountLabel: '${widget.state.meters.length} عداد في القائمة',
       onApply: _apply,
       onReset: _reset,
-      resetEnabled: _square != null || _status != null,
+      resetEnabled: _square != null || _status != null || _path.text.isNotEmpty,
       sections: <Widget>[
+        AppFilterSection(
+          title: FieldListOptionsStrings.pathNumber,
+          child: TextField(
+            key: const ValueKey('meters-path-filter'),
+            controller: _path,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => setState(() => _pathError = null),
+            decoration: InputDecoration(
+              labelText: FieldListOptionsStrings.pathNumber,
+              helperText: FieldListOptionsStrings.pathHelp,
+              errorText: _pathError,
+              prefixIcon: const Icon(Icons.route_outlined),
+            ),
+          ),
+        ),
         AppFilterSection(
           title: 'حالة العداد',
           child: Column(

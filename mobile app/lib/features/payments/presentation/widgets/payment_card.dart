@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/finance_badges.dart';
@@ -53,6 +54,8 @@ class PaymentCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                RecordLocationLabel(location: payment.location),
+                const SizedBox(height: 4),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[

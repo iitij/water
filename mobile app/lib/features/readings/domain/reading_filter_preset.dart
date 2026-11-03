@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/l10n/field_list_options_strings.dart';
+
 /// فلتر قراءات محفوظ باسم (خطة 2.0 — الفصل 6.3).
 ///
 /// القارئ يعمل بالمربع والمسار نفسه كل يوم؛ إعادة تركيب الفلاتر في كل جلسة
@@ -13,6 +15,7 @@ class ReadingFilterPreset extends Equatable {
     required this.name,
     this.squareId,
     this.squareName,
+    this.pathNumber,
     this.invoiceFilterCode = 'all',
     this.fromDate,
     this.toDate,
@@ -25,6 +28,7 @@ class ReadingFilterPreset extends Equatable {
   /// الاسم كما يراه القارئ.
   final String name;
   final int? squareId;
+  final int? pathNumber;
 
   /// اسم المربع محفوظ مع المعرّف حتى يظهر في الشريحة بلا شبكة.
   final String? squareName;
@@ -38,6 +42,7 @@ class ReadingFilterPreset extends Equatable {
   /// هل هذا الفلتر «فارغ» (لا شيء يُستعاد)؟
   bool get isEmpty =>
       squareId == null &&
+      pathNumber == null &&
       fromDate == null &&
       toDate == null &&
       query.trim().isEmpty &&
@@ -46,37 +51,42 @@ class ReadingFilterPreset extends Equatable {
   /// عدد الأوجه المطبّقة — يظهر في الشريحة.
   int get facetCount =>
       (squareId == null ? 0 : 1) +
+      (pathNumber == null ? 0 : 1) +
       (fromDate != null || toDate != null ? 1 : 0) +
       (invoiceFilterCode == 'all' ? 0 : 1) +
       (query.trim().isEmpty ? 0 : 1);
 
   ReadingFilterPreset copyWith({String? name}) => ReadingFilterPreset(
-        id: id,
-        name: name ?? this.name,
-        squareId: squareId,
-        squareName: squareName,
-        invoiceFilterCode: invoiceFilterCode,
-        fromDate: fromDate,
-        toDate: toDate,
-        query: query,
-      );
+    id: id,
+    name: name ?? this.name,
+    squareId: squareId,
+    squareName: squareName,
+    pathNumber: pathNumber,
+    invoiceFilterCode: invoiceFilterCode,
+    fromDate: fromDate,
+    toDate: toDate,
+    query: query,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-        'square_id': squareId,
-        'square_name': squareName,
-        'invoice_filter': invoiceFilterCode,
-        'from_date': fromDate?.toIso8601String(),
-        'to_date': toDate?.toIso8601String(),
-        'query': query,
-      };
+    'id': id,
+    'name': name,
+    'square_id': squareId,
+    'square_name': squareName,
+    'path_number': pathNumber,
+    'invoice_filter': invoiceFilterCode,
+    'from_date': fromDate?.toIso8601String(),
+    'to_date': toDate?.toIso8601String(),
+    'query': query,
+  };
 
-  factory ReadingFilterPreset.fromJson(Map<String, dynamic> json) => ReadingFilterPreset(
+  factory ReadingFilterPreset.fromJson(Map<String, dynamic> json) =>
+      ReadingFilterPreset(
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? 'فلتر',
         squareId: (json['square_id'] as num?)?.toInt(),
         squareName: json['square_name']?.toString(),
+        pathNumber: (json['path_number'] as num?)?.toInt(),
         invoiceFilterCode: json['invoice_filter']?.toString() ?? 'all',
         fromDate: DateTime.tryParse(json['from_date']?.toString() ?? ''),
         toDate: DateTime.tryParse(json['to_date']?.toString() ?? ''),
@@ -87,12 +97,16 @@ class ReadingFilterPreset extends Equatable {
   static String suggestName({
     int? squareId,
     String? squareName,
+    int? pathNumber,
     String invoiceFilterCode = 'all',
     DateTime? fromDate,
     DateTime? toDate,
     String query = '',
   }) {
     final parts = <String>[];
+    if (pathNumber != null) {
+      parts.add(FieldListOptionsStrings.pathFilter(pathNumber));
+    }
     if (squareName != null && squareName.trim().isNotEmpty) {
       parts.add(squareName.trim());
     } else if (squareId != null) {
@@ -113,6 +127,14 @@ class ReadingFilterPreset extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      <Object?>[id, name, squareId, invoiceFilterCode, fromDate, toDate, query];
+  List<Object?> get props => <Object?>[
+    id,
+    name,
+    squareId,
+    pathNumber,
+    invoiceFilterCode,
+    fromDate,
+    toDate,
+    query,
+  ];
 }

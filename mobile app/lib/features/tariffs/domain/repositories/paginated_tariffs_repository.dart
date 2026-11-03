@@ -9,5 +9,7 @@ abstract interface class PaginatedTariffsRepository {
     int pageSize = 25,
     String sortBy = 'start_date',
     String sortDirection = 'desc',
+    DateTime? addedFrom,
+    DateTime? addedTo,
   });
 }

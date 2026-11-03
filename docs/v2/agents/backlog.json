@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-10-29",
+  "updated_at": "2026-11-03",
   "ux_revert": "بطلب المستخدم ألغيت دفعة UX-01 إلى UX-05 واستعيدت ملفاتها من 7feff2f؛ حُفظت أعمال UX-SIMPLIFY وإصلاح Dashboard المستقلة. flutter test --no-pub --concurrency=1: 468 PASS؛ flutter analyze --no-pub: No issues found!؛ السجلان mobile app/build/ux-revert-tests.log وux-revert-analyze.log.",
   "branch": "arena/9da3be61-water",
   "status_values": [
@@ -30,6 +30,39 @@
   }
  },
  "tasks": [
+  {
+   "id": "HOME-INVOICE-DRILLDOWN-20261103-01",
+   "sprint": "S9",
+   "agent": "A1+A9+A10",
+   "task": "فتح قائمة الفواتير غير المسددة أو المتأخرة عند الضغط على عددها في ملخص الصفحة الرئيسية",
+   "files": "mobile app/lib/features/home/presentation/{home_screen.dart,widgets/home_panels.dart,widgets/home_invoice_counts.dart}; mobile app/lib/core/l10n/invoice_summary_strings.dart; mobile app/lib/features/invoices/presentation/widgets/invoice_filters_sheet.dart; mobile app/test/home/home_invoice_counts_test.dart",
+   "status": "done",
+   "verification_status": "full_tests_analyze_and_windows_build_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 --reporter expanded: 582 PASS / 26 SKIP، exit 0؛ تشمل 6 اختبارات جديدة للمسارين الفعليين إلى قائمة الفواتير، والرجوع، وغياب الصلاحية، والعرض 320/1280 مع تكبير النص، وحفظ فلتر unpaid. flutter analyze --no-pub: No issues found، exit 0. flutter build windows --release --no-pub: exit 0، 93.4s. تستخدم الروابط status=unpaid وstatus=overdue المدعومين حالياً، المطابقين لتعريف عدادات AdminController؛ لا تعديل في API أو قاعدة البيانات. السجلات mobile app/build/invoice-count-{focused,full-tests,analyze,windows}.log؛ النسخة build/windows/x64/runner/Release/water_project.exe. لم تُستبدل النسخة المثبتة ولم يجر اختبار API حي أو قبول مستخدم."
+  },
+  {
+   "id": "LIST-FILTERS-20261103-01",
+   "sprint": "S9",
+   "agent": "A1+A6+A7+A8+A9+A10",
+   "task": "توحيد البحث والفلترة والترتيب في قوائم التطبيق، بفترة تاريخ الإضافة والمربع والمسار وإظهار هوية الموقع للسجلات المرتبطة بالمشتركين",
+   "files": "mobile app/lib/core/{ui/list_presentation_controls.dart,models/record_location.dart,l10n/list_options_strings.dart}; mobile app/lib/features/{subscribers,meters,readings,invoices,payments,subscription_fees,service_requests,transactions,squares,users_roles,devices,tariffs,cash_sessions,audit,global_search}/**; app/Http/Controllers/Api/**; mobile app/test/core/ui/list_filters_test.dart; tests/Feature/ListFiltersParityTest.php; docs/v2/qa/LIST_FILTERS_2026-11-03_AR.md",
+   "status": "done",
+   "verification_status": "local_full_checks_and_platform_builds_passed",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1: 583 PASS، 26 SKIP، exit 0؛ flutter analyze --no-pub: No issues found!، exit 0؛ PHPUnit كامل: 88 PASS، 2448 assertions، ثم فحص API أخير للمسار صفر والعقود: 18 PASS، 151 assertions، exit 0. فحص تحديد الصفوف الظاهرة: 13 PASS بعد ضبط تحديد الكل للمشتركين والعدادات. Windows Release: exit 0 (52.9s)؛ Android Debug APK: exit 0 (44.1s)، 231527668 بايت. اختبارات الجوال والكمبيوتر وتبويبات ملف المشترك وصور العرض موثقة في docs/v2/qa/LIST_FILTERS_2026-11-03_AR.md والسجلات mobile app/build/all-lists-*.log. النتائج لقطة للشجرة المشتركة مع تعديلات متزامنة محفوظة؛ لا نشر خادم أو تثبيت جهاز/قبول ميداني ضمن هذه المهمة."
+  },
+  {
+   "id": "FIELD-SEARCH-SCOPE-20261103-01",
+   "sprint": "S3",
+   "agent": "A1+A8+A9+A10",
+   "task": "فصل بحث القارئ الميداني بالمسار عن الاسم ورقم العداد لمنع ظهور مسارات أخرى عند البحث عن 6",
+   "files": "mobile app/lib/features/meters/presentation/cubit/meters_cubit.dart; mobile app/lib/features/readings/presentation/pages/field_reader_screen.dart; mobile app/lib/core/l10n/field_experience_strings.dart; mobile app/test/features/readings/field_reader_search_test.dart",
+   "status": "done",
+   "verification_status": "focused_tests_and_windows_build_passed_full_suite_not_green",
+   "owner_acceptance": "not_tested",
+   "evidence": "flutter test --no-pub --concurrency=1 --dart-define=WRITE_FIELD_SEARCH_PREVIEWS=true test/features/readings/field_reader_search_test.dart test/features/meters/path_filter_test.dart test/features/readings/path_filter_test.dart test/ui/water_experience_test.dart --reporter expanded: 35 PASS، exit 0؛ تتضمن 16 اختباراً جديداً ومسار 6 مقابل 16 وأرقام العدادات والأرقام العربية والفارسية والاستجابات المتأخرة وواجهتي 390/1280. dart analyze لملفات الإنتاج الثلاثة وملفي الاختبارات: No issues found، exit 0. flutter build windows --release --no-pub النهائي: exit 0، 133.2s؛ build/field-search-windows-final.log. الفحص الشامل بدأ أثناء استكمال التعديل: 561 PASS، 26 SKIP، 2 FAIL؛ فشل تبديل النطاق كان على لقطة الكود السابقة وآخر إعادة مركزة ذات 35 اختباراً تثبت إصلاحه؛ الفشل الآخر settings hub بعرض 320px خارج ملفات المهمة. flutter analyze --no-pub: 22 ملاحظة خارج ملفات الإصلاح، exit 1؛ السجلان build/field-search-full-tests.log وbuild/field-search-analyze.log. معاينات الاختبار في build/field-search-preview/ تثبت التوزيع فقط؛ خط اختبار Flutter الافتراضي لا يعرض النص العربي فعلياً. لم تُحدَّث النسخة المثبتة المفتوحة ولم يجر قبول مستخدم أو اختبار API مصادق؛ لا تغيير في API أو قاعدة البيانات."
+  },
   {
    "id": "SERVER-STARTUP-20261029-01",
    "sprint": "S9",
@@ -1301,6 +1334,65 @@
   "verification_status": "local_tests_passed",
   "owner_acceptance": "not_tested",
   "evidence": "flutter test --no-pub --concurrency=1 test/core/config/app_config_test.dart test/core/setup/server_connection_service_test.dart --reporter expanded: 16 PASS. dart analyze --fatal-infos lib/core/config/app_config.dart test/core/config/app_config_test.dart: No issues found. git diff --check: نجح. تطبيع الرابط ينتج https://34.57.211.224/api/. GET لهذا الخادم على /api/admin/dashboard مع Accept: application/json وبالتحقق المعتاد من شهادة HTTPS أعاد HTTP 401 دون توكن. الخادم المحفوظ صراحة له الأولوية؛ لم يُفحص دخول مصادق أو جهاز فعلي."
+}
+,
+{
+  "id": "SEARCH-SINGLE-DIGIT-20261103",
+  "sprint": "S9",
+  "agent": "A1+A6+A9+A10",
+  "task": "السماح بالبحث الشامل برقم مسار من خانة واحدة مع الأرقام العربية والفارسية وإبقاء حد حرفين للنص",
+  "files": "mobile app/lib/features/global_search/presentation/{cubit/global_search_cubit.dart,pages/global_search_screen.dart}; mobile app/lib/core/l10n/global_search_strings.dart; mobile app/test/global_search/global_search_query_test.dart; app/Http/Controllers/Api/SearchController.php; tests/Feature/GlobalSearchTest.php; docs/V2_S1_HANDOVER.md",
+  "status": "done",
+  "verification_status": "local_tests_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "2026-11-03: flutter test --no-pub --concurrency=1 test/global_search: 16 PASS؛ اختبارات screen_smoke_test.dart مع --plain-name global search: 8 PASS (320/1440px)؛ dart analyze --fatal-infos lib/core/l10n/global_search_strings.dart lib/features/global_search test/global_search: No issues found؛ php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit tests/Feature/GlobalSearchTest.php: 4 PASS / 44 assertions؛ PHP lint و scoped git diff --check: PASS. فشل اختبار إعدادات قراءات مستقل على 320px بسبب dropdown overflow؛ لا فشل في اختبارات البحث. السجلات mobile app/build/search-single-digit-{tests,smoke,analyze}.log. flutter build windows --release --no-pub: PASS (159.2s)؛ السجل mobile app/build/search-single-digit-windows.log مع تحذير ملف recipe مشغول بسبب بناء متزامن؛ كان ذلك تحققاً محلياً. لاحقاً نُشر إصلاح البحث المحدد على الخادم الحي في 2026-11-03: 6/٦/۶ تعيد خمسة عدادات بينها عدادا المسار 6، min_length=1؛ النص بحرف واحد محجوب؛ HTTP دون توكن 401؛ php8.4-fpm/nginx active. التفاصيل docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md. انفصل الهاتف عن USB قبل إعادة التحقق من واجهته."
+},
+{
+  "id": "SUBSCRIBER-OPEN-FILE-20261103",
+  "sprint": "S9",
+  "agent": "A1+A9+A10",
+  "task": "إصلاح عاجل: فتح ملف المشترك عند الضغط على بطاقته على الهاتف وWindows مع فصل التحديد الجماعي والضغط المطول",
+  "files": "mobile app/lib/features/subscribers/presentation/pages/subscribers_screen.dart; mobile app/lib/features/subscribers/presentation/widgets/subscriber_cards.dart; mobile app/test/ui/water_experience_test.dart",
+  "status": "done",
+  "verification_status": "local_tests_and_windows_build_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "قبل الإصلاح: اختبار ضغط البطاقة فشل على 390 و1440px (Expected [42], Actual []). بعد الإصلاح: اختبارات الواجهة والمشتركين 30 PASS؛ ثم الواجهة بعد إضافة اختبارات GoRouter: 22 PASS، تشمل فتح المسار الصحيح بالبطاقة والزر على العرضين وفصل checkbox والضغط المطول. dart analyze للملفات المعدلة: No issues found. بناء Windows قيد التشغيل. السجلات mobile app/build/subscriber-open-{before,tests,route-tests,analyze,windows}.log. اكتمل flutter build windows --release --no-pub (94s)، لكن التشغيل كشف محرك Debug بسبب بناء متزامن. أُعيد البناء بعد انتهائه (17.5s)، وتطابقت بصمة flutter_windows.dll مع محرك Release وظهرت نافذة التطبيق. لم يُستكمل ضغط مشترك على الجهاز بسبب تحكم متزامن في النافذة؛ فتح الملف مثبت باختبارات GoRouter على 390 و1440px. سجل البناء المصحح mobile app/build/subscriber-open-windows-rebuild.log. حزمة مستقلة جاهزة في mobile app/build/subscriber-open-release-20261103/؛ لم يُحدّث التطبيق المثبّت."
+}
+,
+{
+  "id": "SEARCH-DIRECT-INPUT-20261103",
+  "sprint": "S9",
+  "agent": "A1+A9+A10",
+  "task": "حصر إدخال رقم المسار في خانة البحث الرئيسية دون فلتر مسار مكرر، وتقديم مجموعة العدادات عند البحث الرقمي، وتحديث تطبيق Windows المثبت",
+  "files": "mobile app/lib/features/global_search/presentation/{cubit/global_search_cubit.dart,pages/global_search_screen.dart}; mobile app/test/global_search/global_search_query_test.dart; mobile app/lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart (تصحيح padding اللازم للترجمة); mobile app/RELEASE_NOTES.md; docs/V2_S1_HANDOVER.md; docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md",
+  "status": "done",
+  "verification_status": "local_tests_and_installed_windows_ui_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub --concurrency=1 test/global_search: 16 PASS عند 320/1440px، مع التحقق من خلو الخيارات من حقل المسار وإرسال البحث الرئيسي؛ dart analyze --fatal-infos للبحث والاختبار وsubscriber_360_tabs: No issues found؛ flutter build windows --release --no-pub: PASS 70.2s؛ تحديث تطبيق Windows المثبت مع نسخة احتياطية وتطابق SHA256. تحقق Computer Use في التطبيق المثبت: كتابة 6 مباشرة دون فلاتر تظهر عدادي المسار 6 أول النتائج. الخادم الحي يعيد مجموعة meter أولاً للرقم الواحد بصيغ 6/٦/۶. التفاصيل في docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md. لم يُعد بناء Android في هذه المتابعة."
+}
+,
+{
+  "id": "SEARCH-EXACT-PATH-20261103",
+  "sprint": "S9",
+  "agent": "A1+A6+A10",
+  "task": "اعتبار البحث المكون من أرقام فقط رقم مسار حصرياً بمطابقة كاملة قبل حدود النتائج، مع استبعاد مطابقات الهاتف والاسم وأرقام السجلات والمسارات الأخرى",
+  "files": "app/Http/Controllers/Api/SearchController.php; tests/Feature/GlobalSearchTest.php; docs/V2_S1_HANDOVER.md; docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md; mobile app/RELEASE_NOTES.md",
+  "status": "done",
+  "verification_status": "backend_tests_live_and_windows_ui_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit tests/Feature/GlobalSearchTest.php --debug: 6 PASS / 67 assertions / exit0؛ PHP lint و git diff --check PASS. فحص كل سجل مع قاعدة بيانات الخادم: q1/١/۱ -> 3 عدادات و3 مشتركين و4 فواتير و3 سندات، off_path_results=0؛ q11 بلا نتائج؛ q6 عدادان ومشتركان وفاتورة واحدة فقط. شاهد Computer Use تطبيق Windows المثبت بعد إدخال1 في البحث الرئيسي دون فلاتر: بطاقات المسار1 فقط بمعلومات الموقع الصحيحة. نُشر إصلاح SearchController المحدد مع نسخة احتياطية، دون ترحيل أو تعديل بيانات. التفاصيل docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md."
+}
+,
+{
+  "id": "SEARCH-SUBSCRIBERS-FIRST-20261103",
+  "sprint": "S9",
+  "agent": "A1+A6+A10",
+  "task": "تقديم مجموعة المشتركين على العدادات في كل نتائج البحث",
+  "files": "app/Http/Controllers/Api/SearchController.php; tests/Feature/GlobalSearchTest.php; mobile app/RELEASE_NOTES.md; docs/V2_S1_HANDOVER.md; docs/v2/qa/SEARCH_SINGLE_DIGIT_LIVE_2026-11-03_AR.md",
+  "status": "done",
+  "verification_status": "backend_tests_and_live_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit tests/Feature/GlobalSearchTest.php --debug: 6 PASS / 71 assertions؛ فحص مباشر لكل سجل على الخادم q1/١/۱/6 يؤكد ترتيب subscriber ثم meter، مع off_path_results=0. نُشر تعديل SearchController فقط بنسخة احتياطية؛ الخدمتان active؛ دون توكن401. لا حاجة لإعادة بناء العميل."
 }
 ]
 }

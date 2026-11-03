@@ -5,15 +5,15 @@ enum SubscriberStatus { active, inactive, suspended }
 extension SubscriberStatusX on SubscriberStatus {
   String get apiValue => name;
   String get label => switch (this) {
-        SubscriberStatus.active => 'نشط',
-        SubscriberStatus.inactive => 'غير نشط',
-        SubscriberStatus.suspended => 'موقوف',
-      };
+    SubscriberStatus.active => 'نشط',
+    SubscriberStatus.inactive => 'غير نشط',
+    SubscriberStatus.suspended => 'موقوف',
+  };
   static SubscriberStatus fromApi(String? v) => switch (v) {
-        'inactive' => SubscriberStatus.inactive,
-        'suspended' => SubscriberStatus.suspended,
-        _ => SubscriberStatus.active,
-      };
+    'inactive' => SubscriberStatus.inactive,
+    'suspended' => SubscriberStatus.suspended,
+    _ => SubscriberStatus.active,
+  };
 }
 
 class Subscriber extends Equatable {
@@ -31,6 +31,8 @@ class Subscriber extends Equatable {
     this.debitBalance = 0,
     this.generalBalance = 0,
     this.meterNumber,
+    this.pathNumbers = const [],
+    this.createdAt,
   });
 
   final int id;
@@ -48,12 +50,28 @@ class Subscriber extends Equatable {
   final double debitBalance;
   final double generalBalance;
   final String? meterNumber;
+  final List<int> pathNumbers;
+  final DateTime? createdAt;
+
+  /// Multiple meters can belong to one subscriber; use the first numeric path.
+  int? get firstPathNumber =>
+      pathNumbers.isEmpty ? null : pathNumbers.reduce((a, b) => a < b ? a : b);
 
   /// الرصيد الصافي الملون: أخضر إن كان دائناً، أحمر إن كان مديناً.
   double get netBalance => creditBalance - debitBalance;
 
   @override
-  List<Object?> get props => [id, name, phone, squareId, status, creditBalance, debitBalance];
+  List<Object?> get props => [
+    id,
+    name,
+    phone,
+    squareId,
+    status,
+    creditBalance,
+    debitBalance,
+    pathNumbers,
+    createdAt,
+  ];
 }
 
 /// رصيد عداد معزول داخل ملف 360°.
@@ -76,7 +94,8 @@ class MeterBalance extends Equatable {
   final int readingsCount;
   final String status;
   final int? pathNumber;
-  String get title => 'عداد رقم: $meterId ($uniqueCode) - ${tenantName ?? 'بدون مستأجر'}';
+  String get title =>
+      'عداد رقم: $meterId ($uniqueCode) - ${tenantName ?? 'بدون مستأجر'}';
   @override
   List<Object?> get props => [meterId, credit, debit];
 }
@@ -98,7 +117,12 @@ class FinancialSummary extends Equatable {
   final String subscriptionFeeStatus;
   final List<MeterBalance> meterBalances;
   @override
-  List<Object?> get props => [generalBalance, totalCredit, totalDebit, meterBalances];
+  List<Object?> get props => [
+    generalBalance,
+    totalCredit,
+    totalDebit,
+    meterBalances,
+  ];
 }
 
 /// حركة دفتر أستاذ خاصة بمشترك (تبويب كشف الحساب SCR-07/6).
@@ -126,11 +150,11 @@ class LedgerEntry extends Equatable {
 
   bool get isCredit => amount > 0;
   String get typeLabel => switch (type) {
-        'payment' || 'credit' => 'دائن',
-        'invoice' || 'debit' => 'مدين',
-        'adjustment' => 'تسوية',
-        _ => type,
-      };
+    'payment' || 'credit' => 'دائن',
+    'invoice' || 'debit' => 'مدين',
+    'adjustment' => 'تسوية',
+    _ => type,
+  };
   @override
   List<Object?> get props => [id, amount, runningBalance, meterId];
 }
@@ -162,7 +186,8 @@ class PartyMeter extends PartyFilter {
   const PartyMeter(this.meter);
   final MeterBalance meter;
   @override
-  bool operator ==(Object other) => other is PartyMeter && other.meter.meterId == meter.meterId;
+  bool operator ==(Object other) =>
+      other is PartyMeter && other.meter.meterId == meter.meterId;
   @override
   int get hashCode => meter.meterId.hashCode;
   @override

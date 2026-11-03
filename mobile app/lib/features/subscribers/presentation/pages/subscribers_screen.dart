@@ -8,6 +8,7 @@ import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/l10n/subscriber_experience_strings.dart';
+import '../../../../core/models/record_location.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -17,6 +18,7 @@ import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/widgets/barcode_scanner_screen.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
@@ -361,7 +363,10 @@ class _SubscribersView extends StatelessWidget {
     final cubit = context.read<SubscribersCubit>();
     final theme = Theme.of(context);
     final activeCount =
-        (state.squareId == null ? 0 : 1) + (state.status == null ? 0 : 1);
+        (state.squareId == null ? 0 : 1) +
+        (state.status == null ? 0 : 1) +
+        (state.pathNumber == null ? 0 : 1) +
+        (state.query.trim().isEmpty ? 0 : 1);
     final squareName = _squareName(state);
     final netBalanceTotal = state.subscribers.fold<double>(
       0,
@@ -373,7 +378,7 @@ class _SubscribersView extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
         AppFilterBar(
           query: state.query,
-          hint: 'بحث بالاسم / الهاتف / كود العداد',
+          hint: SubscriberExperienceStrings.searchHint,
           activeCount: activeCount,
           onOpenFilters: () => _openFilters(context, state, cubit),
           onChanged: cubit.search,
@@ -388,6 +393,16 @@ class _SubscribersView extends StatelessWidget {
               );
               if (code != null && context.mounted) cubit.search(code);
             },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              SubscriberExperienceStrings.searchHelp,
+              style: theme.textTheme.bodySmall,
+            ),
           ),
         ),
         AppFilterChips(
@@ -408,6 +423,18 @@ class _SubscribersView extends StatelessWidget {
         ),
         AppActiveFilters(
           filters: <Widget>[
+            if (state.pathNumber != null)
+              AppFilterChip(
+                label: SubscriberExperienceStrings.pathsLabel([
+                  state.pathNumber!,
+                ]),
+                icon: Icons.route_outlined,
+                selected: true,
+                onRemove: () => cubit.applyFilters(
+                  squareId: state.squareId,
+                  status: state.status,
+                ),
+              ),
             if (squareName != null)
               AppFilterChip(
                 label: squareName,
@@ -426,8 +453,7 @@ class _SubscribersView extends StatelessWidget {
           onClearAll: activeCount == 0
               ? null
               : () {
-                  cubit.filterSquare(null);
-                  cubit.filterStatus(null);
+                  cubit.clearFilters(clearQuery: true);
                 },
         ),
         Padding(
@@ -499,61 +525,113 @@ class _SubscribersView extends StatelessWidget {
         Expanded(
           child: ListPresentation<Subscriber>(
             items: state.subscribers,
-            initialSettings: const ListPresentationSettings(sortBy: 'name', descending: false),
+            onVisibleItemsChanged: cubit.setVisibleSubscribers,
+            pathNumbers: (subscriber) => subscriber.pathNumbers,
+            initialSettings: const ListPresentationSettings(
+              sortBy: 'name',
+              descending: false,
+            ),
             sortValues: {
-              'name': (label: ListOptionsStrings.name, value: (subscriber) => subscriber.name),
-              'id': (label: ListOptionsStrings.id, value: (subscriber) => subscriber.id),
-              'subscription_start_date': (label: ListOptionsStrings.date, value: (subscriber) => subscriber.subscriptionStartDate ?? ''),
-              'square_name': (label: ListOptionsStrings.square, value: (subscriber) => subscriber.squareName ?? ''),
-              'balance': (label: ListOptionsStrings.balance, value: (subscriber) => subscriber.netBalance),
-              'meters_count': (label: ListOptionsStrings.meters, value: (subscriber) => subscriber.metersCount),
-              'status': (label: ListOptionsStrings.status, value: (subscriber) => subscriber.status.index),
+              'square_id': (
+                label: ListOptionsStrings.square,
+                value: (subscriber) => subscriber.squareId,
+              ),
+              'name': (
+                label: ListOptionsStrings.name,
+                value: (subscriber) => subscriber.name,
+              ),
+              'id': (
+                label: ListOptionsStrings.id,
+                value: (subscriber) => subscriber.id,
+              ),
+              'path_number': (
+                label: SubscriberExperienceStrings.path,
+                value: (subscriber) => subscriber.firstPathNumber,
+              ),
+              'addition_order': (
+                label: SubscriberExperienceStrings.additionOrder,
+                value: (subscriber) => subscriber.id,
+              ),
+              'created_at': (
+                label: SubscriberExperienceStrings.addedAt,
+                value: (subscriber) => subscriber.createdAt,
+              ),
+              'subscription_start_date': (
+                label: SubscriberExperienceStrings.subscriptionDate,
+                value: (subscriber) =>
+                    DateTime.tryParse(subscriber.subscriptionStartDate ?? ''),
+              ),
+              'square_name': (
+                label: ListOptionsStrings.square,
+                value: (subscriber) => subscriber.squareName ?? '',
+              ),
+              'balance': (
+                label: ListOptionsStrings.balance,
+                value: (subscriber) => subscriber.netBalance,
+              ),
+              'meters_count': (
+                label: ListOptionsStrings.meters,
+                value: (subscriber) => subscriber.metersCount,
+              ),
+              'status': (
+                label: ListOptionsStrings.status,
+                value: (subscriber) => subscriber.status.index,
+              ),
             },
-            fields: const {'phone': ListOptionsStrings.phone, 'square': ListOptionsStrings.square,
-              'meters': ListOptionsStrings.meters, 'status': ListOptionsStrings.status, 'balance': ListOptionsStrings.balance},
-            builder: (context, subscribers, options) => subscribers.isEmpty && !state.loading
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AdminEmptyView(
-                      title: 'لا يوجد مشتركون مطابقون',
-                      message: activeCount == 0
-                          ? 'أضف مشتركاً جديداً لتبدأ.'
-                          : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
-                      icon: activeCount == 0
-                          ? Icons.people_outline_rounded
-                          : Icons.filter_alt_off_rounded,
-                    ),
-                    if (activeCount != 0)
-                      TextButton.icon(
-                        onPressed: () {
-                          cubit.filterSquare(null);
-                          cubit.filterStatus(null);
-                          cubit.search('');
-                        },
-                        icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                        label: const Text('مسح الفلاتر'),
+            fields: const {
+              'phone': ListOptionsStrings.phone,
+              'square': ListOptionsStrings.square,
+              'meters': ListOptionsStrings.meters,
+              'status': ListOptionsStrings.status,
+              'balance': ListOptionsStrings.balance,
+              'path': SubscriberExperienceStrings.path,
+            },
+            builder: (context, subscribers, options) =>
+                subscribers.isEmpty && !state.loading
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AdminEmptyView(
+                        title: 'لا يوجد مشتركون مطابقون',
+                        message: activeCount == 0
+                            ? 'أضف مشتركاً جديداً لتبدأ.'
+                            : 'لا شيء يطابق البحث أو الفلاتر الحالية.',
+                        icon: activeCount == 0
+                            ? Icons.people_outline_rounded
+                            : Icons.filter_alt_off_rounded,
                       ),
-                  ],
-                )
-              : ListView.builder(
-                  itemCount: subscribers.length,
-                  itemBuilder: (_, i) {
-                    final sub = subscribers[i];
-                    return _SubscriberCard(
-                      subscriber: sub,
-                      presentation: options,
-                      selected: state.selectedIds.contains(sub.id),
-                      onToggleSelect: () =>
-                          context.read<SubscribersCubit>().toggleSelect(sub.id),
-                      onTap: () => context.read<SubscribersCubit>().select(sub),
-                      onOpen360: (s) => _handleOpen360(context, s),
-                      onEdit: (s) => _handleOpenForm(context, existing: s),
-                      onDelete: (s) => _handleDelete(context, s),
-                      onCollectPayment: onCollectPayment,
-                    );
-                  },
-                ),
+                      if (activeCount != 0)
+                        TextButton.icon(
+                          onPressed: () {
+                            cubit.clearFilters(clearQuery: true);
+                          },
+                          icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                          label: const Text('مسح الفلاتر'),
+                        ),
+                    ],
+                  )
+                : ListView.builder(
+                    itemCount: subscribers.length,
+                    itemBuilder: (_, i) {
+                      final sub = subscribers[i];
+                      return _SubscriberCard(
+                        subscriber: sub,
+                        presentation: options,
+                        selected: state.selectedIds.contains(sub.id),
+                        onToggleSelect: () => context
+                            .read<SubscribersCubit>()
+                            .toggleSelect(sub.id),
+                        onTap: () {
+                          cubit.select(sub);
+                          _handleOpen360(context, sub);
+                        },
+                        onOpen360: (s) => _handleOpen360(context, s),
+                        onEdit: (s) => _handleOpenForm(context, existing: s),
+                        onDelete: (s) => _handleDelete(context, s),
+                        onCollectPayment: onCollectPayment,
+                      );
+                    },
+                  ),
           ),
         ),
       ],

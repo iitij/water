@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/l10n/global_search_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../data/models/global_search_models.dart';
@@ -17,23 +21,51 @@ import '../cubit/global_search_cubit.dart';
 /// الخادم لا يعيد إلا المجموعات التي يملك المستخدم صلاحية عرضها، لذلك لا تحتاج
 /// الشاشة إلى فلترة إضافية. الضغط على نتيجة يفتح شاشة السجل نفسها المستخدمة في
 /// التطبيق (المشترك 360، الفاتورة، السند، …) بدل أي شاشة عرض جديدة.
-class GlobalSearchScreen extends StatelessWidget {
+class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
 
+  @override
+  State<GlobalSearchScreen> createState() => _GlobalSearchScreenState();
+}
+
+class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
+  ListPresentationSettings _view = const ListPresentationSettings();
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<GlobalSearchCubit, GlobalSearchState>(
       builder: (context, state) {
         return SubPageScaffold(
           title: 'البحث الشامل',
-          subtitle: 'اسم، هاتف، رقم فاتورة، سند أو عداد',
+          actions: [
+            ListPresentationControls(
+              settings: _view,
+              filterOptions: const ListFilterOptions(
+                hasCreatedAt: true,
+                search: false,
+              ),
+              sortOptions: const {
+                'id': ListOptionsStrings.id,
+                'created_at': ListOptionsStrings.createdAt,
+              },
+              onChanged: (view) {
+                setState(() => _view = view);
+                context.read<GlobalSearchCubit>().applyFacets(
+                  addedFrom: view.createdFrom,
+                  addedTo: view.createdTo,
+                  sortBy: view.sortBy,
+                  descending: view.descending,
+                );
+              },
+            ),
+          ],
+          subtitle: GlobalSearchStrings.searchHint,
           child: SafeArea(
             top: false,
             child: Column(
               children: <Widget>[
                 AppFilterBar(
                   query: state.query,
-                  hint: 'اسم، هاتف، رقم فاتورة، سند أو عداد…',
+                  hint: GlobalSearchStrings.searchHint,
                   onChanged: context.read<GlobalSearchCubit>().search,
                   onClear: state.query.isEmpty
                       ? null
@@ -71,8 +103,8 @@ class GlobalSearchScreen extends StatelessWidget {
 
     if (state.needsMoreCharacters) {
       return const EmptyStateWidget(
-        title: 'أكمل حرفين على الأقل',
-        message: 'البحث يبدأ من حرفين حتى لا يعيد كل السجلات.',
+        title: GlobalSearchStrings.minimumTitle,
+        message: GlobalSearchStrings.minimumMessage,
         icon: Icons.keyboard_rounded,
       );
     }
@@ -80,7 +112,7 @@ class GlobalSearchScreen extends StatelessWidget {
     if (!state.searched) {
       return EmptyStateWidget(
         title: 'ابحث في كل النظام',
-        message: 'اسم مشترك، رقم هاتف، رقم فاتورة، سند قبض، أو رقم عداد — في مكان واحد.',
+        message: GlobalSearchStrings.introduction,
         icon: Icons.manage_search_rounded,
         action: TextButton.icon(
           onPressed: () => context.push('/services'),
@@ -97,7 +129,8 @@ class GlobalSearchScreen extends StatelessWidget {
     if (!state.hasResults) {
       return const EmptyStateWidget(
         title: 'لا توجد نتائج',
-        message: 'جرّب اسم المشترك كاملاً، أو رقم الهاتف، أو رقم الفاتورة كما يظهر في السند.',
+        message:
+            'جرّب اسم المشترك كاملاً، أو رقم الهاتف، أو رقم الفاتورة كما يظهر في السند.',
         icon: Icons.search_off_rounded,
       );
     }
@@ -111,15 +144,14 @@ class GlobalSearchScreen extends StatelessWidget {
       ),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: <Widget>[
-        for (final group in state.groups)
-          ...<Widget>[
-            _GroupHeader(group: group),
-            for (final item in group.items)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: _ResultTile(type: group.type, item: item),
-              ),
-          ],
+        for (final group in state.groups) ...<Widget>[
+          _GroupHeader(group: group),
+          for (final item in group.items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: _ResultTile(type: group.type, item: item),
+            ),
+        ],
       ],
     );
   }
@@ -135,17 +167,26 @@ class _GroupHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.xs, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),
+      padding: const EdgeInsetsDirectional.fromSTEB(
+        AppSpacing.xs,
+        AppSpacing.md,
+        AppSpacing.xs,
+        AppSpacing.xs,
+      ),
       child: Row(
         children: <Widget>[
           Text(
             group.label,
-            style: theme.textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(width: AppSpacing.xs),
           Text(
             '${group.items.length}',
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -167,7 +208,12 @@ class _ResultTile extends StatelessWidget {
     final caption = item.caption;
 
     return AppCard(
-      padding: const EdgeInsetsDirectional.fromSTEB(AppSpacing.sm, 10, AppSpacing.sm, 10),
+      padding: const EdgeInsetsDirectional.fromSTEB(
+        AppSpacing.sm,
+        10,
+        AppSpacing.sm,
+        10,
+      ),
       onTap: () => _open(context),
       child: Row(
         children: <Widget>[
@@ -184,6 +230,8 @@ class _ResultTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall,
                 ),
+                if (type != 'square')
+                  RecordLocationLabel(location: item.location),
                 if (caption != null) ...<Widget>[
                   const SizedBox(height: 2),
                   Text(
@@ -206,7 +254,9 @@ class _ResultTile extends StatelessWidget {
           else
             Text(
               CurrencyFormatter.withLabel(item.amount),
-              style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
         ],
       ),
@@ -218,16 +268,20 @@ class _ResultTile extends StatelessWidget {
       'subscriber' => '/subscribers/${item.id}',
       'invoice' => '/invoices/${item.id}',
       'payment' => '/payments/${item.id}/edit',
-      'meter' => item.subscriberId != null
-          ? '/subscribers/${item.subscriberId}'
-          : '/meters',
+      'meter' =>
+        item.subscriberId != null
+            ? '/subscribers/${item.subscriberId}'
+            : '/meters',
       'square' => '/squares',
       _ => '/home',
     };
     context.push(route);
   }
 
-  static ({IconData icon, Color tone}) _visualFor(String type, ColorScheme scheme) {
+  static ({IconData icon, Color tone}) _visualFor(
+    String type,
+    ColorScheme scheme,
+  ) {
     return switch (type) {
       'subscriber' => (icon: Icons.person_rounded, tone: scheme.primary),
       'invoice' => (icon: Icons.receipt_long_rounded, tone: AppColors.warning),

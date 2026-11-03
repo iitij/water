@@ -26,6 +26,8 @@ class TariffsState {
     this.sortDirection = 'desc',
     this.lastPage,
     this.totalCount,
+    this.addedFrom,
+    this.addedTo,
   });
 
   final List<TariffModel> tariffs;
@@ -48,6 +50,7 @@ class TariffsState {
   final String sortDirection;
   final int? lastPage;
   final int? totalCount;
+  final DateTime? addedFrom, addedTo;
   bool get hasPreviousPage => page > 1;
   bool get hasNextPage =>
       lastPage != null ? page < lastPage! : tariffs.length == pageSize;
@@ -94,6 +97,9 @@ class TariffsState {
     String? sortDirection,
     int? lastPage,
     int? totalCount,
+    DateTime? addedFrom,
+    DateTime? addedTo,
+    bool clearAddedDates = false,
   }) => TariffsState(
     tariffs: tariffs ?? this.tariffs,
     activePrice: activePrice ?? this.activePrice,
@@ -111,6 +117,8 @@ class TariffsState {
     sortDirection: sortDirection ?? this.sortDirection,
     lastPage: lastPage ?? this.lastPage,
     totalCount: totalCount ?? this.totalCount,
+    addedFrom: clearAddedDates ? addedFrom : addedFrom ?? this.addedFrom,
+    addedTo: clearAddedDates ? addedTo : addedTo ?? this.addedTo,
   );
 }
 
@@ -139,6 +147,8 @@ class TariffsCubit extends Cubit<TariffsState> {
               pageSize: query.pageSize,
               sortBy: query.sortBy,
               sortDirection: query.sortDirection,
+              addedFrom: query.addedFrom,
+              addedTo: query.addedTo,
             );
         if (isClosed || generation != _loadGeneration) return;
         if (result.tariffs.isEmpty && query.page > result.lastPage) {
@@ -214,6 +224,8 @@ class TariffsCubit extends Cubit<TariffsState> {
     required int pageSize,
     required String sortBy,
     required String sortDirection,
+    DateTime? addedFrom,
+    DateTime? addedTo,
   }) async {
     emit(
       state.copyWith(
@@ -221,6 +233,9 @@ class TariffsCubit extends Cubit<TariffsState> {
         pageSize: pageSize,
         sortBy: sortBy,
         sortDirection: sortDirection,
+        addedFrom: addedFrom,
+        addedTo: addedTo,
+        clearAddedDates: true,
         selectedIds: const <int>{},
         selectionMode: false,
       ),

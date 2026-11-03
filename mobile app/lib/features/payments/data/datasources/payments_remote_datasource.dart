@@ -116,12 +116,20 @@ class PaymentsRemoteDataSource {
     int perPage = 25,
     String? sortBy,
     String? sortDirection,
+    int? pathNumber,
+    DateTime? addedFrom,
+    DateTime? addedTo,
   }) async {
     final response = await _client.getRaw(
       FinanceEndpoints.paymentsVoidRequests,
       query: <String, dynamic>{
         'page': page,
         'per_page': perPage,
+        if (pathNumber != null) 'path_number': pathNumber,
+        if (addedFrom != null)
+          'added_from': addedFrom.toIso8601String().split('T').first,
+        if (addedTo != null)
+          'added_to': addedTo.toIso8601String().split('T').first,
         if (sortBy != null) 'sort_by': sortBy,
         if (sortDirection != null) 'sort_direction': sortDirection,
       },

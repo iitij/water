@@ -39,8 +39,15 @@ class FieldReaderScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => BlocProvider(
-    create: (_) =>
-        MetersCubit(metersRepository)..setQuery(initialMeterQuery ?? ''),
+    create: (_) {
+      final cubit = MetersCubit(metersRepository, fieldReaderSearch: true);
+      if (initialMeterQuery?.trim().isNotEmpty == true) {
+        cubit.setMeterQuery(initialMeterQuery!);
+      } else {
+        cubit.setQuery('');
+      }
+      return cubit;
+    },
     child: _FieldReaderView(
       readingsRepository: readingsRepository,
       invoiceActions: invoiceActions,
@@ -115,9 +122,39 @@ class _FieldReaderView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _FieldWorkspaceHeader(state: state),
+                        Padding(
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                            16,
+                            0,
+                            16,
+                            8,
+                          ),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 420),
+                              child: AppSegmentedControl<bool>(
+                                options: const [
+                                  AppSegmentedOption(
+                                    value: true,
+                                    label: FieldExperienceStrings.searchByPath,
+                                  ),
+                                  AppSegmentedOption(
+                                    value: false,
+                                    label: FieldExperienceStrings.searchByMeter,
+                                  ),
+                                ],
+                                value: state.searchByPath,
+                                onChanged: cubit.setSearchByPath,
+                              ),
+                            ),
+                          ),
+                        ),
                         AppFilterBar(
                           query: state.query,
-                          hint: FieldExperienceStrings.searchHint,
+                          hint: state.searchByPath
+                              ? FieldExperienceStrings.pathSearchHint
+                              : FieldExperienceStrings.meterSearchHint,
                           onChanged: cubit.setQuery,
                           activeCount: state.squareFilter == null ? 0 : 1,
                           onOpenFilters: () => _openSquareSheet(context, state),
@@ -130,7 +167,9 @@ class _FieldReaderView extends StatelessWidget {
                             16,
                           ),
                           child: Text(
-                            FieldExperienceStrings.searchHelp,
+                            state.searchByPath
+                                ? FieldExperienceStrings.pathSearchHelp
+                                : FieldExperienceStrings.meterSearchHelp,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -242,7 +281,7 @@ class _FieldReaderView extends StatelessWidget {
         ),
       ),
     );
-    if (code != null && context.mounted) cubit.setQuery(code);
+    if (code != null && context.mounted) cubit.setMeterQuery(code);
   }
 }
 

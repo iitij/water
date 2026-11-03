@@ -72,6 +72,7 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     final query = context.read<PaymentsCubit>().state.query;
     _presentation = ListPresentationSettings(
       sortBy: query.sortBy,
+      pathNumber: query.pathNumber, createdFrom: query.addedFrom, createdTo: query.addedTo,
       descending: query.sortDirection == 'desc',
       pageSize: query.limit ?? 25,
       compact: true,
@@ -82,7 +83,10 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     final reload =
         settings.sortBy != _presentation.sortBy ||
         settings.descending != _presentation.descending ||
-        settings.pageSize != _presentation.pageSize;
+        settings.pageSize != _presentation.pageSize ||
+        settings.pathNumber != _presentation.pathNumber ||
+        settings.createdFrom != _presentation.createdFrom ||
+        settings.createdTo != _presentation.createdTo;
     setState(() {
       _presentation = settings;
       _selecting = false;
@@ -92,6 +96,10 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     await cubit.applyFilters(
       cubit.state.query.copyWith(
         limit: settings.pageSize,
+        pathNumber: settings.pathNumber,
+        addedFrom: settings.createdFrom,
+        addedTo: settings.createdTo,
+        clearListFilters: true,
         sortBy: settings.sortBy,
         sortDirection: settings.descending ? 'desc' : 'asc',
       ),
@@ -154,6 +162,11 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
               ignoring: state.isLoading,
               child: ListPresentationControls(
                 settings: _presentation,
+                filterOptions: const ListFilterOptions(
+                  hasPath: true,
+                  hasCreatedAt: true,
+                  search: false,
+                ),
                 sortOptions: const {
                   'payment_date': ListOptionsStrings.date,
                   'receipt_number': ListOptionsStrings.receiptNumber,
@@ -161,6 +174,9 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                   'amount': ListOptionsStrings.amount,
                   'user_name': ListOptionsStrings.collector,
                   'id': ListOptionsStrings.id,
+                  'created_at': ListOptionsStrings.createdAt,
+                  'path_number': ListOptionsStrings.path,
+                  'square_name': ListOptionsStrings.square,
                 },
                 fields: const {
                   'date': ListOptionsStrings.date,
@@ -232,13 +248,13 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
       ),
       floatingActionButton:
           (trySl<PermissionService>()?.can('invoices.view') ?? false) &&
-                  (trySl<PermissionService>()?.can('payments.collect') ?? false)
-              ? FloatingActionButton.extended(
-                  onPressed: () => _openForm(cubit),
-                  icon: const Icon(Icons.add),
-                  label: const Text('بدء التحصيل'),
-                )
-              : null,
+              (trySl<PermissionService>()?.can('payments.collect') ?? false)
+          ? FloatingActionButton.extended(
+              onPressed: () => _openForm(cubit),
+              icon: const Icon(Icons.add),
+              label: const Text('بدء التحصيل'),
+            )
+          : null,
       body: SafeArea(
         child: BlocBuilder<PaymentsCubit, PaymentsState>(
           builder: (context, state) {

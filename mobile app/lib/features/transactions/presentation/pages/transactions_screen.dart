@@ -11,6 +11,7 @@ import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../domain/entities/ledger_transaction.dart';
 import '../cubit/transactions_cubit.dart';
@@ -302,10 +303,23 @@ class _TransactionsView extends StatelessWidget {
               Expanded(
                 child: ListPresentation<LedgerTransaction>(
                   items: state.transactions,
+                  pathNumbers: (transaction) => transaction.location.paths,
                   initialSettings: const ListPresentationSettings(
                     sortBy: 'created_at',
                   ),
                   sortValues: {
+                    'square_id': (
+                      label: ListOptionsStrings.square,
+                      value: (transaction) => transaction.location.squareId,
+                    ),
+                    'square_name': (
+                      label: ListOptionsStrings.square,
+                      value: (transaction) => transaction.location.squareName,
+                    ),
+                    'path_number': (
+                      label: ListOptionsStrings.path,
+                      value: (transaction) => transaction.location.firstPath,
+                    ),
                     'created_at': (
                       label: ListOptionsStrings.date,
                       value: (transaction) => transaction.createdAt ?? '',
@@ -393,6 +407,7 @@ class _LedgerRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                RecordLocationLabel(location: t.location),
                 Text(
                   '${t.subscriberName ?? ''}${presentation.isVisible('description') ? ' • ${t.description ?? ''}' : ''}',
                   maxLines: 2,

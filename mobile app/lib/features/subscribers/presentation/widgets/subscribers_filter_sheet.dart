@@ -15,17 +15,38 @@ class _SubscribersFilterSheet extends StatefulWidget {
 class _SubscribersFilterSheetState extends State<_SubscribersFilterSheet> {
   late int? _square = widget.state.squareId;
   late SubscriberStatus? _status = widget.state.status;
+  late final _pathController = TextEditingController(
+    text: widget.state.pathNumber?.toString() ?? '',
+  );
+  String? _pathError;
+
+  @override
+  void dispose() {
+    _pathController.dispose();
+    super.dispose();
+  }
 
   void _apply() {
-    widget.cubit.filterSquare(_square);
-    widget.cubit.filterStatus(_status);
+    final text = normalizeDigits(_pathController.text.trim());
+    final path = int.tryParse(text);
+    if (text.isNotEmpty && (path == null || path < 0)) {
+      setState(() => _pathError = SubscriberExperienceStrings.invalidPath);
+      return;
+    }
+    widget.cubit.applyFilters(
+      squareId: _square,
+      status: _status,
+      pathNumber: path,
+    );
     Navigator.of(context).maybePop();
   }
 
   void _reset() => setState(() {
-        _square = null;
-        _status = null;
-      });
+    _square = null;
+    _status = null;
+    _pathController.clear();
+    _pathError = null;
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +55,23 @@ class _SubscribersFilterSheetState extends State<_SubscribersFilterSheet> {
       resultCountLabel: '${widget.state.subscribers.length} مشترك في القائمة',
       onApply: _apply,
       onReset: _reset,
-      resetEnabled: _square != null || _status != null,
+      resetEnabled:
+          _square != null || _status != null || _pathController.text.isNotEmpty,
       sections: <Widget>[
+        AppFilterSection(
+          title: SubscriberExperienceStrings.path,
+          subtitle: SubscriberExperienceStrings.pathHelp,
+          child: TextField(
+            controller: _pathController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: SubscriberExperienceStrings.pathHint,
+              errorText: _pathError,
+              prefixIcon: const Icon(Icons.route_outlined),
+            ),
+            onChanged: (_) => setState(() => _pathError = null),
+          ),
+        ),
         AppFilterSection(
           title: 'حالة الاشتراك',
           child: Column(
@@ -53,8 +89,8 @@ class _SubscribersFilterSheetState extends State<_SubscribersFilterSheet> {
                   icon: status == SubscriberStatus.active
                       ? Icons.check_circle_outline_rounded
                       : status == SubscriberStatus.suspended
-                          ? Icons.pause_circle_outline_rounded
-                          : Icons.remove_circle_outline_rounded,
+                      ? Icons.pause_circle_outline_rounded
+                      : Icons.remove_circle_outline_rounded,
                   selected: _status == status,
                   onTap: () => setState(() => _status = status),
                 ),

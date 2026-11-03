@@ -179,7 +179,7 @@ abstract final class ModuleCatalog {
     AppModule(
       id: 'subscribers',
       group: AppModuleGroup.crm,
-      title: 'المشتركون 360°',
+      title: 'المشتركون',
       subtitle: 'الملف الشامل، كشف الحساب والتبويبات الستة',
       icon: Icons.people_alt_rounded,
       color: AppColors.primary,

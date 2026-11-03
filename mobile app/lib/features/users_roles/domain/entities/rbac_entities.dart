@@ -31,7 +31,15 @@ class SystemUser extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, name, email, avatarUrl, roles, permissions, createdAt];
+  List<Object?> get props => [
+    id,
+    name,
+    email,
+    avatarUrl,
+    roles,
+    permissions,
+    createdAt,
+  ];
 }
 
 class Role extends Equatable {
@@ -42,6 +50,7 @@ class Role extends Equatable {
     required this.permissions,
     this.permissionsCount,
     this.updatedAt,
+    this.createdAt,
   });
 
   final int id;
@@ -50,12 +59,20 @@ class Role extends Equatable {
   final List<String> permissions;
   final int? permissionsCount;
   final DateTime? updatedAt;
+  final DateTime? createdAt;
 
   int get effectivePermissionsCount => permissionsCount ?? permissions.length;
   bool get isSuperAdmin => name == 'super_admin';
 
   @override
-  List<Object?> get props => [id, name, guardName, permissions, permissionsCount, updatedAt];
+  List<Object?> get props => [
+    id,
+    name,
+    guardName,
+    permissions,
+    permissionsCount,
+    updatedAt,
+  ];
 }
 
 enum ShieldPermissionKind { resource, page, widget }
@@ -88,8 +105,11 @@ class ShieldPermissionGroup extends Equatable {
 }
 
 class ShieldPermissionCatalog extends Equatable {
-  const ShieldPermissionCatalog({required this.groups,
-    this.guardNames = const ['web'], this.guardPermissions = const {}});
+  const ShieldPermissionCatalog({
+    required this.groups,
+    this.guardNames = const ['web'],
+    this.guardPermissions = const {},
+  });
 
   final List<ShieldPermissionGroup> groups;
   final List<String> guardNames;
@@ -98,20 +118,32 @@ class ShieldPermissionCatalog extends Equatable {
   ShieldPermissionCatalog forGuard(String guard) {
     if (guardPermissions.isEmpty) return this;
     final allowed = (guardPermissions[guard] ?? const <String>[]).toSet();
-    return ShieldPermissionCatalog(guardNames: guardNames,
-      guardPermissions: guardPermissions, groups: [
+    return ShieldPermissionCatalog(
+      guardNames: guardNames,
+      guardPermissions: guardPermissions,
+      groups: [
         for (final group in groups)
-          if (group.permissions.any((permission) => allowed.contains(permission.name)))
-            ShieldPermissionGroup(key: group.key, label: group.label, kind: group.kind,
-              permissions: group.permissions.where((permission) => allowed.contains(permission.name)).toList()),
-      ]);
+          if (group.permissions.any(
+            (permission) => allowed.contains(permission.name),
+          ))
+            ShieldPermissionGroup(
+              key: group.key,
+              label: group.label,
+              kind: group.kind,
+              permissions: group.permissions
+                  .where((permission) => allowed.contains(permission.name))
+                  .toList(),
+            ),
+      ],
+    );
   }
 
   List<ShieldPermissionGroup> byKind(ShieldPermissionKind kind) =>
       groups.where((group) => group.kind == kind).toList(growable: false);
 
-  Set<String> get allNames =>
-      groups.expand((group) => group.permissions.map((permission) => permission.name)).toSet();
+  Set<String> get allNames => groups
+      .expand((group) => group.permissions.map((permission) => permission.name))
+      .toSet();
 
   @override
   List<Object> get props => [groups, guardNames, guardPermissions];

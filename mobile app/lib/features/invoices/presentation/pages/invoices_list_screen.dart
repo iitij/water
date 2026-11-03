@@ -55,6 +55,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     final query = context.read<InvoicesCubit>().state.query;
     _presentation = ListPresentationSettings(
       sortBy: query.sortBy,
+      pathNumber: query.pathNumber, createdFrom: query.addedFrom, createdTo: query.addedTo,
       descending: query.sortDirection == 'desc',
       pageSize: query.limit ?? 25,
     );
@@ -65,13 +66,20 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     setState(() => _presentation = value);
     if (before.sortBy != value.sortBy ||
         before.descending != value.descending ||
-        before.pageSize != value.pageSize) {
+        before.pageSize != value.pageSize ||
+        value.pathNumber != before.pathNumber ||
+        value.createdFrom != before.createdFrom ||
+        value.createdTo != before.createdTo) {
       final cubit = context.read<InvoicesCubit>();
       cubit.applyFilters(
         cubit.state.query.copyWith(
           sortBy: value.sortBy,
           sortDirection: value.descending ? 'desc' : 'asc',
           limit: value.pageSize,
+          pathNumber: value.pathNumber,
+          addedFrom: value.createdFrom,
+          addedTo: value.createdTo,
+          clearListFilters: true,
         ),
       );
     }
@@ -94,6 +102,11 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
               ignoring: state.isLoading,
               child: ListPresentationControls(
                 settings: _presentation,
+                filterOptions: const ListFilterOptions(
+                  hasPath: true,
+                  hasCreatedAt: true,
+                  search: false,
+                ),
                 sortOptions: const {
                   'bill_date': ListOptionsStrings.date,
                   'bill_number': ListOptionsStrings.billNumber,
@@ -101,6 +114,9 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                   'total_due': ListOptionsStrings.amount,
                   'status': ListOptionsStrings.status,
                   'id': ListOptionsStrings.id,
+                  'created_at': ListOptionsStrings.createdAt,
+                  'path_number': ListOptionsStrings.path,
+                  'square_name': ListOptionsStrings.square,
                 },
                 fields: const {
                   'location': ListOptionsStrings.location,
@@ -653,47 +669,16 @@ class _MasterDetailListState extends State<_MasterDetailList> {
 
   @override
   Widget build(BuildContext context) {
-    final invoice = widget.invoices.where((i) => i.id == _selectedId).firstOrNull;
+    final invoice = widget.invoices
+        .where((i) => i.id == _selectedId)
+        .firstOrNull;
 
-    return LayoutBuilder(builder: (context, constraints) {
-      final compact = constraints.maxWidth < 1100;
-      if (compact) {
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-          itemCount: widget.invoices.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final item = widget.invoices[index];
-            return InvoiceCardActions(
-              invoice: item,
-              siblings: widget.invoices,
-              cubit: widget.cubit,
-              child: InvoiceCard(
-                invoice: item,
-                dense: widget.presentation.compact,
-                hiddenFields: widget.presentation.hiddenFields,
-                remainingLabel: remainingLabelFor(item, widget.invoices),
-                showCheckbox: true,
-                selected: widget.state.selectedIds.contains(item.id),
-                onToggleSelect: () => widget.cubit.toggleSelection(item.id),
-                onMoreActions: () => showInvoiceActionSheet(
-                  context,
-                  invoice: item,
-                  cubit: widget.cubit,
-                ),
-                onTap: () => setState(() => _selectedId = item.id),
-              ),
-            );
-          },
-        );
-      }
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Expanded(
-            flex: constraints.maxWidth >= 1450 ? 4 : 5,
-            child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 6, 96),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 1100;
+        if (compact) {
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
             itemCount: widget.invoices.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
@@ -702,41 +687,80 @@ class _MasterDetailListState extends State<_MasterDetailList> {
                 invoice: item,
                 siblings: widget.invoices,
                 cubit: widget.cubit,
-                child: InkWell(
-                  onTap: () => setState(() => _selectedId = item.id),
-                  child: InvoiceCard(
+                child: InvoiceCard(
+                  invoice: item,
+                  dense: widget.presentation.compact,
+                  hiddenFields: widget.presentation.hiddenFields,
+                  remainingLabel: remainingLabelFor(item, widget.invoices),
+                  showCheckbox: true,
+                  selected: widget.state.selectedIds.contains(item.id),
+                  onToggleSelect: () => widget.cubit.toggleSelection(item.id),
+                  onMoreActions: () => showInvoiceActionSheet(
+                    context,
                     invoice: item,
-                    dense: widget.presentation.compact,
-                    hiddenFields: widget.presentation.hiddenFields,
-                    remainingLabel: remainingLabelFor(item, widget.invoices),
-                    showCheckbox: true,
-                    selected: widget.state.selectedIds.contains(item.id),
-                    onToggleSelect: () => widget.cubit.toggleSelection(item.id),
-                    onMoreActions: () => showInvoiceActionSheet(
-                      context,
-                      invoice: item,
-                      cubit: widget.cubit,
-                    ),
+                    cubit: widget.cubit,
                   ),
+                  onTap: () => setState(() => _selectedId = item.id),
                 ),
               );
             },
-          ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          flex: constraints.maxWidth >= 1450 ? 6 : 5,
-          child: invoice == null
-              ? const EmptyStateWidget(
-                  title: 'اختر فاتورة لعرض تفاصيلها',
-                  icon: Icons.receipt_long_outlined,
-                  compact: true,
-                )
-              : InvoiceDetailPanel(invoice: invoice, cubit: widget.cubit),
-        ),
-      ],
-      );
-    });
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Expanded(
+              flex: constraints.maxWidth >= 1450 ? 4 : 5,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 12, 6, 96),
+                itemCount: widget.invoices.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final item = widget.invoices[index];
+                  return InvoiceCardActions(
+                    invoice: item,
+                    siblings: widget.invoices,
+                    cubit: widget.cubit,
+                    child: InkWell(
+                      onTap: () => setState(() => _selectedId = item.id),
+                      child: InvoiceCard(
+                        invoice: item,
+                        dense: widget.presentation.compact,
+                        hiddenFields: widget.presentation.hiddenFields,
+                        remainingLabel: remainingLabelFor(
+                          item,
+                          widget.invoices,
+                        ),
+                        showCheckbox: true,
+                        selected: widget.state.selectedIds.contains(item.id),
+                        onToggleSelect: () =>
+                            widget.cubit.toggleSelection(item.id),
+                        onMoreActions: () => showInvoiceActionSheet(
+                          context,
+                          invoice: item,
+                          cubit: widget.cubit,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              flex: constraints.maxWidth >= 1450 ? 6 : 5,
+              child: invoice == null
+                  ? const EmptyStateWidget(
+                      title: 'اختر فاتورة لعرض تفاصيلها',
+                      icon: Icons.receipt_long_outlined,
+                      compact: true,
+                    )
+                  : InvoiceDetailPanel(invoice: invoice, cubit: widget.cubit),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

@@ -4,6 +4,7 @@ import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/status_badge.dart';
@@ -87,6 +88,8 @@ class InvoiceCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            RecordLocationLabel(location: invoice.location),
+            const SizedBox(height: 4),
             // ── A. الترويسة: المستفيد أولاً + الحالة ──
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

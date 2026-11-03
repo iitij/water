@@ -7,5 +7,8 @@ abstract interface class SortedVoidRequestsRepository {
     required int perPage,
     required String sortBy,
     required String sortDirection,
+    int? pathNumber,
+    DateTime? addedFrom,
+    DateTime? addedTo,
   });
 }

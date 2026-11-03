@@ -88,6 +88,7 @@ class DeviceController extends ApiController
     {
         return [
             'id' => $device->id,
+            'created_at' => $device->created_at?->toISOString(),
             'device_uuid' => $device->device_uuid,
             'name' => $device->name,
             'platform' => $device->platform,

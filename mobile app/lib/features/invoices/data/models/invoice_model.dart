@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/models/record_location.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../domain/accounting/finance_enums.dart';
 
@@ -14,6 +15,7 @@ import '../../domain/accounting/finance_enums.dart';
 class InvoiceModel extends Equatable {
   const InvoiceModel({
     required this.id,
+    this.location = const RecordLocation(),
     required this.subscriberId,
     required this.invoiceType,
     required this.billNumber,
@@ -42,6 +44,7 @@ class InvoiceModel extends Equatable {
     this.isPathMatch = false,
   });
 
+  final RecordLocation location;
   final int id;
   final int subscriberId;
   final int? meterId;
@@ -145,6 +148,7 @@ class InvoiceModel extends Equatable {
 
     return InvoiceModel(
       id: JsonUtils.asInt(json['id']),
+      location: RecordLocation.fromJson(json),
       subscriberId: JsonUtils.asInt(json['subscriber_id']),
       meterId: JsonUtils.asIntOrNull(json['meter_id']),
       invoiceType: InvoiceType.parse(json['invoice_type'] as String?),
@@ -261,6 +265,7 @@ class InvoiceModel extends Equatable {
     amountPaid: amountPaid ?? this.amountPaid,
     status: status ?? this.status,
     notes: notes ?? this.notes,
+    location: location,
     createdAt: createdAt,
     deletedAt: deletedAt,
     subscriber: subscriber ?? this.subscriber,
@@ -274,7 +279,7 @@ class InvoiceModel extends Equatable {
   );
 
   @override
-  List<Object?> get props => <Object?>[
+  List<Object?> get props => <Object?>[location,
     id,
     billNumber,
     status,

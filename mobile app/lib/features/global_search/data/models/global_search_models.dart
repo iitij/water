@@ -1,3 +1,5 @@
+import '../../../../core/models/record_location.dart';
+
 /// استجابة البحث الكاملة: الاستعلام الأصلي + مجموعات النتائج المرخّصة فقط.
 class GlobalSearchResponse {
   const GlobalSearchResponse({
@@ -12,16 +14,17 @@ class GlobalSearchResponse {
 
   bool get isEmpty => groups.isEmpty;
 
-  int get itemCount => groups.fold<int>(0, (sum, group) => sum + group.items.length);
+  int get itemCount =>
+      groups.fold<int>(0, (sum, group) => sum + group.items.length);
 
   factory GlobalSearchResponse.fromJson(Map<String, dynamic> json) {
     final rawGroups = json['groups'];
     final groups = rawGroups is List
         ? rawGroups
-            .whereType<Map<String, dynamic>>()
-            .map(GlobalSearchGroup.fromJson)
-            .where((group) => group.items.isNotEmpty)
-            .toList(growable: false)
+              .whereType<Map<String, dynamic>>()
+              .map(GlobalSearchGroup.fromJson)
+              .where((group) => group.items.isNotEmpty)
+              .toList(growable: false)
         : const <GlobalSearchGroup>[];
 
     return GlobalSearchResponse(
@@ -51,9 +54,9 @@ class GlobalSearchGroup {
       label: _asText(json['label']) ?? '',
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(GlobalSearchItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(GlobalSearchItem.fromJson)
+                .toList(growable: false)
           : const <GlobalSearchItem>[],
     );
   }
@@ -63,6 +66,7 @@ class GlobalSearchGroup {
 class GlobalSearchItem {
   const GlobalSearchItem({
     required this.id,
+    this.location = const RecordLocation(),
     required this.title,
     this.subtitle,
     this.badge,
@@ -71,6 +75,7 @@ class GlobalSearchItem {
   });
 
   final int id;
+  final RecordLocation location;
   final String title;
   final String? subtitle;
   final String? badge;
@@ -89,6 +94,7 @@ class GlobalSearchItem {
   factory GlobalSearchItem.fromJson(Map<String, dynamic> json) {
     return GlobalSearchItem(
       id: _asInt(json['id']) ?? 0,
+      location: RecordLocation.fromJson(json),
       title: _asText(json['title']) ?? '',
       subtitle: _asText(json['subtitle']),
       badge: _asText(json['badge']),

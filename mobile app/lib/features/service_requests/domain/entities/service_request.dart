@@ -1,26 +1,29 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/models/record_location.dart';
+
 enum TankerStatus { pending, completed, invoiced, paid }
 
 extension TankerStatusX on TankerStatus {
   String get apiValue => name;
   String get label => switch (this) {
-        TankerStatus.pending => 'معلق',
-        TankerStatus.completed => 'مكتمل',
-        TankerStatus.invoiced => 'مفوتر',
-        TankerStatus.paid => 'مسدد',
-      };
+    TankerStatus.pending => 'معلق',
+    TankerStatus.completed => 'مكتمل',
+    TankerStatus.invoiced => 'مفوتر',
+    TankerStatus.paid => 'مسدد',
+  };
   static TankerStatus fromApi(String? v) => switch (v) {
-        'completed' => TankerStatus.completed,
-        'invoiced' => TankerStatus.invoiced,
-        'paid' => TankerStatus.paid,
-        _ => TankerStatus.pending,
-      };
+    'completed' => TankerStatus.completed,
+    'invoiced' => TankerStatus.invoiced,
+    'paid' => TankerStatus.paid,
+    _ => TankerStatus.pending,
+  };
 }
 
 class ServiceRequest extends Equatable {
   const ServiceRequest({
     required this.id,
+    this.location = const RecordLocation(),
     required this.subscriberId,
     required this.amount,
     required this.serviceDate,
@@ -29,7 +32,9 @@ class ServiceRequest extends Equatable {
     this.invoiceId,
     this.invoiceNumber,
     this.notes,
+    this.createdAt,
   });
+  final RecordLocation location;
   final int id;
   final int subscriberId;
   final String? subscriberName;
@@ -39,14 +44,26 @@ class ServiceRequest extends Equatable {
   final int? invoiceId;
   final String? invoiceNumber;
   final String? notes;
+  final DateTime? createdAt;
 
   bool get hasNote => notes != null && notes!.trim().isNotEmpty;
   bool get canEdit => true;
   bool get canEditFinancial => invoiceId == null;
-  bool get canDelete => invoiceId == null &&
+  bool get canDelete =>
+      invoiceId == null &&
       (status == TankerStatus.pending || status == TankerStatus.completed);
   bool get canComplete => invoiceId == null && status == TankerStatus.pending;
   bool get canInvoice => invoiceId == null && status == TankerStatus.completed;
   @override
-  List<Object?> get props => [id, subscriberId, subscriberName, amount, serviceDate, status, invoiceId, invoiceNumber, notes];
+  List<Object?> get props => [location,
+    id,
+    subscriberId,
+    subscriberName,
+    amount,
+    serviceDate,
+    status,
+    invoiceId,
+    invoiceNumber,
+    notes,
+  ];
 }

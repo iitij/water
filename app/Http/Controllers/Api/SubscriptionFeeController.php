@@ -12,16 +12,16 @@ class SubscriptionFeeController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(SubscriptionFee::class, 'viewAny');
-        $query = SubscriptionFee::with(['subscriber:id,name,phone,square_id', 'meter:id,unique_code,path_number,tenant_name', 'invoice:id,bill_number,status'])
+        $query = SubscriptionFee::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number,tenant_name', 'invoice:id,bill_number,status'])
             ->latest('id');
         if ($request->filled('status')) $query->where('status', $request->query('status'));
         if ($request->filled('subscriber_id')) $query->where('subscriber_id', $request->integer('subscriber_id'));
         if ($request->filled('meter_id')) $query->where('meter_id', $request->integer('meter_id'));
         if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('created_at', '<=', $request->query('to_date'));
+        $this->applySorting($query, $request, self::LIST_SORTS['subscription_fees']);
         $total = (clone $query)->sum('amount');
         $invoiced = (clone $query)->whereIn('status', ['invoiced', 'partially_paid', 'paid'])->sum('amount');
-        $this->applySorting($query, $request, self::LIST_SORTS['subscription_fees']);
         $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
             'data' => $page->items(),

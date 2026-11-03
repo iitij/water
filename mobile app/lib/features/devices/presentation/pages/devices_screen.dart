@@ -3,11 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/finance/finance_feedback.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
 import '../../../admin_shared/presentation/widgets/admin_permission_guard.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../domain/device_record.dart';
@@ -35,7 +37,9 @@ class DevicesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (can != null && !can!(AdminPermissions.viewUsers)) {
       return const Scaffold(
-        body: AdminErrorView(message: 'إدارة الأجهزة تحتاج صلاحية ViewAny:User.'),
+        body: AdminErrorView(
+          message: 'إدارة الأجهزة تحتاج صلاحية ViewAny:User.',
+        ),
       );
     }
     return BlocProvider(
@@ -82,12 +86,13 @@ class _DevicesView extends StatelessWidget {
             ),
           ],
           child: switch (state.status) {
-            DevicesStatus.initial || DevicesStatus.loading when state.devices.isEmpty =>
+            DevicesStatus.initial || DevicesStatus.loading
+                when state.devices.isEmpty =>
               const AppLoader(),
             DevicesStatus.failure when state.devices.isEmpty => AdminErrorView(
-                message: state.errorMessage ?? 'تعذّر تحميل الأجهزة.',
-                onRetry: () => context.read<DevicesCubit>().load(),
-              ),
+              message: state.errorMessage ?? 'تعذّر تحميل الأجهزة.',
+              onRetry: () => context.read<DevicesCubit>().load(),
+            ),
             _ => _DevicesBody(state: state),
           },
         );
@@ -103,50 +108,81 @@ class _DevicesBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = state.active;
-    final revoked = state.revoked;
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      children: <Widget>[
-        AppCard(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Icon(Icons.shield_outlined, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: AppSpacing.sm),
-              const Expanded(
-                child: Text(
-                  'كل جهاز يسجّل الدخول يظهر هنا. إبطال جهاز يمنعه من الوصول '
-                  'إلى البيانات في أول طلب لاحق — استخدمه فوراً عند فقدان الجهاز.',
-                  style: TextStyle(height: 1.5),
-                ),
-              ),
-            ],
-          ),
+    return ListPresentation<DeviceRecord>(
+      items: state.devices,
+      sortValues: {
+        'id': (label: ListOptionsStrings.id, value: (device) => device.id),
+        'name': (
+          label: ListOptionsStrings.name,
+          value: (device) => device.displayName,
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Text('نشطة (${active.length})', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: AppSpacing.sm),
-        if (active.isEmpty)
-          const AppCard(child: Text('لا توجد أجهزة نشطة مسجّلة على هذا الحساب.'))
-        else
-          for (final device in active)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _DeviceCard(device: device),
+        'status': (
+          label: ListOptionsStrings.status,
+          value: (device) => device.isRevoked ? 1 : 0,
+        ),
+        'created_at': (
+          label: ListOptionsStrings.createdAt,
+          value: (device) => device.createdAt,
+        ),
+      },
+      builder: (context, devices, options) {
+        final active = devices.where((device) => !device.isRevoked).toList();
+        final revoked = devices.where((device) => device.isRevoked).toList();
+        return ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: <Widget>[
+            AppCard(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    Icons.shield_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Expanded(
+                    child: Text(
+                      'كل جهاز يسجّل الدخول يظهر هنا. إبطال جهاز يمنعه من الوصول '
+                      'إلى البيانات في أول طلب لاحق — استخدمه فوراً عند فقدان الجهاز.',
+                      style: TextStyle(height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
             ),
-        if (revoked.isNotEmpty) ...<Widget>[
-          const SizedBox(height: AppSpacing.lg),
-          Text('مُبطلة (${revoked.length})', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: AppSpacing.sm),
-          for (final device in revoked)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _DeviceCard(device: device),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'نشطة (${active.length})',
+              style: Theme.of(context).textTheme.titleSmall,
             ),
-        ],
-      ],
+            const SizedBox(height: AppSpacing.sm),
+            if (active.isEmpty)
+              const AppCard(
+                child: Text('لا توجد أجهزة نشطة مسجّلة على هذا الحساب.'),
+              )
+            else
+              for (final device in active)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: _DeviceCard(device: device),
+                ),
+            if (revoked.isNotEmpty) ...<Widget>[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'مُبطلة (${revoked.length})',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              for (final device in revoked)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: _DeviceCard(device: device),
+                ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -165,7 +201,8 @@ class _DeviceCard extends StatelessWidget {
     final confirmed = await ConfirmDialog.show(
       context,
       title: 'إبطال الجهاز؟',
-      message: 'سيفقد «${device.displayName}» الوصول فوراً، وسيُطلب تسجيل الدخول '
+      message:
+          'سيفقد «${device.displayName}» الوصول فوراً، وسيُطلب تسجيل الدخول '
           'من جديد على ذلك الجهاز. لا يمكن التراجع.',
       confirmLabel: 'إبطال',
       destructive: true,
@@ -197,17 +234,31 @@ class _DeviceCard extends StatelessWidget {
                   runSpacing: AppSpacing.xs,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
-                    Text(device.displayName, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      device.displayName,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     if (device.isCurrent)
-                      const AppPill(label: 'هذا الجهاز', dense: true, filled: true),
+                      const AppPill(
+                        label: 'هذا الجهاز',
+                        dense: true,
+                        filled: true,
+                      ),
                     if (revoked)
-                      AppPill(label: 'مُبطل', icon: Icons.block_rounded, dense: true, color: scheme.error),
+                      AppPill(
+                        label: 'مُبطل',
+                        icon: Icons.block_rounded,
+                        dense: true,
+                        color: scheme.error,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _subtitle(device),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -249,7 +300,9 @@ class _DeviceCard extends StatelessWidget {
     if (device.isRevoked) {
       parts.add('أُبطل ${_format(device.revokedAt!)}');
     }
-    return parts.isEmpty ? DeviceRecord.platformLabelOf(device.platform) : parts.join(' • ');
+    return parts.isEmpty
+        ? DeviceRecord.platformLabelOf(device.platform)
+        : parts.join(' • ');
   }
 
   static String _format(DateTime value) {

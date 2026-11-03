@@ -54,32 +54,38 @@ class SquaresScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(square == null ? 'إضافة مربع سكني' : 'تعديل المربع'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'اسم المربع * (100 حرف كحد أقصى)',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'اسم المربع * (100 حرف كحد أقصى)',
+              ),
+              maxLength: 100,
             ),
-            maxLength: 100,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: descCtrl,
-            decoration: const InputDecoration(
-              labelText: 'الوصف (3 أسطر)',
+            const SizedBox(height: 8),
+            TextField(
+              controller: descCtrl,
+              decoration: const InputDecoration(labelText: 'الوصف (3 أسطر)'),
+              maxLines: 3,
             ),
-            maxLines: 3,
-          ),
-        ]),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
             onPressed: () {
               if (nameCtrl.text.trim().isEmpty) return;
               cubit.save(
                 id: square?.id,
                 name: nameCtrl.text.trim(),
-                description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                description: descCtrl.text.trim().isEmpty
+                    ? null
+                    : descCtrl.text.trim(),
               );
               Navigator.pop(ctx);
             },
@@ -97,11 +103,15 @@ class _SquaresView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<SquaresCubit, SquaresState>(
-      listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+      listenWhen: (prev, curr) =>
+          curr.error != null && prev.error != curr.error,
       listener: (context, state) {
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.error!), backgroundColor: AppColors.danger),
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
+            ),
           );
         }
       },
@@ -181,49 +191,70 @@ class _MasterList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.all(12),
-        child: TextField(
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'بحث باسم المربع...',
-          ),
-          onChanged: (v) => context.read<SquaresCubit>().load(search: v),
-        ),
-      ),
-      if (state.selectedIds.isNotEmpty)
-        MaterialBanner(
-          content: Text('تم تحديد ${state.selectedIds.length} مربعاً'),
-          leading: const Icon(Icons.checklist),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                if (await confirmAction(
-                  context,
-                  'حذف جماعي للمربعات',
-                  'حذف ${state.selectedIds.length} مربعاً؟ لا يمكن حذف المربعات التي تحتوي على مشتركين.',
-                )) {
-                  if (context.mounted) {
-                    await context.read<SquaresCubit>().bulkDelete();
-                  }
-                }
-              },
-              child: const Text('حذف المحدد', style: TextStyle(color: AppColors.danger)),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'بحث باسم المربع...',
             ),
-          ],
+            onChanged: (v) => context.read<SquaresCubit>().load(search: v),
+          ),
         ),
-      Expanded(
-        child: ListPresentation<Square>(items: state.squares,
-          sortValues: {
-            'name': (label: ListOptionsStrings.name, value: (square) => square.name),
-            'id': (label: ListOptionsStrings.id, value: (square) => square.id),
-            'subscribers_count': (label: ListOptionsStrings.subscriber, value: (square) => square.subscribersCount),
-          }, fields: const {'description': ListOptionsStrings.description,
-            'subscribers_count': ListOptionsStrings.subscriber},
-          builder: (context, squares, options) => state.loading
-            ? const Center(child: CircularProgressIndicator())
-            : squares.isEmpty
+        if (state.selectedIds.isNotEmpty)
+          MaterialBanner(
+            content: Text('تم تحديد ${state.selectedIds.length} مربعاً'),
+            leading: const Icon(Icons.checklist),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  if (await confirmAction(
+                    context,
+                    'حذف جماعي للمربعات',
+                    'حذف ${state.selectedIds.length} مربعاً؟ لا يمكن حذف المربعات التي تحتوي على مشتركين.',
+                  )) {
+                    if (context.mounted) {
+                      await context.read<SquaresCubit>().bulkDelete();
+                    }
+                  }
+                },
+                child: const Text(
+                  'حذف المحدد',
+                  style: TextStyle(color: AppColors.danger),
+                ),
+              ),
+            ],
+          ),
+        Expanded(
+          child: ListPresentation<Square>(
+            items: state.squares,
+            sortValues: {
+              'created_at': (
+                label: ListOptionsStrings.createdAt,
+                value: (square) => square.createdAt,
+              ),
+              'name': (
+                label: ListOptionsStrings.name,
+                value: (square) => square.name,
+              ),
+              'id': (
+                label: ListOptionsStrings.id,
+                value: (square) => square.id,
+              ),
+              'subscribers_count': (
+                label: ListOptionsStrings.subscriber,
+                value: (square) => square.subscribersCount,
+              ),
+            },
+            fields: const {
+              'description': ListOptionsStrings.description,
+              'subscribers_count': ListOptionsStrings.subscriber,
+            },
+            builder: (context, squares, options) => state.loading
+                ? const Center(child: CircularProgressIndicator())
+                : squares.isEmpty
                 ? const EmptyState(message: 'لا توجد مربعات سكنية')
                 : ListView.builder(
                     itemCount: squares.length,
@@ -232,97 +263,139 @@ class _MasterList extends StatelessWidget {
                       final selected = state.selected?.id == sq.id;
                       final checked = state.selectedIds.contains(sq.id);
                       return Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                        padding: const EdgeInsetsDirectional.fromSTEB(
+                          16,
+                          0,
+                          16,
+                          8,
+                        ),
                         child: AppCard(
-                        padding: EdgeInsets.zero,
-                        color: (selected || checked)
-                            ? Theme.of(context).colorScheme.primary.withValues(alpha: .04)
-                            : null,
-                        borderColor: (selected || checked)
-                            ? Theme.of(context).colorScheme.primary.withValues(alpha: .4)
-                            : null,
-                        child: ListTile(
-                          dense: options.compact,
-                          leading: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(
-                                value: checked,
-                                onChanged: (_) => context.read<SquaresCubit>().toggleSelect(sq.id),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              const AppGlyph(
-                                icon: Icons.grid_view_rounded,
-                                size: 36,
-                                neutral: true,
-                              ),
-                            ],
-                          ),
-                          title: Text(sq.name),
-                          subtitle: options.isVisible('description') ? Text(sq.description ?? '') : null,
-                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            if (options.isVisible('subscribers_count'))
-                              StatusBadge(label: '${sq.subscribersCount} مشترك', color: AppColors.info),
-                            PopupMenuButton<String>(
-                              tooltip: 'خيارات المربع',
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(AppRadius.lg),
-                              ),
-                              onSelected: (value) async {
-                                if (value == 'edit') {
-                                  unawaited(SquaresScreen._showForm(context, square: sq));
-                                }
-                                if (value == 'delete') {
-                                  if (await confirmAction(
-                                    context,
-                                    'حذف المربع',
-                                    'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
-                                  )) {
-                                    if (context.mounted) {
-                                      await context.read<SquaresCubit>().delete(sq.id);
-                                    }
-                                  }
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.edit_outlined, size: 18),
-                                      SizedBox(width: 10),
-                                      Text('تعديل المربع'),
-                                    ],
-                                  ),
+                          padding: EdgeInsets.zero,
+                          color: (selected || checked)
+                              ? Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: .04)
+                              : null,
+                          borderColor: (selected || checked)
+                              ? Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: .4)
+                              : null,
+                          child: ListTile(
+                            dense: options.compact,
+                            leading: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Checkbox(
+                                  value: checked,
+                                  onChanged: (_) => context
+                                      .read<SquaresCubit>()
+                                      .toggleSelect(sq.id),
+                                  visualDensity: VisualDensity.compact,
                                 ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
-                                      SizedBox(width: 10),
-                                      Text('حذف المربع', style: TextStyle(color: AppColors.danger)),
-                                    ],
+                                const AppGlyph(
+                                  icon: Icons.grid_view_rounded,
+                                  size: 36,
+                                  neutral: true,
+                                ),
+                              ],
+                            ),
+                            title: Text(sq.name),
+                            subtitle: options.isVisible('description')
+                                ? Text(sq.description ?? '')
+                                : null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (options.isVisible('subscribers_count'))
+                                  StatusBadge(
+                                    label: '${sq.subscribersCount} مشترك',
+                                    color: AppColors.info,
+                                  ),
+                                PopupMenuButton<String>(
+                                  tooltip: 'خيارات المربع',
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.lg,
+                                    ),
+                                  ),
+                                  onSelected: (value) async {
+                                    if (value == 'edit') {
+                                      unawaited(
+                                        SquaresScreen._showForm(
+                                          context,
+                                          square: sq,
+                                        ),
+                                      );
+                                    }
+                                    if (value == 'delete') {
+                                      if (await confirmAction(
+                                        context,
+                                        'حذف المربع',
+                                        'حذف «${sq.name}»؟ لا يمكن الحذف إن كان له مشتركون.',
+                                      )) {
+                                        if (context.mounted) {
+                                          await context
+                                              .read<SquaresCubit>()
+                                              .delete(sq.id);
+                                        }
+                                      }
+                                    }
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 10),
+                                          Text('تعديل المربع'),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.delete_outline,
+                                            size: 18,
+                                            color: AppColors.danger,
+                                          ),
+                                          SizedBox(width: 10),
+                                          Text(
+                                            'حذف المربع',
+                                            style: TextStyle(
+                                              color: AppColors.danger,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  icon: Icon(
+                                    Icons.more_vert_rounded,
+                                    size: 20,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
-                              icon: Icon(
-                                Icons.more_vert_rounded,
-                                size: 20,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
                             ),
-                          ]),
-                          onTap: () => _selectSquare(context, sq),
-                          onLongPress: () => context.read<SquaresCubit>().toggleSelect(sq.id),
-                        ),
+                            onTap: () => _selectSquare(context, sq),
+                            onLongPress: () => context
+                                .read<SquaresCubit>()
+                                .toggleSelect(sq.id),
+                          ),
                         ),
                       );
                     },
                   ),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -330,7 +403,10 @@ class _SquareDetail extends StatelessWidget {
   const _SquareDetail({required this.state});
   final SquaresState state;
 
-  Future<void> _openSubscriber(BuildContext context, Subscriber subscriber) async {
+  Future<void> _openSubscriber(
+    BuildContext context,
+    Subscriber subscriber,
+  ) async {
     final cubit = context.read<SquaresCubit>();
     final sq = state.selected;
     final router = GoRouter.maybeOf(context);
@@ -351,7 +427,8 @@ class _SquareDetail extends StatelessWidget {
         builder: (_) => MultiBlocProvider(
           providers: [
             BlocProvider<Subscriber360Cubit>(
-              create: (_) => Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
+              create: (_) =>
+                  Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
             ),
             BlocProvider<SubscriptionFeesCubit>(
               create: (_) => SubscriptionFeesCubit(deps.fees)
@@ -374,7 +451,11 @@ class _SquareDetail extends StatelessWidget {
     }
   }
 
-  Future<void> _openSubscriberForm(BuildContext context, Square sq, {Subscriber? existing}) async {
+  Future<void> _openSubscriberForm(
+    BuildContext context,
+    Square sq, {
+    Subscriber? existing,
+  }) async {
     final cubit = context.read<SquaresCubit>();
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -393,7 +474,11 @@ class _SquareDetail extends StatelessWidget {
     }
   }
 
-  Future<void> _deleteSubscriber(BuildContext context, Square sq, Subscriber sub) async {
+  Future<void> _deleteSubscriber(
+    BuildContext context,
+    Square sq,
+    Subscriber sub,
+  ) async {
     final confirmed = await confirmAction(
       context,
       'حذف مشترك من المربع',
@@ -407,15 +492,18 @@ class _SquareDetail extends StatelessWidget {
         await cubit.select(sq);
         await cubit.load();
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم حذف المشترك بنجاح')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('تم حذف المشترك بنجاح')));
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.danger),
+          SnackBar(
+            content: Text(friendlyError(e)),
+            backgroundColor: AppColors.danger,
+          ),
         );
       }
     }
@@ -424,62 +512,70 @@ class _SquareDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sq = state.selected!;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Container(
-        color: AppColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'مشتركو: ${sq.name} (${state.selectedSubscribers.length})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: AppColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'مشتركو: ${sq.name} (${state.selectedSubscribers.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () => _openSubscriberForm(context, sq),
-              icon: const Icon(Icons.person_add, size: 18),
-              label: const Text('إضافة مشترك'),
-            ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: state.selectedSubscribers.isEmpty
-            ? const EmptyState(message: 'لا يوجد مشتركون في هذا المربع بعد')
-            : ListView.builder(
-                itemCount: state.selectedSubscribers.length,
-                itemBuilder: (_, i) {
-                  final s = state.selectedSubscribers[i];
-                  return ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(s.name),
-                    subtitle: Text(s.phone ?? ''),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        BalanceText(s.netBalance),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'تعديل المشترك',
-                          onPressed: () => _openSubscriberForm(context, sq, existing: s),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger),
-                          tooltip: 'حذف المشترك',
-                          onPressed: () => _deleteSubscriber(context, sq, s),
-                        ),
-                      ],
-                    ),
-                    onTap: () => _openSubscriber(context, s),
-                  );
-                },
+              FilledButton.tonalIcon(
+                onPressed: () => _openSubscriberForm(context, sq),
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('إضافة مشترك'),
               ),
-      ),
-    ]);
+            ],
+          ),
+        ),
+        Expanded(
+          child: state.selectedSubscribers.isEmpty
+              ? const EmptyState(message: 'لا يوجد مشتركون في هذا المربع بعد')
+              : ListView.builder(
+                  itemCount: state.selectedSubscribers.length,
+                  itemBuilder: (_, i) {
+                    final s = state.selectedSubscribers[i];
+                    return ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(s.name),
+                      subtitle: Text(s.phone ?? ''),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          BalanceText(s.netBalance),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            tooltip: 'تعديل المشترك',
+                            onPressed: () =>
+                                _openSubscriberForm(context, sq, existing: s),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: AppColors.danger,
+                            ),
+                            tooltip: 'حذف المشترك',
+                            onPressed: () => _deleteSubscriber(context, sq, s),
+                          ),
+                        ],
+                      ),
+                      onTap: () => _openSubscriber(context, s),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 }

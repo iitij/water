@@ -62,4 +62,22 @@ abstract final class ListOptionsStrings {
   static const type = 'النوع';
   static const description = 'البيان';
   static const loadError = 'تعذر تحميل القائمة كاملة. أعد المحاولة.';
+  static const search = 'بحث في النتائج';
+  static const searchHint = 'ابحث في بيانات القائمة أو المربع/المسار مثل 4/1';
+  static const path = 'رقم المسار';
+  static const allPaths = 'كل المسارات';
+  static const allSquares = 'كل المربعات';
+  static const addedFrom = 'تاريخ الإضافة من';
+  static const addedTo = 'تاريخ الإضافة إلى';
+  static const anyDate = 'كل التواريخ';
+  static const invalidPath = 'أدخل رقم مسار صحيحاً من صفر فأكثر.';
+  static const invalidPeriod = 'تاريخ البداية يجب أن يسبق تاريخ النهاية.';
+  static const clearFilters = 'مسح فلاتر العرض';
+  static const filters = 'البحث والفلترة';
+  static const sourceTotals =
+      'الإجماليات أعلى الشاشة تشمل القائمة قبل فلاتر العرض.';
+  static const noSquare = 'بدون مربع';
+  static const noPath = 'بدون مسار';
+  static const notApplicable = 'لا يرتبط السجل بمشترك أو مسار';
+  static String filterCount(int count) => 'فلاتر العرض: $count';
 }

@@ -368,7 +368,11 @@ class SubscriberController extends ApiController
             'square' => $subscriber->square,
             'meters_count' => $subscriber->meters_count,
             'subscription_start_date' => optional($subscriber->subscription_start_date)->format('Y-m-d'),
+            'created_at' => $subscriber->created_at?->toISOString(),
             'meter_number' => $subscriber->meters->first()?->unique_code,
+            'path_numbers' => $subscriber->meters->pluck('path_number')
+                ->filter(fn ($number) => $number !== null)
+                ->unique()->sort(SORT_NUMERIC)->values()->all(),
             'credit_balance' => $summary['total_credit_balance'],
             'debit_balance' => $summary['total_debit_balance'],
             'account_balance' => $summary['account_balance'],

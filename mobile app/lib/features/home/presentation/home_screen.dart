@@ -23,6 +23,7 @@ import '../../dashboard/presentation/widgets/monthly_revenue_chart_card.dart';
 import '../../navigation/presentation/widgets/module_section.dart';
 import '../../offline_sync/services/sync_queue_manager.dart';
 import '../domain/workspace_catalog.dart';
+import 'widgets/home_invoice_counts.dart';
 import 'widgets/workspace_widgets.dart';
 
 part 'widgets/home_panels.dart';
@@ -137,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 primaryIcon: _primaryIcon(),
                 onPrimary: () => context.push(_primaryRoute()),
                 canViewDashboard: _canViewDashboard,
+                canViewInvoices: canInvoices,
                 onDashboard: () => context.push(RouteNames.dashboard),
               ),
             ),

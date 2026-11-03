@@ -5,34 +5,112 @@ part of '../pages/subscriber_360_screen.dart';
 /// Headers scroll with their list even when a large profile summary leaves
 /// only a short viewport. Keeping fixed controls outside the list overflows
 /// before the outer NestedScrollView can collapse its header.
+Map<String, dynamic> _profileRecord(
+  BuildContext context,
+  Map<String, dynamic> raw,
+) {
+  final detail = context.read<Subscriber360Cubit>().state.detail!;
+  final subscriber = detail.subscriber;
+  final meterId = JsonUtils.asIntOrNull(raw['meter_id']);
+  final meters = detail.summary.meterBalances.where(
+    (meter) => meter.meterId == meterId,
+  );
+  return {
+    'name': subscriber.name,
+    'square_id': subscriber.squareId,
+    'square_name': subscriber.squareName,
+    'path_numbers': subscriber.pathNumbers,
+    if (meterId != null && meters.isNotEmpty)
+      'path_number': meters.first.pathNumber,
+    ...raw,
+  };
+}
+
+Map<
+  String,
+  ({String label, Comparable<dynamic>? Function(Map<String, dynamic>) value})
+>
+get _profileSortValues => {
+  'id': (
+    label: ListOptionsStrings.id,
+    value: (row) => JsonUtils.asIntOrNull(row['id']),
+  ),
+  'reference': (
+    label: ListOptionsStrings.reference,
+    value: (row) => [
+      row['name'],
+      row['bill_number'],
+      row['receipt_number'],
+      row['description'],
+      row['notes'],
+      row['unique_code'],
+    ].whereType<Object>().join(' '),
+  ),
+  'created_at': (
+    label: ListOptionsStrings.createdAt,
+    value: (row) => JsonUtils.asDate(row['created_at']),
+  ),
+  'amount': (
+    label: ListOptionsStrings.amount,
+    value: (row) =>
+        JsonUtils.asDoubleOrNull(row['amount'] ?? row['total_amount']),
+  ),
+  'status': (
+    label: ListOptionsStrings.status,
+    value: (row) => row['status']?.toString(),
+  ),
+  'square_id': (
+    label: ListOptionsStrings.square,
+    value: (row) => RecordLocation.fromJson(row).squareId,
+  ),
+  'square_name': (
+    label: ListOptionsStrings.square,
+    value: (row) => RecordLocation.fromJson(row).squareName,
+  ),
+  'path_number': (
+    label: ListOptionsStrings.path,
+    value: (row) => RecordLocation.fromJson(row).firstPath,
+  ),
+};
+
 class _SubscriberTabScrollView extends StatelessWidget {
   const _SubscriberTabScrollView({
     required this.header,
     required this.empty,
-    required this.itemCount,
+    required this.records,
     required this.itemBuilder,
   });
-
   final List<Widget> header;
   final Widget empty;
-  final int itemCount;
+  final List<Map<String, dynamic>> records;
   final IndexedWidgetBuilder itemBuilder;
 
   @override
-  Widget build(BuildContext context) => CustomScrollView(
-    slivers: [
-      for (final child in header) SliverToBoxAdapter(child: child),
-      SliverPadding(
-        padding: const EdgeInsets.only(top: 10, bottom: 24),
-        sliver: itemCount == 0
-            ? SliverToBoxAdapter(child: empty)
-            : SliverList.builder(
-                itemCount: itemCount,
-                itemBuilder: itemBuilder,
-              ),
-      ),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final rows = [
+      for (var index = 0; index < records.length; index++)
+        {..._profileRecord(context, records[index]), '_index': index},
+    ];
+    return ListPresentation<Map<String, dynamic>>.slivers(
+      items: rows,
+      initialSettings: const ListPresentationSettings(sortBy: 'id'),
+      sortValues: _profileSortValues,
+      pathNumbers: (row) => RecordLocation.fromJson(row).paths,
+      sliversBuilder: (context, visible, options) => [
+        for (final child in header) SliverToBoxAdapter(child: child),
+        SliverPadding(
+          padding: const EdgeInsets.only(top: 10, bottom: 24),
+          sliver: visible.isEmpty
+              ? SliverToBoxAdapter(child: empty)
+              : SliverList.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, index) =>
+                      itemBuilder(context, visible[index]['_index'] as int),
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class _MetersTab extends StatelessWidget {
@@ -188,8 +266,30 @@ class _MetersTab extends StatelessWidget {
         onRecordReading != null ||
         GetIt.I.isRegistered<ReadingsRepository>() ||
         GoRouter.maybeOf(context) != null;
-    return CustomScrollView(
-      slivers: [
+    final rows = [
+      for (var index = 0; index < meters.length; index++)
+        {
+          ..._profileRecord(context, {
+            'id': meters[index].meterId,
+            'meter_id': meters[index].meterId,
+            'unique_code': meters[index].uniqueCode,
+            'path_number': meters[index].pathNumber,
+            'created_at': detail.metersRaw
+                .where((raw) => raw['id'] == meters[index].meterId)
+                .firstOrNull?['created_at'],
+          }),
+          '_index': index,
+        },
+    ];
+    return ListPresentation<Map<String, dynamic>>.slivers(
+      items: rows,
+      initialSettings: const ListPresentationSettings(
+        sortBy: 'path_number',
+        descending: false,
+      ),
+      sortValues: _profileSortValues,
+      pathNumbers: (row) => RecordLocation.fromJson(row).paths,
+      sliversBuilder: (context, visible, options) => [
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 8),
@@ -206,7 +306,7 @@ class _MetersTab extends StatelessWidget {
             ),
           ),
         ),
-        if (meters.isEmpty)
+        if (visible.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: _SubscriberEmptyState(
@@ -216,9 +316,9 @@ class _MetersTab extends StatelessWidget {
           )
         else
           SliverList.builder(
-            itemCount: meters.length,
+            itemCount: visible.length,
             itemBuilder: (_, i) {
-              final m = meters[i];
+              final m = meters[visible[i]['_index'] as int];
               final isActive = m.status == 'active';
               return Padding(
                 padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
@@ -460,208 +560,239 @@ class _InvoicesTab extends StatelessWidget {
       );
     }
     final hasFinanceServices = GetIt.I.isRegistered<InvoicesRepository>();
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 24),
-      itemCount: invoices.length,
-      itemBuilder: (_, i) {
-        final inv = invoices[i];
-        final model = _toInvoiceModel(inv);
-        final total = JsonUtils.asDoubleOrNull(inv['total_amount']) ?? model.totalAmount;
-        final paid = JsonUtils.asDoubleOrNull(inv['amount_paid']) ?? model.amountPaid;
-        final isPaid = (inv['status'] ?? model.status.wire) == 'paid';
-        return Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
-          child: AppCard(
-            padding: const EdgeInsets.all(12),
-            onTap: model.id > 0 ? () => _openDetails(context, model) : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const AppGlyph(icon: Icons.receipt_long_rounded, size: 38),
-                    const Gap(10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+    final rows = [for (final row in invoices) _profileRecord(context, row)];
+    return ListPresentation<Map<String, dynamic>>.slivers(
+      items: rows,
+      initialSettings: const ListPresentationSettings(sortBy: 'id'),
+      sortValues: _profileSortValues,
+      pathNumbers: (row) => RecordLocation.fromJson(row).paths,
+      sliversBuilder: (context, visible, options) => [
+        SliverPadding(
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          sliver: SliverList.builder(
+            itemCount: visible.length,
+            itemBuilder: (_, i) {
+              final inv = visible[i];
+              final model = _toInvoiceModel(inv);
+              final total =
+                  JsonUtils.asDoubleOrNull(inv['total_amount']) ??
+                  model.totalAmount;
+              final paid =
+                  JsonUtils.asDoubleOrNull(inv['amount_paid']) ??
+                  model.amountPaid;
+              final isPaid = (inv['status'] ?? model.status.wire) == 'paid';
+              return Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                child: AppCard(
+                  padding: const EdgeInsets.all(12),
+                  onTap: model.id > 0
+                      ? () => _openDetails(context, model)
+                      : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            model.billNumber,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14.5,
-                              height: 1.3,
+                          const AppGlyph(
+                            icon: Icons.receipt_long_rounded,
+                            size: 38,
+                          ),
+                          const Gap(10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  model.billNumber,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14.5,
+                                    height: 1.3,
+                                  ),
+                                ),
+                                const Gap(2),
+                                Text(
+                                  '${inv['bill_date'] ?? ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ],
                             ),
                           ),
-                          const Gap(2),
-                          Text(
-                            '${inv['bill_date'] ?? ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
+                          StatusBadge(
+                            label: model.status.label,
+                            color: isPaid
+                                ? AppColors.success
+                                : AppColors.warning,
                           ),
+                          if (hasFinanceServices && model.id > 0)
+                            PopupMenuButton<String>(
+                              tooltip: 'إجراءات الفاتورة',
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.lg,
+                                ),
+                              ),
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case 'open':
+                                    await _openDetails(context, model);
+                                  case 'pdf':
+                                    await openInvoicePdfPreview(context, model);
+                                  case 'thermal':
+                                    await printInvoiceThermal(context, model);
+                                  case 'whatsapp':
+                                    await sendInvoiceWhatsapp(context, model);
+                                  case 'edit':
+                                    await _editInvoice(context, model);
+                                  case 'delete':
+                                    await _deleteInvoice(context, model);
+                                }
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'open',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.open_in_new, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('عرض التفاصيل'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'pdf',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.picture_as_pdf_outlined,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text('طباعة / معاينة PDF'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'thermal',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.print_outlined, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('طباعة حرارية'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'whatsapp',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.chat_outlined,
+                                        size: 18,
+                                        color: AppColors.whatsapp,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text('إرسال واتساب'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('تعديل الفاتورة'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                        color: AppColors.danger,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'حذف الفاتورة',
+                                        style: TextStyle(
+                                          color: AppColors.danger,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
-                    ),
-                    StatusBadge(
-                      label: model.status.label,
-                      color: isPaid ? AppColors.success : AppColors.warning,
-                    ),
-                    if (hasFinanceServices && model.id > 0)
-                      PopupMenuButton<String>(
-                        tooltip: 'إجراءات الفاتورة',
-                        shape: RoundedRectangleBorder(
+                      const Gap(10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: .45),
                           borderRadius: BorderRadius.circular(AppRadius.lg),
                         ),
-                        onSelected: (action) async {
-                          switch (action) {
-                            case 'open':
-                              await _openDetails(context, model);
-                            case 'pdf':
-                              await openInvoicePdfPreview(context, model);
-                            case 'thermal':
-                              await printInvoiceThermal(context, model);
-                            case 'whatsapp':
-                              await sendInvoiceWhatsapp(context, model);
-                            case 'edit':
-                              await _editInvoice(context, model);
-                            case 'delete':
-                              await _deleteInvoice(context, model);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'open',
-                            child: Row(
-                              children: [
-                                Icon(Icons.open_in_new, size: 18),
-                                SizedBox(width: 10),
-                                Text('عرض التفاصيل'),
-                              ],
+                        child: Row(
+                          children: [
+                            _TabMoneyStat(
+                              label: 'الإجمالي',
+                              value: total,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'pdf',
-                            child: Row(
-                              children: [
-                                Icon(Icons.picture_as_pdf_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('طباعة / معاينة PDF'),
-                              ],
+                            const Gap(16),
+                            _TabMoneyStat(
+                              label: 'المسدد',
+                              value: paid,
+                              color: AppColors.success,
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'thermal',
-                            child: Row(
-                              children: [
-                                Icon(Icons.print_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('طباعة حرارية'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'whatsapp',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.chat_outlined,
-                                  size: 18,
-                                  color: AppColors.whatsapp,
-                                ),
-                                SizedBox(width: 10),
-                                Text('إرسال واتساب'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('تعديل الفاتورة'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.delete_outline,
-                                  size: 18,
-                                  color: AppColors.danger,
-                                ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'حذف الفاتورة',
-                                  style: TextStyle(color: AppColors.danger),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-                const Gap(10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withValues(alpha: .45),
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                  ),
-                  child: Row(
-                    children: [
-                      _TabMoneyStat(
-                        label: 'الإجمالي',
-                        value: total,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      const Gap(16),
-                      _TabMoneyStat(
-                        label: 'المسدد',
-                        value: paid,
-                        color: AppColors.success,
-                      ),
-                      const Spacer(),
-                      if (!isPaid)
-                        AppIconButton(
-                          icon: Icons.payments_outlined,
-                          tooltip: 'تحصيل الفاتورة',
-                          size: 38,
-                          onPressed: () async {
-                            if (hasFinanceServices && model.id > 0) {
-                              final saved = await collectInvoicePayment(
-                                context,
-                                model,
-                              );
-                              if (saved && context.mounted) {
-                                await context.read<Subscriber360Cubit>().load(
-                                  subscriber.id,
-                                );
-                              }
-                            } else if (onCollect != null) {
-                              onCollect!();
-                            }
-                          },
+                            const Spacer(),
+                            if (!isPaid)
+                              AppIconButton(
+                                icon: Icons.payments_outlined,
+                                tooltip: 'تحصيل الفاتورة',
+                                size: 38,
+                                onPressed: () async {
+                                  if (hasFinanceServices && model.id > 0) {
+                                    final saved = await collectInvoicePayment(
+                                      context,
+                                      model,
+                                    );
+                                    if (saved && context.mounted) {
+                                      await context
+                                          .read<Subscriber360Cubit>()
+                                          .load(subscriber.id);
+                                    }
+                                  } else if (onCollect != null) {
+                                    onCollect!();
+                                  }
+                                },
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -738,188 +869,208 @@ class _PaymentsTab extends StatelessWidget {
       );
     }
     final hasPaymentsRepo = GetIt.I.isRegistered<PaymentsRepository>();
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 24),
-      itemCount: payments.length,
-      itemBuilder: (_, i) {
-        final p = payments[i];
-        final model = _toPaymentModel(p);
-        return Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
-          child: AppCard(
-            padding: const EdgeInsets.all(12),
-            onTap: hasPaymentsRepo && model.id > 0
-                ? () => showPaymentActionSheet(
-                    context,
-                    payment: model,
-                    onDeleted: () => _deletePayment(context, model),
-                  )
-                : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const AppGlyph(
-                      icon: Icons.receipt_rounded,
-                      tone: AppColors.success,
-                      size: 38,
-                    ),
-                    const Gap(10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+    final rows = [for (final row in payments) _profileRecord(context, row)];
+    return ListPresentation<Map<String, dynamic>>.slivers(
+      items: rows,
+      initialSettings: const ListPresentationSettings(sortBy: 'id'),
+      sortValues: _profileSortValues,
+      pathNumbers: (row) => RecordLocation.fromJson(row).paths,
+      sliversBuilder: (context, visible, options) => [
+        SliverPadding(
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          sliver: SliverList.builder(
+            itemCount: visible.length,
+            itemBuilder: (_, i) {
+              final p = visible[i];
+              final model = _toPaymentModel(p);
+              return Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+                child: AppCard(
+                  padding: const EdgeInsets.all(12),
+                  onTap: hasPaymentsRepo && model.id > 0
+                      ? () => showPaymentActionSheet(
+                          context,
+                          payment: model,
+                          onDeleted: () => _deletePayment(context, model),
+                        )
+                      : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            model.receiptNumber,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14.5,
-                              height: 1.3,
+                          const AppGlyph(
+                            icon: Icons.receipt_rounded,
+                            tone: AppColors.success,
+                            size: 38,
+                          ),
+                          const Gap(10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  model.receiptNumber,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14.5,
+                                    height: 1.3,
+                                  ),
+                                ),
+                                const Gap(2),
+                                Text(
+                                  '${p['payment_date'] ?? ''} • ${model.method.label}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ],
                             ),
                           ),
-                          const Gap(2),
-                          Text(
-                            '${p['payment_date'] ?? ''} • ${model.method.label}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
+                          if (hasPaymentsRepo && model.id > 0)
+                            PopupMenuButton<String>(
+                              tooltip: 'إجراءات السند',
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.lg,
+                                ),
+                              ),
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case 'pdf':
+                                    await openPaymentPdfPreview(context, model);
+                                  case 'thermal':
+                                    await printPaymentThermal(context, model);
+                                  case 'whatsapp':
+                                    await sendPaymentWhatsapp(context, model);
+                                  case 'edit':
+                                    await _editPayment(context, model);
+                                  case 'delete':
+                                    await _deletePayment(context, model);
+                                }
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'pdf',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.picture_as_pdf_outlined,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text('طباعة / معاينة PDF'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'thermal',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.print_outlined, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('طباعة حرارية'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'whatsapp',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.chat_outlined,
+                                        size: 18,
+                                        color: AppColors.whatsapp,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text('إرسال واتساب'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('تعديل السند'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                        color: AppColors.danger,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'حذف السند',
+                                        style: TextStyle(
+                                          color: AppColors.danger,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
-                    ),
-                    if (hasPaymentsRepo && model.id > 0)
-                      PopupMenuButton<String>(
-                        tooltip: 'إجراءات السند',
-                        shape: RoundedRectangleBorder(
+                      const Gap(10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: .45),
                           borderRadius: BorderRadius.circular(AppRadius.lg),
                         ),
-                        onSelected: (action) async {
-                          switch (action) {
-                            case 'pdf':
-                              await openPaymentPdfPreview(context, model);
-                            case 'thermal':
-                              await printPaymentThermal(context, model);
-                            case 'whatsapp':
-                              await sendPaymentWhatsapp(context, model);
-                            case 'edit':
-                              await _editPayment(context, model);
-                            case 'delete':
-                              await _deletePayment(context, model);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'pdf',
-                            child: Row(
-                              children: [
-                                Icon(Icons.picture_as_pdf_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('طباعة / معاينة PDF'),
-                              ],
+                        child: Row(
+                          children: [
+                            Text(
+                              'مبلغ السند',
+                              style: Theme.of(context).textTheme.labelSmall,
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'thermal',
-                            child: Row(
-                              children: [
-                                Icon(Icons.print_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('طباعة حرارية'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'whatsapp',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.chat_outlined,
-                                  size: 18,
-                                  color: AppColors.whatsapp,
+                            const Gap(8),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(
+                                CurrencyFormatter.format(model.amount),
+                                style: TextStyle(
+                                  color: AppSemantic.resolve(
+                                    context,
+                                    AppColors.success,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  fontFeatures: const <FontFeature>[
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
-                                SizedBox(width: 10),
-                                Text('إرسال واتساب'),
-                              ],
+                              ),
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit_outlined, size: 18),
-                                SizedBox(width: 10),
-                                Text('تعديل السند'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.delete_outline,
-                                  size: 18,
-                                  color: AppColors.danger,
-                                ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'حذف السند',
-                                  style: TextStyle(color: AppColors.danger),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-                const Gap(10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest
-                        .withValues(alpha: .45),
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'مبلغ السند',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      const Gap(8),
-                      Directionality(
-                        textDirection: TextDirection.ltr,
-                        child: Text(
-                          CurrencyFormatter.format(model.amount),
-                          style: TextStyle(
-                            color: AppSemantic.resolve(
-                              context,
-                              AppColors.success,
-                            ),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                            fontFeatures: const <FontFeature>[
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -1169,7 +1320,17 @@ class _FeesTab extends StatelessWidget {
             title: 'لا توجد رسوم اشتراك',
             icon: Icons.card_membership_outlined,
           ),
-          itemCount: state.fees.length,
+          records: [
+            for (final fee in state.fees)
+              {
+                'id': fee.id,
+                'meter_id': fee.meterId,
+                'created_at': fee.createdAt,
+                'amount': fee.amount,
+                'notes': fee.notes,
+                'status': fee.status.apiValue,
+              },
+          ],
           itemBuilder: (_, i) {
             final f = state.fees[i];
             return Padding(
@@ -1541,7 +1702,16 @@ class _RequestsTab extends StatelessWidget {
             title: 'لا توجد طلبات وايت',
             icon: Icons.local_shipping,
           ),
-          itemCount: state.requests.length,
+          records: [
+            for (final request in state.requests)
+              {
+                'id': request.id,
+                'created_at': request.createdAt?.toIso8601String(),
+                'amount': request.amount,
+                'notes': request.notes,
+                'status': request.status.apiValue,
+              },
+          ],
           itemBuilder: (_, i) {
             final r = state.requests[i];
             return Padding(
@@ -1798,7 +1968,17 @@ class _StatementTab extends StatelessWidget {
             title: 'لا توجد حركات مالية ضمن هذا الفلتر',
             icon: Icons.account_balance_outlined,
           ),
-          itemCount: state.statement.length,
+          records: [
+            for (final entry in state.statement)
+              {
+                'id': entry.id,
+                'meter_id': entry.meterId,
+                'created_at': entry.createdAt,
+                'amount': entry.amount,
+                'description': entry.description,
+                'status': entry.type,
+              },
+          ],
           itemBuilder: (_, i) {
             final e = state.statement[i];
             return Padding(

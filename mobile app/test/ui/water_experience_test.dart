@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/theme/app_colors.dart';
 import 'package:water_project/core/theme/app_theme.dart';
@@ -299,6 +300,88 @@ void main() {
     expect(edits, 1);
   });
 
+  for (final width in [390.0, 1440.0]) {
+    for (final useButton in [false, true]) {
+      testWidgets('subscriber file route at $width, button=$useButton', (
+        tester,
+      ) async {
+        _size(tester, width);
+        Subscriber? routedSubscriber;
+        String? routedId;
+        final router = GoRouter(
+          initialLocation: '/subscribers',
+          routes: [
+            GoRoute(path: '/subscribers', builder: (_, _) => _list()),
+            GoRoute(
+              path: '/subscribers/:id',
+              builder: (_, state) {
+                routedSubscriber = state.extra as Subscriber;
+                routedId = state.pathParameters['id'];
+                return const Scaffold(body: Text('ملف المشترك'));
+              },
+            ),
+          ],
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(
+          MaterialApp.router(
+            routerConfig: router,
+            theme: AppTheme.light,
+            locale: const Locale('ar'),
+            supportedLocales: const [Locale('ar')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final target = find.text(useButton ? 'عرض الملف' : _subscriber.name);
+        await tester.ensureVisible(target);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+        expect(find.text('ملف المشترك'), findsOneWidget);
+        expect(routedId, '${_subscriber.id}');
+        expect(routedSubscriber, same(_subscriber));
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('subscriber card opens its file at $width', (tester) async {
+      _size(tester, width);
+      final opened = <int>[];
+      await tester.pumpWidget(
+        _app(_list(onOpen: (subscriber) => opened.add(subscriber.id))),
+      );
+      await tester.pumpAndSettle();
+      final name = find.text(_subscriber.name);
+      await tester.ensureVisible(name);
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+      expect(opened, [_subscriber.id]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('subscriber selection stays separate at $width', (
+      tester,
+    ) async {
+      _size(tester, width);
+      final opened = <int>[];
+      await tester.pumpWidget(
+        _app(_list(onOpen: (subscriber) => opened.add(subscriber.id))),
+      );
+      await tester.pumpAndSettle();
+      final checkbox = find.byType(Checkbox);
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+      expect(opened, isEmpty);
+      await tester.longPress(find.text(_subscriber.name));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+      expect(opened, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('subscriber quick action opens the same financial file', (
     tester,
   ) async {
@@ -430,6 +513,8 @@ void main() {
     expect(find.text(_meter.subscriberName!), findsOneWidget);
     expect(tester.takeException(), isNull);
     await _preview(tester, 'field-dark');
+    await tester.tap(find.text('الاسم أو رقم العداد'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '2025067437');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();

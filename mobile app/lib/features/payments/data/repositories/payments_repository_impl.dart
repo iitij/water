@@ -263,11 +263,17 @@ class PaymentsRepositoryImpl
     required int perPage,
     required String sortBy,
     required String sortDirection,
+    int? pathNumber,
+    DateTime? addedFrom,
+    DateTime? addedTo,
   }) => _remote.voidRequests(
     page: page,
     perPage: perPage,
     sortBy: sortBy,
     sortDirection: sortDirection,
+    pathNumber: pathNumber,
+    addedFrom: addedFrom,
+    addedTo: addedTo,
   );
 
   @override

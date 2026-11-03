@@ -6,6 +6,7 @@ import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
@@ -60,7 +61,10 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
     setState(() => _presentation = settings);
     if (previous.sortBy != settings.sortBy ||
         previous.descending != settings.descending ||
-        previous.pageSize != settings.pageSize) {
+        previous.pageSize != settings.pageSize ||
+        previous.pathNumber != settings.pathNumber ||
+        previous.createdFrom != settings.createdFrom ||
+        previous.createdTo != settings.createdTo) {
       _load();
     }
   }
@@ -86,6 +90,9 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
           ? await (repository as SortedVoidRequestsRepository)
                 .sortedVoidRequests(
                   page: page,
+                  pathNumber: _presentation.pathNumber,
+                  addedFrom: _presentation.createdFrom,
+                  addedTo: _presentation.createdTo,
                   perPage: _presentation.pageSize,
                   sortBy: _presentation.sortBy,
                   sortDirection: _presentation.descending ? 'desc' : 'asc',
@@ -206,12 +213,21 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
               ignoring: _loading || _busy.isNotEmpty,
               child: ListPresentationControls(
                 settings: _presentation,
+                filterOptions: widget.repository is SortedVoidRequestsRepository
+                    ? const ListFilterOptions(
+                        hasPath: true,
+                        hasCreatedAt: true,
+                        search: false,
+                      )
+                    : null,
                 sortOptions: const {
                   'void_requested_at': ListOptionsStrings.date,
                   'receipt_number': ListOptionsStrings.receiptNumber,
                   'amount': ListOptionsStrings.amount,
                   'subscriber_name': ListOptionsStrings.subscriber,
                   'id': ListOptionsStrings.id,
+                  'created_at': ListOptionsStrings.createdAt,
+                  'path_number': ListOptionsStrings.path,
                 },
                 fields: const {
                   'date': ListOptionsStrings.date,
@@ -323,6 +339,7 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
                         ),
                     ],
                   ),
+                  RecordLocationLabel(location: request.location),
                   if (request.subscriber != null)
                     Text('المشترك: ${request.subscriber}'),
                   if (request.reason != null &&

@@ -29,16 +29,18 @@ class SystemUserModel extends SystemUser {
   }
 
   Map<String, dynamic> toJson({String? password}) => {
-        'name': name,
-        'email': email,
-        'roles': roles,
-        if (password != null && password.isNotEmpty) 'password': password,
-      };
+    'name': name,
+    'email': email,
+    'roles': roles,
+    if (password != null && password.isNotEmpty) 'password': password,
+  };
 
   static List<String> _names(dynamic value) {
     if (value is! List) return const [];
     return value
-        .map((item) => item is Map ? adminString(item['name']) : adminString(item))
+        .map(
+          (item) => item is Map ? adminString(item['name']) : adminString(item),
+        )
         .where((name) => name.isNotEmpty)
         .toList(growable: false);
   }
@@ -52,6 +54,7 @@ class RoleModel extends Role {
     required super.permissions,
     super.permissionsCount,
     super.updatedAt,
+    super.createdAt,
   });
 
   factory RoleModel.fromJson(dynamic value) {
@@ -65,19 +68,23 @@ class RoleModel extends Role {
       permissions: permissions,
       permissionsCount: rawCount == null ? null : adminInt(rawCount),
       updatedAt: adminDate(json['updated_at']),
+      createdAt: adminDate(json['created_at']),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'guard_name': guardName,
-        'permissions': permissions,
-      };
+    'name': name,
+    'guard_name': guardName,
+    'permissions': permissions,
+  };
 }
 
 class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
-  const ShieldPermissionCatalogModel({required super.groups,
-    super.guardNames, super.guardPermissions});
+  const ShieldPermissionCatalogModel({
+    required super.groups,
+    super.guardNames,
+    super.guardPermissions,
+  });
 
   factory ShieldPermissionCatalogModel.fromJson(dynamic value) {
     final root = adminDataMap(value);
@@ -109,7 +116,9 @@ class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
         for (final entry in raw.entries) {
           final value = entry.value;
           final json = adminMap(value);
-          final permissions = _permissions(value is List ? value : json['permissions']);
+          final permissions = _permissions(
+            value is List ? value : json['permissions'],
+          );
           if (permissions.isEmpty) continue;
           groups.add(
             ShieldPermissionGroup(
@@ -123,17 +132,23 @@ class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
       }
     }
     final guardNames = root['guard_names'] is List
-        ? (root['guard_names'] as List).map((dynamic value) => value.toString()).toList()
+        ? (root['guard_names'] as List)
+              .map((dynamic value) => value.toString())
+              .toList()
         : const <String>['web'];
     final rawGuards = adminMap(root['guard_permissions']);
     final guardPermissions = <String, List<String>>{
       for (final entry in rawGuards.entries)
         entry.key: entry.value is List
-          ? (entry.value as List).map((dynamic value) => value.toString()).toList()
-          : <String>[],
+            ? (entry.value as List)
+                  .map((dynamic value) => value.toString())
+                  .toList()
+            : <String>[],
     };
     return ShieldPermissionCatalogModel(
-      groups: groups.isEmpty ? standardShieldPermissionCatalog().groups : groups,
+      groups: groups.isEmpty
+          ? standardShieldPermissionCatalog().groups
+          : groups,
       guardNames: guardNames.isEmpty ? const ['web'] : guardNames,
       guardPermissions: guardPermissions,
     );
@@ -141,19 +156,25 @@ class ShieldPermissionCatalogModel extends ShieldPermissionCatalog {
 
   static List<ShieldPermission> _permissions(dynamic value) {
     if (value is! List) return const [];
-    return value.map((item) {
-      if (item is Map) {
-        final name = adminString(item['name']);
-        return ShieldPermission(name: name, label: adminString(item['label'], name));
-      }
-      final name = adminString(item);
-      return ShieldPermission(name: name, label: name.split(':').first);
-    }).where((permission) => permission.name.isNotEmpty).toList(growable: false);
+    return value
+        .map((item) {
+          if (item is Map) {
+            final name = adminString(item['name']);
+            return ShieldPermission(
+              name: name,
+              label: adminString(item['label'], name),
+            );
+          }
+          final name = adminString(item);
+          return ShieldPermission(name: name, label: name.split(':').first);
+        })
+        .where((permission) => permission.name.isNotEmpty)
+        .toList(growable: false);
   }
 
   static ShieldPermissionKind _kind(String value) => switch (value) {
-        'resource' || 'resources' => ShieldPermissionKind.resource,
-        'widget' || 'widgets' => ShieldPermissionKind.widget,
-        _ => ShieldPermissionKind.page,
-      };
+    'resource' || 'resources' => ShieldPermissionKind.resource,
+    'widget' || 'widgets' => ShieldPermissionKind.widget,
+    _ => ShieldPermissionKind.page,
+  };
 }

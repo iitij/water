@@ -1,5 +1,17 @@
 /// Arabic copy for the subscriber experience and exported statements.
 abstract final class SubscriberExperienceStrings {
+  static const searchHint = 'اسم، هاتف، كود عداد أو مسار';
+  static const searchHelp = 'ابحث برقم المسار، أو بالمربع/المسار مثل 4/1.';
+  static const path = 'رقم المسار';
+  static const pathHint = 'كل المسارات';
+  static const pathHelp =
+      'يعرض المشترك إذا طابق المسار أي عداد لديه. الترتيب بأول مسار رقمي.';
+  static const invalidPath = 'أدخل رقم مسار صحيحاً من صفر فأكثر.';
+  static const additionOrder = 'ترتيب إضافة المشترك';
+  static const subscriptionDate = 'تاريخ بدء الاشتراك';
+  static const addedAt = 'تاريخ إضافة المشترك';
+  static const noPath = 'بدون مسار';
+  static String pathsLabel(List<int> paths) => 'المسار: ${paths.join('، ')}';
   static const profile = 'ملف المشترك';
   static const generalBalance = 'الحساب العام';
   static const generalHint = 'اشتراك وطلبات وايت • مستقل عن العدادات';

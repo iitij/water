@@ -102,7 +102,7 @@ class InvoiceController extends ApiController
     public function unpaid(Request $request)
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
-        $query = Invoice::with(['subscriber.square', 'meter'])
+        $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter'])
             ->whereIn('status', ['issued', 'partially_paid', 'overdue'])->latest('bill_date')->latest('id');
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));

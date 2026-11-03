@@ -7,7 +7,9 @@ import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/common_widgets.dart';
 import '../../../../core/fouad/currency_formatter.dart';
 import '../../../../core/fouad/fouad_module.dart';
+import '../../../../core/l10n/list_options_strings.dart';
 import '../../../../core/l10n/subscriber_experience_strings.dart';
+import '../../../../core/models/record_location.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -16,6 +18,8 @@ import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
+import '../../../../core/ui/list_presentation_controls.dart';
+import '../../../../core/ui/record_location_label.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/models/invoice_model.dart';
@@ -271,6 +275,21 @@ class _Subscriber360View extends StatelessWidget {
                   )
                 : NestedScrollView(
                     headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: RecordLocationLabel(
+                            location: RecordLocation(
+                              squareId: activeSubscriber.squareId,
+                              squareName: activeSubscriber.squareName,
+                              paths: activeSubscriber.pathNumbers,
+                            ),
+                          ),
+                        ),
+                      ),
                       SliverToBoxAdapter(
                         child: _FinancialSummaryHeader(summary: detail.summary),
                       ),

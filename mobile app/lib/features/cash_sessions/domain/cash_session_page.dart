@@ -80,6 +80,8 @@ class CashSessionCollectorOption {
 class CashSessionFilters {
   const CashSessionFilters({
     this.state,
+    this.addedFrom,
+    this.addedTo,
     this.collectorId,
     this.fromDate,
     this.toDate,
@@ -89,6 +91,7 @@ class CashSessionFilters {
   });
 
   final CashSessionState? state;
+  final DateTime? addedFrom, addedTo;
   final int? collectorId;
   final DateTime? fromDate;
   final DateTime? toDate;
@@ -98,6 +101,8 @@ class CashSessionFilters {
 
   Map<String, dynamic> toQuery({int page = 1}) => <String, dynamic>{
     'page': page,
+    if (addedFrom != null) 'added_from': dateValue(addedFrom!),
+    if (addedTo != null) 'added_to': dateValue(addedTo!),
     'per_page': pageSize,
     'sort_by': sortBy,
     'sort_direction': sortDirection,
@@ -109,10 +114,14 @@ class CashSessionFilters {
 
   CashSessionFilters withPresentation({
     required int pageSize,
+    DateTime? addedFrom,
+    DateTime? addedTo,
     required String sortBy,
     required String sortDirection,
   }) => CashSessionFilters(
     state: state,
+    addedFrom: addedFrom,
+    addedTo: addedTo,
     collectorId: collectorId,
     fromDate: fromDate,
     toDate: toDate,

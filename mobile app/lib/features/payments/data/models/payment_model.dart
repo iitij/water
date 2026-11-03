@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../../core/models/record_location.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 
@@ -8,6 +9,7 @@ import '../../../invoices/domain/accounting/finance_enums.dart';
 class PaymentModel extends Equatable {
   const PaymentModel({
     required this.id,
+    this.location = const RecordLocation(),
     required this.subscriberId,
     required this.receiptNumber,
     required this.amount,
@@ -36,6 +38,7 @@ class PaymentModel extends Equatable {
     this.whatsappSentVia,
   });
 
+  final RecordLocation location;
   final int id;
   final int subscriberId;
   final int? meterId;
@@ -117,6 +120,7 @@ class PaymentModel extends Equatable {
 
     return PaymentModel(
       id: JsonUtils.asInt(json['id']),
+      location: RecordLocation.fromJson(json),
       subscriberId: JsonUtils.asInt(json['subscriber_id']),
       meterId: JsonUtils.asIntOrNull(json['meter_id']),
       invoiceId: JsonUtils.asIntOrNull(json['invoice_id']),
@@ -209,6 +213,7 @@ class PaymentModel extends Equatable {
 
   @override
   List<Object?> get props => <Object?>[
+    location,
     id,
     receiptNumber,
     amount,
@@ -312,6 +317,9 @@ class ReceiptDataModel extends Equatable {
 class PaymentQuery extends Equatable {
   const PaymentQuery({
     this.search = '',
+    this.pathNumber,
+    this.addedFrom,
+    this.addedTo,
     this.method,
     this.subscriberId,
     this.invoiceId,
@@ -324,6 +332,8 @@ class PaymentQuery extends Equatable {
   });
 
   final String search;
+  final int? pathNumber;
+  final DateTime? addedFrom, addedTo;
   final String? method;
   final int? subscriberId;
   final int? invoiceId;
@@ -344,12 +354,20 @@ class PaymentQuery extends Equatable {
     if (toDate != null) 'to_date': DateFormat.day(toDate),
     if (limit != null) 'per_page': limit,
     'page': page,
+    if (pathNumber != null) 'path_number': pathNumber,
+    if (addedFrom != null)
+      'added_from': addedFrom!.toIso8601String().split('T').first,
+    if (addedTo != null)
+      'added_to': addedTo!.toIso8601String().split('T').first,
     'sort_by': sortBy,
     'sort_direction': sortDirection,
   };
 
   String get signature => <String>[
     search,
+    '$pathNumber',
+    '$addedFrom',
+    '$addedTo',
     '$method',
     '$subscriberId',
     '$fromDate',
@@ -363,6 +381,10 @@ class PaymentQuery extends Equatable {
 
   PaymentQuery copyWith({
     String? search,
+    int? pathNumber,
+    DateTime? addedFrom,
+    DateTime? addedTo,
+    bool clearListFilters = false,
     String? method,
     int? subscriberId,
     DateTime? fromDate,
@@ -374,6 +396,15 @@ class PaymentQuery extends Equatable {
     bool clearFilters = false,
   }) => PaymentQuery(
     search: search ?? this.search,
+    pathNumber: (clearListFilters || clearFilters)
+        ? pathNumber
+        : pathNumber ?? this.pathNumber,
+    addedFrom: (clearListFilters || clearFilters)
+        ? addedFrom
+        : addedFrom ?? this.addedFrom,
+    addedTo: (clearListFilters || clearFilters)
+        ? addedTo
+        : addedTo ?? this.addedTo,
     method: clearFilters ? null : (method ?? this.method),
     subscriberId: clearFilters ? null : (subscriberId ?? this.subscriberId),
     invoiceId: invoiceId,
@@ -388,6 +419,9 @@ class PaymentQuery extends Equatable {
   @override
   List<Object?> get props => <Object?>[
     search,
+    pathNumber,
+    addedFrom,
+    addedTo,
     method,
     subscriberId,
     invoiceId,
@@ -427,6 +461,7 @@ class VoidPaymentOutcome extends Equatable {
 class PaymentVoidRequest extends Equatable {
   const PaymentVoidRequest({
     required this.id,
+    this.location = const RecordLocation(),
     required this.receiptNumber,
     required this.amount,
     this.subscriber,
@@ -437,6 +472,7 @@ class PaymentVoidRequest extends Equatable {
   });
 
   final int id;
+  final RecordLocation location;
   final String receiptNumber;
   final double amount;
   final String? subscriber;
@@ -448,6 +484,7 @@ class PaymentVoidRequest extends Equatable {
   factory PaymentVoidRequest.fromJson(Map<String, dynamic> json) =>
       PaymentVoidRequest(
         id: JsonUtils.asInt(json['id']),
+        location: RecordLocation.fromJson(json),
         receiptNumber: JsonUtils.asString(json['receipt_number']),
         amount: JsonUtils.asDouble(json['amount']),
         subscriber: JsonUtils.asStringOrNull(json['subscriber']),

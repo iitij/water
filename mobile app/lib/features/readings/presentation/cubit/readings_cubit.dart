@@ -10,6 +10,7 @@ import '../../domain/reading_filter_preset.dart';
 import '../../domain/readings_repository.dart';
 
 enum ReadingsLoadStatus { initial, loading, success, failure }
+
 enum ReadingInvoiceFilter { all, invoiced, notInvoiced }
 
 class ReadingsState {
@@ -19,6 +20,7 @@ class ReadingsState {
     this.squares = const [],
     this.invoiceFilter = ReadingInvoiceFilter.all,
     this.squareFilter,
+    this.pathFilter,
     this.fromDate,
     this.toDate,
     this.query = '',
@@ -34,6 +36,7 @@ class ReadingsState {
   final List<SquareOption> squares;
   final ReadingInvoiceFilter invoiceFilter;
   final int? squareFilter;
+  final int? pathFilter;
   final DateTime? fromDate;
   final DateTime? toDate;
   final String query;
@@ -47,12 +50,21 @@ class ReadingsState {
 
   bool get isSelecting => selectedKeys.isNotEmpty;
 
+  bool get hasFilters =>
+      query.trim().isNotEmpty ||
+      squareFilter != null ||
+      pathFilter != null ||
+      fromDate != null ||
+      toDate != null ||
+      invoiceFilter != ReadingInvoiceFilter.all;
+
   ReadingsState copyWith({
     ReadingsLoadStatus? status,
     List<Reading>? readings,
     List<SquareOption>? squares,
     ReadingInvoiceFilter? invoiceFilter,
     int? squareFilter,
+    int? pathFilter,
     DateTime? fromDate,
     DateTime? toDate,
     String? query,
@@ -60,6 +72,7 @@ class ReadingsState {
     String? errorMessage,
     String? actionMessage,
     bool clearSquareFilter = false,
+    bool clearPathFilter = false,
     bool clearFromDate = false,
     bool clearToDate = false,
     bool clearError = false,
@@ -72,13 +85,18 @@ class ReadingsState {
       readings: readings ?? this.readings,
       squares: squares ?? this.squares,
       invoiceFilter: invoiceFilter ?? this.invoiceFilter,
-      squareFilter: clearSquareFilter ? null : squareFilter ?? this.squareFilter,
+      squareFilter: clearSquareFilter
+          ? null
+          : squareFilter ?? this.squareFilter,
+      pathFilter: clearPathFilter ? null : pathFilter ?? this.pathFilter,
       fromDate: clearFromDate ? null : fromDate ?? this.fromDate,
       toDate: clearToDate ? null : toDate ?? this.toDate,
       query: query ?? this.query,
       selectedKeys: selectedKeys ?? this.selectedKeys,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      actionMessage: clearActionMessage ? null : actionMessage ?? this.actionMessage,
+      actionMessage: clearActionMessage
+          ? null
+          : actionMessage ?? this.actionMessage,
       isMutating: isMutating ?? this.isMutating,
       presets: presets ?? this.presets,
     );
@@ -90,10 +108,10 @@ class ReadingsCubit extends Cubit<ReadingsState> {
     required ReadingsRepository readingsRepository,
     required MetersRepository metersRepository,
     ReadingFilterPresetStore? presetStore,
-  })  : _readingsRepository = readingsRepository,
-        _metersRepository = metersRepository,
-        _presets = presetStore ?? SharedPreferencesReadingFilterPresetStore(),
-        super(const ReadingsState());
+  }) : _readingsRepository = readingsRepository,
+       _metersRepository = metersRepository,
+       _presets = presetStore ?? SharedPreferencesReadingFilterPresetStore(),
+       super(const ReadingsState());
 
   final ReadingsRepository _readingsRepository;
   final MetersRepository _metersRepository;
@@ -111,13 +129,14 @@ class ReadingsCubit extends Cubit<ReadingsState> {
 
   /// اسم مقترح للفلتر الحالي — يُستخدم كقيمة أولية في مربع الحفظ.
   String suggestPresetName() => ReadingFilterPreset.suggestName(
-        squareId: state.squareFilter,
-        squareName: _squareNameOf(state.squareFilter),
-        invoiceFilterCode: state.invoiceFilter.name,
-        fromDate: state.fromDate,
-        toDate: state.toDate,
-        query: state.query,
-      );
+    squareId: state.squareFilter,
+    squareName: _squareNameOf(state.squareFilter),
+    pathNumber: state.pathFilter,
+    invoiceFilterCode: state.invoiceFilter.name,
+    fromDate: state.fromDate,
+    toDate: state.toDate,
+    query: state.query,
+  );
 
   String? _squareNameOf(int? id) {
     if (id == null) return null;
@@ -138,6 +157,7 @@ class ReadingsCubit extends Cubit<ReadingsState> {
       name: trimmed,
       squareId: state.squareFilter,
       squareName: _squareNameOf(state.squareFilter),
+      pathNumber: state.pathFilter,
       invoiceFilterCode: state.invoiceFilter.name,
       fromDate: state.fromDate,
       toDate: state.toDate,
@@ -157,7 +177,9 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   }
 
   Future<void> deletePreset(String id) async {
-    final next = state.presets.where((item) => item.id != id).toList(growable: false);
+    final next = state.presets
+        .where((item) => item.id != id)
+        .toList(growable: false);
     try {
       await _presets.save(next);
     } catch (_) {
@@ -174,26 +196,33 @@ class ReadingsCubit extends Cubit<ReadingsState> {
       'notInvoiced' => ReadingInvoiceFilter.notInvoiced,
       _ => ReadingInvoiceFilter.all,
     };
-    emit(state.copyWith(
-      query: preset.query,
-      invoiceFilter: filter,
-      squareFilter: preset.squareId,
-      clearSquareFilter: preset.squareId == null,
-      fromDate: preset.fromDate,
-      toDate: preset.toDate,
-      clearFromDate: preset.fromDate == null,
-      clearToDate: preset.toDate == null,
-    ));
+    emit(
+      state.copyWith(
+        query: preset.query,
+        invoiceFilter: filter,
+        squareFilter: preset.squareId,
+        clearSquareFilter: preset.squareId == null,
+        pathFilter: preset.pathNumber,
+        clearPathFilter: preset.pathNumber == null,
+        fromDate: preset.fromDate,
+        toDate: preset.toDate,
+        clearFromDate: preset.fromDate == null,
+        clearToDate: preset.toDate == null,
+      ),
+    );
     await load();
   }
+
   Timer? _searchTimer;
 
   Future<void> load({bool keepSelection = false}) async {
-    emit(state.copyWith(
-      status: ReadingsLoadStatus.loading,
-      clearError: true,
-      selectedKeys: keepSelection ? state.selectedKeys : <String>{},
-    ));
+    emit(
+      state.copyWith(
+        status: ReadingsLoadStatus.loading,
+        clearError: true,
+        selectedKeys: keepSelection ? state.selectedKeys : <String>{},
+      ),
+    );
     try {
       final bool? isInvoiced = switch (state.invoiceFilter) {
         ReadingInvoiceFilter.all => null,
@@ -210,16 +239,28 @@ class ReadingsCubit extends Cubit<ReadingsState> {
         ),
         _metersRepository.getSquares(),
       ]);
-      emit(state.copyWith(
-        status: ReadingsLoadStatus.success,
-        readings: results[0] as List<Reading>,
-        squares: results[1] as List<SquareOption>,
-      ));
+      emit(
+        state.copyWith(
+          status: ReadingsLoadStatus.success,
+          readings: (results[0] as List<Reading>)
+              .where(
+                (reading) =>
+                    state.pathFilter == null ||
+                    reading.pathNumber == state.pathFilter,
+              )
+              .toList(growable: false),
+          squares: results[1] as List<SquareOption>,
+        ),
+      );
     } catch (error) {
-      emit(state.copyWith(
-        status: state.readings.isEmpty ? ReadingsLoadStatus.failure : ReadingsLoadStatus.success,
-        errorMessage: _messageFor(error),
-      ));
+      emit(
+        state.copyWith(
+          status: state.readings.isEmpty
+              ? ReadingsLoadStatus.failure
+              : ReadingsLoadStatus.success,
+          errorMessage: _messageFor(error),
+        ),
+      );
     }
   }
 
@@ -235,20 +276,24 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   }
 
   void setSquareFilter(int? squareId) {
-    emit(state.copyWith(
-      squareFilter: squareId,
-      clearSquareFilter: squareId == null,
-    ));
+    emit(
+      state.copyWith(
+        squareFilter: squareId,
+        clearSquareFilter: squareId == null,
+      ),
+    );
     load();
   }
 
   void setDateRange({DateTime? fromDate, DateTime? toDate}) {
-    emit(state.copyWith(
-      fromDate: fromDate,
-      toDate: toDate,
-      clearFromDate: fromDate == null,
-      clearToDate: toDate == null,
-    ));
+    emit(
+      state.copyWith(
+        fromDate: fromDate,
+        toDate: toDate,
+        clearFromDate: fromDate == null,
+        clearToDate: toDate == null,
+      ),
+    );
     load();
   }
 
@@ -267,33 +312,55 @@ class ReadingsCubit extends Cubit<ReadingsState> {
     required int? squareId,
     required DateTime? fromDate,
     required DateTime? toDate,
+    int? pathNumber,
+    bool clearPath = false,
   }) {
-    final unchanged = squareId == state.squareFilter &&
+    _searchTimer?.cancel();
+    final unchanged =
+        squareId == state.squareFilter &&
         fromDate == state.fromDate &&
-        toDate == state.toDate;
-    emit(state.copyWith(
-      squareFilter: squareId,
-      clearSquareFilter: squareId == null,
-      fromDate: fromDate,
-      toDate: toDate,
-      clearFromDate: fromDate == null,
-      clearToDate: toDate == null,
-    ));
+        toDate == state.toDate &&
+        (clearPath
+            ? state.pathFilter == null
+            : pathNumber == null || pathNumber == state.pathFilter);
+    emit(
+      state.copyWith(
+        squareFilter: squareId,
+        clearSquareFilter: squareId == null,
+        pathFilter: pathNumber,
+        clearPathFilter: clearPath,
+        fromDate: fromDate,
+        toDate: toDate,
+        clearFromDate: fromDate == null,
+        clearToDate: toDate == null,
+      ),
+    );
     if (!unchanged) load();
   }
 
   /// Clears every facet and the search text in one transition.
   void clearAllFilters() {
     _searchTimer?.cancel();
-    emit(state.copyWith(
-      query: '',
-      invoiceFilter: ReadingInvoiceFilter.all,
-      clearSquareFilter: true,
-      clearFromDate: true,
-      clearToDate: true,
-    ));
+    emit(
+      state.copyWith(
+        query: '',
+        invoiceFilter: ReadingInvoiceFilter.all,
+        clearSquareFilter: true,
+        clearPathFilter: true,
+        clearFromDate: true,
+        clearToDate: true,
+      ),
+    );
     load();
   }
+
+  void setPathFilter(int? pathNumber) => applyFilters(
+    squareId: state.squareFilter,
+    fromDate: state.fromDate,
+    toDate: state.toDate,
+    pathNumber: pathNumber,
+    clearPath: pathNumber == null,
+  );
 
   void clearDateFilters() {
     emit(state.copyWith(clearFromDate: true, clearToDate: true));
@@ -323,14 +390,23 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   Future<BulkOperationResult?> issueSelectedInvoices() async {
     final selected = selectedReadings;
     if (selected.isEmpty) return null;
-    emit(state.copyWith(isMutating: true, clearError: true, clearActionMessage: true));
+    emit(
+      state.copyWith(
+        isMutating: true,
+        clearError: true,
+        clearActionMessage: true,
+      ),
+    );
     try {
       final result = await _readingsRepository.bulkIssueInvoices(selected);
-      emit(state.copyWith(
-        isMutating: false,
-        actionMessage: result.message ?? 'تم إصدار ${result.succeededCount} فاتورة.',
-        selectedKeys: <String>{},
-      ));
+      emit(
+        state.copyWith(
+          isMutating: false,
+          actionMessage:
+              result.message ?? 'تم إصدار ${result.succeededCount} فاتورة.',
+          selectedKeys: <String>{},
+        ),
+      );
       await load();
       return result;
     } catch (error) {
@@ -342,14 +418,23 @@ class ReadingsCubit extends Cubit<ReadingsState> {
   Future<BulkOperationResult?> deleteSelectedReadings() async {
     final selected = selectedReadings;
     if (selected.isEmpty) return null;
-    emit(state.copyWith(isMutating: true, clearError: true, clearActionMessage: true));
+    emit(
+      state.copyWith(
+        isMutating: true,
+        clearError: true,
+        clearActionMessage: true,
+      ),
+    );
     try {
       final result = await _readingsRepository.bulkDeleteReadings(selected);
-      emit(state.copyWith(
-        isMutating: false,
-        actionMessage: result.message ?? 'تم حذف ${result.succeededCount} قراءة.',
-        selectedKeys: <String>{},
-      ));
+      emit(
+        state.copyWith(
+          isMutating: false,
+          actionMessage:
+              result.message ?? 'تم حذف ${result.succeededCount} قراءة.',
+          selectedKeys: <String>{},
+        ),
+      );
       await load();
       return result;
     } catch (error) {

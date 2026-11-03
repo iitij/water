@@ -19,17 +19,17 @@ abstract class ApiController extends Controller
         'subscribers' => ['id', 'name', 'subscription_start_date', 'balance', 'status', 'created_at', 'square_name' => 'square.name', 'meters_count' => '@meters_count'],
         'meters' => ['id', 'unique_code', 'path_number', 'tenant_name', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'square_name' => 'subscriber.square.name'],
         'readings' => ['id', 'reading_date', 'actual_reading_date', 'previous_reading', 'current_reading', 'consumption_units', 'created_at', 'meter_code' => 'meter.unique_code', 'subscriber_name' => 'meter.subscriber.name'],
-        'invoices' => ['id', 'bill_number', 'bill_date', 'total_amount', 'amount_paid', 'status', 'created_at', 'beneficiary_name' => 'subscriber.name', 'subscriber_name' => 'subscriber.name', 'total_due' => ['expression' => 'COALESCE(invoices.total_amount, 0) + COALESCE(invoices.previous_balance, 0)']],
-        'payments' => ['id', 'receipt_number', 'payment_date', 'amount', 'created_at', 'subscriber_name' => 'subscriber.name', 'user_name' => 'user.name'],
-        'void_requests' => ['id', 'receipt_number', 'amount', 'void_requested_at', 'subscriber_name' => 'subscriber.name'],
-        'subscription_fees' => ['id', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'meter_code' => 'meter.unique_code', 'invoice_number' => 'invoice.bill_number'],
+        'invoices' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'bill_number', 'bill_date', 'total_amount', 'amount_paid', 'status', 'created_at', 'beneficiary_name' => 'subscriber.name', 'subscriber_name' => 'subscriber.name', 'total_due' => ['expression' => 'COALESCE(invoices.total_amount, 0) + COALESCE(invoices.previous_balance, 0)']],
+        'payments' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'payment_date', 'amount', 'created_at', 'subscriber_name' => 'subscriber.name', 'user_name' => 'user.name'],
+        'void_requests' => ['created_at', 'path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'amount', 'void_requested_at', 'subscriber_name' => 'subscriber.name'],
+        'subscription_fees' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'meter_code' => 'meter.unique_code', 'invoice_number' => 'invoice.bill_number'],
         'service_requests' => ['id', 'service_date', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name'],
         'squares' => ['id', 'name', 'created_at', 'subscribers_count' => '@subscribers_count'],
         'tariffs' => ['id', 'name', 'unit_price', 'start_date', 'end_date', 'created_at', 'updated_at', 'deleted_at'],
-        'transactions' => ['id', 'created_at', 'amount', 'type', 'subscriber_name' => 'subscriber.name'],
+        'transactions' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'created_at', 'amount', 'type', 'subscriber_name' => 'subscriber.name'],
         'users' => ['id', 'name', 'email', 'email_verified_at', 'created_at', 'updated_at'],
         'roles' => ['id', 'name', 'guard_name', 'created_at', 'updated_at', 'permissions_count' => '@permissions_count'],
-        'cash_sessions' => ['id', 'session_date', 'expected_amount', 'counted_amount', 'variance_amount', 'closed_at', 'collector_name' => 'user.name'],
+        'cash_sessions' => ['created_at', 'id', 'session_date', 'expected_amount', 'counted_amount', 'variance_amount', 'closed_at', 'collector_name' => 'user.name'],
         'audit_events' => ['id', 'event', 'source', 'created_at', 'occurred_at' => 'created_at', 'actor_name' => 'actor.name'],
         'settings' => ['id', 'key', 'label', 'type', 'created_at', 'updated_at'],
     ];
@@ -37,6 +37,7 @@ abstract class ApiController extends Controller
     /** Sort the complete authorized query before pagination, with a stable key. */
     protected function applySorting(Builder $query, Request $request, array $fields): Builder
     {
+        $this->applyListFilters($query, $request);
         $allowed = [];
         foreach ($fields as $key => $field) {
             $allowed[is_int($key) ? $field : $key] = $field;
@@ -72,6 +73,46 @@ abstract class ApiController extends Controller
             }
         }
         return $query;
+    }
+
+    /** Optional facets always narrow the already authorized list query. */
+    protected function applyListFilters(Builder $query, Request $request): void
+    {
+        $input = $request->validate([
+            'added_from' => ['nullable', 'date_format:Y-m-d'],
+            'added_to' => ['nullable', 'date_format:Y-m-d', Rule::when($request->filled('added_from'), ['after_or_equal:added_from'])],
+            'path_number' => ['nullable', 'integer', 'min:0'],
+        ], [
+            'added_to.after_or_equal' => 'تاريخ البداية يجب أن يسبق تاريخ النهاية.',
+            'path_number.integer' => 'أدخل رقم مسار صحيحاً.',
+        ]);
+        $model = $query->getModel();
+        if ($model->usesTimestamps()) {
+            if (! empty($input['added_from'])) {
+                $query->where($model->qualifyColumn($model->getCreatedAtColumn()), '>=', $input['added_from'].' 00:00:00');
+            }
+            if (! empty($input['added_to'])) {
+                $query->where($model->qualifyColumn($model->getCreatedAtColumn()), '<', \Carbon\Carbon::parse($input['added_to'])->addDay()->format('Y-m-d').' 00:00:00');
+            }
+        }
+        $table = $model->getTable();
+        $paths = ['subscribers' => 'meters', 'readings' => 'meter', 'invoices' => 'meter',
+            'payments' => 'meter', 'subscription_fees' => 'meter', 'transactions' => 'meter',
+            'service_requests' => 'subscriber.meters'];
+        if (isset($input['path_number'])) {
+            if ($table === 'meters') {
+                $query->where('path_number', $input['path_number']);
+            } elseif (in_array($table, ['invoices', 'payments', 'subscription_fees', 'transactions'], true)) {
+                $path = $input['path_number'];
+                $query->where(function ($builder) use ($path) {
+                    $builder->whereHas('meter', fn ($meter) => $meter->where('path_number', $path))
+                        ->orWhere(fn ($general) => $general->whereNull('meter_id')
+                            ->whereHas('subscriber.meters', fn ($meter) => $meter->where('path_number', $path)));
+                });
+            } elseif (isset($paths[$table])) {
+                $query->whereHas($paths[$table], fn ($related) => $related->where('path_number', $input['path_number']));
+            }
+        }
     }
 
     /** Correlated belongs-to subqueries avoid joins changing rows or scopes. */

@@ -12,7 +12,7 @@ class ServiceRequestController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(ServiceRequest::class, 'viewAny');
-        $query = ServiceRequest::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'invoice:id,bill_number,status'])
+        $query = ServiceRequest::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name', 'subscriber.meters:id,subscriber_id,path_number', 'invoice:id,bill_number,status'])
             ->latest('service_date')->latest('id');
         if ($request->filled('status')) $query->where('status', $request->query('status'));
         if ($request->filled('subscriber_id')) $query->where('subscriber_id', $request->integer('subscriber_id'));
@@ -20,8 +20,8 @@ class ServiceRequestController extends ApiController
         if ($request->filled('created_until')) $query->whereDate('service_date', '<=', $request->query('created_until'));
         if ($request->filled('from_date')) $query->whereDate('service_date', '>=', $request->query('from_date'));
         if ($request->filled('to_date')) $query->whereDate('service_date', '<=', $request->query('to_date'));
-        $total = (clone $query)->sum('amount');
         $this->applySorting($query, $request, self::LIST_SORTS['service_requests']);
+        $total = (clone $query)->sum('amount');
         $page = $query->paginate($this->perPage($request))->appends($request->query());
         return response()->json([
             'data' => $page->items(),

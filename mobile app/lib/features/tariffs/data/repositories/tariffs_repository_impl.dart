@@ -18,6 +18,8 @@ class TariffsRepositoryImpl
     int pageSize = 25,
     String sortBy = 'start_date',
     String sortDirection = 'desc',
+    DateTime? addedFrom,
+    DateTime? addedTo,
   }) async {
     final result = await _remote.listPage(
       trash: trash,
@@ -26,6 +28,8 @@ class TariffsRepositoryImpl
       pageSize: pageSize,
       sortBy: sortBy,
       sortDirection: sortDirection,
+      addedFrom: addedFrom,
+      addedTo: addedTo,
     );
     _cachedActivePrice = result.activePrice;
     return result;

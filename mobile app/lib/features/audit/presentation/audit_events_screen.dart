@@ -76,7 +76,9 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
       if (!mounted || request != _request) return;
       // Laravel legitimately returns an empty page beyond last_page when the
       // data shrinks between requests. Return to its last available page.
-      if (_canView && result.events.isEmpty && result.currentPage > result.lastPage) {
+      if (_canView &&
+          result.events.isEmpty &&
+          result.currentPage > result.lastPage) {
         result = await _repository.fetch(_filters, page: result.lastPage);
         if (!mounted || request != _request) return;
       }
@@ -112,6 +114,8 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
   void _apply() {
     final filters = AuditEventFilters(
       query: _query.text,
+      addedFrom: _view.createdFrom,
+      addedTo: _view.createdTo,
       event: _event,
       source: _source,
       actorId: _actor,
@@ -159,6 +163,10 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
           ? [
               ListPresentationControls(
                 settings: _view,
+                filterOptions: const ListFilterOptions(
+                  hasCreatedAt: true,
+                  search: false,
+                ),
                 sortOptions: {
                   'id': ListOptionsStrings.id,
                   'event': strings.auditEvent,
