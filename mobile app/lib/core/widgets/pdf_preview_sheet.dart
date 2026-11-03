@@ -38,11 +38,8 @@ class PdfPreviewSheet extends StatelessWidget {
         isScrollControlled: true,
         useSafeArea: true,
         showDragHandle: true,
-        builder: (_) => PdfPreviewSheet(
-          title: title,
-          bytes: bytes,
-          fileName: fileName,
-        ),
+        builder: (_) =>
+            PdfPreviewSheet(title: title, bytes: bytes, fileName: fileName),
       );
     } on AppFailure catch (failure) {
       if (context.mounted) AppFeedback.error(context, failure.message);
@@ -65,15 +62,17 @@ class PdfPreviewSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: <Widget>[
-                const Icon(Icons.picture_as_pdf_outlined, color: AppColors.primary),
+                const Icon(
+                  Icons.picture_as_pdf_outlined,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -93,6 +92,10 @@ class PdfPreviewSheet extends StatelessWidget {
           Expanded(
             child: PdfPreview(
               build: (_) async => bytes,
+              // All printing goes through the visible buttons and the shared
+              // service, including the Windows dialog and A5 landscape format.
+              allowPrinting: false,
+              allowSharing: false,
               canChangePageFormat: false,
               canChangeOrientation: false,
               canDebug: false,
@@ -130,10 +133,7 @@ class PdfPreviewSheet extends StatelessWidget {
 
   Future<void> _print(BuildContext context) async {
     try {
-      await Printing.layoutPdf(
-        name: fileName,
-        onLayout: (_) async => bytes,
-      );
+      await PdfPrintService.printDocument(bytes, name: fileName);
     } catch (error) {
       if (context.mounted) AppFeedback.error(context, 'تعذّرت الطباعة: $error');
     }

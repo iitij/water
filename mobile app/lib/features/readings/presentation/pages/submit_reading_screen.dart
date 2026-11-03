@@ -8,6 +8,7 @@ import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/l10n/app_strings.dart';
 import '../../../../core/l10n/reading_invoice_strings.dart';
 import '../../../../core/navigation/sub_page.dart';
@@ -453,6 +454,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   }
 
   String _humanMessage(Object error) {
+    if (error is AppFailure) return error.message;
     if (error is StateError) return error.message.toString();
     if (error is DioException) {
       final data = error.response?.data;

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <title>سند قبض {{ $payment->receipt_number }}</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        @include('pdf.partials.fonts')
 
         @page {
             size: A5 landscape;

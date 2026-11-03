@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:water_project/core/error/failures.dart';
 import 'package:water_project/core/l10n/reading_invoice_strings.dart';
 import 'package:water_project/features/readings/data/models/reading.dart';
 import 'package:water_project/features/readings/data/services/reading_invoice_actions_service.dart';
@@ -31,6 +32,8 @@ void main() {
   late List<MethodCall> shares;
   late List<Uri> launched;
   late List<String> downloads;
+  late List<MethodCall> printCalls;
+  var printError = false;
   var pdf = '%PDF-1.7 test';
   var pages = 1;
   var failRaster = false;
@@ -43,6 +46,8 @@ void main() {
     shares = [];
     launched = [];
     downloads = [];
+    printCalls = [];
+    printError = false;
     pdf = '%PDF-1.7 test';
     pages = 1;
     failRaster = false;
@@ -98,6 +103,19 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(printing, (
       call,
     ) async {
+      if (call.method == 'printPdf') {
+        printCalls.add(call);
+        if (printError) throw PlatformException(code: 'print_failed');
+        final args = call.arguments as Map;
+        await binding.defaultBinaryMessenger.handlePlatformMessage(
+          printing.name,
+          printing.codec.encodeMethodCall(
+            MethodCall('onCompleted', {'job': args['job'], 'completed': false}),
+          ),
+          (_) {},
+        );
+        return 1;
+      }
       expect(call.method, 'rasterPdf');
       final args = call.arguments as Map;
       expect(
@@ -135,6 +153,42 @@ void main() {
       );
       return null;
     });
+  });
+
+  test('reading result prints a single authenticated official PDF', () async {
+    await service.printInvoice(invoice);
+    expect(downloads, ['invoices/592/pdf']);
+    expect(printCalls, hasLength(1));
+    expect(
+      (printCalls.single.arguments as Map)['name'],
+      'invoice-INV-202611-0003.pdf',
+    );
+    expect(launched, isEmpty);
+  });
+
+  test(
+    'printing failures never trigger repeated downloads or a browser',
+    () async {
+      printError = true;
+      await expectLater(
+        service.printInvoice(invoice),
+        throwsA(isA<UnexpectedFailure>()),
+      );
+      expect(downloads, hasLength(1));
+      expect(printCalls, hasLength(1));
+      expect(launched, isEmpty);
+    },
+  );
+
+  test('failed server PDF is reported after one request', () async {
+    httpStatus = 500;
+    await expectLater(
+      service.printInvoice(invoice),
+      throwsA(isA<ServerFailure>()),
+    );
+    expect(downloads, hasLength(1));
+    expect(printCalls, isEmpty);
+    expect(launched, isEmpty);
   });
 
   tearDown(() async {

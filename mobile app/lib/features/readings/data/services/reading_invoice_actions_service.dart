@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/finance/finance_locator.dart';
+import '../../../../core/finance/finance_api_client.dart';
+import '../../../../core/l10n/printing_strings.dart';
 import '../../../../core/l10n/reading_invoice_strings.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/services/pdf_print_service.dart';
@@ -21,53 +21,16 @@ class ReadingInvoiceActionsService {
 
   Future<void> printInvoice(InvoiceSummary invoice) async {
     final invoiceId = invoice.id;
-    if (invoiceId == null) throw StateError('رقم الفاتورة غير متاح للطباعة.');
-
-    try {
-      final pdfService = sl<PdfPrintService>();
-      final bytes = await pdfService.fetchPdf(
-        ApiEndpoints.invoicePdf(invoiceId),
-        fallbackUrl: invoice.pdfUrl,
-      );
-      if (_isPdf(bytes)) {
-        await pdfService.printBytes(
-          bytes,
-          name: 'invoice-${invoice.billNumber ?? invoiceId}.pdf',
-        );
-        return;
-      }
-    } catch (_) {
-      // Fallback to direct Dio fetch if FinanceModule is not initialized in isolated tests.
-    }
-
-    try {
-      final response = await _dio.get<List<int>>(
-        ApiEndpoints.invoicePdf(invoiceId),
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final bytes = response.data;
-      if (bytes != null && _isPdf(bytes)) {
-        await Printing.layoutPdf(
-          onLayout: (_) async => Uint8List.fromList(bytes),
-          name: 'invoice-${invoice.billNumber ?? invoiceId}.pdf',
-          format: PdfPageFormat.a5.landscape,
-        );
-        return;
-      }
-    } on DioException catch (error) {
-      if (error.response?.statusCode != 404) rethrow;
-    }
-
-    final rawPrintUrl = invoice.pdfUrl;
-    var printUri = rawPrintUrl == null ? null : Uri.tryParse(rawPrintUrl);
-    if (printUri != null && !printUri.hasScheme) {
-      final baseUri = Uri.tryParse(_dio.options.baseUrl);
-      if (baseUri != null) printUri = baseUri.resolveUri(printUri);
-    }
-    if (printUri == null ||
-        !await launchUrl(printUri, mode: LaunchMode.externalApplication)) {
-      throw StateError('تعذر فتح ملف الفاتورة للطباعة.');
-    }
+    if (invoiceId == null) throw StateError(PrintingStrings.missingInvoice);
+    final pdfService = PdfPrintService(client: FinanceApiClient(_dio));
+    final bytes = await pdfService.fetchPdf(
+      ApiEndpoints.invoicePdf(invoiceId),
+      fallbackUrl: invoice.pdfUrl,
+    );
+    await pdfService.printBytes(
+      bytes,
+      name: 'invoice-${invoice.billNumber ?? invoiceId}.pdf',
+    );
   }
 
   Future<void> shareOnWhatsApp(InvoiceSummary invoice) async {

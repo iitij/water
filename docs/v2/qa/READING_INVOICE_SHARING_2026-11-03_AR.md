@@ -31,7 +31,13 @@
   `mobile app/build/reading-invoice-windows.log`.
   حُفظت نسخة المنتج في `mobile app/build/reading-invoice-release-20261103/`،
   وطابقت بصمة محرك Flutter محرك Release.
-- الفحص الشامل والتحقق الأصلي من مشاركة Windows: قيد الاستكمال.
+- `flutter test --no-pub --concurrency=1 --reporter expanded`:
+  **597 PASS / 26 SKIP / 0 FAIL**؛ السجل
+  `mobile app/build/reading-invoice-full-tests.log`؛ المدة 3 دقائق.
+- بُنيت واجهة اختبار منفصلة بفاتورة وهمية لفحص المشاركة الأصلية في Windows،
+  لكن لم يُستكمل هذا التحقق؛ أوقف المستخدم Computer Use بزر Escape.
+  لم تُستبدل نسخة التطبيق المثبتة. حزمة المنتج الجاهزة هي
+  `mobile app/build/reading-invoice-release-20261103/`، وليست واجهة الاختبار.
 
 ## حدود التحقق
 

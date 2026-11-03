@@ -73,6 +73,7 @@ void main() {
       ),
     );
     when(() => actions.sendSms(invoice)).thenAnswer((_) async {});
+    when(() => actions.printInvoice(invoice)).thenAnswer((_) async {});
     when(() => actions.shareOnWhatsApp(invoice)).thenAnswer((_) async {});
   });
 
@@ -110,6 +111,10 @@ void main() {
       expect(find.text(ReadingInvoiceStrings.sms), findsOneWidget);
       expect(find.text(ReadingInvoiceStrings.whatsapp), findsOneWidget);
       expect(find.text(ReadingInvoiceStrings.sharingHelp), findsOneWidget);
+      await tester.ensureVisible(find.text('طباعة الفاتورة'));
+      await tester.tap(find.text('طباعة الفاتورة'));
+      await tester.pumpAndSettle();
+      verify(() => actions.printInvoice(invoice)).called(1);
       await tester.ensureVisible(find.text(ReadingInvoiceStrings.sms));
       await tester.tap(find.text(ReadingInvoiceStrings.sms));
       await tester.pumpAndSettle();

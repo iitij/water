@@ -1393,6 +1393,29 @@
   "verification_status": "backend_tests_and_live_passed",
   "owner_acceptance": "not_tested",
   "evidence": "php -d extension=pdo_sqlite -d extension=sqlite3 vendor/bin/phpunit tests/Feature/GlobalSearchTest.php --debug: 6 PASS / 71 assertions؛ فحص مباشر لكل سجل على الخادم q1/١/۱/6 يؤكد ترتيب subscriber ثم meter، مع off_path_results=0. نُشر تعديل SearchController فقط بنسخة احتياطية؛ الخدمتان active؛ دون توكن401. لا حاجة لإعادة بناء العميل."
+},
+{
+  "id": "READING-INVOICE-SHARING-20261103",
+  "sprint": "S9",
+  "agent": "A1 (urgent integration across A8/A9/A10)",
+  "task": "إضافة SMS لنتيجة القراءة ومشاركة صور جميع صفحات الفاتورة عبر قائمة المشاركة بدلاً من رابط واتساب النصي",
+  "files": "mobile app/lib/core/l10n/reading_invoice_strings.dart; mobile app/lib/features/readings/data/services/reading_invoice_actions_service.dart; mobile app/lib/features/readings/presentation/pages/submit_reading_screen.dart; mobile app/test/features/readings/reading_invoice_actions{,_screen}_test.dart; mobile app/RELEASE_NOTES.md; docs/v2/qa/READING_INVOICE_SHARING_2026-11-03_AR.md",
+  "status": "done",
+  "verification_status": "local_tests_and_windows_build_passed",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub --concurrency=1 --reporter expanded: 597 PASS / 26 SKIP / 0 FAIL؛ اختبارات القراءات 57 PASS، بينها 320/390/1440px وصور PNG ونص SMS وحالات الفشل والإلغاء. flutter analyze --no-pub: No issues found. flutter build windows --release --no-pub: PASS 89.8s. حزمة المنتج build/reading-invoice-release-20261103 محفوظة بمحرك Release مطابق. لم تُرسل رسالة فعلية ولم يُقبل هاتف؛ أوقف المستخدم Computer Use بزر Escape قبل استكمال فحص المشاركة الأصلية، ولم تُستبدل النسخة المثبتة. التفاصيل docs/v2/qa/READING_INVOICE_SHARING_2026-11-03_AR.md."
+}
+,
+{
+  "id": "LOGIN-DEFAULT-EMAIL-20261104",
+  "sprint": "S9",
+  "agent": "A1 (urgent integration across A9/A10)",
+  "task": "تعبئة بريد شاشة الدخول تلقائياً بالقيمة admin@water.test مع إمكانية تعديله",
+  "files": "mobile app/lib/features/auth/presentation/pages/login_screen.dart; mobile app/test/features/auth/login_screen_test.dart",
+  "status": "done",
+  "verification_status": "local_widget_test_passed_analyze_existing_infos",
+  "owner_acceptance": "not_tested",
+  "evidence": "flutter test --no-pub test/features/auth/login_screen_test.dart --reporter expanded: 1 PASS؛ يثبت البريد الافتراضي، إمكانية تغييره واستمرار التغيير بعد إعادة البناء، وبقاء كلمة المرور فارغة. flutter analyze --no-pub: exit 1 بسبب 3 ملاحظات info في ملفات PDF/القراءات المعدلة مسبقاً، دون ملاحظات على ملفي هذا التغيير."
 }
 ]
 }
