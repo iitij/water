@@ -1,3 +1,7 @@
+## ملاحظات الإصدار المؤجلة إلى ما قبل الإنتاج
+
+المشروع ما زال في **مرحلة التطوير** وليس منشوراً كإصدار إنتاجي. مراجعة 2026-11-12 والمهام الـ12 الناتجة عنها موثقة في [تقرير الفحص وسجل إصلاحات ما قبل الإنتاج](docs/v2/qa/PREPRODUCTION_AUDIT_2026-11-12_AR.md)، وفي [سجل مهام الفريق](docs/v2/agents/backlog.json) بالمعرّفات `PREPROD-01` إلى `PREPROD-12`، وعلى [GitHub Issues](https://github.com/5krm/water/issues?q=PREPROD). **الإصلاحات مؤجلة بقرار صاحب المشروع؛ لا تعتبر أي منها منجزة أو مقبولة للإنتاج حتى تستوفي شروط القبول.**
+
 ## Mobile / Windows application
 
 The Flutter app is in [`mobile app/`](mobile%20app/README.md). Laravel remains at
