@@ -31,6 +31,10 @@ jobs:
           php-version: '8.4'
           extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
           coverage: none
+      - name: Prepare Laravel writable directories
+        run: |
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          chmod -R u+rwX bootstrap/cache storage/framework storage/logs
       - name: Install pinned Composer dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: PHP syntax checks
