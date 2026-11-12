@@ -1,0 +1,67 @@
+name: Water Main Source Archive
+
+on:
+  push:
+    paths:
+      - ".github/workflows/archive-main-snapshot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    name: Create versioned ZIP from main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exactly this main commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Package, checksum and verify
+        id: package
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          VERSION="2026.11.12"
+          SHORT_SHA="${SOURCE_COMMIT:0:12}"
+          NAME="Water_Source_v${VERSION}_PreSingleMeter_${SHORT_SHA}.zip"
+          DEST="backups/releases/${NAME}"
+          mkdir -p backups/releases
+          git archive --format=zip --output="${DEST}" "${SOURCE_COMMIT}"
+          test -s "${DEST}"
+          unzip -tq "${DEST}"
+          (cd backups/releases && sha256sum "${NAME}" > "${NAME}.sha256")
+          cat > "backups/releases/${NAME}.txt" <<EOF
+          Water source snapshot (Git-tracked files only)
+          Version label: v${VERSION} / PreSingleMeter
+          Source commit: ${SOURCE_COMMIT}
+          Source branch: main
+          Archive: ${NAME}
+          Database: no new live database backup was taken; any .sql files are previously tracked repository files only.
+          Restore: extract ZIP into a fresh directory; use a separate database backup if required.
+          Verification: ZIP integrity checked with unzip -tq; SHA256 in accompanying file.
+          EOF
+          test "$(unzip -Z1 "${DEST}" | wc -l)" -gt 100
+          SIZE="$(stat -c%s "${DEST}")"
+          test "${SIZE}" -lt 95000000 || { echo "ZIP too large for GitHub tracked file"; exit 1; }
+          echo "archive=${DEST}" >> "$GITHUB_OUTPUT"
+          echo "ARCHIVE=${DEST}" >> "$GITHUB_STEP_SUMMARY"
+          cat "backups/releases/${NAME}.sha256" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save the verified archive to main
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${ARCHIVE}" "${ARCHIVE}.sha256" "${ARCHIVE}.txt"
+          git commit -m "backup: preserve Water source before single-meter changes"
+          git push origin HEAD:main
