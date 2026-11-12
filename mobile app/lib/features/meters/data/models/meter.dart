@@ -201,6 +201,7 @@ class SubscriberOption {
     this.status = 'active',
     this.subscriptionStartDate,
     this.meterCount = 0,
+    this.currentMeterId,
   });
 
   final int id;
@@ -211,6 +212,8 @@ class SubscriberOption {
   final String status;
   final DateTime? subscriptionStartDate;
   final int meterCount;
+  final int? currentMeterId;
+  bool get hasCurrentMeter => currentMeterId != null;
 
   factory SubscriberOption.fromJson(Map<String, dynamic> json) {
     final square = _asMap(json['square']);
@@ -225,6 +228,11 @@ class SubscriberOption {
       subscriptionStartDate: _asDate(json['subscription_start_date']),
       meterCount:
           _asInt(json['meters_count']) ?? (meters is List ? meters.length : 0),
+      currentMeterId: _asInt(json['current_meter_id']) ??
+          _asInt(_asMap(json['current_meter'])?['id']) ??
+          (meters is List
+              ? _asInt(meters.cast<dynamic>().where((m) => m is Map && m['removed_at'] == null && m['deleted_at'] == null).firstOrNull?['id'])
+              : null),
     );
   }
 }
