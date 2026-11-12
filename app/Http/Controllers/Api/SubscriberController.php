@@ -21,7 +21,7 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'viewAny');
         $query = Subscriber::query()
-            ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone'])
+            ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone,removed_at', 'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at'])
             ->withCount('meters')
             ->orderBy('name');
 
@@ -83,6 +83,7 @@ class SubscriberController extends ApiController
         $subscriber = Subscriber::with([
             'square:id,name,code,description',
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
+            'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number,tenant_name'])->latest('bill_date')->latest('id'),
             'payments' => fn ($q) => $q->with(['meter:id,unique_code,tenant_name', 'user:id,name'])->latest('payment_date')->latest('id'),
             'subscriptionFees' => fn ($q) => $q->latest(),
@@ -172,7 +173,7 @@ class SubscriberController extends ApiController
     public function summary(int $id)
     {
         $this->authorizeApi(Subscriber::class, 'view');
-        $subscriber = Subscriber::with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance'])
+        $subscriber = Subscriber::with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance', 'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at'])
             ->findOrFail($id);
 
         return response()->json([
@@ -377,12 +378,12 @@ class SubscriberController extends ApiController
             'square_id' => $subscriber->square_id,
             'square' => $subscriber->square,
             'meters_count' => $subscriber->meters_count,
+            'current_meter_id' => $subscriber->currentMeter?->id,
             'subscription_start_date' => optional($subscriber->subscription_start_date)->format('Y-m-d'),
             'created_at' => $subscriber->created_at?->toISOString(),
-            'meter_number' => $subscriber->meters->first()?->unique_code,
-            'path_numbers' => $subscriber->meters->pluck('path_number')
-                ->filter(fn ($number) => $number !== null)
-                ->unique()->sort(SORT_NUMERIC)->values()->all(),
+            'meter_number' => $subscriber->currentMeter?->unique_code,
+            'path_numbers' => $subscriber->currentMeter?->path_number !== null
+                ? [(int) $subscriber->currentMeter->path_number] : [],
             'credit_balance' => $summary['total_credit_balance'],
             'debit_balance' => $summary['total_debit_balance'],
             'account_balance' => $summary['account_balance'],
