@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Meter;
 use App\Models\Subscriber;
+use App\Services\SingleMeterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -85,7 +86,7 @@ class MeterController extends ApiController
         return response()->json(['meter' => $meter]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, SingleMeterService $singleMeterService)
     {
         $this->authorizeApi(Meter::class, 'create');
         $data = $request->validate([
@@ -99,17 +100,12 @@ class MeterController extends ApiController
             'tenant_name' => ['nullable', 'string', 'max:255'],
             'tenant_phone' => ['nullable', 'string', 'max:50'],
         ]);
-        $subscriber = Subscriber::findOrFail($data['subscriber_id']);
-        if (! $this->pathAvailable($subscriber->square_id, $data['path_number'] ?? null)) {
-            return response()->json(['errors' => ['path_number' => ['رقم المسار مستخدم بالفعل في هذا المربع السكني.']]], 422);
-        }
-        $data['status'] ??= 'active';
-        $meter = Meter::create($data)->load(['subscriber.square']);
+        $meter = $singleMeterService->create($data)->load(['subscriber.square']);
 
         return response()->json(['message' => 'تم إضافة العداد بنجاح.', 'meter' => $meter], 201);
     }
 
-    public function update(Request $request, int $id)
+    public function update(Request $request, int $id, SingleMeterService $singleMeterService)
     {
         $this->authorizeApi(Meter::class, 'update');
         $meter = Meter::findOrFail($id);
@@ -124,12 +120,7 @@ class MeterController extends ApiController
             'tenant_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'tenant_phone' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
-        $subscriber = isset($data['subscriber_id']) ? Subscriber::findOrFail($data['subscriber_id']) : $meter->subscriber;
-        $pathNumber = array_key_exists('path_number', $data) ? $data['path_number'] : $meter->path_number;
-        if (! $this->pathAvailable($subscriber->square_id, $pathNumber, $meter->id)) {
-            return response()->json(['errors' => ['path_number' => ['رقم المسار مستخدم بالفعل في هذا المربع السكني.']]], 422);
-        }
-        $meter->update($data);
+        $meter = $singleMeterService->update($meter, $data);
 
         return response()->json(['message' => 'تم تحديث العداد بنجاح.', 'meter' => $meter->fresh(['subscriber.square'])]);
     }
@@ -198,6 +189,7 @@ class MeterController extends ApiController
         }
 
         return ! Meter::where('path_number', $pathNumber)
+            ->whereNull('removed_at')
             ->when($ignoreMeterId, fn ($q) => $q->where('id', '!=', $ignoreMeterId))
             ->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId))
             ->exists();
