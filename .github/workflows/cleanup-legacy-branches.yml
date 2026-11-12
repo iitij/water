@@ -1,0 +1,37 @@
+name: Remove obsolete Water backup branches
+
+on:
+  push:
+    paths:
+      - ".github/workflows/cleanup-legacy-branches.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  remove:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Verify archived source before deleting old branch pointers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP="backups/releases/Water_Source_v2026.11.12_PreSingleMeter_806e30f0fded.zip"
+          test -s "$ZIP"
+          (cd backups/releases && sha256sum -c "$(basename "$ZIP").sha256")
+          unzip -tq "$ZIP"
+
+          FEATURE="feature/water-redesign-2026-11-12"
+          SNAPSHOT="snapshot/pre-redesign-2026-11-12"
+          F_SHA="$(git ls-remote origin "refs/heads/$FEATURE" | cut -f1)"
+          S_SHA="$(git ls-remote origin "refs/heads/$SNAPSHOT" | cut -f1)"
+          test "$F_SHA" = "b4f7dfb27f101c54cb7dd970a5b99af7ff10312a"
+          test "$S_SHA" = "be5eac056263e85eeba617dfb34398fa29a21b8e"
+          git push origin --delete "$FEATURE" "$SNAPSHOT"
+          printf 'Verified source ZIP; removed two obsolete branch refs.\n' >> "$GITHUB_STEP_SUMMARY"
