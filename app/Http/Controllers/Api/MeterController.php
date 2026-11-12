@@ -16,6 +16,9 @@ class MeterController extends ApiController
         $this->authorizeApi(Meter::class, 'viewAny');
         $query = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code'])
             ->withCount('readings')->orderBy('id');
+        if ($request->query('include_history') !== '1') {
+            $query->whereNull('removed_at');
+        }
 
         if ($request->filled('subscriber_id')) {
             $query->where('subscriber_id', $request->integer('subscriber_id'));
