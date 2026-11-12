@@ -31,13 +31,14 @@ class SubscriberListMetadataTest extends TestCase
                 'unique_code' => 'PATH-' . $index,
                 'path_number' => $pathNumber,
                 'status' => $index === 2 ? 'inactive' : 'active',
+                'removed_at' => $index === 0 ? null : '2026-01-01',
             ]);
         }
 
         $this->getJson('/api/subscribers')->assertOk()
             ->assertJsonPath('data.0.id', $subscriber->id)
             ->assertJsonPath('data.0.meter_number', 'PATH-0')
-            ->assertJsonPath('data.0.path_numbers', [0, 2, 10])
+            ->assertJsonPath('data.0.path_numbers', [10])
             ->assertJsonPath('data.0.created_at', '2026-02-03T04:05:06.000000Z')
             ->assertJsonPath('data.0.subscription_start_date', '2025-01-01');
     }
@@ -67,15 +68,20 @@ class SubscriberListMetadataTest extends TestCase
                 'unique_code' => 'METER-' . $subscriber->id, 'path_number' => 12, 'status' => 'active',
             ]);
         }
+        $matching->meters()->where('path_number', 12)->update(['removed_at' => '2026-01-01']);
         $matching->meters()->create(['unique_code' => 'SECOND', 'path_number' => 3, 'status' => 'active']);
 
+        // A historical path must no longer appear in an operational search.
         $this->getJson('/api/subscribers?' . http_build_query(['search' => '١٢']))->assertOk()
-            ->assertJsonPath('total', 2)
-            ->assertJsonPath('data.0.path_numbers', [3, 12]);
-        $compound = strtr($square->id . '/12', ['1' => '١', '2' => '٢']);
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $other->id);
+        $this->getJson('/api/subscribers?' . http_build_query(['search' => '٣']))->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.path_numbers', [3]);
+        $compound = strtr($square->id . '/3', ['1' => '١', '2' => '٢', '3' => '٣']);
         $this->getJson('/api/subscribers?' . http_build_query(['q' => $compound]))->assertOk()
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.id', $matching->id)
-            ->assertJsonPath('data.0.path_numbers', [3, 12]);
+            ->assertJsonPath('data.0.path_numbers', [3]);
     }
 }
