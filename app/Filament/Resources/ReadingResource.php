@@ -30,15 +30,13 @@ class ReadingResource extends Resource
                 ->label('المشترك / المستأجر')
                 ->searchable()
                 ->options(function () {
-                    $subscribers = \App\Models\Subscriber::with('meters')->where('status', 'active')->get();
+                    $subscribers = \App\Models\Subscriber::with('currentMeter')->where('status', 'active')->get();
                     $results = [];
                     foreach ($subscribers as $subscriber) {
                         $results[(string)$subscriber->id] = $subscriber->name;
-                        foreach ($subscriber->meters as $meter) {
-                            if ($meter->tenant_name) {
+                        if (($meter = $subscriber->currentMeter) && $meter->tenant_name) {
                                 $label = "{$subscriber->name} (عداد: {$meter->unique_code} - المستأجر: {$meter->tenant_name})";
                                 $results["{$subscriber->id}|{$meter->id}"] = $label;
-                            }
                         }
                     }
                     return $results;
@@ -68,8 +66,7 @@ class ReadingResource extends Resource
                     }
 
                     $subscriber = \App\Models\Subscriber::find($state);
-                    if ($subscriber && $subscriber->meters()->count() === 1) {
-                        $meter = $subscriber->meters()->first();
+                    if ($subscriber && ($meter = $subscriber->currentMeter)) {
                         $set('meter_id', $meter->id);
                         $set('previous_reading', $meter->getLastReadingValue());
                         $service = new \App\Services\ReadingService();
