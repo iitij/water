@@ -49,18 +49,8 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
   bool? _pathConflict;
   String? _loadError;
 
-  bool get _showTenantFields {
-    final selected = _selectedSubscriber;
-    if (selected == null) return false;
-    final existingMeterCount = selected.meterCount;
-    final countAfterSave = widget.meter != null &&
-            widget.meter!.subscriberId == selected.id
-        ? existingMeterCount
-        : existingMeterCount + 1;
-    return countAfterSave > 1 ||
-        (_tenantNameController.text.trim().isNotEmpty ||
-            _tenantPhoneController.text.trim().isNotEmpty);
-  }
+  // Tenant details remain optional even when the subscriber has one meter.
+  bool get _showTenantFields => true;
 
   @override
   void initState() {
@@ -170,11 +160,17 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
     });
   }
 
-  Future<void> _save({bool addAnother = false}) async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final subscriber = _selectedSubscriber;
     if (subscriber == null) {
       _showMessage('اختر المشترك مالك العداد.');
+      return;
+    }
+    final editingSameMeter = widget.meter != null &&
+        widget.meter!.id == subscriber.currentMeterId;
+    if (subscriber.hasCurrentMeter && !editingSameMeter) {
+      _showMessage('هذا المشترك مرتبط بعداد حالي. لا يمكن إضافة عداد ثانٍ.');
       return;
     }
     final pathNumber = int.tryParse(
@@ -224,25 +220,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
       );
       if (!mounted) return;
       widget.onSaved?.call(savedMeter);
-      if (addAnother && widget.meter == null) {
-        // سلسلة «حفظ وإضافة عداد آخر» (توازي Filament: Create & create another):
-        // يُحفظ العداد ثم يُفرَّغ النموذج ويبقى المشترك نفسه محدداً.
-        _formKey.currentState!.reset();
-        _uniqueCodeController.clear();
-        _pathController.clear();
-        _tenantNameController.clear();
-        _tenantPhoneController.clear();
-        setState(() {
-          _isSaving = false;
-          _status = 'active';
-          _pathConflict = null;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ العداد — أضف العداد التالي للمشترك نفسه.')),
-        );
-        _schedulePathValidation('');
-        return;
-      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
@@ -482,16 +459,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   loading: _isSaving,
                                   onPressed: _isSaving || _isCheckingPath ? null : () => _save(),
                                 ),
-                                if (widget.meter == null) ...[
-                                  const SizedBox(height: 10),
-                                  AppSecondaryButton(
-                                    label: 'حفظ وإضافة عداد آخر',
-                                    icon: Icons.playlist_add_outlined,
-                                    onPressed: _isSaving || _isCheckingPath
-                                        ? null
-                                        : () => _save(addAnother: true),
-                                  ),
-                                ],
                               ],
                             ),
                           ),
