@@ -84,7 +84,7 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseHas('meters', [
             'id' => $old,
             'subscriber_id' => $subscriber->id,
-            'removed_at' => '2026-11-01',
+            'removed_at' => '2026-11-01 00:00:00',
         ]);
 
         $this->getJson('/api/meters?subscriber_id='.$subscriber->id)
