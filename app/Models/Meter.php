@@ -37,6 +37,11 @@ class Meter extends Model
         return $this->belongsTo(Subscriber::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     public function readings(): HasMany
     {
         return $this->hasMany(Reading::class);
@@ -55,6 +60,11 @@ class Meter extends Model
     /**
      * آخر قراءة للعداد
      */
+    public function isCurrent(): bool
+    {
+        return $this->removed_at === null && $this->deleted_at === null;
+    }
+
     public function getLatestReading(?int $ignoreReadingId = null): ?Reading
     {
         $query = $this->readings()->orderBy('id', 'desc');
