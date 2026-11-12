@@ -1,0 +1,32 @@
+name: Water Flutter single-meter check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile app/lib/features/meters/data/models/meter.dart"
+      - "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart"
+      - "mobile app/lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart"
+      - ".github/workflows/flutter-single-meter-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-changed-flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "mobile app"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze changed Flutter modules
+        run: |
+          dart analyze lib/features/meters/data/models/meter.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
