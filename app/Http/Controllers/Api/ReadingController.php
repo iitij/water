@@ -388,6 +388,12 @@ class ReadingController extends ApiController
             }
         }
 
+        if ($meter->removed_at !== null) {
+            throw ValidationException::withMessages([
+                'meter_id' => ['هذا العداد من السجل التاريخي وقد تم استبداله أو نزعه. اختر العداد الحالي.'],
+            ]);
+        }
+
         $lastReading = $meter->readings()->latest('id')->first();
         $previous = $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading;
         $current = (float) $data['current_reading'];
