@@ -25,6 +25,11 @@ class InvoiceService
         string $invoiceType = 'meter'
     ): Invoice {
         return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $tankerInstallment, $includeReadings, $invoiceType) {
+            if ($includeReadings && $meter !== null && $meter->removed_at !== null) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'meter_id' => ['لا يمكن إصدار فاتورة استهلاك جديدة لعداد تم نزعه أو استبداله.'],
+                ]);
+            }
             $unitPrice = \App\Models\Tariff::getActivePrice();
 
             // 1. حساب الاستهلاك - نأخذ آخر قراءة فقط للاستهلاك الحالي، وما قبلها يُحتسب متأخرات
