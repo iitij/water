@@ -108,7 +108,7 @@ class SingleMeterService
     {
         $query = Meter::query()->where('subscriber_id', $subscriberId)->whereNull('removed_at');
         if ($exceptMeterId !== null) {
-            $query->whereKeyNot($exceptMeterId);
+            $query->where('id', '!=', $exceptMeterId);
         }
         if ($query->exists()) {
             throw ValidationException::withMessages([
