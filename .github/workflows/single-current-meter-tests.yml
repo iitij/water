@@ -1,0 +1,43 @@
+name: Water single-meter acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/Models/Meter.php"
+      - "app/Models/Subscriber.php"
+      - "app/Services/SingleMeterService.php"
+      - "app/Http/Controllers/Api/MeterController.php"
+      - "app/Http/Controllers/Api/ReadingController.php"
+      - "app/Http/Controllers/Api/SubscriberController.php"
+      - "app/Services/InvoiceService.php"
+      - "database/migrations/*single_meter*"
+      - "tests/Feature/SingleCurrentMeterTest.php"
+      - "tests/Feature/SubscriberListMetadataTest.php"
+      - ".github/workflows/single-current-meter-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Install pinned Composer dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: PHP syntax checks
+        run: |
+          php -l app/Services/SingleMeterService.php
+          php -l app/Http/Controllers/Api/MeterController.php
+          php -l app/Filament/Resources/Meters/Schemas/MeterForm.php
+          php -l database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php
+      - name: Single meter and subscriber metadata tests
+        run: php artisan test --filter='SingleCurrentMeterTest|SubscriberListMetadataTest'
