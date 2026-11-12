@@ -29,13 +29,13 @@ class SubscriberController extends ApiController
             $normalized = $this->normalizeDigits($search);
             if ($path = $this->parseCompoundSearch($normalized)) {
                 [$squareId, $pathNumber] = $path;
-                $query->where('square_id', $squareId)->whereHas('meters', fn ($q) => $q->where('path_number', $pathNumber));
+                $query->where('square_id', $squareId)->whereHas('currentMeter', fn ($q) => $q->where('path_number', $pathNumber));
             } else {
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('name', 'like', "%{$search}%")
                         ->orWhereHas('square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
                         ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhereHas('meters', function ($meterQuery) use ($search, $normalized) {
+                        ->orWhereHas('currentMeter', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
                                 ->orWhere('tenant_name', 'like', "%{$search}%")
                                 ->orWhere('tenant_phone', 'like', "%{$search}%");
