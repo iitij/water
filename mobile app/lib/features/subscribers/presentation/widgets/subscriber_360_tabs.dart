@@ -256,12 +256,20 @@ class _MetersTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meters = detail.summary.meterBalances;
+    // The API retains historical meters for ledgers. Display only the current
+    // association (removed_at == null) in the operational subscriber tab.
+    final meters = detail.summary.meterBalances.where((meter) {
+      final raw = detail.metersRaw
+          .where((row) => row['id'] == meter.meterId)
+          .firstOrNull;
+      return raw == null || raw['removed_at'] == null;
+    }).toList();
     final hasMetersRepo = GetIt.I.isRegistered<MetersRepository>();
     final canAddMeter =
-        onAddMeter != null ||
-        hasMetersRepo ||
-        GoRouter.maybeOf(context) != null;
+        meters.isEmpty &&
+        (onAddMeter != null ||
+            hasMetersRepo ||
+            GoRouter.maybeOf(context) != null);
     final canRecordReading =
         onRecordReading != null ||
         GetIt.I.isRegistered<ReadingsRepository>() ||
@@ -290,13 +298,14 @@ class _MetersTab extends StatelessWidget {
       sortValues: _profileSortValues,
       pathNumbers: (row) => RecordLocation.fromJson(row).paths,
       sliversBuilder: (context, visible, options) => [
-        SliverToBoxAdapter(
+        if (meters.isEmpty)
+          SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 8),
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: AppPrimaryButton(
-                label: 'إضافة عداد للمشترك',
+                label: 'ربط العداد بالمشترك',
                 icon: Icons.add_rounded,
                 expand: false,
                 onPressed: canAddMeter
@@ -310,7 +319,7 @@ class _MetersTab extends StatelessWidget {
           const SliverFillRemaining(
             hasScrollBody: false,
             child: _SubscriberEmptyState(
-              title: 'لا توجد عدادات لهذا المشترك',
+              title: 'لا يوجد عداد حالي مرتبط بهذا المشترك',
               icon: Icons.speed,
             ),
           )
@@ -392,9 +401,6 @@ class _MetersTab extends StatelessWidget {
                                 if (value == 'edit') {
                                   _editMeter(context, m);
                                 }
-                                if (value == 'delete') {
-                                  _deleteMeter(context, m);
-                                }
                               },
                               itemBuilder: (context) => const [
                                 PopupMenuItem(
@@ -404,25 +410,6 @@ class _MetersTab extends StatelessWidget {
                                       Icon(Icons.edit_outlined, size: 18),
                                       SizedBox(width: 10),
                                       Text('تعديل العداد'),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.delete_outline,
-                                        size: 18,
-                                        color: AppColors.danger,
-                                      ),
-                                      SizedBox(width: 10),
-                                      Text(
-                                        'حذف العداد',
-                                        style: TextStyle(
-                                          color: AppColors.danger,
-                                        ),
-                                      ),
                                     ],
                                   ),
                                 ),
