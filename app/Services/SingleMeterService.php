@@ -88,7 +88,9 @@ class SingleMeterService
             $pathNumber = array_key_exists('path_number', $data)
                 ? $data['path_number']
                 : $meter->path_number;
-            $this->ensurePathAvailable((int) $destination->square_id, $pathNumber, $meter->id);
+            if ($newRemoval === null) {
+                $this->ensurePathAvailable((int) $destination->square_id, $pathNumber, $meter->id);
+            }
 
             try {
                 $meter->update($data);
@@ -154,7 +156,7 @@ class SingleMeterService
     {
         return $meter->readings()->withTrashed()->exists()
             || $meter->payments()->withTrashed()->exists()
-            || $meter->transactions()->exists()
+            || $meter->transactions()->withTrashed()->exists()
             || $meter->invoices()->withTrashed()->exists();
     }
 }
