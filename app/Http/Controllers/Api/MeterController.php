@@ -200,7 +200,9 @@ class MeterController extends ApiController
 
     private function hasHistory(Meter $meter): bool
     {
-        return $meter->readings()->exists() || $meter->payments()->exists()
-            || $meter->subscriber->invoices()->where('meter_id', $meter->id)->exists();
+        return $meter->readings()->withTrashed()->exists()
+            || $meter->payments()->withTrashed()->exists()
+            || $meter->invoices()->withTrashed()->exists()
+            || $meter->transactions()->withTrashed()->exists();
     }
 }
