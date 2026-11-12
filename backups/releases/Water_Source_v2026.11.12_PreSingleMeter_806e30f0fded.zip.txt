@@ -1,0 +1,8 @@
+Water source snapshot (Git-tracked files only)
+Version label: v2026.11.12 / PreSingleMeter
+Source commit: 806e30f0fdedc26d39957a1f0cf3163b5932781c
+Source branch: main
+Archive: Water_Source_v2026.11.12_PreSingleMeter_806e30f0fded.zip
+Database: no new live database backup was taken; any .sql files are previously tracked repository files only.
+Restore: extract ZIP into a fresh directory; use a separate database backup if required.
+Verification: ZIP integrity checked with unzip -tq; SHA256 in accompanying file.
