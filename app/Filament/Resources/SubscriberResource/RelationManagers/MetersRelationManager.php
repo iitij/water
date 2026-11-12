@@ -176,6 +176,14 @@ class MetersRelationManager extends RelationManager
                             ->visible(fn(callable $get) => $get('has_tanker_fee')),
                     ])
                     ->action(function (\App\Models\Meter $record, array $data): void {
+                        if ($record->removed_at !== null) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل')
+                                ->danger()
+                                ->send();
+                            return;
+                        }
+
                         $reading = $record->readings()->create([
                             'reading_date' => $data['reading_date'],
                             'current_reading' => $data['current_reading'],
