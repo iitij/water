@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -43,6 +44,18 @@ class Subscriber extends Model
     public function meters(): HasMany
     {
         return $this->hasMany(Meter::class);
+    }
+
+    /** Currently assigned meter; inactive service is not the same as removal. */
+    public function currentMeter(): HasOne
+    {
+        return $this->hasOne(Meter::class)->whereNull('removed_at');
+    }
+
+    /** Removed meters remain available for audit, readings and payments. */
+    public function historicalMeters(): HasMany
+    {
+        return $this->hasMany(Meter::class)->whereNotNull('removed_at');
     }
 
     public function readings(): HasManyThrough
