@@ -101,6 +101,13 @@ class ReadingController extends ApiController
     {
         $this->authorizeApi(Meter::class, 'view');
         $meter = Meter::with(['subscriber', 'subscriber.square'])->findOrFail($meterId);
+        // Preserve idempotent retries above, but never accept new readings for removed meters.
+        if ($meter->removed_at !== null) {
+            throw ValidationException::withMessages([
+                'meter_id' => ['هذا العداد من السجل التاريخي وقد تم استبداله أو نزعه. اختر العداد الحالي.'],
+            ]);
+        }
+
         $lastReading = $meter->readings()->latest('id')->first();
         $period = $this->readingService->calculateReadingPeriod($meterId);
         $subscriptionAmount = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
