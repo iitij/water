@@ -44,4 +44,4 @@ jobs:
           php -l app/Filament/Resources/Meters/Schemas/MeterForm.php
           php -l database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php
       - name: Single meter and subscriber metadata tests
-        run: php artisan test --filter='SingleCurrentMeterTest|SubscriberListMetadataTest'
+        run: php artisan test --filter='SingleCurrentMeterTest|SubscriberListMetadataTest|FouadModulesApiTest|MobileApiIntegrationTest|FinancialReportsTest|WebMobileParityTest|PaymentVoidApprovalTest'
