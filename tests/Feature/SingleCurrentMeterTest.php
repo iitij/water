@@ -134,6 +134,47 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertSame($first->id, $meterA->fresh()->subscriber_id);
     }
 
+    public function test_unbilled_reading_blocks_ending_meter_assignment(): void
+    {
+        $subscriber = $this->subscriber();
+        $meter = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'PENDING-READING',
+        ]);
+
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'current_reading' => 15,
+            'reading_date' => '2026-11-12',
+        ])->assertCreated();
+
+        $this->putJson('/api/meters/'.$meter->id, [
+            'removed_at' => '2026-11-12',
+        ])->assertUnprocessable()->assertJsonValidationErrors('removed_at');
+        $this->assertNull($meter->fresh()->removed_at);
+    }
+
+    public function test_historical_meter_cannot_be_reactivated_while_another_is_current(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OLD-REMOVED',
+            'removed_at' => '2026-10-01',
+        ]);
+        $current = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'NEW-CURRENT',
+        ]);
+
+        $this->putJson('/api/meters/'.$old->id, [
+            'removed_at' => null,
+        ])->assertUnprocessable()->assertJsonValidationErrors('subscriber_id');
+
+        $this->assertNotNull($old->fresh()->removed_at);
+        $this->assertSame($current->id, $subscriber->fresh()->currentMeter->id);
+    }
+
     public function test_new_reading_on_removed_meter_is_rejected(): void
     {
         $subscriber = $this->subscriber();
