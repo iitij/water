@@ -140,6 +140,7 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
             ->modalHeading('إضافة عداد')
             ->modalWidth('2xl')
             ->createAnother(false)
+            ->using(fn (array $data) => app(\App\Services\SingleMeterService::class)->create($data))
             ->extraModalFooterActions(fn (Action $action): array => [
                 $action->makeModalSubmitAction('saveAndAddSubscriptionFee', arguments: ['addSubscriptionFee' => true])
                     ->label('حفظ واضافة رسوم اشتراك')
@@ -173,19 +174,6 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
                         ->relationship('subscriber', 'name')
                         ->required()
                         ->searchable()
-                        ->columnSpan(1),
-
-                    \Filament\Forms\Components\TextInput::make('tenant_name')
-                        ->label('اسم المستأجر')
-                        ->maxLength(255)
-                        ->helperText('اختياري: إذا كان العداد يخص شقة مستأجر معين')
-                        ->columnSpan(1),
-
-                    \Ysfkaya\FilamentPhoneInput\Forms\PhoneInput::make('tenant_phone')
-                        ->label('رقم هاتف المستأجر (إن وجد)')
-                        ->defaultCountry('YE')
-                        ->initialCountry('ye')
-                        ->helperText('اختياري')
                         ->columnSpan(1),
 
                     \Filament\Forms\Components\Select::make('status')
