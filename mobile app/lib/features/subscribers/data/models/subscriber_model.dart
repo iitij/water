@@ -34,9 +34,7 @@ class SubscriberModel extends Subscriber {
       squareName: squareLabelOrNull(square?['name'] ?? j['square_name'], square?['code'] ?? j['square_code']),
       status: SubscriberStatusX.fromApi(jStr(j['status'])),
       subscriptionStartDate: jStr(j['subscription_start_date']),
-      metersCount:
-          jIntOrNull(j['meters_count']) ??
-          ((j['meters'] is List) ? (j['meters'] as List).length : 0),
+      metersCount: _currentMeterCount(j),
       creditBalance: _d(j['credit_balance']),
       debitBalance: _d(j['debit_balance'] ?? j['balance']),
       generalBalance: _d(j['account_balance'] ?? j['balance']),
@@ -44,6 +42,20 @@ class SubscriberModel extends Subscriber {
       pathNumbers: _pathNumbers(j),
       createdAt: DateTime.tryParse(jStr(j['created_at']) ?? ''),
     );
+  }
+
+  static int _currentMeterCount(Map<String, dynamic> json) {
+    final reported = jIntOrNull(json['meters_count']);
+    if (reported != null) return reported > 0 ? 1 : 0;
+    if (jIntOrNull(json['current_meter_id']) != null ||
+        json['current_meter'] is Map) {
+      return 1;
+    }
+    // Ignore historical assignments during local/mobile summary parsing.
+    return jMapList(json['meters']).any(
+      (meter) =>
+          meter['removed_at'] == null && meter['deleted_at'] == null,
+    ) ? 1 : 0;
   }
 
   static List<int> _pathNumbers(Map<String, dynamic> json) {
