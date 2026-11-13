@@ -37,8 +37,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _uniqueCodeController = TextEditingController();
   final _pathController = TextEditingController();
-  final _tenantNameController = TextEditingController();
-  final _tenantPhoneController = TextEditingController();
   Timer? _pathValidationTimer;
   int _pathValidationSequence = 0;
   List<SubscriberOption> _subscribers = const [];
@@ -50,17 +48,12 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
   bool? _pathConflict;
   String? _loadError;
 
-  // Tenant details remain optional even when the subscriber has one meter.
-  bool get _showTenantFields => true;
-
   @override
   void initState() {
     super.initState();
     final meter = widget.meter;
     _uniqueCodeController.text = meter?.uniqueCode ?? '';
     _pathController.text = meter?.pathNumber?.toString() ?? '';
-    _tenantNameController.text = meter?.tenantName ?? '';
-    _tenantPhoneController.text = meter?.tenantPhone ?? '';
     _status = meter?.status ?? 'active';
     _loadFormOptions();
   }
@@ -213,8 +206,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
           uniqueCode: _uniqueCodeController.text.trim(),
           subscriberId: subscriber.id,
           pathNumber: pathNumber,
-          tenantName: _showTenantFields ? _tenantNameController.text : null,
-          tenantPhone: _showTenantFields ? _tenantPhoneController.text : null,
           status: _status,
         ),
         meterId: widget.meter?.id,
@@ -273,8 +264,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
     _pathValidationTimer?.cancel();
     _uniqueCodeController.dispose();
     _pathController.dispose();
-    _tenantNameController.dispose();
-    _tenantPhoneController.dispose();
     super.dispose();
   }
 
@@ -434,41 +423,6 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                     ],
                                   ),
                                 ),
-                                if (_showTenantFields) ...[
-                                  const SizedBox(height: 20),
-                                  const SectionHeading(
-                                    icon: Icons.person_pin_outlined,
-                                    title: 'بيانات المستأجر (اختيارية)',
-                                  ),
-                                  const SizedBox(height: 8),
-                                  AppCard(
-                                    child: Column(
-                                      children: [
-                                        TextFormField(
-                                          controller: _tenantNameController,
-                                          textInputAction: TextInputAction.next,
-                                          decoration: const InputDecoration(
-                                            labelText: 'اسم المستأجر',
-                                            prefixIcon: Icon(Icons.person_pin_outlined),
-                                          ),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextFormField(
-                                          controller: _tenantPhoneController,
-                                          textDirection: TextDirection.ltr,
-                                          keyboardType: TextInputType.phone,
-                                          decoration: const InputDecoration(
-                                            labelText: 'هاتف المستأجر',
-                                            prefixIcon: Icon(Icons.phone_outlined),
-                                            hintText: '+967…',
-                                          ),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
                                 const SizedBox(height: 24),
                                 AppPrimaryButton(
                                   label: _isSaving ? 'جارٍ الحفظ…' : 'حفظ بيانات العداد',
