@@ -229,16 +229,35 @@ class MetersRepositoryImpl implements MetersRepository {
   }
 
   @override
-  Future<void> deleteMeter(int meterId) => _remote.deleteMeter(meterId);
+  Future<void> deleteMeter(int meterId) async {
+    await _remote.deleteMeter(meterId);
+    await _database.evictMeterCache(meterId);
+  }
 
   @override
   Future<({int deletedCount, int skippedCount})> bulkDeleteMeters(List<int> meterIds) async {
     if (meterIds.isEmpty) return (deletedCount: 0, skippedCount: 0);
     final res = await _remote.bulkDeleteMeters(meterIds);
-    return (
-      deletedCount: _asInt(res['deleted_count']) ?? 0,
-      skippedCount: _asInt(res['skipped_count']) ?? 0,
-    );
+    final skippedCount = _asInt(res['skipped_count']) ?? 0;
+    final deletedCount = _asInt(res['deleted_count']) ?? 0;
+    final skippedIdsRaw = res['skipped_ids'];
+    final skippedIds = skippedIdsRaw is List
+        ? skippedIdsRaw.map(_asInt).whereType<int>().toSet()
+        : null;
+    // Never evict a record if the server may have rejected its removal.
+    if (skippedCount == 0 && deletedCount == meterIds.length) {
+      for (final id in meterIds) {
+        await _database.evictMeterCache(id);
+      }
+    } else if (skippedIds != null &&
+        deletedCount + skippedCount == meterIds.length) {
+      for (final id in meterIds) {
+        if (!skippedIds.contains(id)) {
+          await _database.evictMeterCache(id);
+        }
+      }
+    }
+    return (deletedCount: deletedCount, skippedCount: skippedCount);
   }
 
   @override
