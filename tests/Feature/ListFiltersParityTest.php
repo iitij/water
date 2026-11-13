@@ -38,13 +38,19 @@ class ListFiltersParityTest extends TestCase
         foreach ([[$square, [2, 10]], [$square, [1]], [$otherSquare, [10]]] as $index => [$area, $paths]) {
             $subscriber = Subscriber::create(['name' => 'Sub '.$index, 'square_id' => $area->id, 'status' => 'active']);
             $subscriber->forceFill(['created_at' => '2026-11-03 12:00:00'])->save();
-            foreach ($paths as $path) {
-                $subscriber->meters()->create(['unique_code' => $index.'-'.$path, 'path_number' => $path, 'status' => 'active']);
+            foreach ($paths as $pathIndex => $path) {
+                $subscriber->meters()->create([
+                    'unique_code' => $index.'-'.$path,
+                    'path_number' => $path,
+                    'status' => 'active',
+                    'removed_at' => $pathIndex < count($paths) - 1 ? '2026-11-02' : null,
+                ]);
             }
         }
         $this->getJson('/api/subscribers?path_number=10&square_id='.$square->id.'&added_from=2026-11-03')
             ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.name', 'Sub 0');
         $this->getJson('/api/meters?path_number=1')->assertOk()->assertJsonPath('total', 1);
+        $subscriber->currentMeter()->update(['removed_at' => '2026-11-02', 'status' => 'inactive']);
         $subscriber->meters()->create(['unique_code' => 'ZERO-PATH', 'path_number' => 0, 'status' => 'active']);
         $this->getJson('/api/meters?path_number=0')->assertOk()->assertJsonPath('total', 1);
         $this->getJson('/api/subscribers?path_number=0')->assertOk()->assertJsonPath('total', 1);
@@ -56,6 +62,9 @@ class ListFiltersParityTest extends TestCase
         $square = Square::create(['name' => 'Square']);
         $subscriber = Subscriber::create(['name' => 'Sub', 'square_id' => $square->id, 'status' => 'active']);
         foreach ([10, 2] as $path) {
+            if ($path === 2) {
+                $subscriber->currentMeter()->update(['removed_at' => '2026-11-02', 'status' => 'inactive']);
+            }
             $meter = $subscriber->meters()->create(['unique_code' => 'M-'.$path, 'path_number' => $path, 'status' => 'active']);
             $invoice = Invoice::withoutEvents(fn () => Invoice::create(['subscriber_id' => $subscriber->id,
                 'meter_id' => $meter->id, 'invoice_type' => 'manual', 'bill_number' => 'FILTER-'.$path,
