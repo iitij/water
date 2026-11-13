@@ -15,6 +15,10 @@ on:
       - "app/Models/Meter.php"
       - "app/Models/Subscriber.php"
       - "app/Services/SingleMeterService.php"
+      - "app/Services/CurrentMeterBillingGuard.php"
+      - "app/Services/CurrentMeterReadingGuard.php"
+      - "app/Filament/Resources/InvoiceResource.php"
+      - "app/Filament/Resources/InvoiceResource/Pages/CreateInvoice.php"
       - "app/Http/Controllers/Api/MeterController.php"
       - "app/Http/Controllers/Api/ReadingController.php"
       - "app/Http/Controllers/Api/SubscriberController.php"
@@ -48,6 +52,11 @@ jobs:
       - name: PHP syntax checks
         run: |
           php -l app/Services/SingleMeterService.php
+          php -l app/Services/CurrentMeterBillingGuard.php
+          php -l app/Services/CurrentMeterReadingGuard.php
+          php -l app/Services/InvoiceService.php
+          php -l app/Filament/Resources/InvoiceResource.php
+          php -l app/Filament/Resources/InvoiceResource/Pages/CreateInvoice.php
           php -l app/Http/Controllers/Api/MeterController.php
           php -l app/Filament/Resources/Meters/Schemas/MeterForm.php
           php -l app/Filament/Resources/Meters/Pages/EditMeter.php
