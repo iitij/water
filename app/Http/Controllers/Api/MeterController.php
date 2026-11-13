@@ -39,8 +39,7 @@ class MeterController extends ApiController
                 $query->where(function ($builder) use ($search, $normalized) {
                     $builder->where('unique_code', 'like', "%{$search}%")
                         ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$search}%"))
-                        ->orWhere('tenant_name', 'like', "%{$search}%")
-                        ->orWhere('tenant_phone', 'like', "%{$search}%")
+
                         ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%"));
                     if (ctype_digit($normalized)) {
                         $builder->orWhere('path_number', (int) $normalized);
@@ -100,8 +99,6 @@ class MeterController extends ApiController
             'installed_at' => ['nullable', 'date'],
             'removed_at' => ['nullable', 'date', 'after_or_equal:installed_at'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
-            'tenant_name' => ['nullable', 'string', 'max:255'],
-            'tenant_phone' => ['nullable', 'string', 'max:50'],
         ]);
         $meter = $singleMeterService->create($data)->load(['subscriber.square']);
 
@@ -120,8 +117,6 @@ class MeterController extends ApiController
             'installed_at' => ['sometimes', 'nullable', 'date'],
             'removed_at' => ['sometimes', 'nullable', 'date'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
-            'tenant_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'tenant_phone' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
         $meter = $singleMeterService->update($meter, $data);
 
@@ -145,8 +140,6 @@ class MeterController extends ApiController
             'new_meter.path_number' => ['nullable', 'integer', 'min:0'],
             'new_meter.initial_reading' => ['sometimes', 'integer', 'min:0'],
             'new_meter.installed_at' => ['nullable', 'date'],
-            'new_meter.tenant_name' => ['nullable', 'string', 'max:255'],
-            'new_meter.tenant_phone' => ['nullable', 'string', 'max:50'],
             'new_meter.status' => ['sometimes', 'in:active,inactive'],
         ]);
 
