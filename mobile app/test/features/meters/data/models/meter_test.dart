@@ -44,6 +44,29 @@ void main() {
     });
   });
 
+  group('Meter.isCurrent', () {
+    test('inactive meter still occupies subscriber slot until removed', () {
+      final meter = Meter.fromJson({
+        'id': 77,
+        'unique_code': 'INACTIVE-CURRENT',
+        'status': 'inactive',
+        'removed_at': null,
+      });
+      expect(meter.isActive, isFalse);
+      expect(meter.isCurrent, isTrue);
+    });
+
+    test('removed meter remains history but not operationally current', () {
+      final meter = Meter.fromJson({
+        'id': 78,
+        'unique_code': 'OLD-METER',
+        'status': 'inactive',
+        'removed_at': '2026-10-01',
+      });
+      expect(meter.isCurrent, isFalse);
+    });
+  });
+
   group('Meter.fromJson', () {
     test('reads meter, square, tenant, balance, and related last reading', () {
       final meter = Meter.fromJson({
