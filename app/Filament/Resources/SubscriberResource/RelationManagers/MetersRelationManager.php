@@ -13,7 +13,7 @@ class MetersRelationManager extends RelationManager
 {
     protected static string $relationship = 'meters';
 
-    protected static ?string $title = 'العداد الحالي وسجل العدادات السابقة';
+    protected static ?string $title = 'العداد المرتبط بالمشترك';
 
     public function form(\Filament\Schemas\Schema $form): \Filament\Schemas\Schema
     {
