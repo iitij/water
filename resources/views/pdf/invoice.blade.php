@@ -398,17 +398,13 @@
             // 2. Subscriber Info Array
             $subFields = [];
             if($chk('inv_show_sub_name')) $subFields[] = ['l' => $lbl('inv_lbl_sub_name', 'اسم المشترك'), 'v' => $invoice->subscriber->name];
-            if($chk('inv_show_meter_no')) $subFields[] = ['l' => $lbl('inv_lbl_meter_no', 'رقم العداد'), 'v' => $invoice->meter->unique_code ?? $invoice->subscriber->meters->first()->unique_code ?? '-', 'is_ltr' => true];
+            if($chk('inv_show_meter_no')) $subFields[] = ['l' => $lbl('inv_lbl_meter_no', 'رقم العداد'), 'v' => $invoice->meter?->unique_code ?? $invoice->subscriber->currentMeter?->unique_code ?? '-', 'is_ltr' => true];
             if($chk('inv_show_sub_phone')) $subFields[] = ['l' => $lbl('inv_lbl_sub_phone', 'الهاتف'), 'v' => $formatPhone($invoice->subscriber->phone ?? '-'), 'is_ltr' => true];
 
             if($chk('inv_show_square')) $subFields[] = ['l' => $lbl('inv_lbl_square', 'المربع'), 'v' => $invoice->subscriber->square->name ?? '-'];
             if($chk('inv_show_address')) $subFields[] = ['l' => $lbl('inv_lbl_address', 'العنوان'), 'v' => $invoice->subscriber->address ?? '-'];
             if($chk('inv_show_account_no')) $subFields[] = ['l' => $lbl('inv_lbl_account_no', 'رقم الحساب'), 'v' => $invoice->subscriber_id, 'is_ltr' => true];
 
-            if($invoice->meter && $invoice->meter->tenant_name) {
-            if($chk('inv_show_tenant')) $subFields[] = ['l' => $lbl('inv_lbl_tenant', 'المستأجر'), 'v' => $invoice->meter->tenant_name];
-            if($chk('inv_show_tenant_phone')) $subFields[] = ['l' => $lbl('inv_lbl_tenant_phone', 'هاتف المستأجر'), 'v' => $formatPhone($invoice->meter->tenant_phone ?? '-'), 'is_ltr' => true];
-            }
             $subChunks = array_chunk($subFields, 2);
 
             // 3. Details Headers & Values
