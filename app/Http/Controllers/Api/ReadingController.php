@@ -285,7 +285,7 @@ class ReadingController extends ApiController
         $this->authorizeApi(Reading::class, 'create');
         $payload = $request->validate([
             'readings' => ['required', 'array', 'min:1', 'max:100'],
-            'readings.*.meter_id' => ['required', 'integer', 'exists:meters,id'],
+            'readings.*.meter_id' => ['required', 'integer'],
             'readings.*.reading_date' => ['required', 'date'],
             'readings.*.current_reading' => ['required', 'numeric', 'min:0'],
             'readings.*.actual_reading_date' => ['nullable', 'date'],
