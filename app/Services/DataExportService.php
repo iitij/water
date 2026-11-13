@@ -47,8 +47,6 @@ class DataExportService
             'العنوان / الموقع',
             'كود العداد',
             'رقم المسار',
-            'المستأجر',
-            'هاتف المستأجر',
             'حالة العداد',
             'إجمالي الرصيد الدائن (ر.ي)',
             'إجمالي الرصيد المدين (ر.ي)',
@@ -73,9 +71,9 @@ class DataExportService
         $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F8FAFC');
 
         foreach ($subscribers as $sub) {
-            $primaryMeter = $sub->meters->first();
-            $allMeterCodes = $sub->meters->pluck('unique_code')->filter()->join(', ') ?: ($primaryMeter?->unique_code ?? '-');
-            $allPaths = $sub->meters->pluck('path_number')->filter()->join(', ') ?: ($primaryMeter?->path_number !== null ? (string)$primaryMeter->path_number : '-');
+            $primaryMeter = $sub->currentMeter;
+            $allMeterCodes = $primaryMeter?->unique_code ?? '-';
+            $allPaths = $primaryMeter?->path_number !== null ? (string)$primaryMeter->path_number : '-';
 
             $subscriberCredit = $sub->balance > 0 ? (float)$sub->balance : 0.0;
             $metersCredit = (float)$sub->meters->sum(fn($m) => $m->balance > 0 ? (float)$m->balance : 0.0);
@@ -115,8 +113,6 @@ class DataExportService
                 Cell::fromValue($sub->address ?? '-'),
                 Cell::fromValue($allMeterCodes),
                 Cell::fromValue($allPaths),
-                Cell::fromValue($primaryMeter?->tenant_name ?? '-'),
-                Cell::fromValue($primaryMeter?->tenant_phone ?? '-'),
                 Cell::fromValue($meterStatus),
                 Cell::fromValue(round($totalCredit, 2)),
                 Cell::fromValue(round($totalDebit, 2)),
@@ -174,7 +170,6 @@ class DataExportService
             'رقم الفاتورة',
             'تاريخ الفاتورة',
             'اسم المشترك',
-            'المستأجر',
             'رقم الهاتف',
             'المربع السكني',
             'كود العداد',
@@ -229,7 +224,6 @@ class DataExportService
                 Cell::fromValue($inv->bill_number ?? (string)$inv->id),
                 Cell::fromValue($billDate),
                 Cell::fromValue($sub?->name ?? '-'),
-                Cell::fromValue($meter?->tenant_name ?? '-'),
                 Cell::fromValue($sub?->phone ?? '-'),
                 Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
                 Cell::fromValue($meter?->unique_code ?? '-'),
@@ -293,7 +287,6 @@ class DataExportService
             'تاريخ القراءة المعتمد',
             'التاريخ الفعلي للقراءة',
             'اسم المشترك',
-            'المستأجر',
             'رقم الهاتف',
             'المربع السكني',
             'كود العداد',
@@ -335,7 +328,6 @@ class DataExportService
                 Cell::fromValue($readingDate),
                 Cell::fromValue($actualDate),
                 Cell::fromValue($sub?->name ?? '-'),
-                Cell::fromValue($meter?->tenant_name ?? '-'),
                 Cell::fromValue($sub?->phone ?? '-'),
                 Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
                 Cell::fromValue($meter?->unique_code ?? '-'),
