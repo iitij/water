@@ -362,6 +362,33 @@ class AppDatabase extends GeneratedDatabase {
       for (final meter in meters) {
         final id = _int(meter['id'] ?? meter['server_id']);
         if (id == null) continue;
+        final subscriberId = _int(meter['subscriber_id'] ??
+            _asMap(meter['subscriber'])?['id']);
+        // Server contract: one physical meter per subscriber. Receiving a
+        // new meter must evict stale older IDs and their reading caches even
+        // when the replacement originated on another device.
+        if (subscriberId != null && meter['removed_at'] == null) {
+          final oldRows = await _select(
+            'SELECT server_id FROM cached_meters WHERE subscriber_id = ? AND server_id <> ?',
+            [Variable.withInt(subscriberId), Variable.withInt(id)],
+          );
+          for (final old in oldRows) {
+            final oldId = _int(old['server_id']);
+            if (oldId == null) continue;
+            await _execute(
+              'DELETE FROM cached_meter_periods WHERE meter_id = ?',
+              [oldId],
+            );
+            await _execute(
+              'DELETE FROM cached_readings WHERE meter_id = ?',
+              [oldId],
+            );
+            await _execute(
+              'DELETE FROM cached_meters WHERE server_id = ?',
+              [oldId],
+            );
+          }
+        }
         final subscriber = _asMap(meter['subscriber']);
         final square = _asMap(meter['square'] ?? subscriber?['square']);
         final lastReading = meter['last_reading'];
