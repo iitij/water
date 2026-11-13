@@ -20,6 +20,11 @@ if (! str_contains((string) DB::connection()->getDatabaseName(), 'test')) {
 if (! Schema::hasColumn('meters', 'current_subscriber_id')) {
     throw new RuntimeException('Generated column missing from MySQL schema.');
 }
+foreach (['tenant_name', 'tenant_phone'] as $obsoleteColumn) {
+    if (Schema::hasColumn('meters', $obsoleteColumn)) {
+        throw new RuntimeException('Legacy tenant column still exists: '.$obsoleteColumn);
+    }
+}
 
 $square = DB::table('squares')->insertGetId(['name' => 'single meter MySQL smoke']);
 $subscriber = DB::table('subscribers')->insertGetId([
