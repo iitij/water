@@ -215,10 +215,6 @@ class _MetersListView extends StatelessWidget {
                   label: ListOptionsStrings.square,
                   value: (meter) => meter.squareName,
                 ),
-                'tenant_name': (
-                  label: FieldExperienceStrings.tenant,
-                  value: (meter) => meter.tenantName,
-                ),
                 'status': (
                   label: ListOptionsStrings.status,
                   value: (meter) => meter.status,
@@ -241,7 +237,6 @@ class _MetersListView extends StatelessWidget {
                 'code': FieldExperienceStrings.meterCode,
                 'square': ListOptionsStrings.square,
                 'path': FieldExperienceStrings.path,
-                'tenant': FieldExperienceStrings.tenant,
                 'status': ListOptionsStrings.status,
                 'last_reading': FieldExperienceStrings.lastReading,
                 'balance': ListOptionsStrings.balance,
