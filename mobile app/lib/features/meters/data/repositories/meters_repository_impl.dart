@@ -199,6 +199,37 @@ class MetersRepositoryImpl implements MetersRepository {
   }
 
   @override
+  Future<Meter> replaceMeter({
+    required int meterId,
+    required String uniqueCode,
+    required String reason,
+    required String removedAt,
+    required int initialReading,
+    int? pathNumber,
+  }) async {
+    final result = await _remote.replaceMeter(meterId, {
+      'removed_at': removedAt,
+      'reason': reason,
+      'new_meter': {
+        'unique_code': uniqueCode.trim(),
+        'path_number': pathNumber,
+        'initial_reading': initialReading,
+      },
+    });
+    final current = result['current_meter'];
+    if (current is! Map) {
+      throw StateError('Server did not confirm replacement meter.');
+    }
+    final currentJson = Map<String, dynamic>.from(current);
+    final retired = result['old_meter'];
+    await _database.cacheMeters([
+      if (retired is Map) Map<String, dynamic>.from(retired),
+      currentJson,
+    ]);
+    return Meter.fromJson(currentJson);
+  }
+
+  @override
   Future<void> deleteMeter(int meterId) => _remote.deleteMeter(meterId);
 
   @override
