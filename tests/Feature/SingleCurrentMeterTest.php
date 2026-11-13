@@ -238,6 +238,39 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
+    public function test_historic_invoice_can_still_be_paid_after_meter_replacement(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'OLD-DEBT']);
+
+        $invoice = $this->postJson('/api/invoices', [
+            'subscriber_id' => $subscriber->id,
+            'meter_id' => $old->id,
+            'invoice_type' => 'meter',
+            'consumption_fee' => 100,
+        ])->assertCreated()->json('invoice.id');
+
+        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'تغيير بسبب تلف العداد',
+            'new_meter' => ['unique_code' => 'NEW-DEBT'],
+        ])->assertCreated()->json('current_meter.id');
+
+        $this->postJson('/api/payments', [
+            'subscriber_id' => $subscriber->id,
+            'meter_id' => $old->id,
+            'invoice_id' => $invoice,
+            'amount' => 40,
+            'payment_method' => 'cash',
+        ])->assertCreated()
+            ->assertJsonPath('payment.meter_id', $old->id);
+
+        $this->assertSame($old->id, (int) \App\Models\Invoice::findOrFail($invoice)->meter_id);
+        $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
+        $this->assertSame('0.00', (string) Meter::findOrFail($new)->balance);
+        $this->assertSame('-60.00', (string) $old->fresh()->balance);
+    }
+
     public function test_replacement_rolls_back_retirement_if_new_meter_path_conflicts(): void
     {
         $subscriber = $this->subscriber('الأول');
