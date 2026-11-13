@@ -37,7 +37,7 @@ class Meter {
   final bool isPathMatch;
   final DateTime? createdAt;
 
-  /// Operational assignment: inactive service is still current until removed.
+  /// Inactive service still belongs to the subscriber's only meter.
   bool get isCurrent => removedAt == null;
 
   bool get isActive => status == 'active';
@@ -212,8 +212,7 @@ class SubscriberOption {
       phone: _asString(json['phone']),
       status: (json['status'] ?? 'active').toString(),
       subscriptionStartDate: _asDate(json['subscription_start_date']),
-      // The legacy API count may include historical replacements. The
-      // operational subscriber badge is binary: zero or one current meter.
+      // The database now allows at most one physical meter per subscriber.
       meterCount: json.containsKey('current_meter_id')
           ? (_asInt(json['current_meter_id']) == null ? 0 : 1)
           : (meters is List || json.containsKey('current_meter'))
