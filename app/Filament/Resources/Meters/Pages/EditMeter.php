@@ -12,8 +12,8 @@ class EditMeter extends EditRecord
     protected static string $resource = MeterResource::class;
 
     /**
-     * Replacement is a single transactional operation; never ask the user
-     * to manually remove the old meter and then create an unrelated one.
+     * Replacement permanently deletes the old meter's associated records inside
+     * the same transaction that creates the single successor meter.
      */
     protected function getHeaderActions(): array
     {
@@ -24,7 +24,7 @@ class EditMeter extends EditRecord
                 ->color('warning')
                 ->visible(fn (): bool => $this->record?->isCurrent() === true)
                 ->modalHeading('استبدال العداد الحالي')
-                ->modalDescription('يحتفظ النظام بالعداد القديم وقراءاته وفواتيره وأرصدته، ويمنع الاستبدال عند وجود قراءات غير مفوترة.')
+                ->modalDescription('تنبيه: تُحذف بيانات العداد السابق وقراءاته وفواتيره وسنداته نهائياً، دون أرشيف. لا يمكن التراجع عن العملية.')
                 ->form([
                     \Filament\Forms\Components\TextInput::make('new_unique_code')
                         ->label('رقم العداد الجديد')
@@ -67,7 +67,7 @@ class EditMeter extends EditRecord
                         \Illuminate\Support\Facades\Auth::id(),
                     );
                     \Filament\Notifications\Notification::make()
-                        ->title('تم استبدال العداد وحفظ التاريخ المالي')
+                        ->title('تم استبدال العداد وحذف بيانات السابق نهائياً')
                         ->success()
                         ->send();
                     $this->redirect(MeterResource::getUrl('edit', [
