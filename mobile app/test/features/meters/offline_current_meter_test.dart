@@ -92,4 +92,37 @@ void main() {
     );
     expect(await db.getLatestCachedReading(old.id), isNull);
   });
+
+  test('fresh physical meter evicts stale cached meter from another device', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheMeters([
+      {'id': 900, 'unique_code': 'OLD', 'subscriber_id': 91, 'status': 'active'},
+    ]);
+    expect(await db.getCachedMeter(900), isNotNull);
+
+    // Simulates an online refresh after the same subscriber received a
+    // replacement through another device.
+    await db.cacheMeters([
+      {'id': 901, 'unique_code': 'NEW', 'subscriber_id': 91, 'status': 'active'},
+    ]);
+
+    expect(await db.getCachedMeter(900), isNull);
+    expect(await db.getCachedMeter(901), isNotNull);
+    expect(
+      (await db.getCachedMeters()).map((r) => r['server_id']),
+      [901],
+    );
+  });
+
+  test('a deleted meter cannot remain cached for offline search', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheMeters([
+      {'id': 990, 'unique_code': 'DELETE', 'subscriber_id': 99, 'status': 'active'},
+    ]);
+    await db.evictMeterCache(990);
+    expect(await db.getCachedMeter(990), isNull);
+    expect(await db.getCachedMeters(), isEmpty);
+  });
 }
