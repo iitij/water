@@ -25,6 +25,8 @@ on:
       - "app/Services/InvoiceService.php"
       - "database/migrations/*single_meter*"
       - "tests/Feature/SingleCurrentMeterTest.php"
+      - "tests/Feature/GlobalSearchTest.php"
+      - "tests/Feature/ListFiltersParityTest.php"
       - "tests/Feature/SubscriberListMetadataTest.php"
       - ".github/workflows/single-current-meter-tests.yml"
   workflow_dispatch:
