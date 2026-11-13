@@ -90,7 +90,7 @@ class PaymentModel extends Equatable {
   /// السند صالح للاعتماد في حسابات الجرد؟
   bool get isActive => !isVoided && !isDeleted;
 
-  /// الاسم المستلم للرسالة: المستأجر أولاً ثم المشترك.
+  /// اسم المشترك هو المستلم الوحيد للسند والرسالة.
   String get displayName => (beneficiaryName?.trim().isNotEmpty ?? false)
       ? beneficiaryName!.trim()
       : (subscriberName ?? '-');
@@ -104,12 +104,7 @@ class PaymentModel extends Equatable {
     final invoice = JsonUtils.asMap(json['invoice']);
     final user = JsonUtils.asMap(json['user']);
 
-    final tenantName = meter == null
-        ? null
-        : JsonUtils.asStringOrNull(meter['tenant_name']);
-    final beneficiary = (tenantName?.trim().isNotEmpty ?? false)
-        ? '${tenantName!.trim()} (مستأجر)'
-        : JsonUtils.asStringOrNull(subscriber?['name']);
+    final beneficiary = JsonUtils.asStringOrNull(subscriber?['name']);
 
     final meterCode = meter == null
         ? null
@@ -136,9 +131,7 @@ class PaymentModel extends Equatable {
       deletedAt: JsonUtils.asDate(json['deleted_at']),
       subscriberName: JsonUtils.asStringOrNull(subscriber?['name']),
       beneficiaryName: beneficiary,
-      subscriberPhone:
-          JsonUtils.asStringOrNull(subscriber?['phone']) ??
-          JsonUtils.asStringOrNull(meter?['tenant_phone']),
+      subscriberPhone: JsonUtils.asStringOrNull(subscriber?['phone']),
       meterLabel: meterCode == null
           ? null
           : (meterPath == null ? meterCode : '$meterCode / مسار $meterPath'),
