@@ -18,7 +18,6 @@ class Reading {
     this.squareId,
     this.squareName,
     this.subscriberName,
-    this.tenantName,
     this.imagePath,
     this.imageUrl,
     this.isSynced = true,
@@ -44,7 +43,6 @@ class Reading {
   final int? squareId;
   final String? squareName;
   final String? subscriberName;
-  final String? tenantName;
   final String? imagePath;
   final String? imageUrl;
   final bool isSynced;
@@ -93,7 +91,6 @@ class Reading {
       ),
       squareName: squareLabelOrNull(json['square_name'] ?? square?['name'], json['square_code'] ?? square?['code']),
       subscriberName: _string(json['subscriber_name'] ?? subscriber?['name']),
-      tenantName: _string(json['tenant_name'] ?? meter?['tenant_name']),
       imagePath: _string(json['image_path']),
       imageUrl: _string(json['image_url']),
       isSynced: json['is_synced'] != false,
@@ -119,7 +116,6 @@ class Reading {
     squareId: _int(row['square_id']),
     squareName: _string(row['square_name']),
     subscriberName: _string(row['subscriber_name']),
-    tenantName: _string(row['tenant_name']),
     imagePath: _string(row['image_path']),
     isSynced: row['server_id'] != null,
     syncError: _string(row['sync_error']),
