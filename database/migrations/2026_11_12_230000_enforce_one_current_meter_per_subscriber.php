@@ -30,7 +30,7 @@ return new class extends Migration
                 ->havingRaw('COUNT(*) > 1')
                 ->pluck('subscriber_id');
 
-            $purger = app(\\App\\Services\\MeterDataPurger::class);
+            $purger = app(\App\Services\MeterDataPurger::class);
             foreach ($subscribers as $subscriberId) {
                 $ids = DB::table('meters')
                     ->where('subscriber_id', $subscriberId)
