@@ -35,6 +35,13 @@ jobs:
           echo "::group::Tests and seeders tenant fixtures"
           grep -RInE 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر' tests database/seeders || true
           echo "::endgroup::"
+          echo "::group::Enforce zero obsolete tenant identity in active source"
+          if grep -RInE 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر' app resources/views 'mobile app/lib'; then
+            echo "Legacy tenant identity remains in active application sources."
+            exit 1
+          fi
+          echo "PASS: no tenant identity remains in active PHP, Blade or Dart code."
+          echo "::endgroup::"
           echo "::group::Operational multi-meter assumptions"
           grep -RInE 'meters\(\)->first|meters->first|meters\.first|meters\.length\s*[!=<>]=?\s*1|metersCount|meters_count|إضافة عداد آخر|حفظ وإضافة عداد آخر' app resources/views 'mobile app/lib' | head -160 || true
           echo "::endgroup::"
