@@ -22,7 +22,7 @@ class SubscriberController extends ApiController
         $this->authorizeApi(Subscriber::class, 'viewAny');
         $query = Subscriber::query()
             ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,removed_at', 'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at'])
-            ->withCount(['currentMeter as meters_count', 'historicalMeters as historical_meters_count'])
+            ->withCount(['currentMeter as meters_count'])
             ->orderBy('name');
 
         if ($search = trim((string) $request->query('q', $request->query('search', '')))) {
@@ -377,7 +377,6 @@ class SubscriberController extends ApiController
             'square_id' => $subscriber->square_id,
             'square' => $subscriber->square,
             'meters_count' => $subscriber->meters_count,
-            'historical_meters_count' => $subscriber->historical_meters_count,
             'current_meter_id' => $subscriber->currentMeter?->id,
             'subscription_start_date' => optional($subscriber->subscription_start_date)->format('Y-m-d'),
             'created_at' => $subscriber->created_at?->toISOString(),
