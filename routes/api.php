@@ -72,6 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Meters and field reading support.
     Route::get('/meters/search', [MeterController::class, 'search']);
     Route::post('/meters/validate-path', [MeterController::class, 'validatePath']);
+    Route::post('/meters/{id}/replace', [MeterController::class, 'replace']);
     Route::get('/meters/{id}/period', [ReadingController::class, 'getMeterPeriod']);
     Route::post('/meters/bulk-delete', [MeterController::class, 'bulkDelete']);
     Route::apiResource('meters', MeterController::class)->parameters(['meters' => 'id']);
