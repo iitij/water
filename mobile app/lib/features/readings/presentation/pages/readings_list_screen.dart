@@ -263,10 +263,6 @@ class _ReadingsListView extends StatelessWidget {
                   label: ListOptionsStrings.square,
                   value: (reading) => reading.squareName,
                 ),
-                'tenant_name': (
-                  label: FieldExperienceStrings.tenant,
-                  value: (reading) => reading.tenantName,
-                ),
                 'is_invoiced': (
                   label: FieldListOptionsStrings.invoicingStatus,
                   value: (reading) => reading.isInvoiced ? 1 : 0,
@@ -487,7 +483,6 @@ class _ReadingsListView extends StatelessWidget {
                   if (q.isEmpty) return true;
                   return m.uniqueCode.toLowerCase().contains(q) ||
                       (m.subscriberName ?? '').toLowerCase().contains(q) ||
-                      (m.tenantName ?? '').toLowerCase().contains(q) ||
                       (m.pathNumber?.toString() ?? '').contains(q);
                 })
                 .toList(growable: false);
