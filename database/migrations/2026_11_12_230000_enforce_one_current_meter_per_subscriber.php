@@ -12,30 +12,37 @@ return new class extends Migration
      *
      * MySQL, MariaDB and SQLite allow multiple NULL values in a UNIQUE index.
      * A generated nullable column therefore enforces one current meter per
-     * subscriber, while allowing any number of historical meters.
+     * subscriber. A later migration replaces it with strict physical uniqueness.
      */
     public function up(): void
     {
-        // Do not silently select the first meter, erase others, or alter money.
-        $conflicts = DB::table('meters')
-            ->select('subscriber_id')
-            ->whereNull('removed_at')
-            ->whereNull('deleted_at')
-            ->groupBy('subscriber_id')
-            ->havingRaw('COUNT(*) > 1')
-            ->limit(20)
-            ->pluck('subscriber_id');
+        // Compatibility for databases that have not yet run this older
+        // migration. The owner's newer policy explicitly authorizes permanent
+        // removal of duplicate physical meters and their linked test data.
+        // Keep the highest-ID current meter, then let the newer migration
+        // remove every remaining historical/soft-deleted meter as well.
+        DB::transaction(function (): void {
+            $subscribers = DB::table('meters')
+                ->select('subscriber_id')
+                ->whereNull('removed_at')
+                ->whereNull('deleted_at')
+                ->groupBy('subscriber_id')
+                ->havingRaw('COUNT(*) > 1')
+                ->pluck('subscriber_id');
 
-        if ($conflicts->isNotEmpty()) {
-            throw new RuntimeException(
-                'Cannot enforce the single-current-meter constraint: subscribers '
-                .$conflicts->implode(', ')
-                .' have more than one meter without removed_at. '
-                .'Review their readings, invoices and balances, then close the '
-                .'obsolete meter associations with a documented removal date. '
-                .'No meter records were changed by this migration.'
-            );
-        }
+            $purger = app(\\App\\Services\\MeterDataPurger::class);
+            foreach ($subscribers as $subscriberId) {
+                $ids = DB::table('meters')
+                    ->where('subscriber_id', $subscriberId)
+                    ->whereNull('removed_at')
+                    ->whereNull('deleted_at')
+                    ->orderByDesc('id')
+                    ->pluck('id');
+                foreach ($ids->skip(1) as $obsoleteId) {
+                    $purger->purge((int) $obsoleteId);
+                }
+            }
+        });
 
         Schema::table('meters', function (Blueprint $table) {
             $table->unsignedBigInteger('current_subscriber_id')
