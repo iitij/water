@@ -86,7 +86,7 @@ class SubscriberResource extends Resource
                 ->visible(fn ($record) => $record !== null)
                 ->schema([
                     Forms\Components\TextInput::make('credit_balance')
-                        ->label('إجمالي الرصيد الدائن (للمشترك والعدادات)')
+                        ->label('إجمالي الرصيد الدائن (للمشترك والعداد)')
                         ->formatStateUsing(function ($record) {
                             if (! $record) {
                                 return 0;
@@ -101,7 +101,7 @@ class SubscriberResource extends Resource
                         ->dehydrated(false),
 
                     Forms\Components\TextInput::make('debit_balance')
-                        ->label('إجمالي الرصيد المدين (للمشترك والعدادات)')
+                        ->label('إجمالي الرصيد المدين (للمشترك والعداد)')
                         ->formatStateUsing(function ($record) {
                             if (! $record) {
                                 return 0;
@@ -117,7 +117,7 @@ class SubscriberResource extends Resource
 
                     Forms\Components\Repeater::make('meters')
                         ->relationship('meters')
-                        ->label('أرصدة العداد الحالي وسجل العدادات السابقة')
+                        ->label('رصيد العداد المرتبط بالمشترك')
                         ->schema([
                             Forms\Components\TextInput::make('meter_number')
                                 ->label('رقم العداد')
