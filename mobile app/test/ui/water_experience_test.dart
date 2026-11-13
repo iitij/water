@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:water_project/core/l10n/subscriber_experience_strings.dart';
 import 'package:water_project/core/theme/app_colors.dart';
 import 'package:water_project/core/theme/app_theme.dart';
 import 'package:water_project/core/ui/app_filters.dart';
@@ -337,7 +338,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           final tabs = DefaultTabController.of(
-            tester.element(find.text('العدادات').first),
+            tester.element(find.text(SubscriberExperienceStrings.meters).first),
           );
           for (var index = 1; index < tabs.length; index++) {
             tabs.animateTo(index);
@@ -508,7 +509,7 @@ void main() {
       'رسوم الاشتراك',
       'طلبات الوايت',
       'كشف الحساب',
-      'العدادات',
+      SubscriberExperienceStrings.meters,
     ]) {
       final section = find.text(label).first;
       await Scrollable.ensureVisible(tester.element(section), alignment: .5);
