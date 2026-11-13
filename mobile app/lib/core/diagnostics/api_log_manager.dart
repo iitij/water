@@ -34,6 +34,16 @@ class ApiLogManager extends ChangeNotifier {
     _notifying = true;
     try {
       super.notifyListeners();
+    } catch (error, stackTrace) {
+      // Modern notifier implementations may propagate a listener exception.
+      // Report once while the re-entrancy guard is still engaged; a global
+      // FlutterError handler may log back into this same manager.
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'Water API diagnostic logs',
+        context: ErrorDescription('while notifying API log listeners'),
+      ));
     } finally {
       _notifying = false;
     }
