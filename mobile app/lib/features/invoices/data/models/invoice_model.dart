@@ -85,24 +85,13 @@ class InvoiceModel extends Equatable {
 
   bool get isDeleted => deletedAt != null;
 
-  /// `beneficiary_name` — اسم المستأجر إن وُجد وإلا اسم المشترك
-  /// (يطابق العمود في `InvoiceResource#L153-161`).
-  String get beneficiaryName {
-    final tenant = meter?.tenantName;
-    if (tenant != null && tenant.trim().isNotEmpty) return '$tenant (مستأجر)';
-    return subscriber?.name ?? '-';
-  }
+  /// The subscriber owns the current meter and receives billing notices.
+  /// Historical invoice meter references never change the recipient.
+  String get beneficiaryName => subscriber?.name ?? '-';
 
-  /// اسم المستلم الحقيقي للرسائل (المستأجر أولاً — كما في `WhatsAppService#L62`).
-  String get messageRecipientName =>
-      (meter?.tenantName?.trim().isNotEmpty ?? false)
-      ? meter!.tenantName!.trim()
-      : (subscriber?.name ?? '');
+  String get messageRecipientName => subscriber?.name ?? '';
 
-  String? get messageRecipientPhone =>
-      (meter?.tenantPhone?.trim().isNotEmpty ?? false)
-      ? meter!.tenantPhone
-      : subscriber?.phone;
+  String? get messageRecipientPhone => subscriber?.phone;
 
   /// `total_amount + previous_balance` (`total_due` في Filament).
   double get totalDue => totalAmount + previousBalance;
@@ -463,7 +452,7 @@ class InvoiceSubscriberRef extends Equatable {
   List<Object?> get props => <Object?>[id, name, phone, squareName, balance];
 }
 
-/// إسقاط مختصر للعداد (الحقول اللازمة لعرض الفاتورة وتحديد هاتف المستأجر).
+/// بيانات العداد المرتبط بالفاتورة، بما فيها السجلات التاريخية.
 class InvoiceMeterRef extends Equatable {
   const InvoiceMeterRef({
     required this.id,
