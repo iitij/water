@@ -20,11 +20,11 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::Backend + blade tenant references"
-          rg -n 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر|inv_show_tenant|rect_show_tenant' app resources/views || true
+          grep -RInE 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر|inv_show_tenant|rect_show_tenant' app resources/views || true
           echo "::endgroup::"
           echo "::group::Flutter tenant references"
-          rg -n 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر' 'mobile app/lib' || true
+          grep -RInE 'tenant_name|tenant_phone|tenantName|tenantPhone|مستأجر' 'mobile app/lib' || true
           echo "::endgroup::"
           echo "::group::Operational multi-meter assumptions"
-          rg -n 'meters\(\)->first|meters->first|meters\.first|meters\.length\s*[!=<>]=?\s*1|metersCount|meters_count|إضافة عداد آخر|حفظ وإضافة عداد آخر' app resources/views 'mobile app/lib' | head -160 || true
+          grep -RInE 'meters\(\)->first|meters->first|meters\.first|meters\.length\s*[!=<>]=?\s*1|metersCount|meters_count|إضافة عداد آخر|حفظ وإضافة عداد آخر' app resources/views 'mobile app/lib' | head -160 || true
           echo "::endgroup::"
