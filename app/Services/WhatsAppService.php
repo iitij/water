@@ -59,7 +59,7 @@ class WhatsAppService
      */
     public function getInvoiceMessageUrl(Invoice $invoice): ?string
     {
-        $phone = $invoice->meter?->tenant_phone ?? $invoice->subscriber->phone;
+        $phone = $invoice->subscriber->phone;
         $formattedPhone = $this->formatPhoneNumber($phone);
 
         if (! $formattedPhone) {
@@ -72,7 +72,7 @@ class WhatsAppService
     /** نص رسالة الفاتورة بعد تطبيق القالب والمتغيرات — يُستخدم أيضاً في إيصال الفاتورة للتطبيق. */
     public function invoiceMessage(Invoice $invoice): string
     {
-        $name = $invoice->meter?->tenant_name ?? $invoice->subscriber->name;
+        $name = $invoice->subscriber->name;
         $amount = number_format($invoice->total_amount + $invoice->previous_balance, 2);
 
         // رابط طباعة الفاتورة كميزة إضافية للعميل
@@ -180,7 +180,7 @@ class WhatsAppService
      */
     public function getPaymentMessageUrl(Payment $payment): ?string
     {
-        $phone = $payment->meter?->tenant_phone ?? $payment->subscriber->phone;
+        $phone = $payment->subscriber->phone;
         $formattedPhone = $this->formatPhoneNumber($phone);
 
         if (! $formattedPhone) {
@@ -193,7 +193,7 @@ class WhatsAppService
     /** نص رسالة تأكيد الدفع — يُستخدم أيضاً في إيصال السند للتطبيق (message_template). */
     public function paymentMessage(Payment $payment): string
     {
-        $name = $payment->meter?->tenant_name ?? $payment->subscriber->name;
+        $name = $payment->subscriber->name;
         $amount = number_format($payment->amount, 2);
 
         $defaultMsg = "أهلاً بك {name}،\nاستلمنا دفعتك بنجاح بموجب سند قبض رقم {receipt_number}.\nإجمالي المبلغ المدفوع: {amount} ريال.\nشكراً لتعاملك معنا.";
