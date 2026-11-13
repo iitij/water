@@ -281,7 +281,7 @@ class MetersRepositoryImpl implements MetersRepository {
       return meter.uniqueCode.toLowerCase().contains(needle) ||
           meter.pathNumber?.toString().contains(needle) == true ||
           meter.subscriberName?.toLowerCase().contains(needle) == true ||
-          meter.tenantName?.toLowerCase().contains(needle) == true;
+          meter.subscriberId?.toString().contains(needle) == true;
     }).map((meter) {
       final pathMatch = parsed.isCompoundPathSearch
           ? meter.squareId == parsed.squareId && meter.pathNumber == parsed.pathNumber
