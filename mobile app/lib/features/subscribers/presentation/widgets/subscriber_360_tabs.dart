@@ -144,7 +144,6 @@ class _MetersTab extends StatelessWidget {
       subscriberName: detail.subscriber.name,
       squareId: detail.subscriber.squareId,
       squareName: detail.subscriber.squareName,
-      tenantName: m.tenantName,
       pathNumber: m.pathNumber,
       status: m.status,
       balance: m.credit - m.debit,
