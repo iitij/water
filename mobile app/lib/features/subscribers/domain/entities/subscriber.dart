@@ -53,7 +53,7 @@ class Subscriber extends Equatable {
   final List<int> pathNumbers;
   final DateTime? createdAt;
 
-  /// Multiple meters can belong to one subscriber; use the first numeric path.
+  /// Only the current meter contributes to operational path search.
   int? get firstPathNumber =>
       pathNumbers.isEmpty ? null : pathNumbers.reduce((a, b) => a < b ? a : b);
 
@@ -95,7 +95,7 @@ class MeterBalance extends Equatable {
   final String status;
   final int? pathNumber;
   String get title =>
-      'عداد رقم: $meterId ($uniqueCode) - ${tenantName ?? 'بدون مستأجر'}';
+      'عداد رقم: $meterId ($uniqueCode)';
   @override
   List<Object?> get props => [meterId, credit, debit];
 }
