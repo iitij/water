@@ -26,19 +26,15 @@ class SubscriberListMetadataTest extends TestCase
             'subscription_start_date' => '2025-01-01',
         ]);
         $subscriber->forceFill(['created_at' => '2026-02-03 04:05:06'])->save();
-        foreach ([10, null, 2, 10, 0] as $index => $pathNumber) {
-            $subscriber->meters()->create([
-                'unique_code' => 'PATH-' . $index,
-                'path_number' => $pathNumber,
-                'status' => $index === 2 ? 'inactive' : 'active',
-                'removed_at' => $index === 0 ? null : '2026-01-01',
-            ]);
-        }
+        $subscriber->meters()->create([
+            'unique_code' => 'PATH-0',
+            'path_number' => 10,
+            'status' => 'inactive',
+        ]);
 
         $this->getJson('/api/subscribers')->assertOk()
             ->assertJsonPath('data.0.id', $subscriber->id)
             ->assertJsonPath('data.0.meters_count', 1)
-            ->assertJsonPath('data.0.historical_meters_count', 4)
             ->assertJsonPath('data.0.meter_number', 'PATH-0')
             ->assertJsonPath('data.0.path_numbers', [10])
             ->assertJsonPath('data.0.created_at', '2026-02-03T04:05:06.000000Z')
@@ -70,10 +66,14 @@ class SubscriberListMetadataTest extends TestCase
                 'unique_code' => 'METER-' . $subscriber->id, 'path_number' => 12, 'status' => 'active',
             ]);
         }
-        $matching->meters()->where('path_number', 12)->update(['removed_at' => '2026-01-01']);
-        $matching->meters()->create(['unique_code' => 'SECOND', 'path_number' => 3, 'status' => 'active']);
+        $oldMeter = $matching->meters()->firstOrFail();
+        $this->postJson('/api/meters/'.$oldMeter->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'تبديل عداد التجربة',
+            'new_meter' => ['unique_code' => 'SECOND', 'path_number' => 3],
+        ])->assertCreated();
 
-        // A historical path must no longer appear in an operational search.
+        // The physically deleted old path must not appear in a search.
         $this->getJson('/api/subscribers?' . http_build_query(['search' => '١٢']))->assertOk()
             ->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.id', $other->id);
