@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
 
-/// Replacements are atomic and audited on the server. This is an online-only action.
+/// Replacements permanently delete the previous meter's data. Online only.
 class MeterReplacementDialog extends StatefulWidget {
   const MeterReplacementDialog({required this.meter, required this.repository, super.key});
 
@@ -48,7 +48,7 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
       }
       if (error.response == null) return 'لا يوجد اتصال بالخادم. استبدال العداد يتطلب الإنترنت.';
     }
-    return 'تعذر استبدال العداد. تحقق من البيانات ومن عدم وجود قراءات غير مفوترة.';
+    return 'تعذر استبدال العداد. تحقق من البيانات والمسار واتصال الخادم.';
   }
 
   Future<void> _replace() async {
@@ -93,9 +93,9 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                 Text('العداد السابق: ${widget.meter.uniqueCode}'),
                 const SizedBox(height: 8),
                 const Text(
-                  'ستُحفظ القراءات والفواتير والأرصدة القديمة كما هي. '
-                  'يجب فوترة جميع القراءات المعلقة قبل الاستبدال. '
-                  'هذه العملية تحتاج اتصالاً بالخادم.',
+                  'سيُحذف العداد السابق نهائياً مع قراءاته وفواتيره وسنداته وبياناته المرتبطة. '
+                  'لن يُحتفظ بسجل تاريخي للعداد السابق. '
+                  'لا يمكن التراجع عن العملية، وتتطلب اتصالاً بالخادم.',
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
