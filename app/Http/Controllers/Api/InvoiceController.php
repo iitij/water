@@ -178,6 +178,12 @@ class InvoiceController extends ApiController
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
+        if ($meter && ! $meter->isCurrent()
+            && (($data['invoice_type'] ?? 'meter') === 'meter' || (float) ($data['consumption_fee'] ?? 0) > 0)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => ['لا يمكن إنشاء فاتورة استهلاك جديدة على عداد منزوع أو مستبدل.'],
+            ]);
+        }
         $components = (float) ($data['consumption_fee'] ?? 0) + (float) ($data['subscription_installment'] ?? 0) + (float) ($data['tanker_charges'] ?? 0);
         $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components) {
             $invoice = Invoice::create([
@@ -241,6 +247,14 @@ class InvoiceController extends ApiController
             return response()->json(['message' => 'العداد المحدد لا يتبع المشترك المحدد.'], 422);
         }
 
+        // Preserve historical invoices, but do not move new consumption onto a retired meter.
+        if (array_key_exists('meter_id', $data) && $data['meter_id'] !== null
+            && (int) $data['meter_id'] !== (int) ($oldMeterId ?? 0)
+            && ! Meter::findOrFail($data['meter_id'])->isCurrent()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => ['لا يمكن نقل الفاتورة إلى عداد منزوع.'],
+            ]);
+        }
         DB::transaction(function () use ($invoice, $data, $oldSubscriber, $oldMeter, $oldMeterId) {
             if (array_key_exists('subscriber_id', $data) && ! array_key_exists('meter_id', $data) && $invoice->meter_id) {
                 $data['meter_id'] = null;
