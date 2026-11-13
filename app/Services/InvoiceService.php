@@ -25,7 +25,7 @@ class InvoiceService
         string $invoiceType = 'meter'
     ): Invoice {
         return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $tankerInstallment, $includeReadings, $invoiceType) {
-            if ($includeReadings && $meter !== null && $meter->removed_at !== null) {
+            if ($includeReadings && $meter !== null && (! $meter->isCurrent() || (int) $meter->subscriber_id !== (int) $subscriber->id)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'meter_id' => ['لا يمكن إصدار فاتورة استهلاك جديدة لعداد تم نزعه أو استبداله.'],
                 ]);
@@ -36,7 +36,8 @@ class InvoiceService
             $uninvoicedReadings = collect();
             if ($includeReadings) {
                 $uninvoicedReadings = Reading::whereHas('meter', function ($q) use ($subscriber, $meter) {
-                    $q->where('subscriber_id', $subscriber->id);
+                    $q->where('subscriber_id', $subscriber->id)
+                        ->whereNull('removed_at');
                     if ($meter) {
                         $q->where('id', $meter->id);
                     }
