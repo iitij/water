@@ -12,6 +12,14 @@ abstract interface class MetersRepository {
   Future<SubscriberOption> getSubscriber(int subscriberId);
 
   Future<Meter> saveMeter(MeterDraft draft, {int? meterId});
+  Future<Meter> replaceMeter({
+    required int meterId,
+    required String uniqueCode,
+    required String reason,
+    required String removedAt,
+    required int initialReading,
+    int? pathNumber,
+  });
   Future<void> deleteMeter(int meterId);
   Future<({int deletedCount, int skippedCount})> bulkDeleteMeters(List<int> meterIds);
 
