@@ -175,6 +175,90 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertSame($current->id, $subscriber->fresh()->currentMeter->id);
     }
 
+    public function test_atomic_replacement_retains_history_balances_and_audit(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OLD-ATOMIC',
+            'balance' => '-73.50',
+            'path_number' => 11,
+        ]);
+
+        $response = $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'عداد تالف يحتاج استبدالاً',
+            'new_meter' => [
+                'unique_code' => 'NEW-ATOMIC',
+                'path_number' => 11,
+                'initial_reading' => 0,
+            ],
+        ])->assertCreated()->assertJsonPath('old_meter.id', $old->id)
+            ->assertJsonPath('current_meter.unique_code', 'NEW-ATOMIC');
+
+        $newId = $response->json('current_meter.id');
+        $this->assertSame($newId, $subscriber->fresh()->currentMeter->id);
+        $this->assertSame(1, $subscriber->historicalMeters()->count());
+        $this->assertSame('-73.50', (string) $old->fresh()->balance);
+        $this->assertDatabaseHas('audit_events', [
+            'event' => 'meter.replaced',
+            'entity_id' => (string) $old->id,
+        ]);
+    }
+
+    public function test_replacement_rolls_back_retirement_if_new_meter_path_conflicts(): void
+    {
+        $subscriber = $this->subscriber('الأول');
+        $another = $this->subscriber('الثاني');
+        $another->update(['square_id' => $subscriber->square_id]);
+
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OLD-ROLLBACK',
+            'path_number' => 4,
+        ]);
+        Meter::create([
+            'subscriber_id' => $another->id,
+            'unique_code' => 'OTHER-ROLLBACK',
+            'path_number' => 9,
+        ]);
+
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'بديل جديد',
+            'new_meter' => ['unique_code' => 'FAIL-ROLLBACK', 'path_number' => 9],
+        ])->assertUnprocessable()->assertJsonValidationErrors('path_number');
+
+        $this->assertNull($old->fresh()->removed_at);
+        $this->assertSame('active', $old->fresh()->status);
+        $this->assertSame($old->id, $subscriber->fresh()->currentMeter->id);
+        $this->assertDatabaseMissing('meters', ['unique_code' => 'FAIL-ROLLBACK']);
+        $this->assertDatabaseMissing('audit_events', [
+            'event' => 'meter.replaced',
+            'entity_id' => (string) $old->id,
+        ]);
+    }
+
+    public function test_replacement_rejects_pending_readings(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'PENDING-SWAP']);
+        $this->postJson('/api/readings', [
+            'meter_id' => $old->id,
+            'current_reading' => 7,
+            'reading_date' => now()->toDateString(),
+        ])->assertCreated();
+
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'لا يمكن الاستبدال قبل الفوترة',
+            'new_meter' => ['unique_code' => 'NEW-PENDING'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+
+        $this->assertNull($old->fresh()->removed_at);
+        $this->assertDatabaseMissing('meters', ['unique_code' => 'NEW-PENDING']);
+    }
+
     public function test_new_reading_on_removed_meter_is_rejected(): void
     {
         $subscriber = $this->subscriber();
