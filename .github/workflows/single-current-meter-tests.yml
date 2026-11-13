@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "app/Filament/Resources/Meters/**"
+      - "app/Filament/Resources/SubscriberResource.php"
+      - "app/Filament/Resources/InvoiceResource.php"
       - "app/Filament/Resources/ReadingResource.php"
       - "app/Http/Controllers/Api/InvoiceController.php"
       - "routes/api.php"
@@ -48,6 +50,10 @@ jobs:
           php -l app/Services/SingleMeterService.php
           php -l app/Http/Controllers/Api/MeterController.php
           php -l app/Filament/Resources/Meters/Schemas/MeterForm.php
+          php -l app/Filament/Resources/Meters/Pages/EditMeter.php
+          php -l app/Filament/Resources/Meters/Tables/MetersTable.php
+          php -l app/Filament/Resources/SubscriberResource.php
+          php -l app/Http/Controllers/Api/InvoiceController.php
           php -l app/Filament/Resources/ReadingResource.php
           php -l app/Filament/Resources/ReadingResource/Pages/CreateReading.php
           php -l app/Filament/Resources/SubscriberResource/RelationManagers/MetersRelationManager.php
