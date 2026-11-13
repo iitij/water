@@ -108,7 +108,7 @@ class MetersRepositoryImpl implements MetersRepository {
 
     // The legacy `/subscribers` API omits square_id from its summary rows.
     // Meters already carry subscriber + square relations, so use that pack to
-    // enrich the selector and to reveal tenant fields for multi-meter owners.
+    // enrich the selector and carry a current-meter identifier across reloads.
     List<Meter> meters;
     try {
       meters = (await _remote.fetchMeters())
@@ -144,7 +144,9 @@ class MetersRepositoryImpl implements MetersRepository {
         status: option.status,
         subscriptionStartDate: option.subscriptionStartDate ??
             firstMeter?.subscriptionStartDate,
-        meterCount: option.meterCount > 0 ? option.meterCount : relatedMeters.length,
+        meterCount: relatedMeters.isNotEmpty ? relatedMeters.length : option.meterCount,
+        currentMeterId: option.currentMeterId ??
+            relatedMeters.where((m) => m.removedAt == null).firstOrNull?.id,
       );
     }).where((subscriber) => subscriber.id > 0).toList(growable: false);
   }
@@ -168,6 +170,14 @@ class MetersRepositoryImpl implements MetersRepository {
           status: option.status,
           subscriptionStartDate: option.subscriptionStartDate,
           meterCount: relatedMeters.length,
+          currentMeterId: option.currentMeterId ??
+              (relatedMeters.cast<dynamic>().where((m) =>
+                m is Map && m['removed_at'] == null && m['deleted_at'] == null)
+                  .firstOrNull is Map
+                  ? int.tryParse((relatedMeters.cast<dynamic>().where((m) =>
+                      m is Map && m['removed_at'] == null && m['deleted_at'] == null)
+                        .firstOrNull as Map)['id']?.toString() ?? '')
+                  : null),
         );
       }
       return option;
