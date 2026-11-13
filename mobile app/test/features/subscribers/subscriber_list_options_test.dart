@@ -46,6 +46,36 @@ void main() {
     );
   });
 
+  test('subscriber meter count excludes historical meters even without API count', () {
+    final replaced = SubscriberModel.fromJson({
+      'id': 8,
+      'name': 'مشترك',
+      'meters': [
+        {'id': 11, 'path_number': 7, 'removed_at': '2026-10-01'},
+        {'id': 12, 'path_number': 3, 'removed_at': null},
+      ],
+    });
+    expect(replaced.metersCount, 1);
+    expect(replaced.pathNumbers, [3]);
+
+    final historicalOnly = SubscriberModel.fromJson({
+      'id': 9,
+      'name': 'بدون عداد حالي',
+      'meters': [
+        {'id': 11, 'path_number': 7, 'removed_at': '2026-10-01'},
+      ],
+    });
+    expect(historicalOnly.metersCount, 0);
+    expect(historicalOnly.pathNumbers, isEmpty);
+
+    final staleCount = SubscriberModel.fromJson({
+      'id': 10,
+      'name': 'سجل قديم',
+      'meters_count': 3,
+    });
+    expect(staleCount.metersCount, 1);
+  });
+
   test('operational paths omit retired meters while preserving active path', () {
     final subscriber = SubscriberModel.fromJson({
       'id': 6,
