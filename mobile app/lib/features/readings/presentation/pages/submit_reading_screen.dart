@@ -737,14 +737,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     ],
                   ],
                 ),
-                if (_meter.tenantName?.isNotEmpty == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      'المستأجر: ${_meter.tenantName}',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                  ),
               ],
             ),
           ),
