@@ -1748,11 +1748,11 @@
  "agent": "A2+A3+A4+A5+A10",
  "task": "إلغاء مفهوم العدادات التاريخية نهائياً: الاحتفاظ بحد أقصى بسجل عداد واحد لكل مشترك، حذف العدادات المخالفة وقراءاتها وفواتيرها وسنداتها وقيودها المرتبطة، وتعزيز قيد MySQL ومسار الاستبدال وواجهة Flutter",
  "files": "app/Services/MeterDataPurger.php; app/Services/SingleMeterService.php; database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php; database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php; tests/Feature/StrictSingleMeterPurgeTest.php; tests/scripts/mysql_single_meter_smoke.php; docs/v2/qa/STRICT_SINGLE_METER_PURGE_2026_11_14_AR.md",
- "status": "doing",
- "verification_status": "latest_mysql_upgrade_ci_pending",
+ "status": "done",
+ "verification_status": "laravel_full_ci_2818_assertions_mysql_legacy_migrations_and_flutter_passed",
  "owner_acceptance": "not_tested",
- "issue_url": "https://github.com/5krm/water/issues/37",
- "evidence": "منطق جديد بناء على قرار المالك بإزالة الأرشيف. Laravel 2818 assertion / 136 warning على https://github.com/5krm/water/actions/runs/43527421900 وMySQL 8 ناجح على https://github.com/5krm/water/actions/runs/43527421899 وFlutter 752 PASS / 27 SKIP على https://github.com/5krm/water/actions/runs/43526262464. تم توسيع اختبار ترحيل قاعدة أقدم بها أكثر من عداد حالي، ونتيجته أحدث من الروابط السابقة ما زالت في الانتظار. لم ينفذ ترحيل على قاعدة خادم المستخدم؛ لم تنفذ أجهزة فعلية."
+ "issue_url": "https://github.com/5krm/water/issues/39",
+ "evidence": "تم استبدال قيد العداد الحالي بتفرد سجل فعلي واحد، وإزالة السجلات القديمة وبياناتها في الترحيل، وإلغاء أرشفتها من API/Flutter/Filament. Laravel 2818 تحققاً و136 تحذيراً بلا فشل: https://github.com/5krm/water/actions/runs/43528295241 ؛ MySQL 8 مع تجربة بيانات تاريخية وعدادين حاليين في ترحيل قديم: https://github.com/5krm/water/actions/runs/43528069771 ؛ Flutter 752 PASS / 27 SKIP: https://github.com/5krm/water/actions/runs/43526262464 ؛ Audit UI ناجح https://github.com/5krm/water/actions/runs/43528295275. لم ينفذ الترحيل على قاعدة خادم المستخدم (المهمة #39)، ولم تنفذ اختبارات الأجهزة الفعلية (#37)."
 }
 ]
 }
