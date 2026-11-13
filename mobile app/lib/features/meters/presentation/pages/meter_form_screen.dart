@@ -12,6 +12,7 @@ import '../../../../core/utils/compound_search_parser.dart';
 import '../../../../core/widgets/empty_state_widget.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
+import 'meter_replacement_dialog.dart';
 
 class MeterFormScreen extends StatefulWidget {
   const MeterFormScreen({
@@ -227,6 +228,22 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
         _showMessage(_errorMessage(error));
       }
     }
+  }
+
+  Future<void> _replaceCurrentMeter() async {
+    final old = widget.meter;
+    if (old == null || old.removedAt != null || _isSaving) return;
+    final replacement = await showDialog<Meter>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MeterReplacementDialog(
+        meter: old,
+        repository: widget.repository,
+      ),
+    );
+    if (replacement == null || !mounted) return;
+    widget.onSaved?.call(replacement);
+    Navigator.of(context).pop(true);
   }
 
   void _showMessage(String message) {
@@ -459,6 +476,14 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                   loading: _isSaving,
                                   onPressed: _isSaving || _isCheckingPath ? null : () => _save(),
                                 ),
+                                if (widget.meter != null && widget.meter!.removedAt == null) ...[
+                                  const SizedBox(height: 12),
+                                  AppSecondaryButton(
+                                    label: 'استبدال العداد مع حفظ تاريخه',
+                                    icon: Icons.swap_horiz_rounded,
+                                    onPressed: _isSaving ? null : _replaceCurrentMeter,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
