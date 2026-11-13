@@ -68,10 +68,6 @@ class ReceiptSettings extends Page implements HasForms
             'rect_lbl_account_no' => Setting::get('rect_lbl_account_no', 'رقم الحساب'),
             
             // Tenant Row
-            'rect_show_tenant' => Setting::get('rect_show_tenant', '1') == '1',
-            'rect_lbl_tenant' => Setting::get('rect_lbl_tenant', 'المستأجر'),
-            'rect_show_tenant_phone' => Setting::get('rect_show_tenant_phone', '1') == '1',
-            'rect_lbl_tenant_phone' => Setting::get('rect_lbl_tenant_phone', 'هاتف المستأجر'),
 
             // Payment Info
             'rect_show_payment_method' => Setting::get('rect_show_payment_method', '1') == '1',
@@ -164,8 +160,6 @@ class ReceiptSettings extends Page implements HasForms
                                 $this->buildFieldConfig('المربع السكني', 'rect_show_square', 'rect_lbl_square'),
                                 $this->buildFieldConfig('رقم الحساب', 'rect_show_account_no', 'rect_lbl_account_no'),
 
-                                $this->buildFieldConfig('المستأجر', 'rect_show_tenant', 'rect_lbl_tenant'),
-                                $this->buildFieldConfig('هاتف المستأجر', 'rect_show_tenant_phone', 'rect_lbl_tenant_phone'),
                             ]),
 
                         Tab::make('بيانات الدفع والمبالغ')
