@@ -311,15 +311,17 @@ class AppDatabase extends GeneratedDatabase {
         // Historical meter records must not inflate the operational badge.
         // In the absence of an explicit count, resolve the one current meter.
         final serverCount = _int(subscriber['meters_count']);
-        final hasCurrent = _int(subscriber['current_meter_id']) != null ||
-            subscriber['current_meter'] is Map ||
-            (meters is List &&
-                meters.any((meter) =>
-                    meter is Map &&
-                    meter['removed_at'] == null &&
-                    meter['deleted_at'] == null));
-        final currentMeterCount =
-            serverCount == null ? (hasCurrent ? 1 : 0) : (serverCount > 0 ? 1 : 0);
+        final hasCurrent = subscriber.containsKey('current_meter_id')
+            ? _int(subscriber['current_meter_id']) != null
+            : subscriber.containsKey('current_meter')
+                ? subscriber['current_meter'] is Map
+                : meters is List
+                    ? meters.any((meter) =>
+                        meter is Map &&
+                        meter['removed_at'] == null &&
+                        meter['deleted_at'] == null)
+                    : (serverCount ?? 0) > 0;
+        final currentMeterCount = hasCurrent ? 1 : 0;
         await _execute(
           '''INSERT OR REPLACE INTO cached_subscribers(
              server_id, name, phone, address, square_id, square_name, status,
