@@ -151,11 +151,17 @@ void main() {
     expect(repo.uploaded, [newId]);
     expect(repo.pending.keys, [oldId]);
     expect(repo.pending[oldId]!.status, SyncQueueStatus.queued);
+    expect(manager.items, isEmpty,
+        reason: 'the other account must not appear in the current user UI');
+    expect(manager.pendingCount, 0);
+    expect(manager.blockedCount, 0);
     expect(repo.pending[oldId]!.attempts, 0,
         reason: 'no artificial retries or terminal failure for another user');
     expect(repo.failed, isEmpty);
 
     when(() => session.user).thenReturn(<String, dynamic>{'id': 10});
+    expect(manager.items.map((item) => item.id), [oldId]);
+    expect(manager.pendingCount, 1);
     await manager.syncPending();
 
     expect(sentUuids, [newId, oldId]);
@@ -186,6 +192,12 @@ void main() {
     );
     addTearDown(manager.dispose);
     await manager.syncPending();
+
+    expect(manager.items.map((item) => item.id), [newId]);
+    expect(manager.pendingCount, 1);
+    expect(manager.failedCount, 1);
+    expect(manager.attentionCount, 0);
+    expect(manager.blockedCount, 1);
 
     await manager.retry(oldId);
     expect(repo.pending[oldId]!.status, SyncQueueStatus.needsAttention);
