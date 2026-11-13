@@ -218,6 +218,7 @@ class SubscriberOption {
   factory SubscriberOption.fromJson(Map<String, dynamic> json) {
     final square = _asMap(json['square']);
     final meters = json['meters'];
+    final currentMeter = _asMap(json['current_meter']) ?? _firstCurrentMeter(meters);
     return SubscriberOption(
       id: _asInt(json['id'] ?? json['server_id']) ?? 0,
       name: (json['name'] ?? '').toString(),
@@ -226,15 +227,25 @@ class SubscriberOption {
       phone: _asString(json['phone']),
       status: (json['status'] ?? 'active').toString(),
       subscriptionStartDate: _asDate(json['subscription_start_date']),
-      meterCount:
-          _asInt(json['meters_count']) ?? (meters is List ? meters.length : 0),
+      meterCount: _asInt(json['meters_count']) ??
+          (meters is List ? (currentMeter == null ? 0 : 1) : 0),
       currentMeterId: _asInt(json['current_meter_id']) ??
-          _asInt(_asMap(json['current_meter'])?['id']) ??
-          (meters is List
-              ? _asInt(meters.cast<dynamic>().where((m) => m is Map && m['removed_at'] == null && m['deleted_at'] == null).firstOrNull?['id'])
-              : null),
+          _asInt(currentMeter?['id']),
     );
   }
+}
+
+Map<String, dynamic>? _firstCurrentMeter(Object? rawMeters) {
+  if (rawMeters is! List) return null;
+  for (final item in rawMeters) {
+    final meter = _asMap(item);
+    if (meter != null &&
+        meter['removed_at'] == null &&
+        meter['deleted_at'] == null) {
+      return meter;
+    }
+  }
+  return null;
 }
 
 Map<String, dynamic>? _asMap(Object? value) {
