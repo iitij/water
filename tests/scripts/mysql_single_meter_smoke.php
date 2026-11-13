@@ -10,6 +10,7 @@ $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 if (DB::connection()->getDriverName() !== 'mysql') {
     throw new RuntimeException('Refusing to run: expected MySQL.');
@@ -77,4 +78,54 @@ if (DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1
     throw new RuntimeException('BUG: prior meter still exists or replacement is missing.');
 }
 
-echo "PASS: MySQL strict UNIQUE subscriber_id, soft-delete/removed protection and physical replacement.\n";
+
+ // Simulate the prior schema with a current meter plus a historical one.
+ // This proves the new migration removes pre-existing data, not just that
+ // a freshly created database is valid.
+ Schema::table('meters', function (Blueprint $table): void {
+     $table->dropUnique('meters_one_per_subscriber');
+ });
+ Schema::table('meters', function (Blueprint $table): void {
+     $table->unsignedBigInteger('current_subscriber_id')
+         ->nullable()
+         ->virtualAs('CASE WHEN removed_at IS NULL AND deleted_at IS NULL THEN subscriber_id ELSE NULL END');
+     $table->unique('current_subscriber_id', 'meters_one_current_per_subscriber');
+ });
+ $obsolete = DB::table('meters')->insertGetId([
+     'unique_code' => 'mysql-meter-obsolete-history',
+     'subscriber_id' => $subscriber,
+     'removed_at' => '2026-11-01',
+ ]);
+ $obsoleteInvoice = DB::table('invoices')->insertGetId([
+     'subscriber_id' => $subscriber,
+     'meter_id' => $obsolete,
+     'bill_number' => 'MYSQL-HIST-INV',
+     'bill_date' => '2026-11-14',
+     'invoice_type' => 'meter',
+ ]);
+ $obsoleteReceipt = DB::table('payments')->insertGetId([
+     'subscriber_id' => $subscriber,
+     'meter_id' => $obsolete,
+     'invoice_id' => $obsoleteInvoice,
+     'receipt_number' => 'MYSQL-HIST-REC',
+     'payment_date' => '2026-11-14',
+     'payment_method' => 'cash',
+     'amount' => 20,
+ ]);
+ $migration = require dirname(__DIR__, 2).'/database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php';
+ $migration->up();
+ if (DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1
+     || DB::table('meters')->where('id', $obsolete)->exists()
+     || ! DB::table('meters')->where('id', $new)->exists()
+     || DB::table('invoices')->where('id', $obsoleteInvoice)->exists()
+     || DB::table('payments')->where('id', $obsoleteReceipt)->exists()
+     || Schema::hasColumn('meters', 'current_subscriber_id')) {
+     throw new RuntimeException('BUG: data backfill retained historical meter or finance.');
+ }
+ $expectDuplicate(fn () => DB::table('meters')->insert([
+     'unique_code' => 'mysql-meter-after-migration',
+     'subscriber_id' => $subscriber,
+ ]));
+ 
+ echo "PASS: MySQL one physical meter, irreversible legacy backfill and linked finance cleanup.\n";
+
