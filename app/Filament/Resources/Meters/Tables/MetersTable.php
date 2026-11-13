@@ -28,11 +28,6 @@ class MetersTable
                     ->label('المربع')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('tenant_name')
-                    ->label('المستأجر')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('الحالة')
                     ->badge()
