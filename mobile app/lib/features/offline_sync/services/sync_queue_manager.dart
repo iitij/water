@@ -537,6 +537,9 @@ class SyncQueueManager extends ChangeNotifier {
       throw StateError('استجابة مزامنة القراءة غير مكتملة.');
     }
     final result = _asMap(results.first);
+    if (result == null) {
+      throw StateError('استجابة مزامنة القراءة غير مكتملة.');
+    }
     ensureSyncBatchItemAccepted(result);
 
     final readingMap = _asMap(result['reading']) ?? _asMap(result['data']);
