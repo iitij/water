@@ -294,4 +294,69 @@ class StrictSingleMeterPurgeTest extends TestCase
         ]);
         $this->assertDatabaseCount('payments', 0);
     }
+
+    public function test_plain_meter_deletion_removes_fault_visit_and_meter_audit_rows_permanently(): void
+    {
+        $square = Square::create(['name' => 'Delete cleanup square']);
+        $subscriber = Subscriber::create(['name' => 'Delete cleanup subscriber', 'square_id' => $square->id]);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'DELETE-ORPHAN-1']);
+        DB::table('reading_faults')->insert([
+            'meter_id' => $meter->id,
+            'subscriber_id' => $subscriber->id,
+            'reading_date' => now()->toDateString(),
+            'fault_type' => 'no_access',
+            'sync_uuid' => (string) Str::uuid(),
+        ]);
+        DB::table('route_visits')->insert([
+            'meter_id' => $meter->id,
+            'route_date' => now()->toDateString(),
+            'status' => 'visited',
+            'sync_uuid' => (string) Str::uuid(),
+        ]);
+        DB::table('audit_events')->insert([
+            'entity_type' => 'meter',
+            'entity_id' => (string) $meter->id,
+            'event' => 'meter.old',
+        ]);
+        $this->deleteJson('/api/meters/'.$meter->id)->assertOk();
+
+        foreach (['meters', 'reading_faults', 'route_visits', 'audit_events'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        $this->assertDatabaseHas('subscribers', ['id' => $subscriber->id]);
+    }
+
+    public function test_bulk_delete_purges_obsolete_field_records_but_skips_financial_meters(): void
+    {
+        $square = Square::create(['name' => 'Bulk cleanup square']);
+        $canDelete = Subscriber::create(['name' => 'Can delete', 'square_id' => $square->id]);
+        $protected = Subscriber::create(['name' => 'Protected', 'square_id' => $square->id]);
+        $empty = Meter::create(['subscriber_id' => $canDelete->id, 'unique_code' => 'BULK-EMPTY']);
+        $invoiced = Meter::create(['subscriber_id' => $protected->id, 'unique_code' => 'BULK-INVOICED']);
+        DB::table('reading_faults')->insert([
+            'meter_id' => $empty->id,
+            'subscriber_id' => $canDelete->id,
+            'reading_date' => now()->toDateString(),
+            'fault_type' => 'no_access',
+            'sync_uuid' => (string) Str::uuid(),
+        ]);
+        $invoice = DB::table('invoices')->insertGetId([
+            'subscriber_id' => $protected->id,
+            'meter_id' => $invoiced->id,
+            'bill_number' => 'BULK-PROTECTED-INV',
+            'bill_date' => now()->toDateString(),
+            'invoice_type' => 'meter',
+        ]);
+        $this->postJson('/api/meters/bulk-delete', [
+            'ids' => [$empty->id, $invoiced->id],
+        ])->assertOk()
+          ->assertJsonPath('deleted_count', 1)
+          ->assertJsonPath('skipped_count', 1)
+          ->assertJsonPath('skipped_ids', [$invoiced->id]);
+
+        $this->assertDatabaseMissing('meters', ['id' => $empty->id]);
+        $this->assertDatabaseHas('meters', ['id' => $invoiced->id]);
+        $this->assertDatabaseHas('invoices', ['id' => $invoice, 'meter_id' => $invoiced->id]);
+        $this->assertDatabaseCount('reading_faults', 0);
+    }
 }
