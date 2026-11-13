@@ -144,7 +144,9 @@ class MetersRepositoryImpl implements MetersRepository {
         status: option.status,
         subscriptionStartDate: option.subscriptionStartDate ??
             firstMeter?.subscriptionStartDate,
-        meterCount: relatedMeters.isNotEmpty ? relatedMeters.length : option.meterCount,
+        meterCount: option.currentMeterId != null
+            ? 1
+            : (relatedMeters.where((m) => m.removedAt == null).isNotEmpty ? 1 : 0),
         currentMeterId: option.currentMeterId ??
             relatedMeters.where((m) => m.removedAt == null).firstOrNull?.id,
       );
@@ -169,7 +171,8 @@ class MetersRepositoryImpl implements MetersRepository {
           phone: option.phone,
           status: option.status,
           subscriptionStartDate: option.subscriptionStartDate,
-          meterCount: relatedMeters.length,
+          meterCount: option.currentMeterId != null ||
+                  _currentMeterIdFromJson(relatedMeters) != null ? 1 : 0,
           currentMeterId: option.currentMeterId ??
               _currentMeterIdFromJson(relatedMeters),
         );
