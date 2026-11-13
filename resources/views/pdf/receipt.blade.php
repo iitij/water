@@ -314,13 +314,6 @@
     $outstanding = $payment->subscriber->getOutstandingBalance();
     $creditBalance = (float) $payment->subscriber->balance; // رصيد دائن للمشترك
 
-    $tenantName = null;
-    $tenantPhone = null;
-    if ($payment->invoice && $payment->invoice->meter) {
-    $tenantName = $payment->invoice->meter->tenant_name;
-    $tenantPhone = $payment->invoice->meter->tenant_phone;
-    }
-
     $invoiceRemaining = 0;
     $dueBefore = 0;
     if ($payment->invoice) {
@@ -368,15 +361,9 @@
         // 2. Subscriber Info Array
         $subFields = [];
         $subNameValue = $payment->subscriber->name;
-        if($tenantName) {
-        $subNameValue .= '<br><span style="color: #02687E; font-weight: 800; font-size: 11.5px;">' . $lbl('rect_lbl_tenant', 'المستأجر') . ': ' . $tenantName . '</span>';
-        }
         if($chk('rect_show_sub_name')) $subFields[] = ['l' => $lbl('rect_lbl_sub_name', 'اسم المشترك'), 'v' => $subNameValue];
 
         $subPhoneValue = $formatPhone($payment->subscriber->phone ?? '-');
-        if($tenantPhone) {
-        $subPhoneValue .= '<br><span style="color: #02687E; font-size: 11.5px;">' . $formatPhone($tenantPhone) . '</span>';
-        }
         if($chk('rect_show_sub_phone')) $subFields[] = ['l' => $lbl('rect_lbl_sub_phone', 'الهاتف'), 'v' => $subPhoneValue, 'is_ltr' => true];
 
         if($chk('rect_show_square')) $subFields[] = ['l' => $lbl('rect_lbl_square', 'المربع السكني'), 'v' => $payment->subscriber->square->name ?? '-'];
