@@ -80,12 +80,14 @@ class PaymentFormScreen extends StatelessWidget {
   }
 }
 
-/// عند وجود عداد واحد فقط نفتح النموذج على حسابه المعزول مباشرة (قاعدة §3.4-1)،
-/// ومع أكثر من عداد نترك المحصل يختار الفاتورة (الحساب العام للمشترك).
+/// Only use the operational meter for a new subscriber payment.
+/// Keep invoice-specific meter ID even if that invoice is historical.
 int? _singleMeterId(SubscriberOption? subscriber) {
   final meters = subscriber?.meters;
-  if (meters == null || meters.length != 1) return null;
-  return meters.first.id;
+  if (meters == null) return null;
+  // The references endpoint is expected to expose the current meter first.
+  // Ambiguous history must not be auto-selected for new payments.
+  return meters.length == 1 ? meters.single.id : null;
 }
 
 class _PaymentCreateScreen extends StatelessWidget {
