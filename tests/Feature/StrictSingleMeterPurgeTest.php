@@ -58,8 +58,18 @@ class StrictSingleMeterPurgeTest extends TestCase
             'description' => 'Old meter consumption',
             'amount' => 95,
         ]);
+        $cashSessionId = DB::table('cash_sessions')->insertGetId([
+            'user_id' => User::query()->value('id'),
+            'session_date' => '2026-11-14',
+            'opening_amount' => 0,
+            'expected_amount' => 50,
+            'counted_amount' => 50,
+            'variance_amount' => 0,
+            'state' => 'closed',
+        ]);
         $payment = DB::table('payments')->insertGetId([
             'subscriber_id' => $subscriber->id,
+            'cash_session_id' => $cashSessionId,
             'meter_id' => $old->id,
             'invoice_id' => $invoice,
             'receipt_number' => 'PURGE-REC',
@@ -150,6 +160,13 @@ class StrictSingleMeterPurgeTest extends TestCase
             $this->assertDatabaseCount($table, 0);
         }
         $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseHas('cash_sessions', [
+            'id' => $cashSessionId,
+            'state' => 'closed',
+            'expected_amount' => 0,
+            'counted_amount' => 50,
+            'variance_amount' => 50,
+        ]);
         $this->assertSame('25.00', (string) $subscriber->fresh()->balance);
         $this->assertDatabaseMissing('audit_events', [
             'entity_type' => 'meter',
