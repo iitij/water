@@ -93,8 +93,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<ReadingSaveResult> submitReading(ReadingSubmission submission) async {
-    // The offline database can retain a historical meter for statements, but
-    // must never queue new readings for it once its removal is known locally.
+    // A stale or removed meter must never be queued for new readings.
     final cachedMeter = await _database.getCachedMeter(submission.meterId);
     if (cachedMeter != null && cachedMeter['removed_at'] != null) {
       throw StateError('هذا العداد منزوع أو مستبدل؛ لا يمكن تسجيل قراءة جديدة عليه.');
@@ -164,6 +163,15 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     ReadingSubmission submission, {
     String message = 'حُفظت القراءة على الجهاز وستتم مزامنتها عند عودة الاتصال.',
   }) async {
+    // A removed meter is evicted from SQLite. Never create an offline action
+    // for a meter ID that is no longer present in the locally trusted list:
+    // the server could have physically replaced it on another device.
+    final cachedMeter = await _database.getCachedMeter(submission.meterId);
+    if (cachedMeter == null || cachedMeter['removed_at'] != null) {
+      throw StateError(
+        'العداد غير متاح على هذا الجهاز؛ حدّث قائمة العدادات قبل تسجيل قراءة دون اتصال.',
+      );
+    }
     final readingPayload = submission.toJson(localId: localId)
       ..['local_id'] = localId
       ..['image_path'] = submission.imagePath;
