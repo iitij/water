@@ -175,6 +175,107 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertSame($current->id, $subscriber->fresh()->currentMeter->id);
     }
 
+    public function test_new_consumption_invoice_resolves_the_single_current_meter(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OLD-CONSUMPTION',
+            'removed_at' => '2026-10-01',
+        ]);
+        $current = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'CURRENT-CONSUMPTION',
+        ]);
+
+        $this->postJson('/api/invoices', [
+            'subscriber_id' => $subscriber->id,
+            'invoice_type' => 'meter',
+            'consumption_fee' => 120,
+        ])->assertCreated()
+            ->assertJsonPath('invoice.meter_id', $current->id);
+
+        $this->assertDatabaseMissing('invoices', [
+            'meter_id' => $old->id,
+            'consumption_fee' => 120,
+        ]);
+    }
+
+    public function test_consumption_invoice_without_a_current_meter_is_rejected(): void
+    {
+        $subscriber = $this->subscriber();
+        Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'ONLY-HISTORIC',
+            'removed_at' => '2026-10-01',
+        ]);
+
+        $this->postJson('/api/invoices', [
+            'subscriber_id' => $subscriber->id,
+            'invoice_type' => 'meter',
+            'consumption_fee' => 20,
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_non_consumption_service_invoice_can_refer_to_historic_meter(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'HISTORIC-SERVICE',
+            'removed_at' => '2026-10-01',
+        ]);
+
+        $this->postJson('/api/invoices', [
+            'subscriber_id' => $subscriber->id,
+            'meter_id' => $old->id,
+            'invoice_type' => 'subscription',
+            'subscription_installment' => 15,
+        ])->assertCreated()->assertJsonPath('invoice.meter_id', $old->id);
+    }
+
+    public function test_filament_manual_consumption_invoice_uses_current_meter_not_history(): void
+    {
+        $subscriber = $this->subscriber();
+        Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'FILAMENT-RETIRED',
+            'removed_at' => '2026-09-01',
+        ]);
+        $current = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'FILAMENT-CURRENT',
+        ]);
+
+        // Exercise the form-to-record validation without requiring a browser.
+        $reflection = new \ReflectionClass(\App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class);
+        $page = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('mutateFormDataBeforeCreate');
+
+        $data = $method->invoke($page, [
+            'subscriber_id' => $subscriber->id,
+            'consumption_fee' => 34,
+        ]);
+        $this->assertSame($current->id, $data['meter_id']);
+        $this->assertSame('meter', $data['invoice_type']);
+        $this->assertSame('issued', $data['status']);
+    }
+
+    public function test_filament_manual_consumption_without_current_meter_fails(): void
+    {
+        $subscriber = $this->subscriber();
+        $reflection = new \ReflectionClass(\App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class);
+        $page = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('mutateFormDataBeforeCreate');
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $method->invoke($page, [
+            'subscriber_id' => $subscriber->id,
+            'consumption_fee' => 25,
+        ]);
+    }
+
     public function test_manual_consumption_invoice_cannot_target_a_retired_meter(): void
     {
         $subscriber = $this->subscriber();
