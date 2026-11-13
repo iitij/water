@@ -197,36 +197,6 @@ class _MetersTab extends StatelessWidget {
     }
   }
 
-  Future<void> _deleteMeter(BuildContext context, MeterBalance m) async {
-    if (!GetIt.I.isRegistered<MetersRepository>()) return;
-    final confirmed = await confirmAction(
-      context,
-      'حذف العداد',
-      'هل تريد حذف العداد «${m.uniqueCode}»؟ لا يمكن حذف عداد له قراءات أو فواتير أو سندات.',
-    );
-    if (!confirmed || !context.mounted) return;
-    try {
-      await GetIt.I<MetersRepository>().deleteMeter(m.meterId);
-      if (context.mounted) {
-        await context.read<Subscriber360Cubit>().load(detail.subscriber.id);
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('تم حذف العداد بنجاح')));
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyError(e)),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _defaultRecordReading(
     BuildContext context,
     MeterBalance m,
