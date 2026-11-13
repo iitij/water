@@ -221,11 +221,10 @@ class MetersRepositoryImpl implements MetersRepository {
       throw StateError('Server did not confirm replacement meter.');
     }
     final currentJson = Map<String, dynamic>.from(current);
-    final retired = result['old_meter'];
-    await _database.cacheMeters([
-      if (retired is Map) Map<String, dynamic>.from(retired),
-      currentJson,
-    ]);
+    // The old meter no longer exists physically; do not keep its cached
+    // record, readings or billing period as a hidden historical meter.
+    await _database.evictMeterCache(meterId);
+    await _database.cacheMeters([currentJson]);
     return Meter.fromJson(currentJson);
   }
 
@@ -303,8 +302,7 @@ class MetersRepositoryImpl implements MetersRepository {
     return filtered;
   }
 
-  // A subscriber may have historic meters, but at most one current meter.
-  // Never infer current identity from the first (potentially retired) record.
+  // Only the assigned physical meter is valid; ignore stale cached removals.
   int? _currentMeterIdFromJson(List<dynamic> rows) {
     for (final value in rows) {
       if (value is! Map) continue;
