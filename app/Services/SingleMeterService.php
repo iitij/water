@@ -12,11 +12,11 @@ use Illuminate\Validation\ValidationException;
 /**
  * Shared write policy for API and Filament.
  *
- * Current = not removed AND not soft-deleted. "inactive" still occupies the
- * subscriber's meter slot until a recorded replacement/removal.
+ * Every subscriber has at most ONE persisted meter row. Inactive status
+ * does not free that slot. Replacement permanently purges the previous meter.
  *
- * The generated UNIQUE index added by the single-meter migration is the
- * final concurrency guard; subscriber locks provide user-friendly errors.
+ * The database UNIQUE(subscriber_id) index is the final concurrency guard;
+ * subscriber locks provide user-friendly errors.
  */
 class SingleMeterService
 {
@@ -66,7 +66,7 @@ class SingleMeterService
                 throw ValidationException::withMessages([
                     'subscriber_id' => [
                         'لا يمكن نقل عداد له قراءات أو فواتير أو سندات أو حركات مالية '
-                        .'عن طريق تعديل المشترك؛ يلزم إجراء نقل مستقل يحفظ التاريخ.',
+                        .'عن طريق تعديل المشترك؛ تعالج بياناته المالية أولاً قبل النقل.',
                     ],
                 ]);
             }
@@ -77,13 +77,6 @@ class SingleMeterService
             if ($newRemoval !== null) {
                 throw ValidationException::withMessages([
                     'removed_at' => ['لا يُسمح بالاحتفاظ بعداد منزوع في السجل. استخدم استبدال العداد أو حذفه.'],
-                ]);
-            }
-
-            if ($meter->removed_at === null && $newRemoval !== null
-                && $meter->readings()->where('is_invoiced', false)->exists()) {
-                throw ValidationException::withMessages([
-                    'removed_at' => ['لا يمكن إنهاء ارتباط عداد لديه قراءات لم تُفوتر بعد.'],
                 ]);
             }
 
