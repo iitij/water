@@ -28,7 +28,6 @@ abstract final class FieldExperienceStrings {
   static const unknownSubscriber = 'مشترك غير محدد';
   static const meterCode = 'رقم العداد';
   static const path = 'المسار';
-  static const tenant = 'المستأجر';
   static const lastReading = 'آخر قراءة';
   static const balance = 'رصيد العداد';
   static const currency = 'ريال';
@@ -40,5 +39,4 @@ abstract final class FieldExperienceStrings {
   static const inactive = 'غير نشط';
   static const selectMeter = 'تحديد العداد';
   static String resultCount(int count) => '$count عداد مطابق';
-  static String tenantName(String name) => '$tenant: $name';
 }
