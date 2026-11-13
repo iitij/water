@@ -6,7 +6,7 @@ abstract final class SubscriberExperienceStrings {
   static const path = 'رقم المسار';
   static const pathHint = 'كل المسارات';
   static const pathHelp =
-      'يعرض المشترك إذا طابق المسار أي عداد لديه. الترتيب بأول مسار رقمي.';
+      'يعرض المشترك إذا طابق المسار عداده الحالي. لا تدخل مسارات العدادات السابقة في البحث التشغيلي.';
   static const invalidPath = 'أدخل رقم مسار صحيحاً من صفر فأكثر.';
   static const additionOrder = 'ترتيب إضافة المشترك';
   static const subscriptionDate = 'تاريخ بدء الاشتراك';
@@ -24,7 +24,7 @@ abstract final class SubscriberExperienceStrings {
   static const credit = 'دائن';
   static const debit = 'مدين';
   static const currency = 'ريال';
-  static const meters = 'العدادات';
+  static const meters = 'العداد الحالي وسجل العدادات السابقة';
   static const invoices = 'الفواتير';
   static const payments = LaravelScreenStrings.payments;
   static const fees = 'رسوم الاشتراك';
