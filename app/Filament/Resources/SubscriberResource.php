@@ -202,10 +202,10 @@ class SubscriberResource extends Resource
                         'danger' => 'inactive',
                     ]),
 
-                Tables\Columns\TextColumn::make('meters_count')
-                    ->label('العدادات')
-                    ->counts('meters')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('currentMeter.unique_code')
+                    ->label('العداد الحالي')
+                    ->placeholder('بانتظار تركيب عداد')
+                    ->searchable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('square_id')
