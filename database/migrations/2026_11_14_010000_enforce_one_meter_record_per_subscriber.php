@@ -71,9 +71,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('meters', function (Blueprint $table): void {
-            $table->dropUnique('meters_one_per_subscriber');
-        });
-        // Destructive backfill is intentionally not reversible.
+        // Never silently remove the final uniqueness guarantee: purged meter
+        // rows and associated finance cannot be restored by a rollback.
+        throw new RuntimeException(
+            'This destructive one-meter migration is irreversible. '
+            .'Restore a verified test database snapshot instead of rollback.'
+        );
     }
 };
