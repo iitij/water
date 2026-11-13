@@ -290,11 +290,11 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         settings,
         const [
           'bill_number', 'date_from', 'date_to', 'sub_name', 'meter_no', 'sub_phone',
-          'square', 'address', 'account_no', 'tenant', 'tenant_phone',
+          'square', 'address', 'account_no',
         ],
         const [
           'رقم الفاتورة', 'من تاريخ', 'إلى تاريخ', 'اسم المشترك', 'رقم العداد', 'الهاتف',
-          'المربع', 'العنوان', 'رقم الحساب', 'المستأجر', 'هاتف المستأجر',
+          'المربع', 'العنوان', 'رقم الحساب',
         ],
       ),
       _fieldTab(
@@ -382,8 +382,8 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         'حقول السند والمشترك',
         Icons.person_outline,
         settings,
-        const ['receipt_number', 'receipt_date', 'sub_name', 'sub_phone', 'square', 'account_no', 'tenant', 'tenant_phone'],
-        const ['رقم السند', 'تاريخ السند', 'اسم المشترك', 'الهاتف', 'المربع السكني', 'رقم الحساب', 'المستأجر', 'هاتف المستأجر'],
+        const ['receipt_number', 'receipt_date', 'sub_name', 'sub_phone', 'square', 'account_no'],
+        const ['رقم السند', 'تاريخ السند', 'اسم المشترك', 'الهاتف', 'المربع السكني', 'رقم الحساب'],
       ),
       _EditorTab(
         'بيانات الدفع والمبالغ',
