@@ -45,17 +45,21 @@ class SubscriberModel extends Subscriber {
   }
 
   static int _currentMeterCount(Map<String, dynamic> json) {
-    final reported = jIntOrNull(json['meters_count']);
-    if (reported != null) return reported > 0 ? 1 : 0;
-    if (jIntOrNull(json['current_meter_id']) != null ||
-        json['current_meter'] is Map) {
-      return 1;
+    // Trust the canonical association over aggregate counts, which used to
+    // include retired meters. Zero current meters is a legitimate state.
+    if (json.containsKey('current_meter_id')) {
+      return jIntOrNull(json['current_meter_id']) == null ? 0 : 1;
     }
-    // Ignore historical assignments during local/mobile summary parsing.
-    return jMapList(json['meters']).any(
-      (meter) =>
-          meter['removed_at'] == null && meter['deleted_at'] == null,
-    ) ? 1 : 0;
+    if (json.containsKey('current_meter')) {
+      return json['current_meter'] is Map ? 1 : 0;
+    }
+    if (json['meters'] is List) {
+      return jMapList(json['meters']).any(
+        (meter) =>
+            meter['removed_at'] == null && meter['deleted_at'] == null,
+      ) ? 1 : 0;
+    }
+    return (jIntOrNull(json['meters_count']) ?? 0) > 0 ? 1 : 0;
   }
 
   static List<int> _pathNumbers(Map<String, dynamic> json) {
