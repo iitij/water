@@ -46,16 +46,10 @@ class Subscriber extends Model
         return $this->hasMany(Meter::class);
     }
 
-    /** Currently assigned meter; inactive service is not the same as removal. */
+    /** The one physical meter belonging to this subscriber (if assigned). */
     public function currentMeter(): HasOne
     {
-        return $this->hasOne(Meter::class)->whereNull('removed_at');
-    }
-
-    /** Removed meters remain available for audit, readings and payments. */
-    public function historicalMeters(): HasMany
-    {
-        return $this->hasMany(Meter::class)->whereNotNull('removed_at');
+        return $this->hasOne(Meter::class);
     }
 
     public function readings(): HasManyThrough
