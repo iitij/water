@@ -37,6 +37,8 @@ class SubscriberListMetadataTest extends TestCase
 
         $this->getJson('/api/subscribers')->assertOk()
             ->assertJsonPath('data.0.id', $subscriber->id)
+            ->assertJsonPath('data.0.meters_count', 1)
+            ->assertJsonPath('data.0.historical_meters_count', 4)
             ->assertJsonPath('data.0.meter_number', 'PATH-0')
             ->assertJsonPath('data.0.path_numbers', [10])
             ->assertJsonPath('data.0.created_at', '2026-02-03T04:05:06.000000Z')
