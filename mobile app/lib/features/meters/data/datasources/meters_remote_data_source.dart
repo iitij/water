@@ -106,6 +106,17 @@ class MetersRemoteDataSource {
     return _extractObject(response.data, keys: const ['meter', 'data']);
   }
 
+  Future<Map<String, dynamic>> replaceMeter(
+    int meterId,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _dio.post<dynamic>(
+      '${ApiEndpoints.meters}/$meterId/replace',
+      data: payload,
+    );
+    return _extractObject(response.data, keys: const []);
+  }
+
   Future<void> deleteMeter(int meterId) async {
     await _dio.delete<dynamic>('${ApiEndpoints.meters}/$meterId');
   }
