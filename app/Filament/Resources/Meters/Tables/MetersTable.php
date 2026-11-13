@@ -53,6 +53,13 @@ class MetersTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\TernaryFilter::make('current_only')
+                    ->label('العداد الحالي')
+                    ->default(true)
+                    ->queries(
+                        true: fn (\Illuminate\Database\Eloquent\Builder $query) => $query->whereNull('removed_at'),
+                        false: fn (\Illuminate\Database\Eloquent\Builder $query) => $query->whereNotNull('removed_at'),
+                    ),
                 Tables\Filters\SelectFilter::make('status')
                     ->label('حالة العداد')
                     ->options([
