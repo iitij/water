@@ -30,7 +30,7 @@ class MeterForm
                                             $subscriber = \App\Models\Subscriber::find($subscriberId);
                                             if ($subscriber) {
                                                 $query = \App\Models\Meter::where('path_number', $value)
-                                                                                                        ->whereHas('subscriber', function($q) use ($subscriber) {
+                                                    ->whereHas('subscriber', function($q) use ($subscriber) {
                                                         $q->where('square_id', $subscriber->square_id);
                                                     });
                                                 if ($record) {
@@ -56,11 +56,10 @@ class MeterForm
                                         }
                                         $existing = \App\Models\Meter::withTrashed()
                                             ->where('subscriber_id', (int) $value)
-                                            ->whereNull('removed_at')
                                             ->when($record, fn ($q) => $q->where('id', '!=', $record->id))
                                             ->exists();
                                         if ($existing) {
-                                            $fail('هذا المشترك مرتبط بعداد حالي بالفعل. لا يمكن إضافة عداد ثانٍ.');
+                                            $fail('هذا المشترك مرتبط بعداد بالفعل. لا يمكن إضافة عداد ثانٍ.');
                                         }
                                     },
                             ])
