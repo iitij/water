@@ -159,9 +159,7 @@ class TransactionsCubit extends Cubit<TransactionsState> {
   }
 
   LedgerMeterFilterOption _fromMeterModel(Meter m) {
-    final owner = (m.tenantName != null && m.tenantName!.trim().isNotEmpty)
-        ? m.tenantName!
-        : (m.subscriberName ?? '');
+    final owner = m.subscriberName ?? '';
     return LedgerMeterFilterOption(
       id: m.id,
       subscriberId: m.subscriberId,
