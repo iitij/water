@@ -6,6 +6,8 @@ use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Permanently removes an obsolete meter and all records belonging to its
@@ -24,6 +26,11 @@ final class MeterDataPurger
         if (! $meter) {
             return;
         }
+
+        $imagePaths = DB::table('readings')
+            ->where('meter_id', $meterId)
+            ->whereNotNull('image_path')
+            ->pluck('image_path')->all();
 
         $invoiceIds = DB::table('invoices')->where('meter_id', $meterId)->pluck('id')->all();
         $paymentIds = DB::table('payments')
@@ -94,5 +101,36 @@ final class MeterDataPurger
                 ->whereNull('deleted_at')
                 ->sum('amount'),
         ]);
+
+        foreach (DB::table('meters')->where('subscriber_id', $meter->subscriber_id)->pluck('id') as $remainingId) {
+            DB::table('meters')->where('id', $remainingId)->update([
+                'balance' => DB::table('transactions')
+                    ->where('meter_id', $remainingId)
+                    ->whereNull('deleted_at')
+                    ->sum('amount'),
+            ]);
+        }
+
+        // The database deletion is transactional; only delete owned image
+        // assets after its commit so a failed replacement keeps the files.
+        // Never delete absolute/foreign paths from legacy test fixtures.
+        $ownedImages = array_values(array_unique(array_filter(
+            $imagePaths,
+            static fn ($path) => is_string($path)
+                && str_starts_with($path, 'readings/')
+                && ! str_contains($path, '..')
+        )));
+        if ($ownedImages !== []) {
+            DB::afterCommit(static function () use ($ownedImages, $meterId): void {
+                try {
+                    Storage::disk('public')->delete($ownedImages);
+                } catch (\\Throwable $exception) {
+                    Log::warning('Obsolete meter image cleanup failed', [
+                        'meter_id' => $meterId,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            });
+        }
     }
 }
