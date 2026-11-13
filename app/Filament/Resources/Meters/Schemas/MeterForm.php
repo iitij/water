@@ -68,15 +68,6 @@ class MeterForm
                             ->required()
                             ->searchable()
                             ->live(),
-                        Forms\Components\TextInput::make('tenant_name')
-                            ->label('اسم المستأجر')
-                            ->maxLength(255)
-                            ->helperText('اختياري: بيانات المستأجر المرتبط بهذا العداد إن وجدت'),
-                        \Ysfkaya\FilamentPhoneInput\Forms\PhoneInput::make('tenant_phone')
-                            ->label('رقم هاتف المستأجر (إن وجد)')
-                            ->defaultCountry('YE')
-                            ->initialCountry('ye')
-                            ->helperText('اختياري'),
                         Forms\Components\Select::make('status')
                             ->label('حالة العداد')
                             ->options([
