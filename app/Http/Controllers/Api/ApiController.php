@@ -18,7 +18,7 @@ abstract class ApiController extends Controller
     /** Trusted field mappings only; request values are never SQL identifiers. */
     protected const LIST_SORTS = [
         'subscribers' => ['id', 'name', 'subscription_start_date', 'balance', 'status', 'created_at', 'square_name' => 'square.name', 'meters_count' => '@meters_count'],
-        'meters' => ['id', 'unique_code', 'path_number', 'tenant_name', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'square_name' => 'subscriber.square.name'],
+        'meters' => ['id', 'unique_code', 'path_number', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'square_name' => 'subscriber.square.name'],
         'readings' => ['id', 'reading_date', 'actual_reading_date', 'previous_reading', 'current_reading', 'consumption_units', 'created_at', 'meter_code' => 'meter.unique_code', 'subscriber_name' => 'meter.subscriber.name'],
         'invoices' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'bill_number', 'bill_date', 'total_amount', 'amount_paid', 'status', 'created_at', 'beneficiary_name' => 'subscriber.name', 'subscriber_name' => 'subscriber.name', 'total_due' => ['expression' => 'COALESCE(invoices.total_amount, 0) + COALESCE(invoices.previous_balance, 0)']],
         'payments' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'payment_date', 'amount', 'created_at', 'subscriber_name' => 'subscriber.name', 'user_name' => 'user.name'],
