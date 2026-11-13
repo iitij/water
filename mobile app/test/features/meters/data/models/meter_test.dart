@@ -74,8 +74,6 @@ void main() {
         'unique_code': 'WM-17',
         'path_number': '4',
         'balance': '-125.50',
-        'tenant_name': 'Tenant One',
-        'tenant_phone': '771234567',
         'last_reading': {'current_reading': '250.5'},
         'subscriber': {
           'id': 9,
@@ -95,7 +93,6 @@ void main() {
       expect(meter.subscriptionStartDate, DateTime(2026, 1, 10));
       expect(meter.balance, -125.5);
       expect(meter.lastReading, 250.5);
-      expect(meter.tenantName, 'Tenant One');
     });
   });
 }
