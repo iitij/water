@@ -29,7 +29,7 @@ class RouteVisitController extends ApiController
 
         $query = RouteVisit::query()
             ->with([
-                'meter:id,unique_code,path_number,tenant_name',
+                'meter:id,unique_code,path_number',
                 'square:id,name,code',
                 'user:id,name',
             ])
