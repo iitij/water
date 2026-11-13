@@ -93,6 +93,7 @@ class MeterController extends ApiController
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'status' => ['sometimes', 'in:active,inactive'],
             'installed_at' => ['nullable', 'date'],
+            'removed_at' => ['prohibited'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
         ]);
         $meter = $singleMeterService->create($data)->load(['subscriber.square']);
@@ -110,6 +111,7 @@ class MeterController extends ApiController
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'status' => ['sometimes', 'required', 'in:active,inactive'],
             'installed_at' => ['sometimes', 'nullable', 'date'],
+            'removed_at' => ['prohibited'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
         ]);
         $meter = $singleMeterService->update($meter, $data);
