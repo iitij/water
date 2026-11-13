@@ -9,7 +9,7 @@ import '../../domain/accounting/finance_enums.dart';
 /// يبني رسالة واتساب الفاتورة مطابقةً لـ `WhatsAppService::getInvoiceMessageUrl`
 /// (`app/Services/WhatsAppService.php` سطر 60-186):
 ///  - اختيار القالب حسب `invoice_type` (عداد/اشتراك/وايت).
-///  - أولوية `meter.tenant_phone` ثم `subscriber.phone`.
+///  - هاتف المشترك فقط (`subscriber.phone`).
 ///  - المتغيرات `total_amount = total_amount + previous_balance - credit_applied`.
 ///  - البلوكات الشرطية `{if:subscription_fee}` و`{if:tanker_fee}` و`{if:previous_balance}`
 ///    و`{if:credit_applied}`.
