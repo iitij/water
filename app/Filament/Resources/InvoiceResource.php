@@ -151,17 +151,10 @@ class InvoiceResource extends Resource
 
                 Tables\Columns\TextColumn::make('beneficiary_name')
                     ->label('المشترك')
-                    ->state(function (\App\Models\Invoice $record) {
-                        if ($record->meter && $record->meter->tenant_name) {
-                            return $record->meter->tenant_name . ' (مستأجر)';
-                        }
-                        return $record->subscriber->name ?? '-';
-                    })
+                    ->state(fn (\App\Models\Invoice $record) => $record->subscriber->name ?? '-')
                     ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search): \Illuminate\Database\Eloquent\Builder {
                         return $query->whereHas('subscriber', function ($q) use ($search) {
                             $q->where('name', 'like', "%{$search}%");
-                        })->orWhereHas('meter', function ($q) use ($search) {
-                            $q->where('tenant_name', 'like', "%{$search}%");
                         });
                     })
                     ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction): \Illuminate\Database\Eloquent\Builder {
@@ -558,17 +551,13 @@ class InvoiceResource extends Resource
                     ->color('primary')
                     ->form([
                         Forms\Components\Select::make('subscriber_id')
-                            ->label('المشترك / المستأجر')
+                            ->label('المشترك')
                             ->searchable()
                             ->options(function () {
                                 $subscribers = \App\Models\Subscriber::with('currentMeter')->where('status', 'active')->get();
                                 $results = [];
                                 foreach ($subscribers as $subscriber) {
                                     $results[(string)$subscriber->id] = $subscriber->name;
-                                    if (($meter = $subscriber->currentMeter) && $meter->tenant_name) {
-                                            $label = "{$subscriber->name} (عداد: {$meter->unique_code} - المستأجر: {$meter->tenant_name})";
-                                            $results["{$subscriber->id}|{$meter->id}"] = $label;
-                                    }
                                 }
                                 return $results;
                             })
@@ -584,21 +573,11 @@ class InvoiceResource extends Resource
                                 }
 
                                 $subIdInt = $state;
-                                if (strpos((string)$state, '|') !== false) {
-                                    [$subId, $meterId] = explode('|', $state);
-                                    $set('meter_id', (int)$meterId);
-                                    $set('subscriber_id', (int)$subId);
-                                    $subIdInt = $subId;
+                                $subscriber = \App\Models\Subscriber::find($state);
+                                if ($subscriber && $subscriber->currentMeter) {
+                                    $set('meter_id', $subscriber->currentMeter->id);
                                 } else {
-                                    $subscriber = \App\Models\Subscriber::find($state);
-                                    if ($subscriber && $subscriber->currentMeter) {
-                                        $set('meter_id', $subscriber->currentMeter->id);
-                                    } else {
-                                        $currentMeter = \App\Models\Meter::find($get('meter_id'));
-                                        if (!$currentMeter || ! $currentMeter->isCurrent() || $currentMeter->subscriber_id != $state) {
-                                            $set('meter_id', null);
-                                        }
-                                    }
+                                    $set('meter_id', null);
                                 }
 
                                 $subscriberModel = null;
@@ -637,13 +616,7 @@ class InvoiceResource extends Resource
                             ->options(function (callable $get) {
                                 $subscriber = Subscriber::find($get('subscriber_id'));
                                 if (!$subscriber) return [];
-                                return $subscriber->currentMeter()->get()->mapWithKeys(function ($meter) {
-                                    $label = $meter->unique_code;
-                                    if ($meter->tenant_name) {
-                                        $label .= ' - المستأجر: ' . $meter->tenant_name;
-                                    }
-                                    return [$meter->id => $label];
-                                });
+                                return $subscriber->currentMeter()->pluck('unique_code', 'id');
                             })
                             ->required()
                             ->visible(fn(callable $get) => filled($get('subscriber_id')))
@@ -664,7 +637,7 @@ class InvoiceResource extends Resource
                                 } else {
                                     $subId = $get('subscriber_id');
                                     if ($subId) {
-                                        $subIdInt = (int) (strpos((string)$subId, '|') !== false ? explode('|', $subId)[0] : $subId);
+                                        $subIdInt = (int) $subId;
                                         $subscriber = \App\Models\Subscriber::find($subIdInt);
                                         if ($subscriber) {
                                             $set('subscription_installment', \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)->where('status', 'uninvoiced')->sum('amount'));
@@ -696,7 +669,7 @@ class InvoiceResource extends Resource
                                 } else {
                                     $subId = $get('subscriber_id');
                                     if ($subId) {
-                                        $subIdInt = (int) (strpos((string)$subId, '|') !== false ? explode('|', $subId)[0] : $subId);
+                                        $subIdInt = (int) $subId;
                                         $sum = \App\Models\ServiceRequest::where('subscriber_id', $subIdInt)->where('status', 'completed')->sum('amount');
                                         $set('tanker_installment', $sum);
                                     }
@@ -718,9 +691,6 @@ class InvoiceResource extends Resource
                     ->action(function (array $data): void {
                         try {
                             $subIdInt = $data['subscriber_id'];
-                            if (strpos((string)$subIdInt, '|') !== false) {
-                                $subIdInt = explode('|', $subIdInt)[0];
-                            }
                             $subscriber = Subscriber::find($subIdInt);
                             $meter = \App\Models\Meter::find($data['meter_id']);
                             $service = new InvoiceService();
