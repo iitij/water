@@ -24,17 +24,6 @@ class MetersRelationManager extends RelationManager
                 ->unique(ignoreRecord: true)
                 ->maxLength(50),
                 
-            Forms\Components\TextInput::make('tenant_name')
-                ->label('اسم المستأجر')
-                ->maxLength(255)
-                ->helperText('اختياري: إذا كان العداد يخص شقة مستأجر معين'),
-                
-            \Ysfkaya\FilamentPhoneInput\Forms\PhoneInput::make('tenant_phone')
-                ->label('رقم هاتف المستأجر (إن وجد)')
-                ->defaultCountry('YE')
-                ->initialCountry('ye')
-                ->helperText('اختياري'),
-
             Forms\Components\Select::make('status')
                 ->label('الحالة')
                 ->options([
@@ -53,11 +42,6 @@ class MetersRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('unique_code')
                     ->label('رقم العداد')
                     ->searchable(),
-
-                Tables\Columns\TextColumn::make('tenant_name')
-                    ->label('المستأجر')
-                    ->searchable()
-                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('الحالة')
