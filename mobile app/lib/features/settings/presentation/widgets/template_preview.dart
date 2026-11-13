@@ -83,7 +83,6 @@ class _InvoicePreview extends StatelessWidget {
             _previewRow(settings, 'sub_name', 'أحمد محمد'),
             _previewRow(settings, 'meter_no', 'MTR-1042'),
             _previewRow(settings, 'square', 'المربع الأول'),
-            _previewRow(settings, 'tenant', 'اسم المستأجر'),
           ],
         ),
         const SizedBox(height: 16),
