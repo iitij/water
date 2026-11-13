@@ -178,18 +178,22 @@ class InvoiceController extends ApiController
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
-        if ($meter && ! $meter->isCurrent()
-            && (($data['invoice_type'] ?? 'meter') === 'meter' || (float) ($data['consumption_fee'] ?? 0) > 0)) {
+        $isConsumption = (float) ($data['consumption_fee'] ?? 0) > 0;
+        $invoiceType = $data['invoice_type'] ?? (($meter || $isConsumption) ? 'meter' : 'subscription');
+        if ($isConsumption && $invoiceType !== 'meter') {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'meter_id' => ['لا يمكن إنشاء فاتورة استهلاك جديدة على عداد منزوع أو مستبدل.'],
+                'invoice_type' => ['لا يمكن إضافة رسوم استهلاك إلى فاتورة خدمات غير مخصصة للاستهلاك.'],
             ]);
         }
+        if ($invoiceType === 'meter') {
+            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
+        }
         $components = (float) ($data['consumption_fee'] ?? 0) + (float) ($data['subscription_installment'] ?? 0) + (float) ($data['tanker_charges'] ?? 0);
-        $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components) {
+        $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
-                'invoice_type' => $data['invoice_type'] ?? ($meter ? 'meter' : 'subscription'),
+                'invoice_type' => $invoiceType,
                 'bill_number' => $data['bill_number'] ?? Invoice::generateBillNumber(),
                 'bill_date' => $data['bill_date'] ?? now()->toDateString(),
                 'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
