@@ -52,8 +52,10 @@ class SubscriberModel extends Subscriber {
       if (values is List)
         for (final value in values)
           if (jIntOrNull(value) case final int number) number,
+      // Preserve historical paths only in history/ledger, not operational search.
       for (final meter in jMapList(json['meters']))
-        if (jIntOrNull(meter['path_number']) case final int number) number,
+        if (meter['removed_at'] == null && meter['deleted_at'] == null)
+          if (jIntOrNull(meter['path_number']) case final int number) number,
     }.toList()..sort();
     return List.unmodifiable(numbers);
   }
