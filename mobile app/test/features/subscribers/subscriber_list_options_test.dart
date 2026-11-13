@@ -46,6 +46,20 @@ void main() {
     );
   });
 
+  test('operational paths omit retired meters while preserving active path', () {
+    final subscriber = SubscriberModel.fromJson({
+      'id': 6,
+      'name': 'مشترك',
+      'meters_count': 1,
+      'meters': [
+        {'id': 1, 'path_number': 9, 'removed_at': '2026-09-01'},
+        {'id': 2, 'path_number': 4, 'removed_at': null},
+      ],
+    });
+    expect(subscriber.metersCount, 1);
+    expect(subscriber.pathNumbers, [4]);
+  });
+
   test(
     'path filter matches any meter, combines facets, and resets once',
     () async {
