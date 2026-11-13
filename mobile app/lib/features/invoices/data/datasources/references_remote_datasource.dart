@@ -38,8 +38,6 @@ class MeterOption {
     required this.id,
     required this.uniqueCode,
     this.pathNumber,
-    this.tenantName,
-    this.tenantPhone,
     this.balance = 0,
     this.status,
     this.uninvoicedUnits = 0,
@@ -48,8 +46,6 @@ class MeterOption {
   final int id;
   final String uniqueCode;
   final int? pathNumber;
-  final String? tenantName;
-  final String? tenantPhone;
   final double balance;
   final String? status;
 
@@ -74,8 +70,6 @@ class MeterOption {
         id: JsonUtils.asInt(json['id']),
         uniqueCode: JsonUtils.asString(json['unique_code']),
         pathNumber: JsonUtils.asIntOrNull(json['path_number']),
-        tenantName: JsonUtils.asStringOrNull(json['tenant_name']),
-        tenantPhone: JsonUtils.asStringOrNull(json['tenant_phone']),
         balance: JsonUtils.asDouble(json['balance']),
         status: JsonUtils.asStringOrNull(json['status']),
         uninvoicedUnits: JsonUtils.asDouble(json['uninvoiced_units']),
