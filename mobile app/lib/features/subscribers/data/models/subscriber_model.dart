@@ -74,7 +74,6 @@ class MeterBalanceModel extends MeterBalance {
   const MeterBalanceModel({
     required super.meterId,
     required super.uniqueCode,
-    super.tenantName,
     super.credit,
     super.debit,
     super.readingsCount,
@@ -86,7 +85,6 @@ class MeterBalanceModel extends MeterBalance {
       MeterBalanceModel(
         meterId: jInt(j['id']),
         uniqueCode: jStr(j['unique_code']) ?? '',
-        tenantName: jStr(j['tenant_name']),
         credit: _d(j['meter_credit']),
         debit: _d(j['meter_debit']),
         readingsCount: jInt(j['readings_count']),
