@@ -18,10 +18,10 @@ final _squares = <Square>[
 ];
 
 final _subscribers = <Subscriber>[
-  const Subscriber(id: 1, name: 'أحمد محمد الحداد', phone: '+967 771 234 567', squareId: 4, squareName: 'مربع 4 - حارة السوق', metersCount: 2, creditBalance: 0, debitBalance: 12500, generalBalance: -3000, meterNumber: 'W-1001'),
+  const Subscriber(id: 1, name: 'أحمد محمد الحداد', phone: '+967 771 234 567', squareId: 4, squareName: 'مربع 4 - حارة السوق', metersCount: 1, creditBalance: 0, debitBalance: 12500, generalBalance: -3000, meterNumber: 'W-1001'),
   const Subscriber(id: 2, name: 'فاطمة علي السقاف', phone: '+967 733 987 654', squareId: 1, squareName: 'مربع 1 - الحارة الشمالية', metersCount: 1, creditBalance: 5000, debitBalance: 0, generalBalance: 5000, meterNumber: 'W-1002'),
   const Subscriber(id: 3, name: 'خالد عمر باوزير', phone: '+967 700 111 222', squareId: 4, squareName: 'مربع 4 - حارة السوق', status: SubscriberStatus.suspended, metersCount: 1, creditBalance: 0, debitBalance: 48000, generalBalance: -48000, meterNumber: 'W-1003'),
-  const Subscriber(id: 4, name: 'مريم سالم العولقي', phone: '+967 715 555 333', squareId: 2, squareName: 'مربع 2 - الحارة الجنوبية', metersCount: 3, creditBalance: 2200, debitBalance: 1800, generalBalance: 400, meterNumber: 'W-1004'),
+  const Subscriber(id: 4, name: 'مريم سالم العولقي', phone: '+967 715 555 333', squareId: 2, squareName: 'مربع 2 - الحارة الجنوبية', metersCount: 1, creditBalance: 2200, debitBalance: 1800, generalBalance: 400, meterNumber: 'W-1004'),
 ];
 
 class FakeSquaresRepository implements SquaresRepository {
@@ -66,8 +66,7 @@ class FakeSubscribersRepository implements SubscribersRepository {
         remainingSubscriptionFee: 15000,
         subscriptionFeeStatus: 'uninvoiced',
         meterBalances: const [
-          MeterBalance(meterId: 11, uniqueCode: 'W-1001', tenantName: 'محل البقالة', credit: 0, debit: 9500, readingsCount: 12),
-          MeterBalance(meterId: 12, uniqueCode: 'W-1005', tenantName: null, credit: 2000, debit: 0, readingsCount: 8),
+          MeterBalance(meterId: 11, uniqueCode: 'W-1001', credit: 0, debit: 9500, readingsCount: 12),
         ],
       ),
       invoices: const [
@@ -92,7 +91,7 @@ class FakeSubscribersRepository implements SubscribersRepository {
   Future<List<LedgerEntry>> getStatement(int subscriberId, {PartyFilter party = const PartyAll()}) async {
     const all = <LedgerEntry>[
       LedgerEntry(id: 3, type: 'payment', amount: 8200, description: 'سند قبض REC-202609-0012', createdAt: '2026-09-05 10:30', runningBalance: -1300),
-      LedgerEntry(id: 2, type: 'invoice', amount: -9500, meterId: 11, party: 'عداد رقم: 11 - محل البقالة', description: 'فاتورة INV-202610-0001', createdAt: '2026-10-01 09:00', runningBalance: -9500),
+      LedgerEntry(id: 2, type: 'invoice', amount: -9500, meterId: 11, party: 'عداد رقم: 11 (W-1001)', description: 'فاتورة INV-202610-0001', createdAt: '2026-10-01 09:00', runningBalance: -9500),
       LedgerEntry(id: 1, type: 'invoice', amount: -3000, description: 'فاتورة اشتراك INV-202608-0003', createdAt: '2026-08-15 11:00', runningBalance: -3000),
     ];
     return switch (party) {
