@@ -4,31 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/Filament/Resources/Meters/**"
-      - "app/Filament/Resources/SubscriberResource.php"
-      - "app/Filament/Resources/InvoiceResource.php"
-      - "app/Filament/Resources/ReadingResource.php"
-      - "app/Http/Controllers/Api/InvoiceController.php"
-      - "routes/api.php"
-      - "app/Filament/Resources/ReadingResource/Pages/CreateReading.php"
-      - "app/Filament/Resources/SubscriberResource/RelationManagers/MetersRelationManager.php"
-      - "app/Models/Meter.php"
-      - "app/Models/Subscriber.php"
-      - "app/Services/SingleMeterService.php"
-      - "app/Services/CurrentMeterBillingGuard.php"
-      - "app/Services/CurrentMeterReadingGuard.php"
-      - "app/Filament/Resources/InvoiceResource.php"
-      - "app/Filament/Resources/InvoiceResource/Pages/CreateInvoice.php"
-      - "app/Http/Controllers/Api/MeterController.php"
-      - "app/Http/Controllers/Api/ReadingController.php"
-      - "app/Http/Controllers/Api/SubscriberController.php"
-      - "app/Services/InvoiceService.php"
-      - "database/migrations/*single_meter*"
-      - "tests/Feature/SingleCurrentMeterTest.php"
-      - "tests/Feature/SingleMeterFilamentIntegrationTest.php"
-      - "tests/Feature/GlobalSearchTest.php"
-      - "tests/Feature/ListFiltersParityTest.php"
-      - "tests/Feature/SubscriberListMetadataTest.php"
+      - "app/**"
+      - "resources/views/**"
+      - "tests/**"
+      - "database/migrations/**"
       - ".github/workflows/single-current-meter-tests.yml"
   workflow_dispatch:
 
@@ -67,6 +46,12 @@ jobs:
           php -l app/Filament/Resources/Meters/Tables/MetersTable.php
           php -l app/Filament/Resources/SubscriberResource.php
           php -l app/Http/Controllers/Api/InvoiceController.php
+          php -l app/Http/Controllers/Api/PaymentController.php
+          php -l app/Http/Controllers/Api/SubscriberController.php
+          php -l app/Services/WhatsAppService.php
+          php -l app/Services/DataExportService.php
+          php -l app/Filament/Pages/InvoiceSettings.php
+          php -l app/Filament/Pages/ReceiptSettings.php
           php -l app/Filament/Resources/ReadingResource.php
           php -l app/Filament/Resources/ReadingResource/Pages/CreateReading.php
           php -l app/Filament/Resources/SubscriberResource/RelationManagers/MetersRelationManager.php
