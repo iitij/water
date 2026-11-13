@@ -561,15 +561,13 @@ class InvoiceResource extends Resource
                             ->label('المشترك / المستأجر')
                             ->searchable()
                             ->options(function () {
-                                $subscribers = \App\Models\Subscriber::with('meters')->where('status', 'active')->get();
+                                $subscribers = \App\Models\Subscriber::with('currentMeter')->where('status', 'active')->get();
                                 $results = [];
                                 foreach ($subscribers as $subscriber) {
                                     $results[(string)$subscriber->id] = $subscriber->name;
-                                    foreach ($subscriber->meters as $meter) {
-                                        if ($meter->tenant_name) {
+                                    if (($meter = $subscriber->currentMeter) && $meter->tenant_name) {
                                             $label = "{$subscriber->name} (عداد: {$meter->unique_code} - المستأجر: {$meter->tenant_name})";
                                             $results["{$subscriber->id}|{$meter->id}"] = $label;
-                                        }
                                     }
                                 }
                                 return $results;
@@ -593,11 +591,11 @@ class InvoiceResource extends Resource
                                     $subIdInt = $subId;
                                 } else {
                                     $subscriber = \App\Models\Subscriber::find($state);
-                                    if ($subscriber && $subscriber->meters()->count() === 1) {
-                                        $set('meter_id', $subscriber->meters()->first()->id);
+                                    if ($subscriber && $subscriber->currentMeter) {
+                                        $set('meter_id', $subscriber->currentMeter->id);
                                     } else {
                                         $currentMeter = \App\Models\Meter::find($get('meter_id'));
-                                        if (!$currentMeter || $currentMeter->subscriber_id != $state) {
+                                        if (!$currentMeter || ! $currentMeter->isCurrent() || $currentMeter->subscriber_id != $state) {
                                             $set('meter_id', null);
                                         }
                                     }
@@ -639,7 +637,7 @@ class InvoiceResource extends Resource
                             ->options(function (callable $get) {
                                 $subscriber = Subscriber::find($get('subscriber_id'));
                                 if (!$subscriber) return [];
-                                return $subscriber->meters()->get()->mapWithKeys(function ($meter) {
+                                return $subscriber->currentMeter()->get()->mapWithKeys(function ($meter) {
                                     $label = $meter->unique_code;
                                     if ($meter->tenant_name) {
                                         $label .= ' - المستأجر: ' . $meter->tenant_name;
