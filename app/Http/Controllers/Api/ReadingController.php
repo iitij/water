@@ -324,12 +324,19 @@ class ReadingController extends ApiController
                     'invoice_error' => $result['invoice_error'],
                 ];
             } catch (\Throwable $exception) {
+                $permanent = $exception instanceof ValidationException
+                    || $exception instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                    || ($exception instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                        && $exception->getStatusCode() < 500);
                 $results[] = [
                     'index' => $index,
                     'sync_uuid' => $item['sync_uuid'] ?? null,
                     'client_action_id' => $clientActionId,
                     'success' => false,
-                    'message' => $exception instanceof ValidationException ? collect($exception->errors())->flatten()->first() : $exception->getMessage(),
+                    'retryable' => ! $permanent,
+                    'message' => $exception instanceof ValidationException
+                        ? collect($exception->errors())->flatten()->first()
+                        : ($permanent ? $exception->getMessage() : 'خطأ مؤقت في الخادم؛ أعد المحاولة لاحقاً.'),
                 ];
             }
         }
