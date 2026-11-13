@@ -367,13 +367,6 @@ class _MetersTab extends StatelessWidget {
                                     ).textTheme.labelMedium,
                                   ),
                                 ),
-                                if (m.tenantName?.isNotEmpty == true)
-                                  Text(
-                                    m.tenantName!,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
                                 Text(
                                   'مسار: ${m.pathNumber ?? '-'} • قراءات: ${m.readingsCount}',
                                   maxLines: 1,
