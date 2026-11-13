@@ -13,7 +13,7 @@ class SubscriptionFeeController extends ApiController
     public function index(Request $request)
     {
         $this->authorizeApi(SubscriptionFee::class, 'viewAny');
-        $query = SubscriptionFee::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number,tenant_name', 'invoice:id,bill_number,status'])
+        $query = SubscriptionFee::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'invoice:id,bill_number,status'])
             ->latest('id');
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
