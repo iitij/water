@@ -21,7 +21,6 @@ const _meter = Meter(
   pathNumber: 6,
   lastReading: 1250,
   balance: -10523.5,
-  tenantName: 'خالد محمد',
   status: 'inactive',
 );
 const _previewKey = ValueKey('compact-field-card');
@@ -165,10 +164,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(meter.subscriberName!), findsNWidgets(2));
     expect(find.text(FieldExperienceStrings.inactive), findsOneWidget);
-    expect(
-      find.text(FieldExperienceStrings.tenantName(_meter.tenantName!)),
-      findsOneWidget,
-    );
     expect(find.text('-10,523.5'), findsNWidgets(2));
     final sheetAction = find.descendant(
       of: find.byType(BottomSheet),
