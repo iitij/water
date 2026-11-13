@@ -128,6 +128,50 @@ class MeterController extends ApiController
         return response()->json(['message' => 'تم تحديث العداد بنجاح.', 'meter' => $meter->fresh(['subscriber.square'])]);
     }
 
+    /**
+     * One atomic replacement instead of separate removal/create requests.
+     * Last pending readings must be invoiced before replacement.
+     */
+    public function replace(Request $request, int $id, SingleMeterService $singleMeterService)
+    {
+        $this->authorizeApi(Meter::class, 'update');
+        $this->authorizeApi(Meter::class, 'create');
+
+        $data = $request->validate([
+            'removed_at' => ['required', 'date', 'before_or_equal:today'],
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+            'new_meter' => ['required', 'array'],
+            'new_meter.unique_code' => ['required', 'string', 'max:50', 'unique:meters,unique_code'],
+            'new_meter.path_number' => ['nullable', 'integer', 'min:0'],
+            'new_meter.initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'new_meter.installed_at' => ['nullable', 'date'],
+            'new_meter.tenant_name' => ['nullable', 'string', 'max:255'],
+            'new_meter.tenant_phone' => ['nullable', 'string', 'max:50'],
+            'new_meter.status' => ['sometimes', 'in:active,inactive'],
+        ]);
+
+        $old = Meter::findOrFail($id);
+        if ($old->installed_at !== null
+            && \Carbon\Carbon::parse($data['removed_at'])->startOfDay()->lt($old->installed_at->startOfDay())) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'removed_at' => ['تاريخ النزع لا يمكن أن يكون قبل تركيب العداد القديم.'],
+            ]);
+        }
+
+        $result = $singleMeterService->replace(
+            $old,
+            $data['new_meter'],
+            $data['removed_at'],
+            $data['reason'],
+            $request->user()?->id,
+        );
+
+        return response()->json([
+            'message' => 'تم استبدال العداد بنجاح مع حفظ تاريخ العداد السابق وحسابه.',
+            ...$result,
+        ], 201);
+    }
+
     public function destroy(int $id)
     {
         $this->authorizeApi(Meter::class, 'delete');
