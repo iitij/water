@@ -11,6 +11,10 @@ on:
       - ".github/workflows/single-current-meter-tests.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
