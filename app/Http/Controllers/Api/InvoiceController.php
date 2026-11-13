@@ -85,8 +85,7 @@ class InvoiceController extends ApiController
                         })
                         ->orWhereHas('meter', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
-                                ->orWhere('tenant_name', 'like', "%{$search}%")
-                                ->orWhere('tenant_phone', 'like', "%{$search}%");
+;
                             if (ctype_digit($normalized)) {
                                 $meterQuery->orWhere('path_number', (int) $normalized);
                             }
@@ -151,7 +150,7 @@ class InvoiceController extends ApiController
         $this->authorizeApi(Invoice::class, 'view');
         $invoice = Invoice::withTrashed()->with([
             'subscriber.square', 'meter', 'items', 'readings',
-            'payments' => fn ($q) => $q->with(['user:id,name', 'meter:id,unique_code,tenant_name'])->latest('payment_date'),
+            'payments' => fn ($q) => $q->with(['user:id,name', 'meter:id,unique_code'])->latest('payment_date'),
         ])->findOrFail($id);
 
         return response()->json(['invoice' => $this->decorate($invoice)]);
@@ -578,7 +577,7 @@ class InvoiceController extends ApiController
         $invoice = Invoice::with(['subscriber.square', 'meter', 'readings'])->findOrFail($id);
         $url = $whatsAppService->getInvoiceMessageUrl($invoice);
         if (! $url) {
-            return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.'], 422);
+            return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك.'], 422);
         }
         parse_str(parse_url($url, PHP_URL_QUERY) ?? '', $query);
 
@@ -703,7 +702,7 @@ class InvoiceController extends ApiController
             'payment_method' => $payment->payment_method,
             'reason' => $payment->reason,
             'subscriber_name' => $subscriber->name,
-            'subscriber_phone' => $payment->meter?->tenant_phone ?: $subscriber->phone,
+            'subscriber_phone' => $subscriber->phone,
             'invoice_remaining' => number_format($invoiceRemaining, 2, '.', ''),
             'outstanding_balance' => number_format($subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance()), 2, '.', ''),
             'credit_balance' => number_format(max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance)), 2, '.', ''),
