@@ -28,6 +28,9 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<MeterPeriodResponse> getMeterPeriod(Meter meter) async {
+    if (!meter.isCurrent) {
+      throw StateError('هذا العداد منزوع أو مستبدل؛ لا يمكن تسجيل قراءة جديدة عليه.');
+    }
     try {
       final json = await _remote.fetchMeterPeriod(meter.id);
       final period = MeterPeriodResponse.fromJson(json);
@@ -90,6 +93,12 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<ReadingSaveResult> submitReading(ReadingSubmission submission) async {
+    // The offline database can retain a historical meter for statements, but
+    // must never queue new readings for it once its removal is known locally.
+    final cachedMeter = await _database.getCachedMeter(submission.meterId);
+    if (cachedMeter != null && cachedMeter['removed_at'] != null) {
+      throw StateError('هذا العداد منزوع أو مستبدل؛ لا يمكن تسجيل قراءة جديدة عليه.');
+    }
     if (submission.currentReading < submission.previousReading) {
       throw StateError(
         'القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة '
