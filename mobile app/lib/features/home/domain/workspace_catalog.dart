@@ -131,7 +131,7 @@ abstract final class WorkspaceCatalog {
       keywords: 'صهريج ناقلة مياه tanker',
     ),
     WorkspaceEntry(
-      title: LaravelScreenStrings.meters, description: 'العدادات والمسارات والمستأجرون',
+      title: LaravelScreenStrings.meters, description: 'العداد الحالي للمشترك والمسارات',
       icon: Icons.gas_meter_outlined, route: RouteNames.meters,
       group: WorkspaceGroup.field, permissions: ['ViewAny:Meter'],
       keywords: 'عداد مسار meter',
