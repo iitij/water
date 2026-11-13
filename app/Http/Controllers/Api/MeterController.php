@@ -16,10 +16,6 @@ class MeterController extends ApiController
         $this->authorizeApi(Meter::class, 'viewAny');
         $query = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code'])
             ->withCount('readings')->orderBy('id');
-        if ($request->query('include_history') !== '1') {
-            $query->whereNull('removed_at');
-        }
-
         if ($request->filled('subscriber_id')) {
             $query->where('subscriber_id', $request->integer('subscriber_id'));
         }
@@ -97,7 +93,6 @@ class MeterController extends ApiController
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'status' => ['sometimes', 'in:active,inactive'],
             'installed_at' => ['nullable', 'date'],
-            'removed_at' => ['nullable', 'date', 'after_or_equal:installed_at'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
         ]);
         $meter = $singleMeterService->create($data)->load(['subscriber.square']);
@@ -115,7 +110,6 @@ class MeterController extends ApiController
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'status' => ['sometimes', 'required', 'in:active,inactive'],
             'installed_at' => ['sometimes', 'nullable', 'date'],
-            'removed_at' => ['sometimes', 'nullable', 'date'],
             'initial_reading' => ['sometimes', 'integer', 'min:0'],
         ]);
         $meter = $singleMeterService->update($meter, $data);
@@ -160,7 +154,7 @@ class MeterController extends ApiController
         );
 
         return response()->json([
-            'message' => 'تم استبدال العداد بنجاح مع حفظ تاريخ العداد السابق وحسابه.',
+            'message' => 'تم استبدال العداد وحذف بيانات العداد السابق نهائياً.',
             ...$result,
         ], 201);
     }
@@ -172,9 +166,9 @@ class MeterController extends ApiController
         if ($this->hasHistory($meter)) {
             return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
         }
-        $meter->delete();
+        $meter->forceDelete();
 
-        return response()->json(['message' => 'تم حذف العداد بنجاح.']);
+        return response()->json(['message' => 'تم حذف العداد نهائياً.']);
     }
 
     public function bulkDelete(Request $request)
@@ -190,7 +184,7 @@ class MeterController extends ApiController
 
                     continue;
                 }
-                $meter->delete();
+                $meter->forceDelete();
                 $deleted++;
             }
         });
