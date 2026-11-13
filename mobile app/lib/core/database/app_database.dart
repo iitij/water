@@ -433,6 +433,17 @@ class AppDatabase extends GeneratedDatabase {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// An accepted replacement physically removes the old meter on the server.
+  /// Remove its stale local caches too. Pending sync actions stay in the queue
+  /// so the server can reject obsolete readings visibly as non-retryable.
+  Future<void> evictMeterCache(int meterId) async {
+    await transaction(() async {
+      await _execute('DELETE FROM cached_meter_periods WHERE meter_id = ?', [meterId]);
+      await _execute('DELETE FROM cached_readings WHERE meter_id = ?', [meterId]);
+      await _execute('DELETE FROM cached_meters WHERE server_id = ?', [meterId]);
+    });
+  }
+
   Future<void> cacheMeterPeriod(int meterId, Map<String, dynamic> period) async {
     await _execute(
       '''INSERT OR REPLACE INTO cached_meter_periods(
