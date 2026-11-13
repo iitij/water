@@ -41,6 +41,9 @@ class Meter {
   final bool isPathMatch;
   final DateTime? createdAt;
 
+  /// Operational assignment: inactive service is still current until removed.
+  bool get isCurrent => removedAt == null;
+
   bool get isActive => status == 'active';
   double get outstandingBalance => balance < 0 ? -balance : 0;
 
