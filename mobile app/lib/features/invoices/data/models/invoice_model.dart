@@ -458,8 +458,6 @@ class InvoiceMeterRef extends Equatable {
     required this.id,
     this.uniqueCode,
     this.pathNumber,
-    this.tenantName,
-    this.tenantPhone,
     this.balance = 0,
     this.status,
   });
@@ -467,8 +465,6 @@ class InvoiceMeterRef extends Equatable {
   final int id;
   final String? uniqueCode;
   final int? pathNumber;
-  final String? tenantName;
-  final String? tenantPhone;
 
   /// `meters.balance` — دفتر العداد المعزول.
   final double balance;
@@ -487,8 +483,6 @@ class InvoiceMeterRef extends Equatable {
         id: JsonUtils.asInt(json['id']),
         uniqueCode: JsonUtils.asStringOrNull(json['unique_code']),
         pathNumber: JsonUtils.asIntOrNull(json['path_number']),
-        tenantName: JsonUtils.asStringOrNull(json['tenant_name']),
-        tenantPhone: JsonUtils.asStringOrNull(json['tenant_phone']),
         balance: JsonUtils.asDouble(json['balance']),
         status: JsonUtils.asStringOrNull(json['status']),
       );
@@ -498,8 +492,6 @@ class InvoiceMeterRef extends Equatable {
     id,
     uniqueCode,
     pathNumber,
-    tenantName,
-    tenantPhone,
     balance,
   ];
 }
