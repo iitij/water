@@ -120,8 +120,8 @@ class MeterController extends ApiController
     }
 
     /**
-     * One atomic replacement instead of separate removal/create requests.
-     * Last pending readings must be invoiced before replacement.
+     * Atomically purge the former meter and its linked records, then assign
+     * a fresh physical meter. No historical meter or finance record survives.
      */
     public function replace(Request $request, int $id, SingleMeterService $singleMeterService)
     {
