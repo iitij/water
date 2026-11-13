@@ -117,11 +117,11 @@ class SubscriberResource extends Resource
 
                     Forms\Components\Repeater::make('meters')
                         ->relationship('meters')
-                        ->label('أرصدة العدادات التابعة')
+                        ->label('أرصدة العداد الحالي وسجل العدادات السابقة')
                         ->schema([
                             Forms\Components\TextInput::make('meter_number')
                                 ->label('رقم العداد')
-                                ->formatStateUsing(fn ($record) => $record ? 'عداد رقم: '.$record->id.' - '.($record->tenant_name ?? 'بدون مستأجر') : '-')
+                                ->formatStateUsing(fn ($record) => $record ? 'عداد رقم: '.$record->id.' ('.$record->unique_code.')' : '-')
                                 ->disabled()
                                 ->dehydrated(false),
                             Forms\Components\TextInput::make('meter_credit')
