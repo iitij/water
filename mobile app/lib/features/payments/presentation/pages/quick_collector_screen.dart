@@ -26,7 +26,7 @@ import '../sheets/collect_payment_sheet.dart';
 
 /// `SCR-13` — المحصل السريع (Field Collector).
 ///
-/// البحث الفوري يعمل على: اسم المشترك، اسم المستأجر (tenant)، رقم الفاتورة،
+/// البحث الفوري يعمل على: اسم المشترك، رقم الفاتورة،
 /// كود العداد، والمسار المركّب `4/1` (مربع/مسار) — يُحوَّل تلقائياً إلى
 /// `square_id` + `path_number` إن كان الخادم يقبلهما (الخطة §7.1-1).
 /// التحصيل بلمسة واحدة عبر [CollectPaymentSheet]، ثم طباعة السند وإرساله واتساب
@@ -176,7 +176,7 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
                   : 'لا نتائج للبحث',
               message: state.searchText.isEmpty
                   ? 'كل الفواتير مسدّدة حالياً.'
-                  : 'جرّب اسم المستأجر أو رقم الفاتورة أو مسار بصيغة 4/1.',
+                  : 'جرّب اسم المشترك أو رقم الفاتورة أو مسار بصيغة 4/1.',
               icon: state.searchText.isEmpty
                   ? Icons.task_alt
                   : Icons.search_off,
