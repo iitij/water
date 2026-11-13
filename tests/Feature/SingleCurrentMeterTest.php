@@ -291,6 +291,30 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseMissing('meters', ['unique_code' => 'NEW-PENDING']);
     }
 
+    public function test_offline_batch_marks_retired_meter_failure_non_retryable(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OFFLINE-OLD',
+            'removed_at' => '2026-10-01',
+        ]);
+
+        $this->postJson('/api/readings/sync-batch', [
+            'readings' => [[
+                'meter_id' => $old->id,
+                'reading_date' => now()->toDateString(),
+                'current_reading' => 55,
+                'sync_uuid' => (string) \Illuminate\Support\Str::uuid(),
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('success_count', 0)
+            ->assertJsonPath('failed_count', 1)
+            ->assertJsonPath('results.0.success', false)
+            ->assertJsonPath('results.0.retryable', false);
+        $this->assertDatabaseCount('readings', 0);
+    }
+
     public function test_new_reading_on_removed_meter_is_rejected(): void
     {
         $subscriber = $this->subscriber();
