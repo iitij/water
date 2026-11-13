@@ -171,13 +171,7 @@ class MetersRepositoryImpl implements MetersRepository {
           subscriptionStartDate: option.subscriptionStartDate,
           meterCount: relatedMeters.length,
           currentMeterId: option.currentMeterId ??
-              (relatedMeters.cast<dynamic>().where((m) =>
-                m is Map && m['removed_at'] == null && m['deleted_at'] == null)
-                  .firstOrNull is Map
-                  ? int.tryParse((relatedMeters.cast<dynamic>().where((m) =>
-                      m is Map && m['removed_at'] == null && m['deleted_at'] == null)
-                        .firstOrNull as Map)['id']?.toString() ?? '')
-                  : null),
+              _currentMeterIdFromJson(relatedMeters),
         );
       }
       return option;
@@ -270,6 +264,18 @@ class MetersRepositoryImpl implements MetersRepository {
       return left.uniqueCode.toLowerCase().compareTo(right.uniqueCode.toLowerCase());
     });
     return filtered;
+  }
+
+  // A subscriber may have historic meters, but at most one current meter.
+  // Never infer current identity from the first (potentially retired) record.
+  int? _currentMeterIdFromJson(List<dynamic> rows) {
+    for (final value in rows) {
+      if (value is! Map) continue;
+      if (value['removed_at'] == null && value['deleted_at'] == null) {
+        return _asInt(value['id'] ?? value['server_id']);
+      }
+    }
+    return null;
   }
 
   int? _asInt(Object? value) {
