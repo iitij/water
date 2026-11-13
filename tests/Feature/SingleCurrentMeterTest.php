@@ -65,7 +65,7 @@ class SingleCurrentMeterTest extends TestCase
         Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'SECOND']);
     }
 
-    public function test_retired_meter_stays_in_history_and_replacement_is_current(): void
+    public function test_replacement_keeps_only_the_new_physical_meter(): void
     {
         $subscriber = $this->subscriber();
         $old = $this->postJson('/api/meters', [
@@ -74,28 +74,18 @@ class SingleCurrentMeterTest extends TestCase
             'path_number' => 4,
         ])->assertCreated()->json('meter.id');
 
-        $this->putJson('/api/meters/'.$old, [
-            'removed_at' => '2026-11-01',
-            'status' => 'inactive',
-        ])->assertOk();
+        $new = $this->postJson('/api/meters/'.$old.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'تغيير عداد قديم',
+            'new_meter' => ['unique_code' => 'M-NEW', 'path_number' => 4],
+        ])->assertCreated()->json('current_meter.id');
 
-        $new = $this->postJson('/api/meters', [
-            'subscriber_id' => $subscriber->id,
-            'unique_code' => 'M-NEW',
-            'path_number' => 4,
-        ])->assertCreated()->json('meter.id');
-
+        $this->assertNotSame($old, $new);
+        $this->assertDatabaseMissing('meters', ['id' => $old]);
+        $this->assertDatabaseCount('meters', 1);
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
-        $this->assertSame(1, $subscriber->historicalMeters()->count());
-        $this->assertDatabaseHas('meters', [
-            'id' => $old,
-            'subscriber_id' => $subscriber->id,
-            'removed_at' => '2026-11-01 00:00:00',
-        ]);
-
         $this->getJson('/api/meters?subscriber_id='.$subscriber->id)
-            ->assertOk()->assertJsonPath('total', 1)
-            ->assertJsonPath('data.0.id', $new);
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $new);
         $this->getJson('/api/subscribers')->assertOk()
             ->assertJsonPath('data.0.current_meter_id', $new)
             ->assertJsonPath('data.0.meter_number', 'M-NEW')
@@ -160,35 +150,22 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertNull($meter->fresh()->removed_at);
     }
 
-    public function test_historical_meter_cannot_be_reactivated_while_another_is_current(): void
+    public function test_database_blocks_a_second_meter_even_when_first_was_retired(): void
     {
         $subscriber = $this->subscriber();
-        $old = Meter::create([
+        Meter::create([
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'OLD-REMOVED',
             'removed_at' => '2026-10-01',
         ]);
-        $current = Meter::create([
-            'subscriber_id' => $subscriber->id,
-            'unique_code' => 'NEW-CURRENT',
-        ]);
 
-        $this->putJson('/api/meters/'.$old->id, [
-            'removed_at' => null,
-        ])->assertUnprocessable()->assertJsonValidationErrors('subscriber_id');
-
-        $this->assertNotNull($old->fresh()->removed_at);
-        $this->assertSame($current->id, $subscriber->fresh()->currentMeter->id);
+        $this->expectException(QueryException::class);
+        Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'NEW-CURRENT']);
     }
 
-    public function test_new_consumption_invoice_resolves_the_single_current_meter(): void
+    public function test_new_consumption_invoice_resolves_the_only_meter(): void
     {
         $subscriber = $this->subscriber();
-        $old = Meter::create([
-            'subscriber_id' => $subscriber->id,
-            'unique_code' => 'OLD-CONSUMPTION',
-            'removed_at' => '2026-10-01',
-        ]);
         $current = Meter::create([
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'CURRENT-CONSUMPTION',
@@ -198,23 +175,13 @@ class SingleCurrentMeterTest extends TestCase
             'subscriber_id' => $subscriber->id,
             'invoice_type' => 'meter',
             'consumption_fee' => 120,
-        ])->assertCreated()
-            ->assertJsonPath('invoice.meter_id', $current->id);
-
-        $this->assertDatabaseMissing('invoices', [
-            'meter_id' => $old->id,
-            'consumption_fee' => 120,
-        ]);
+        ])->assertCreated()->assertJsonPath('invoice.meter_id', $current->id);
+        $this->assertDatabaseCount('meters', 1);
     }
 
-    public function test_consumption_invoice_without_a_current_meter_is_rejected(): void
+    public function test_consumption_invoice_without_an_assigned_meter_is_rejected(): void
     {
         $subscriber = $this->subscriber();
-        Meter::create([
-            'subscriber_id' => $subscriber->id,
-            'unique_code' => 'ONLY-HISTORIC',
-            'removed_at' => '2026-10-01',
-        ]);
 
         $this->postJson('/api/invoices', [
             'subscriber_id' => $subscriber->id,
@@ -224,41 +191,33 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseCount('invoices', 0);
     }
 
-    public function test_non_consumption_service_invoice_can_refer_to_historic_meter(): void
+    public function test_non_consumption_service_invoice_can_refer_to_only_meter(): void
     {
         $subscriber = $this->subscriber();
-        $old = Meter::create([
+        $meter = Meter::create([
             'subscriber_id' => $subscriber->id,
-            'unique_code' => 'HISTORIC-SERVICE',
-            'removed_at' => '2026-10-01',
+            'unique_code' => 'SERVICE-METER',
         ]);
 
         $this->postJson('/api/invoices', [
             'subscriber_id' => $subscriber->id,
-            'meter_id' => $old->id,
+            'meter_id' => $meter->id,
             'invoice_type' => 'subscription',
             'subscription_installment' => 15,
-        ])->assertCreated()->assertJsonPath('invoice.meter_id', $old->id);
+        ])->assertCreated()->assertJsonPath('invoice.meter_id', $meter->id);
     }
 
-    public function test_filament_manual_consumption_invoice_uses_current_meter_not_history(): void
+    public function test_filament_manual_consumption_invoice_uses_only_meter(): void
     {
         $subscriber = $this->subscriber();
-        Meter::create([
-            'subscriber_id' => $subscriber->id,
-            'unique_code' => 'FILAMENT-RETIRED',
-            'removed_at' => '2026-09-01',
-        ]);
         $current = Meter::create([
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'FILAMENT-CURRENT',
         ]);
 
-        // Exercise the form-to-record validation without requiring a browser.
         $reflection = new \ReflectionClass(\App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class);
         $page = $reflection->newInstanceWithoutConstructor();
         $method = $reflection->getMethod('mutateFormDataBeforeCreate');
-
         $data = $method->invoke($page, [
             'subscriber_id' => $subscriber->id,
             'consumption_fee' => 34,
@@ -282,17 +241,22 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_manual_consumption_invoice_cannot_target_a_retired_meter(): void
+    public function test_manual_consumption_invoice_cannot_target_a_deleted_meter(): void
     {
         $subscriber = $this->subscriber();
-        $meter = Meter::create([
+        $old = Meter::create([
             'subscriber_id' => $subscriber->id,
-            'unique_code' => 'INVOICE-RETIRED',
-            'removed_at' => '2026-10-01',
+            'unique_code' => 'INVOICE-OLD',
         ]);
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'تغيير اختبار',
+            'new_meter' => ['unique_code' => 'INVOICE-NEW'],
+        ])->assertCreated();
+
         $this->postJson('/api/invoices', [
             'subscriber_id' => $subscriber->id,
-            'meter_id' => $meter->id,
+            'meter_id' => $old->id,
             'invoice_type' => 'meter',
             'consumption_fee' => 100,
         ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
@@ -314,7 +278,7 @@ class SingleCurrentMeterTest extends TestCase
         );
     }
 
-    public function test_atomic_replacement_retains_history_balances_and_audit(): void
+    public function test_atomic_replacement_purges_history_and_writes_audit_for_new_meter(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create([
@@ -323,7 +287,6 @@ class SingleCurrentMeterTest extends TestCase
             'balance' => '-73.50',
             'path_number' => 11,
         ]);
-
         $response = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
             'reason' => 'عداد تالف يحتاج استبدالاً',
@@ -332,20 +295,21 @@ class SingleCurrentMeterTest extends TestCase
                 'path_number' => 11,
                 'initial_reading' => 0,
             ],
-        ])->assertCreated()->assertJsonPath('old_meter.id', $old->id)
-            ->assertJsonPath('current_meter.unique_code', 'NEW-ATOMIC');
+        ])->assertCreated()->assertJsonPath('current_meter.unique_code', 'NEW-ATOMIC');
 
         $newId = $response->json('current_meter.id');
+        $this->assertNotSame($old->id, $newId);
         $this->assertSame($newId, $subscriber->fresh()->currentMeter->id);
-        $this->assertSame(1, $subscriber->historicalMeters()->count());
-        $this->assertSame('-73.50', (string) $old->fresh()->balance);
+        $this->assertDatabaseCount('meters', 1);
+        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+        $this->assertSame('0.00', (string) Meter::findOrFail($newId)->balance);
         $this->assertDatabaseHas('audit_events', [
             'event' => 'meter.replaced',
-            'entity_id' => (string) $old->id,
+            'entity_id' => (string) $newId,
         ]);
     }
 
-    public function test_historic_invoice_can_still_be_paid_after_meter_replacement(): void
+    public function test_old_meter_invoice_and_receipt_are_purged_at_replacement(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'OLD-DEBT']);
@@ -357,25 +321,26 @@ class SingleCurrentMeterTest extends TestCase
             'consumption_fee' => 100,
         ])->assertCreated()->json('invoice.id');
 
-        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
-            'removed_at' => now()->toDateString(),
-            'reason' => 'تغيير بسبب تلف العداد',
-            'new_meter' => ['unique_code' => 'NEW-DEBT'],
-        ])->assertCreated()->json('current_meter.id');
-
-        $this->postJson('/api/payments', [
+        $receipt = $this->postJson('/api/payments', [
             'subscriber_id' => $subscriber->id,
             'meter_id' => $old->id,
             'invoice_id' => $invoice,
             'amount' => 40,
             'payment_method' => 'cash',
-        ])->assertCreated()
-            ->assertJsonPath('payment.meter_id', $old->id);
+        ])->assertCreated()->json('payment.id');
 
-        $this->assertSame($old->id, (int) \App\Models\Invoice::findOrFail($invoice)->meter_id);
+        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'حذف بيانات العداد التالف',
+            'new_meter' => ['unique_code' => 'NEW-DEBT'],
+        ])->assertCreated()->json('current_meter.id');
+
+        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+        $this->assertDatabaseMissing('invoices', ['id' => $invoice]);
+        $this->assertDatabaseMissing('payments', ['id' => $receipt]);
+        $this->assertDatabaseCount('transactions', 0);
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
         $this->assertSame('0.00', (string) Meter::findOrFail($new)->balance);
-        $this->assertSame('-60.00', (string) $old->fresh()->balance);
     }
 
     public function test_replacement_rolls_back_retirement_if_new_meter_path_conflicts(): void
@@ -411,7 +376,7 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_replacement_rejects_pending_readings(): void
+    public function test_replacement_purges_pending_readings_instead_of_keeping_history(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'PENDING-SWAP']);
@@ -421,24 +386,29 @@ class SingleCurrentMeterTest extends TestCase
             'reading_date' => now()->toDateString(),
         ])->assertCreated();
 
-        $this->postJson('/api/meters/'.$old->id.'/replace', [
+        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
-            'reason' => 'لا يمكن الاستبدال قبل الفوترة',
+            'reason' => 'حذف سجل قراءات قديم',
             'new_meter' => ['unique_code' => 'NEW-PENDING'],
-        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        ])->assertCreated()->json('current_meter.id');
 
-        $this->assertNull($old->fresh()->removed_at);
-        $this->assertDatabaseMissing('meters', ['unique_code' => 'NEW-PENDING']);
+        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+        $this->assertDatabaseCount('readings', 0);
+        $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
     }
 
-    public function test_offline_batch_marks_retired_meter_failure_non_retryable(): void
+    public function test_offline_batch_marks_physically_deleted_meter_non_retryable(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create([
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'OFFLINE-OLD',
-            'removed_at' => '2026-10-01',
         ]);
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'عداد جديد',
+            'new_meter' => ['unique_code' => 'OFFLINE-NEW'],
+        ])->assertCreated();
 
         $this->postJson('/api/readings/sync-batch', [
             'readings' => [[
