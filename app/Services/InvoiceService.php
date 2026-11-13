@@ -25,10 +25,8 @@ class InvoiceService
         string $invoiceType = 'meter'
     ): Invoice {
         return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $tankerInstallment, $includeReadings, $invoiceType) {
-            if ($includeReadings && $meter !== null && (! $meter->isCurrent() || (int) $meter->subscriber_id !== (int) $subscriber->id)) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'meter_id' => ['لا يمكن إصدار فاتورة استهلاك جديدة لعداد تم نزعه أو استبداله.'],
-                ]);
+            if ($includeReadings && $invoiceType === 'meter') {
+                $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             }
             $unitPrice = \App\Models\Tariff::getActivePrice();
 
