@@ -46,7 +46,7 @@ class DailyReceiptsExporter {
   static const List<String> headers = <String>[
     'رقم السند',
     'التاريخ',
-    'المشترك/المستأجر',
+    'المشترك',
     'العداد',
     'المبلغ',
     'طريقة الدفع',
