@@ -80,7 +80,7 @@ class Meter extends Model
     public function getLastReadingValue(?int $ignoreReadingId = null): float
     {
         $latest = $this->getLatestReading($ignoreReadingId);
-        return $latest ? (float) $latest->current_reading : 0;
+        return $latest ? (float) $latest->current_reading : (float) ($this->initial_reading ?? 0);
     }
 
     /**
