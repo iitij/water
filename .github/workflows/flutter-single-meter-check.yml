@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "mobile app/lib/features/meters/data/models/meter.dart"
+      - "mobile app/lib/features/meters/data/repositories/meters_repository_impl.dart"
+      - "mobile app/lib/features/subscribers/data/models/subscriber_model.dart"
+      - "mobile app/test/features/meters/data/models/meter_test.dart"
       - "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart"
       - "mobile app/lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart"
       - ".github/workflows/flutter-single-meter-check.yml"
@@ -29,4 +32,6 @@ jobs:
         run: flutter pub get
       - name: Analyze changed Flutter modules
         run: |
-          dart analyze lib/features/meters/data/models/meter.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
+          dart analyze lib/features/meters/data/models/meter.dart lib/features/meters/data/repositories/meters_repository_impl.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/data/models/subscriber_model.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
+      - name: Single-meter Flutter tests
+        run: flutter test test/features/meters/data/models/meter_test.dart test/features/subscribers/subscriber_list_options_test.dart
