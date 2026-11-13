@@ -8,6 +8,7 @@ on:
       - "mobile app/lib/core/diagnostics/api_log_manager.dart"
       - "mobile app/test/core/l10n/laravel_screen_strings_test.dart"
       - "mobile app/test/core/diagnostics/api_log_manager_test.dart"
+      - "mobile app/test/ui/water_experience_test.dart"
       - "mobile app/lib/features/meters/data/models/meter.dart"
       - "mobile app/lib/features/meters/data/repositories/meters_repository_impl.dart"
       - "mobile app/lib/features/meters/data/datasources/meters_remote_data_source.dart"
