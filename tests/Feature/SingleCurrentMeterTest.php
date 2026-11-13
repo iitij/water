@@ -175,6 +175,38 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertSame($current->id, $subscriber->fresh()->currentMeter->id);
     }
 
+    public function test_manual_consumption_invoice_cannot_target_a_retired_meter(): void
+    {
+        $subscriber = $this->subscriber();
+        $meter = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'INVOICE-RETIRED',
+            'removed_at' => '2026-10-01',
+        ]);
+        $this->postJson('/api/invoices', [
+            'subscriber_id' => $subscriber->id,
+            'meter_id' => $meter->id,
+            'invoice_type' => 'meter',
+            'consumption_fee' => 100,
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_consumption_service_rejects_invoice_for_retired_meter(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'GENERATE-RETIRED',
+            'removed_at' => '2026-10-01',
+        ]);
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        app(\App\Services\InvoiceService::class)->generateInvoice(
+            subscriber: $subscriber,
+            meter: $old,
+        );
+    }
+
     public function test_atomic_replacement_retains_history_balances_and_audit(): void
     {
         $subscriber = $this->subscriber();
