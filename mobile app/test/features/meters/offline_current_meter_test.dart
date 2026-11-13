@@ -125,4 +125,75 @@ void main() {
     expect(await db.getCachedMeter(990), isNull);
     expect(await db.getCachedMeters(), isEmpty);
   });
+
+  test('unfiltered empty server snapshot evicts deleted last meter', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheMeters([
+      {'id': 700, 'unique_code': 'LAST-OLD', 'subscriber_id': 70, 'status': 'active'},
+    ]);
+
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.invalid'));
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) => handler.resolve(
+        Response<dynamic>(
+          requestOptions: options,
+          data: <String, dynamic>{
+            'current_page': 1,
+            'last_page': 1,
+            'data': <Map<String, dynamic>>[],
+          },
+        ),
+      ),
+    ));
+
+    final repo = MetersRepositoryImpl(dio: dio, database: db);
+    expect(await repo.getMeters(), isEmpty);
+    expect(await db.getCachedMeter(700), isNull,
+        reason: 'An empty authoritative list must remove the last deleted meter');
+  });
+
+  test('filtered server query never purges unrelated offline meters', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheMeters([
+      {'id': 701, 'unique_code': 'ONE', 'subscriber_id': 71, 'status': 'active'},
+      {'id': 702, 'unique_code': 'TWO', 'subscriber_id': 72, 'status': 'active'},
+    ]);
+
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.invalid'));
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) => handler.resolve(
+        Response<dynamic>(
+          requestOptions: options,
+          data: <String, dynamic>{
+            'current_page': 1,
+            'last_page': 1,
+            'data': <Map<String, dynamic>>[
+              {'id': 701, 'unique_code': 'ONE', 'subscriber_id': 71, 'status': 'active'},
+            ],
+          },
+        ),
+      ),
+    ));
+    final repo = MetersRepositoryImpl(dio: dio, database: db);
+    expect((await repo.getMeters(query: 'ONE')).map((m) => m.id), [701]);
+    expect(await db.getCachedMeter(702), isNotNull,
+        reason: 'A partial search result cannot authorize deletion');
+  });
+
+  test('invalid authoritative meter identifiers fail closed', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheMeters([
+      {'id': 703, 'unique_code': 'STAYS', 'subscriber_id': 73, 'status': 'active'},
+    ]);
+    await expectLater(
+      db.cacheMeters([
+        {'id': 'invalid', 'unique_code': 'MALFORMED'},
+      ], fullSnapshot: true),
+      throwsFormatException,
+    );
+    expect(await db.getCachedMeter(703), isNotNull);
+  });
 }
