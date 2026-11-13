@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Meter;
 use App\Models\Subscriber;
 use App\Services\SingleMeterService;
+use App\Services\MeterDataPurger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -161,32 +162,37 @@ class MeterController extends ApiController
         ], 201);
     }
 
-    public function destroy(int $id)
+    public function destroy(int $id, MeterDataPurger $purger)
     {
         $this->authorizeApi(Meter::class, 'delete');
-        $meter = Meter::findOrFail($id);
-        if ($this->hasHistory($meter)) {
-            return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
-        }
-        $meter->forceDelete();
 
-        return response()->json(['message' => 'تم حذف العداد نهائياً.']);
+        return DB::transaction(function () use ($id, $purger) {
+            $meter = Meter::query()->lockForUpdate()->findOrFail($id);
+            if ($this->hasHistory($meter)) {
+                return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
+            }
+            // ForceDelete alone nullifies the meter IDs in fault/route rows;
+            // purge them before the record so no hidden meter history remains.
+            $purger->purge((int) $meter->id);
+
+            return response()->json(['message' => 'تم حذف العداد نهائياً.']);
+        });
     }
 
-    public function bulkDelete(Request $request)
+    public function bulkDelete(Request $request, MeterDataPurger $purger)
     {
         $this->authorizeApi(Meter::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:meters,id']]);
         $deleted = 0;
         $skipped = [];
-        DB::transaction(function () use ($data, &$deleted, &$skipped) {
+        DB::transaction(function () use ($data, &$deleted, &$skipped, $purger) {
             foreach (Meter::whereIn('id', $data['ids'])->lockForUpdate()->get() as $meter) {
                 if ($this->hasHistory($meter)) {
                     $skipped[] = $meter->id;
 
                     continue;
                 }
-                $meter->forceDelete();
+                $purger->purge((int) $meter->id);
                 $deleted++;
             }
         });
