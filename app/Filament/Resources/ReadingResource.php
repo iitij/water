@@ -97,8 +97,21 @@ class ReadingResource extends Resource
                 ->relationship(
                     name: 'meter',
                     modifyQueryUsing: fn(\Illuminate\Database\Eloquent\Builder $query, $get) =>
-                    $get('subscriber_id') ? $query->where('subscriber_id', $get('subscriber_id')) : $query
+                    $get('subscriber_id') ? $query->whereNull('removed_at')->where('subscriber_id', $get('subscriber_id')) : $query->whereNull('removed_at')
                 )
+                ->default(fn () => request()->integer('meter_id') ?: null)
+                ->afterStateHydrated(function ($set, $state, $record) {
+                    if ($record || ! $state) return;
+                    $meter = \App\Models\Meter::query()->whereNull('removed_at')->find($state);
+                    if (! $meter) return;
+                    $set('subscriber_id', $meter->tenant_name
+                        ? "{$meter->subscriber_id}|{$meter->id}"
+                        : (string) $meter->subscriber_id);
+                    $set('previous_reading', $meter->getLastReadingValue());
+                    $period = app(\App\Services\ReadingService::class)->calculateReadingPeriod($meter->id);
+                    $set('period_start', $period['period_start']);
+                    $set('period_end', $period['period_end']);
+                })
                 ->getOptionLabelFromRecordUsing(fn ($record) => $record->tenant_name ? "{$record->unique_code} - {$record->tenant_name}" : $record->unique_code)
                 ->required()
                 ->searchable()
