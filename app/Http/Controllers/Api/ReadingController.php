@@ -27,7 +27,7 @@ class ReadingController extends ApiController
     {
         $this->authorizeApi(Reading::class, 'viewAny');
         $query = Reading::with([
-            'meter:id,unique_code,path_number,subscriber_id,status,tenant_name,tenant_phone',
+            'meter:id,unique_code,path_number,subscriber_id,status',
             'meter.subscriber:id,name,phone,square_id',
             'meter.subscriber.square:id,name,code',
             'invoice:id,bill_number,status,total_amount',
@@ -69,7 +69,6 @@ class ReadingController extends ApiController
                         ->orWhere('period_end', 'like', "%{$search}%")
                         ->orWhereHas('meter', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
-                                ->orWhere('tenant_name', 'like', "%{$search}%")
                                 ->orWhereHas('subscriber', fn ($subscriberQuery) => $subscriberQuery->where('name', 'like', "%{$search}%"));
                             if (ctype_digit($normalized)) {
                                 $meterQuery->orWhere('path_number', (int) $normalized);
@@ -493,7 +492,7 @@ class ReadingController extends ApiController
             'bill_date' => optional($invoice->bill_date)->format('Y-m-d'),
             'total_amount' => round((float) $invoice->total_amount + (float) $invoice->previous_balance - (float) $invoice->credit_applied, 2),
             'subscriber_name' => $invoice->subscriber?->name,
-            'subscriber_phone' => $invoice->meter?->tenant_phone ?: $invoice->subscriber?->phone,
+            'subscriber_phone' => $invoice->subscriber?->phone,
             'meter_code' => $invoice->meter?->unique_code,
             'square' => $invoice->subscriber?->square?->name,
             'pdf_url' => route('api.invoices.pdf', ['id' => $invoice->id]),
