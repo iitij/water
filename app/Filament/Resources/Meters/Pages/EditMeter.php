@@ -25,7 +25,7 @@ class EditMeter extends EditRecord
                 ->visible(fn (): bool => $this->record?->isCurrent() === true)
                 ->modalHeading('استبدال العداد الحالي')
                 ->modalDescription('يحتفظ النظام بالعداد القديم وقراءاته وفواتيره وأرصدته، ويمنع الاستبدال عند وجود قراءات غير مفوترة.')
-                ->schema([
+                ->form([
                     \Filament\Forms\Components\TextInput::make('new_unique_code')
                         ->label('رقم العداد الجديد')
                         ->required()
