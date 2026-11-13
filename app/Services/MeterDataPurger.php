@@ -39,6 +39,12 @@ final class MeterDataPurger
             })
             ->pluck('id')->all();
 
+        $affectedCashSessionIds = DB::table('payments')
+            ->whereIn('id', $paymentIds)
+            ->whereNotNull('cash_session_id')
+            ->distinct()
+            ->pluck('cash_session_id')->all();
+
         // Delete dependent ledger entries BEFORE deleting nullable-FK parents:
         // ON DELETE SET NULL would otherwise disguise where the records came
         // from and leave inaccurate subscriber financial balances.
@@ -68,6 +74,28 @@ final class MeterDataPurger
                 $q->where('meter_id', $meterId)->orWhereIn('invoice_id', $invoiceIds);
             })->delete();
         DB::table('payments')->whereIn('id', $paymentIds)->delete();
+
+        // Closed tills cache the expected total and variance; neither may
+        // continue counting receipts that have just been permanently purged.
+        // The counted amount is an independently recorded physical count and
+        // must not be rewritten as though the cashier never counted it.
+        foreach ($affectedCashSessionIds as $cashSessionId) {
+            $session = DB::table('cash_sessions')->where('id', $cashSessionId)->first();
+            if ($session === null || $session->expected_amount === null) {
+                continue; // Open tills calculate the expectation dynamically.
+            }
+            $expected = round((float) DB::table('payments')
+                ->where('cash_session_id', $cashSessionId)
+                ->whereNull('deleted_at')
+                ->whereNull('voided_at')
+                ->sum('amount'), 2);
+            DB::table('cash_sessions')->where('id', $cashSessionId)->update([
+                'expected_amount' => $expected,
+                'variance_amount' => $session->counted_amount === null
+                    ? null : round((float) $session->counted_amount - $expected, 2),
+            ]);
+        }
+
         // invoice_items are removed by ON DELETE CASCADE.
         DB::table('invoices')->whereIn('id', $invoiceIds)->delete();
 
