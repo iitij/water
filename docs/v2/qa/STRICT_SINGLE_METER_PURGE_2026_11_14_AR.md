@@ -21,7 +21,7 @@
 5. تحقّق من عدم وجود `COUNT(*) > 1` لكل مشترك، وعدم وجود `removed_at` أو `deleted_at` غير فارغ.
 6. فعِّل `UNIQUE(subscriber_id)` على مستوى قاعدة البيانات.
 
-**ملفات التنفيذ:** `database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php`، و`app/Services/MeterDataPurger.php`، و`app/Services/SingleMeterService.php`.
+**ملفات التنفيذ:** `database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php` (التعامل مع قواعد لم تطبّق الترحيل القديم ولديها أكثر من عداد حالي)، و`database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php` (الحذف النهائي والتفرد الفيزيائي)، و`app/Services/MeterDataPurger.php`، و`app/Services/SingleMeterService.php`.
 
 ## ما الذي يُحذف مع العداد السابق؟
 
@@ -40,8 +40,8 @@
 
 | المجال | ما ثبت |
 | --- | --- |
-| <https://github.com/5krm/water/actions/runs/43527421900> | Laravel كامل: **2818 assertion**، و136 تحذيراً؛ لا اختبارات فاشلة |
-| <https://github.com/5krm/water/actions/runs/43527421899> | MySQL 8: رفض التعدد مع SoftDelete، وتجربة ترحيل سجل تاريخي وفاتورة وسند متصلين |
+| <https://github.com/5krm/water/actions/runs/43528069732> | Laravel كامل: **2818 assertion**، و136 تحذيراً؛ لا اختبارات فاشلة |
+| <https://github.com/5krm/water/actions/runs/43528069771> | MySQL 8: رفض التعدد مع SoftDelete، وتجربة ترحيل سجل تاريخي وفاتورة وسند متصلين، وترقية قاعدة أقدم بها عدادان حاليان |
 | <https://github.com/5krm/water/actions/runs/43526262464> | Flutter: **752 PASS**، و27 SKIP، وتحليل ثابت ناجح |
 
 تتضمن اختبارات `StrictSingleMeterPurgeTest.php` إثبات عدم ضياع بيانات مشترك آخر أو القيود العامة، مع حذف بيانات العداد السابق. هذه اختبارات قاعدة عابرة وتكامل محاكي **وليست تشغيل ترحيل على قاعدة الجهاز أو الخادم**.
@@ -51,7 +51,7 @@
 - **لم أُشغّل الحذف على قاعدة بيانات خادم المستخدم.** التعديلات محفوظة في الشيفرة على GitHub وتُطبَّق على قاعدة بيانات معينة فقط عندما يتولى المشرف نشر الإصدار وتشغيل الترحيل.
 - ترحيل `up()` مدمّر وغير قابل للاسترجاع بواسطة `down()`. يجب فحص البيئة المستهدفة؛ لا تشغّل `migrate:fresh` على بيئة بيانات تريد الاحتفاظ بها.
 - عند التنفيذ على قاعدة اختبار: تحقق من `APP_ENV` و`DB_DATABASE`، افحص `php artisan migrate:status`، نفّذ `php artisan migrate --force` ثم `php artisan water:audit-single-meter`، وافحص نتائج القراءة والفاتورة والبحث.
-- اختبارات أجهزة Android وWindows وطباعة الفواتير وسلوك الشبكة الفعلية لا تزال في <https://github.com/5krm/water/issues/37>. خطة الحالات الحالية: [SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md](SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md).
+- تطبيق الترحيل والتحقق من بيانات قاعدة اختبار فعلية يتابَع في <https://github.com/5krm/water/issues/39>. لم يُطبّق على قاعدة خادم المستخدم. اختبارات أجهزة Android وWindows وطباعة الفواتير وسلوك الشبكة الفعلية لا تزال في <https://github.com/5krm/water/issues/37>. خطة الحالات الحالية: [SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md](SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md).
 - المستندات التي تصف «الاحتفاظ بالعداد التاريخي» هي أدلة **لسياسة سابقة مُلغاة** وليست مواصفة نافذة.
 
 **معيار القبول:** لا أكثر من عداد فعلي للمشترك، بلا صف تاريخي في قاعدة البيانات؛ حذف كل بيانات العداد المخالف فقط دون تدمير بيانات المشترك العامة أو المشتركين الآخرين؛ لا مزامنة صامتة لعداد محذوف؛ نجاح جميع اختبارات CI والقبول الميداني.
