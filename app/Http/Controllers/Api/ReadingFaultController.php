@@ -36,7 +36,7 @@ class ReadingFaultController extends ApiController
 
         $query = ReadingFault::query()
             ->with([
-                'meter:id,unique_code,path_number,tenant_name,subscriber_id',
+                'meter:id,unique_code,path_number,subscriber_id',
                 'subscriber:id,name,phone',
                 'square:id,name,code',
                 'user:id,name',
