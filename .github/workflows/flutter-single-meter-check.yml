@@ -16,6 +16,7 @@ on:
       - "mobile app/lib/features/meters/presentation/pages/meter_replacement_dialog.dart"
       - "mobile app/lib/features/offline_sync/domain/sync_batch_response_policy.dart"
       - "mobile app/lib/features/offline_sync/services/sync_queue_manager.dart"
+      - "mobile app/lib/features/readings/data/repositories/readings_repository_impl.dart"
       - "mobile app/test/features/offline_sync/sync_batch_response_policy_test.dart"
       - "mobile app/test/features/meters/meter_replacement_dialog_test.dart"
       - "mobile app/test/features/meters/offline_current_meter_test.dart"
@@ -47,7 +48,7 @@ jobs:
         run: flutter pub get
       - name: Analyze changed Flutter modules
         run: |
-          dart analyze lib/core/l10n/subscriber_experience_strings.dart lib/core/diagnostics/api_log_manager.dart lib/features/offline_sync/domain/sync_batch_response_policy.dart lib/features/offline_sync/services/sync_queue_manager.dart lib/features/meters/data/models/meter.dart lib/features/meters/data/datasources/meters_remote_data_source.dart lib/features/meters/domain/meters_repository.dart lib/features/meters/presentation/pages/meter_replacement_dialog.dart lib/features/meters/data/repositories/meters_repository_impl.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/data/models/subscriber_model.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
+          dart analyze lib/core/l10n/subscriber_experience_strings.dart lib/core/diagnostics/api_log_manager.dart lib/features/readings/data/repositories/readings_repository_impl.dart lib/features/offline_sync/domain/sync_batch_response_policy.dart lib/features/offline_sync/services/sync_queue_manager.dart lib/features/meters/data/models/meter.dart lib/features/meters/data/datasources/meters_remote_data_source.dart lib/features/meters/domain/meters_repository.dart lib/features/meters/presentation/pages/meter_replacement_dialog.dart lib/features/meters/data/repositories/meters_repository_impl.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/data/models/subscriber_model.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
       - name: Single-meter Flutter tests
         run: flutter test test/features/meters/offline_current_meter_test.dart test/features/meters/meter_replacement_dialog_test.dart test/features/meters/data/models/meter_test.dart test/features/subscribers/subscriber_list_options_test.dart test/features/offline_sync/sync_batch_response_policy_test.dart test/features/offline_sync/sync_failure_planner_test.dart
       - name: Set up PHP for Laravel translation fixtures
