@@ -1749,10 +1749,10 @@
  "task": "إلغاء مفهوم العدادات التاريخية نهائياً: الاحتفاظ بحد أقصى بسجل عداد واحد لكل مشترك، حذف العدادات المخالفة وقراءاتها وفواتيرها وسنداتها وقيودها المرتبطة، وتعزيز قيد MySQL ومسار الاستبدال وواجهة Flutter",
  "files": "app/Services/MeterDataPurger.php; app/Services/SingleMeterService.php; database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php; database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php; tests/Feature/StrictSingleMeterPurgeTest.php; tests/scripts/mysql_single_meter_smoke.php; docs/v2/qa/STRICT_SINGLE_METER_PURGE_2026_11_14_AR.md",
  "status": "done",
- "verification_status": "laravel_full_ci_2818_assertions_mysql_legacy_migrations_and_flutter_passed",
+ "verification_status": "full_laravel_2819_assertions_mysql8_upgrade_backfill_flutter_754_pass_27_skip",
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/39",
- "evidence": "تم استبدال قيد العداد الحالي بتفرد سجل فعلي واحد، وإزالة السجلات القديمة وبياناتها في الترحيل، وإلغاء أرشفتها من API/Flutter/Filament. Laravel 2818 تحققاً و136 تحذيراً بلا فشل: https://github.com/5krm/water/actions/runs/43528295241 ؛ MySQL 8 مع تجربة بيانات تاريخية وعدادين حاليين في ترحيل قديم: https://github.com/5krm/water/actions/runs/43528069771 ؛ Flutter 752 PASS / 27 SKIP: https://github.com/5krm/water/actions/runs/43526262464 ؛ Audit UI ناجح https://github.com/5krm/water/actions/runs/43528295275. لم ينفذ الترحيل على قاعدة خادم المستخدم (المهمة #39)، ولم تنفذ اختبارات الأجهزة الفعلية (#37)."
+ "evidence": "تم تنفيذ قاعدة سجل عداد فعلي واحد لكل مشترك بدلاً من الاحتفاظ بسجلات تاريخية؛ تنظيف دائم للعدادات المخالفة وبياناتها، وتحديث المعاملات المالية وأرصدة صناديق المحصلين، وذاكرة Flutter والمزامنة. Laravel 2819 تحققاً و136 تحذيراً بلا فشل: https://github.com/5krm/water/actions/runs/43529984099 ؛ MySQL 8 (بيانات تاريخية وعدادان حاليان وترقيات قديمة): https://github.com/5krm/water/actions/runs/43529984017 ؛ Flutter 754 PASS / 27 SKIP، 29 اختباراً مركزاً، وتحليل المصدر ناجح: https://github.com/5krm/water/actions/runs/43529846347 ؛ Audit UI ناجح: https://github.com/5krm/water/actions/runs/43529846360 . تطبيق الترحيل على قاعدة اختبار ذات اتصال فعلي في #39، وقبول Android/Windows في #37 كلاهما لم يُنفذ بعد."
 }
 ]
 }
