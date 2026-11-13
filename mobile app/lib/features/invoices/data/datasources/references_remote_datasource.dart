@@ -6,7 +6,7 @@ import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
 
 /// مراجع خفيفة تحتاجها نوافذ الإصدار الثلاثية وشاشات التحصيل:
-/// المربعات، المشتركون (مع عداداتهم ورسومهم المعلّقة)، وملخص استحقاق المشترك.
+/// المربعات، المشتركون (مع العداد الحالي والرسوم المعلّقة)، وملخص الاستحقاق.
 ///
 /// ملاحظة ملكية: هذه المسارات يملكها Dev 1/Dev 2/Dev 4، لكنها للقراءة فقط داخل
 /// وحدة Dev 3، وتُستخدم بأشكال مرنة (tolerant parsing) حتى لا ننكسر مع اختلاف
@@ -56,7 +56,8 @@ class MeterOption {
   /// وحدات غير مفوترة (من `GET /api/meters/{id}/pending` عند توفره — Dev 2).
   final double uninvoicedUnits;
 
-  bool get hasTenant => (tenantName?.trim().isNotEmpty ?? false);
+  // Legacy tenant fields may still arrive from older API/cache snapshots.
+  // They never affect current-meter selection or subscriber identity.
 
   /// رصيد دائن متاح على دفتر العداد (يُخصم من الفاتورة القادمة كما في
   /// `InvoiceService::generateInvoice` سطر 96-104).
@@ -66,7 +67,6 @@ class MeterOption {
   String get label {
     final buffer = StringBuffer(uniqueCode.isEmpty ? '#$id' : uniqueCode);
     if (pathNumber != null) buffer.write(' / مسار $pathNumber');
-    if (hasTenant) buffer.write(' — المستأجر: ${tenantName!.trim()}');
     return buffer.toString();
   }
 
@@ -143,7 +143,11 @@ class SubscriberOption {
           : JsonUtils.asStringOrNull(square['name']),
       status: JsonUtils.asStringOrNull(json['status']),
       balance: JsonUtils.asDouble(json['balance']),
-      meters: JsonUtils.asMapList(json['meters']).map(MeterOption.fromJson).toList(),
+      meters: JsonUtils.asMapList(json['meters'])
+          .where((row) => row['removed_at'] == null && row['deleted_at'] == null)
+          .map(MeterOption.fromJson)
+          .take(1)
+          .toList(),
       uninvoicedSubscriptionFee: JsonUtils.asDouble(
         json['uninvoiced_subscription_fee'] ?? json['subscription_fee_uninvoiced'],
       ),
