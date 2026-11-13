@@ -13,7 +13,6 @@ class DashboardInvoice extends Equatable {
     required this.status,
     this.subscriberId,
     this.meterId,
-    this.tenantName,
     this.subscriberPhone,
     this.trueRemainingAmount,
   });
@@ -23,7 +22,6 @@ class DashboardInvoice extends Equatable {
   final int? subscriberId;
   final int? meterId;
   final String subscriberName;
-  final String? tenantName;
   final String? subscriberPhone;
   final DateTime? billDate;
   final double totalAmount;
@@ -57,7 +55,6 @@ class DashboardInvoice extends Equatable {
     subscriberId,
     meterId,
     subscriberName,
-    tenantName,
     subscriberPhone,
     billDate,
     totalAmount,
