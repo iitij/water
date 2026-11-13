@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php"
+      - "database/migrations/**"
       - "tests/scripts/mysql_single_meter_smoke.php"
       - ".github/workflows/mysql-single-meter-check.yml"
   workflow_dispatch:
