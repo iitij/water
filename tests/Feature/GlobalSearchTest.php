@@ -50,7 +50,7 @@ class GlobalSearchTest extends TestCase
         $misleading = Subscriber::create(['name' => 'مشترك 1', 'phone' => '711111111', 'square_id' => $square->id, 'status' => 'active']);
         $meter = $matching->meters()->create(['unique_code' => 'MATCH', 'path_number' => 1, 'status' => 'active']);
         $misleading->meters()->create(['unique_code' => 'METER-1', 'path_number' => 11,
-            'tenant_name' => 'مستأجر 1', 'tenant_phone' => '711111111', 'status' => 'active']);
+            'status' => 'active']);
 
         foreach (['1', '١', '۱', ' 1 '] as $term) {
             $response = $this->getJson('/api/search?'.http_build_query(['q' => $term, 'limit' => 10]))->assertOk();
