@@ -7,6 +7,38 @@ import 'package:water_project/features/readings/data/repositories/readings_repos
 import 'package:water_project/features/readings/data/models/reading.dart';
 
 void main() {
+  test('cached subscriber count ignores historical and stale multi-meter data', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    await db.cacheSubscribers([
+      {
+        'id': 101,
+        'name': 'مشترك ذو عداد مستبدل',
+        'meters': [
+          {'id': 4, 'removed_at': '2026-09-01'},
+          {'id': 5, 'removed_at': null},
+        ],
+      },
+      {
+        'id': 102,
+        'name': 'مشترك ينتظر عداداً جديداً',
+        'meters': [
+          {'id': 6, 'removed_at': '2026-08-01'},
+        ],
+      },
+      {
+        'id': 103,
+        'name': 'عدّاد واحد مع عداد تاريخي',
+        'meters_count': 3,
+      },
+    ]);
+    final cached = await db.getCachedSubscribers();
+    final byId = {for (final row in cached) row['server_id']: row};
+    expect(byId[101]?['meters_count'], 1);
+    expect(byId[102]?['meters_count'], 0);
+    expect(byId[103]?['meters_count'], 1);
+  });
+
   test('offline meter list excludes retired assignment and keeps new current meter', () async {
     final db = AppDatabase.inMemory();
     addTearDown(db.close);
