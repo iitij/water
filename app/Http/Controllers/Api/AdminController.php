@@ -206,14 +206,14 @@ class AdminController extends ApiController
 
     private function latestInvoiceData()
     {
-        return Invoice::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'meter:id,unique_code,path_number,tenant_name'])
+        return Invoice::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'meter:id,unique_code,path_number'])
             ->latest('bill_date')->latest('id')->limit(5)->get()
             ->map(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
     }
 
     private function overdueInvoiceData()
     {
-        return Invoice::with(['subscriber:id,name,phone,square_id', 'meter:id,unique_code,path_number,tenant_name'])
+        return Invoice::with(['subscriber:id,name,phone,square_id', 'meter:id,unique_code,path_number'])
             ->where('status', 'overdue')->orderBy('bill_date')->orderBy('id')
             ->limit(20)->get()->map(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
     }
