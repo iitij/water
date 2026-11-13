@@ -156,7 +156,7 @@ void main() {
       expect(message, contains('صالح'));
     });
 
-    test('هاتف المستأجر له الأولوية على هاتف المشترك', () {
+    test('يرسل إشعار الفاتورة إلى هاتف واسم المشترك حصراً', () {
       final invoice = const InvoiceModel(
         id: 10,
         subscriberId: 3,
@@ -166,13 +166,12 @@ void main() {
         meter: InvoiceMeterRef(
           id: 5,
           uniqueCode: 'M-5',
-          tenantName: 'مستأجر',
-          tenantPhone: '0771111111',
         ),
       );
 
-      expect(invoice.messageRecipientPhone, '0771111111');
-      expect(invoice.beneficiaryName, contains('مستأجر'));
+      expect(invoice.messageRecipientPhone, '0700000000');
+      expect(invoice.beneficiaryName, 'صالح');
+      expect(invoice.messageRecipientName, 'صالح');
     });
 
     test('قالب الاشتراك والوايت يُنتقيان حسب نوع الفاتورة', () {
