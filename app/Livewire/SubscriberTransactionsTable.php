@@ -69,7 +69,7 @@ class SubscriberTransactionsTable extends Component implements HasForms, HasTabl
                         if (!$this->record) return [];
                         $options = ['general' => 'الحساب العام'];
                         foreach ($this->record->meters as $meter) {
-                            $options[$meter->id] = 'عداد رقم: ' . $meter->id . ($meter->tenant_name ? ' - ' . $meter->tenant_name : '');
+                            $options[$meter->id] = 'عداد رقم: ' . $meter->id . ' (' . $meter->unique_code . ')';
                         }
                         return $options;
                     })
