@@ -20,8 +20,6 @@ class Meter extends Model
         'installed_at',
         'removed_at',
         'initial_reading',
-        'tenant_name',
-        'tenant_phone',
     ];
 
     protected $casts = [
