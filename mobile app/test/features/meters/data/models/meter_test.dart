@@ -16,6 +16,7 @@ void main() {
       });
       expect(subscriber.currentMeterId, 19);
       expect(subscriber.hasCurrentMeter, isTrue);
+      expect(subscriber.meterCount, 1);
     });
 
     test('derives the current meter from raw detail without picking old one', () {
@@ -28,6 +29,7 @@ void main() {
         ],
       });
       expect(subscriber.currentMeterId, 25);
+      expect(subscriber.meterCount, 1);
     });
 
     test('does not confuse retired-only history for current assignment', () {
@@ -41,6 +43,7 @@ void main() {
       });
       expect(subscriber.hasCurrentMeter, isFalse);
       expect(subscriber.currentMeterId, isNull);
+      expect(subscriber.meterCount, 0);
     });
   });
 
@@ -68,7 +71,7 @@ void main() {
   });
 
   group('Meter.fromJson', () {
-    test('reads meter, square, tenant, balance, and related last reading', () {
+    test('reads meter, square, subscriber, balance, and related last reading', () {
       final meter = Meter.fromJson({
         'id': 17,
         'unique_code': 'WM-17',
