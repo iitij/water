@@ -23,7 +23,7 @@ class PaymentController extends ApiController
         $this->authorizeApi(Payment::class, 'viewAny');
         $query = Payment::with([
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
-            'meter:id,unique_code,path_number,tenant_name,tenant_phone',
+            'meter:id,unique_code,path_number',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
         ])->latest('payment_date')->latest('id');
 
@@ -58,8 +58,7 @@ class PaymentController extends ApiController
                     ->orWhere('reference_number', 'like', "%{$search}%")
                     ->orWhereHas('subscriber', fn ($q) => $q->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%"))
-                    ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%")
-                        ->orWhere('tenant_name', 'like', "%{$search}%"));
+                    ->orWhereHas('meter', fn ($q) => $q->where('unique_code', 'like', "%{$search}%"));
             });
         }
 
@@ -310,7 +309,7 @@ class PaymentController extends ApiController
         $payment = Payment::with(['subscriber', 'meter', 'invoice'])->findOrFail($id);
         $url = $whatsAppService->getPaymentMessageUrl($payment);
         if (! $url) {
-            return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.'], 422);
+            return response()->json(['message' => 'لا يوجد رقم هاتف صالح للمشترك.'], 422);
         }
         parse_str(parse_url($url, PHP_URL_QUERY) ?? '', $query);
 
@@ -376,8 +375,8 @@ class PaymentController extends ApiController
             'payment_method' => $payment->payment_method,
             'reference_number' => $payment->reference_number,
             'reason' => $payment->reason,
-            'subscriber_name' => $payment->meter?->tenant_name ?: $subscriber->name,
-            'subscriber_phone' => $payment->meter?->tenant_phone ?: $subscriber->phone,
+            'subscriber_name' => $subscriber->name,
+            'subscriber_phone' => $subscriber->phone,
             'square' => $subscriber->square?->name,
             'meter' => $payment->meter?->unique_code,
             'invoice_number' => $payment->invoice?->bill_number,
