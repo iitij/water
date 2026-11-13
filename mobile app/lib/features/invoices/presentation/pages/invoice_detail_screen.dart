@@ -288,13 +288,6 @@ class _HeaderCard extends StatelessWidget {
                 value: invoice.meter?.label ?? 'بدون عداد',
                 ltr: true,
               ),
-              if (invoice.meter?.tenantPhone != null)
-                AppField(
-                  icon: Icons.phone_outlined,
-                  label: 'هاتف المستأجر',
-                  value: invoice.meter!.tenantPhone!,
-                  ltr: true,
-                ),
             ],
           ),
         ],
