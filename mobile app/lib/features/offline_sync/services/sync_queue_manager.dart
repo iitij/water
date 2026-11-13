@@ -216,7 +216,10 @@ class SyncQueueManager extends ChangeNotifier {
 
   Future<void> retry(String id) async {
     final index = _items.indexWhere((item) => item.id == id);
-    if (index < 0) return;
+    if (index < 0 ||
+        !canSyncForUser(_items[index], _session.user?['id']?.toString())) {
+      return;
+    }
     final updated = _items[index].copyWith(
       status: SyncQueueStatus.queued,
       clearError: true,
@@ -232,8 +235,9 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> retryFailed() async {
     final updatedItems = <SyncQueueItem>[];
     for (var i = 0; i < _items.length; i++) {
-      if (_items[i].status == SyncQueueStatus.failed ||
-          _items[i].status == SyncQueueStatus.needsAttention) {
+      if (canSyncForUser(_items[i], _session.user?['id']?.toString()) &&
+          (_items[i].status == SyncQueueStatus.failed ||
+              _items[i].status == SyncQueueStatus.needsAttention)) {
         final reset = _items[i].copyWith(
           status: SyncQueueStatus.queued,
           clearError: true,
