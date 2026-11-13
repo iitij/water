@@ -45,9 +45,10 @@ final class CurrentMeterReadingGuard
             ]);
         }
 
-        if ($meter->readings()->where('period_start', $start)->where('period_end', $end)->exists()) {
+        if ($meter->readings()->where('period_start', '<=', $end)
+            ->where('period_end', '>=', $start)->exists()) {
             throw ValidationException::withMessages([
-                'period_start' => ['توجد قراءة مسجلة مسبقاً لنفس الفترة.'],
+                'period_start' => ['تتداخل فترة القراءة الجديدة مع فترة سابقة للعداد.'],
             ]);
         }
     }
