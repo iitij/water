@@ -269,7 +269,7 @@ class MetersRepositoryImpl implements MetersRepository {
     final filtered = source.where((meter) {
       // An offline cache can contain the retired record after replacement;
       // only current meters belong to operational reader/billing lists.
-      if (meter.removedAt != null) return false;
+      if (!meter.isCurrent) return false;
       if (squareId != null && meter.squareId != squareId) return false;
       if (status != null && status.isNotEmpty && meter.status != status) return false;
       if (parsed.isCompoundPathSearch) {
