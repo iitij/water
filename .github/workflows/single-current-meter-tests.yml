@@ -25,6 +25,7 @@ on:
       - "app/Services/InvoiceService.php"
       - "database/migrations/*single_meter*"
       - "tests/Feature/SingleCurrentMeterTest.php"
+      - "tests/Feature/SingleMeterFilamentIntegrationTest.php"
       - "tests/Feature/GlobalSearchTest.php"
       - "tests/Feature/ListFiltersParityTest.php"
       - "tests/Feature/SubscriberListMetadataTest.php"
@@ -54,6 +55,7 @@ jobs:
       - name: PHP syntax checks
         run: |
           php -l app/Services/SingleMeterService.php
+          php -l tests/Feature/SingleMeterFilamentIntegrationTest.php
           php -l app/Services/CurrentMeterBillingGuard.php
           php -l app/Services/CurrentMeterReadingGuard.php
           php -l app/Services/InvoiceService.php
