@@ -163,4 +163,39 @@ void main() {
     expect(repo.pending, isEmpty);
     expect(repo.failed, isEmpty);
   });
+
+  test('manual retry never resets a different account\'s rejected action', () async {
+    final session = _Session();
+    final network = _Network();
+    when(() => session.isReady).thenReturn(true);
+    when(() => session.isAuthenticated).thenReturn(true);
+    when(() => session.user).thenReturn(<String, dynamic>{'id': 11});
+    when(() => network.isConnected).thenAnswer((_) async => false);
+
+    final repo = _QueueRepo([
+      _reading(oldId, '10', baseTime)
+          .copyWith(status: SyncQueueStatus.needsAttention, lastError: 'رفض قديم'),
+      _reading(newId, '11', baseTime)
+          .copyWith(status: SyncQueueStatus.failed, lastError: 'اتصال سابق'),
+    ]);
+    final manager = SyncQueueManager(
+      dio: Dio(BaseOptions(baseUrl: 'https://example.invalid')),
+      repository: repo,
+      networkInfo: network,
+      session: session,
+    );
+    addTearDown(manager.dispose);
+    await manager.syncPending();
+
+    await manager.retry(oldId);
+    expect(repo.pending[oldId]!.status, SyncQueueStatus.needsAttention);
+    expect(repo.pending[oldId]!.lastError, 'رفض قديم');
+
+    await manager.retryFailed();
+    expect(repo.pending[oldId]!.status, SyncQueueStatus.needsAttention);
+    expect(repo.pending[oldId]!.lastError, 'رفض قديم');
+    expect(repo.pending[newId]!.status, SyncQueueStatus.queued);
+    expect(repo.pending[newId]!.lastError, isNull);
+    expect(repo.uploaded, isEmpty);
+  });
 }
