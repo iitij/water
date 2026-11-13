@@ -204,4 +204,94 @@ class StrictSingleMeterPurgeTest extends TestCase
         $this->assertDatabaseHas('invoices', ['id' => $invoice, 'meter_id' => $untouched->id]);
         $this->assertDatabaseCount('meters', 2);
     }
+
+    public function test_deleting_old_meter_receipt_reconciles_cash_session_without_touching_other_receipts(): void
+    {
+        $square = Square::create(['name' => 'Cash reconciliation square']);
+        $owner = Subscriber::create(['name' => 'Old owner', 'square_id' => $square->id]);
+        $other = Subscriber::create(['name' => 'Different owner', 'square_id' => $square->id]);
+        $oldMeter = Meter::create(['subscriber_id' => $owner->id, 'unique_code' => 'CASH-OLD']);
+        $otherMeter = Meter::create(['subscriber_id' => $other->id, 'unique_code' => 'CASH-KEEP']);
+        $session = DB::table('cash_sessions')->insertGetId([
+            'user_id' => User::query()->value('id'),
+            'session_date' => now()->toDateString(),
+            'opening_amount' => 0,
+            'expected_amount' => 120,
+            'counted_amount' => 120,
+            'variance_amount' => 0,
+            'state' => 'closed',
+        ]);
+        $oldReceiptId = DB::table('payments')->insertGetId([
+            'subscriber_id' => $owner->id,
+            'meter_id' => $oldMeter->id,
+            'cash_session_id' => $session,
+            'receipt_number' => 'CASH-OLD-REC',
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+            'amount' => 50,
+        ]);
+        $otherReceiptId = DB::table('payments')->insertGetId([
+            'subscriber_id' => $other->id,
+            'meter_id' => $otherMeter->id,
+            'cash_session_id' => $session,
+            'receipt_number' => 'CASH-OTHER-REC',
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+            'amount' => 70,
+        ]);
+
+        $this->postJson('/api/meters/'.$oldMeter->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'حذف العداد القديم مع سند صندوق',
+            'new_meter' => ['unique_code' => 'CASH-NEW'],
+        ])->assertCreated();
+
+        $this->assertDatabaseMissing('payments', ['id' => $oldReceiptId]);
+        $this->assertDatabaseHas('payments', ['id' => $otherReceiptId, 'meter_id' => $otherMeter->id]);
+        $this->assertDatabaseHas('cash_sessions', [
+            'id' => $session,
+            'state' => 'closed',
+            'expected_amount' => 70,
+            'counted_amount' => 120,
+            'variance_amount' => 50,
+        ]);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('meters', 2);
+    }
+
+    public function test_deleting_old_meter_receipt_does_not_invent_cached_totals_for_open_cash_session(): void
+    {
+        $square = Square::create(['name' => 'Open cash square']);
+        $owner = Subscriber::create(['name' => 'Open cash owner', 'square_id' => $square->id]);
+        $old = Meter::create(['subscriber_id' => $owner->id, 'unique_code' => 'OPEN-CASH-OLD']);
+        $session = DB::table('cash_sessions')->insertGetId([
+            'user_id' => User::query()->value('id'),
+            'session_date' => now()->toDateString(),
+            'opening_amount' => 0,
+            'state' => 'open',
+        ]);
+        DB::table('payments')->insert([
+            'subscriber_id' => $owner->id,
+            'meter_id' => $old->id,
+            'cash_session_id' => $session,
+            'receipt_number' => 'OPEN-CASH-REC',
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+            'amount' => 25,
+        ]);
+
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'اختبار صندوق مفتوح',
+            'new_meter' => ['unique_code' => 'OPEN-CASH-NEW'],
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('cash_sessions', [
+            'id' => $session,
+            'state' => 'open',
+            'expected_amount' => null,
+            'variance_amount' => null,
+        ]);
+        $this->assertDatabaseCount('payments', 0);
+    }
 }
