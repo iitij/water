@@ -38,7 +38,7 @@ class InvoiceController extends ApiController
         $query->with([
             'subscriber:id,name,phone,square_id',
             'subscriber.square:id,name,code',
-            'meter:id,unique_code,path_number,tenant_name,tenant_phone',
+            'meter:id,unique_code,path_number',
         ])->latest('bill_date')->latest('id');
 
         if ($request->filled('status') && $request->query('status') !== 'all') {
