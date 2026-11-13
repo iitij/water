@@ -456,8 +456,6 @@ class FieldReaderMeterCard extends StatelessWidget {
                       ? FieldExperienceStrings.active
                       : FieldExperienceStrings.inactive,
                 ),
-                if (meter.tenantName?.trim().isNotEmpty == true)
-                  Text(FieldExperienceStrings.tenantName(meter.tenantName!)),
                 const SizedBox(height: 16),
                 _FieldMeterFigure(
                   label: FieldExperienceStrings.lastReading,
