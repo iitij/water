@@ -79,7 +79,7 @@ class WhatsAppPayload {
   final String kind;
   final int recordId;
 
-  /// رقم المستلم الخام (هاتف المستأجر له الأولوية — الخطة §7.1/§4.4).
+  /// رقم هاتف المشترك هو رقم المستلم المعتمد.
   final String? phone;
   final String message;
 
