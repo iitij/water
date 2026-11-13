@@ -122,7 +122,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       final readingJson = _asMap(response['reading']) ?? <String, dynamic>{};
       final id = _asInt(readingJson['id'] ?? response['reading_id']);
       if (id == null) {
-        return _queueOfflineSubmission(
+        return await _queueOfflineSubmission(
           localId,
           submission,
           message: 'لم يُرجع الخادم رقم القراءة؛ حُفظ الطلب للمزامنة الآمنة.',
