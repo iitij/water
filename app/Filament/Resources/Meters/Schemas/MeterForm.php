@@ -30,8 +30,7 @@ class MeterForm
                                             $subscriber = \App\Models\Subscriber::find($subscriberId);
                                             if ($subscriber) {
                                                 $query = \App\Models\Meter::where('path_number', $value)
-                                                    ->whereNull('removed_at')
-                                                    ->whereHas('subscriber', function($q) use ($subscriber) {
+                                                                                                        ->whereHas('subscriber', function($q) use ($subscriber) {
                                                         $q->where('square_id', $subscriber->square_id);
                                                     });
                                                 if ($record) {
@@ -48,14 +47,14 @@ class MeterForm
                         Forms\Components\Select::make('subscriber_id')
                             ->label('المشترك')
                             ->relationship('subscriber', 'name')
-                            ->helperText('يمكن ربط عداد حالي واحد فقط بكل مشترك. العدادات السابقة تبقى في السجل التاريخي.')
+                            ->helperText('يمكن ربط عداد واحد فقط بكل مشترك؛ لا تُحفظ عدادات تاريخية.')
                             ->rules([
                                 fn ($get, ?\Illuminate\Database\Eloquent\Model $record) =>
                                     function (string $attribute, $value, \Closure $fail) use ($record): void {
                                         if (! $value) {
                                             return;
                                         }
-                                        $existing = \App\Models\Meter::query()
+                                        $existing = \App\Models\Meter::withTrashed()
                                             ->where('subscriber_id', (int) $value)
                                             ->whereNull('removed_at')
                                             ->when($record, fn ($q) => $q->where('id', '!=', $record->id))
