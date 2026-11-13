@@ -721,6 +721,9 @@ class SyncQueueManager extends ChangeNotifier {
   }
 
   void _handleSessionChanged() {
+    // Queue views must refresh immediately when the active account changes,
+    // including when offline (when no sync attempt will fire a notification).
+    notifyListeners();
     if (_session.isReady &&
         _session.isAuthenticated &&
         _isOnline == true &&
