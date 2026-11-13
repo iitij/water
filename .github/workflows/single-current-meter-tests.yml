@@ -6,6 +6,8 @@ on:
     paths:
       - "app/Filament/Resources/Meters/**"
       - "app/Filament/Resources/ReadingResource.php"
+      - "app/Http/Controllers/Api/InvoiceController.php"
+      - "routes/api.php"
       - "app/Filament/Resources/ReadingResource/Pages/CreateReading.php"
       - "app/Filament/Resources/SubscriberResource/RelationManagers/MetersRelationManager.php"
       - "app/Models/Meter.php"
