@@ -67,7 +67,7 @@
 ## 4. التغطية الآلية وحدودها
 
 - اختبارات PHP/Flutter/MySQL السابقة مثبتة في [تقرير #38](SINGLE_METER_UI_CLEANUP_ACCEPTANCE_2026_11_14_AR.md). بقيت 27 حالة Flutter متجاوزة؛ ليست اختبارات ناجحة.
-- أُضيف اختبار Laravel `tests/Feature/SingleMeterOfflineReplacementRaceTest.php` يحاكي تعارض جهازين، ورفض القراءة القديمة في دفعة مختلطة، والتكرار بنفس `sync_uuid`. **لا تُكتب نتيجة النجاح إلا بعد ظهور تشغيل GitHub Actions ناجح لهذا Commit.**
+- أُضيف اختبار Laravel `tests/Feature/SingleMeterOfflineReplacementRaceTest.php` يحاكي تعارض جهازين، ورفض القراءة القديمة في دفعة مختلطة، والتكرار بنفس `sync_uuid`. **نجح تشغيل [GitHub Actions #43519871654](https://github.com/5krm/water/actions/runs/43519871654)** على Commit `87852951818ecdf7d92bd46b587842f718e05f09`: شُغّل الاختبار الجديد ضمن مجموعة Laravel الكاملة، وأكملت المهمة جميع خطواتها بنجاح. سجلت المجموعة **2795 تحققاً و133 تحذيراً**؛ هذه التحذيرات لا تعني فشل الاختبار ولكنها ليست صفراً من الملاحظات.
 - أمر فحص مركز في بيئة اختبار مناسبة: `php artisan test --filter=SingleMeterOfflineReplacementRaceTest`.
 - الاختبار البرمجي لا يثبت عرض `needsAttention` فعلياً ولا يعمل بديلاً عن الشبكة المتقطعة والطابعة وAndroid وWindows.
 - المرجع العام للتجربة الطويلة: [FIELD_TEST_PLAN_AR.md](FIELD_TEST_PLAN_AR.md)، ولمصفوفة أنواع الأجهزة: [DEVICE_MATRIX_AR.md](DEVICE_MATRIX_AR.md)، وللعيوب: [DEFECT_LOG_AR.md](DEFECT_LOG_AR.md).
