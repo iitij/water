@@ -214,11 +214,11 @@ class SubscriberOption {
       subscriptionStartDate: _asDate(json['subscription_start_date']),
       // The legacy API count may include historical replacements. The
       // operational subscriber badge is binary: zero or one current meter.
-      meterCount: (meters is List ||
-              json.containsKey('current_meter') ||
-              json.containsKey('current_meter_id'))
-          ? (currentMeter == null ? 0 : 1)
-          : ((_asInt(json['meters_count']) ?? 0) > 0 ? 1 : 0),
+      meterCount: json.containsKey('current_meter_id')
+          ? (_asInt(json['current_meter_id']) == null ? 0 : 1)
+          : (meters is List || json.containsKey('current_meter'))
+              ? (currentMeter == null ? 0 : 1)
+              : ((_asInt(json['meters_count']) ?? 0) > 0 ? 1 : 0),
       currentMeterId: _asInt(json['current_meter_id']) ??
           _asInt(currentMeter?['id']),
     );
