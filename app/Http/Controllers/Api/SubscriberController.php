@@ -21,7 +21,7 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'viewAny');
         $query = Subscriber::query()
-            ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,tenant_name,tenant_phone,removed_at', 'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at'])
+            ->with(['square:id,name,code', 'meters:id,subscriber_id,unique_code,path_number,status,balance,removed_at', 'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at'])
             ->withCount(['currentMeter as meters_count', 'historicalMeters as historical_meters_count'])
             ->orderBy('name');
 
@@ -37,8 +37,7 @@ class SubscriberController extends ApiController
                         ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhereHas('currentMeter', function ($meterQuery) use ($search, $normalized) {
                             $meterQuery->where('unique_code', 'like', "%{$search}%")
-                                ->orWhere('tenant_name', 'like', "%{$search}%")
-                                ->orWhere('tenant_phone', 'like', "%{$search}%");
+        ;
                             if (ctype_digit($normalized)) {
                                 $meterQuery->orWhere('path_number', (int) $normalized);
                             }
@@ -84,8 +83,8 @@ class SubscriberController extends ApiController
             'square:id,name,code,description',
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
             'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
-            'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number,tenant_name'])->latest('bill_date')->latest('id'),
-            'payments' => fn ($q) => $q->with(['meter:id,unique_code,tenant_name', 'user:id,name'])->latest('payment_date')->latest('id'),
+            'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
+            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name'])->latest('payment_date')->latest('id'),
             'subscriptionFees' => fn ($q) => $q->latest(),
             'serviceRequests' => fn ($q) => $q->latest('service_date'),
             'transactions' => fn ($q) => $q->latest(),
@@ -186,7 +185,7 @@ class SubscriberController extends ApiController
     {
         $this->authorizeApi(Subscriber::class, 'view');
         $subscriber = Subscriber::findOrFail($id);
-        $invoices = $subscriber->invoices()->with('meter:id,unique_code,path_number,tenant_name')->get()->map(function (Invoice $invoice) {
+        $invoices = $subscriber->invoices()->with('meter:id,unique_code,path_number')->get()->map(function (Invoice $invoice) {
             return [
                 'id' => $invoice->id,
                 'type' => 'invoice',
@@ -202,7 +201,7 @@ class SubscriberController extends ApiController
                 'meter' => $invoice->meter,
             ];
         });
-        $payments = $subscriber->payments()->with('meter:id,unique_code,path_number,tenant_name')->get()->map(function (Payment $payment) {
+        $payments = $subscriber->payments()->with('meter:id,unique_code,path_number')->get()->map(function (Payment $payment) {
             return [
                 'id' => $payment->id,
                 'type' => 'payment',
@@ -306,7 +305,7 @@ class SubscriberController extends ApiController
         $this->authorizeApi(Subscriber::class, 'view');
         $subscriber = Subscriber::findOrFail($id);
         $invoices = $subscriber->invoices()
-            ->with('meter:id,unique_code,path_number,tenant_name')
+            ->with('meter:id,unique_code,path_number')
             ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
