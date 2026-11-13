@@ -212,8 +212,14 @@ class SubscriberOption {
       phone: _asString(json['phone']),
       status: (json['status'] ?? 'active').toString(),
       subscriptionStartDate: _asDate(json['subscription_start_date']),
-      meterCount: _asInt(json['meters_count']) ??
-          (meters is List ? (currentMeter == null ? 0 : 1) : 0),
+      // The legacy API count may include historical replacements. The
+      // operational subscriber badge is binary: zero or one current meter.
+      meterCount: (() {
+        final count = _asInt(json['meters_count']);
+        return count == null
+            ? (currentMeter == null ? 0 : 1)
+            : (count > 0 ? 1 : 0);
+      })(),
       currentMeterId: _asInt(json['current_meter_id']) ??
           _asInt(currentMeter?['id']),
     );
