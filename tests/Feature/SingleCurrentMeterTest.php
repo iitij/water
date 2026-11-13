@@ -449,6 +449,74 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseCount('readings', 0);
     }
 
+    public function test_first_reading_cannot_be_below_initial_meter_reading(): void
+    {
+        $subscriber = $this->subscriber();
+        $meter = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'INITIAL-100',
+            'initial_reading' => 100,
+        ]);
+
+        $this->assertSame(100.0, $meter->getLastReadingValue());
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'current_reading' => 90,
+            'reading_date' => '2026-11-12',
+        ])->assertUnprocessable()->assertJsonValidationErrors('current_reading');
+
+        $this->assertDatabaseCount('readings', 0);
+    }
+
+    public function test_new_reading_rejects_overlapping_meter_period(): void
+    {
+        $subscriber = $this->subscriber();
+        $meter = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'OVERLAP-READING',
+        ]);
+
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'current_reading' => 12,
+            'reading_date' => '2026-10-31',
+            'period_start' => '2026-10-01',
+            'period_end' => '2026-10-31',
+        ])->assertCreated();
+
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'current_reading' => 20,
+            'reading_date' => '2026-11-15',
+            'period_start' => '2026-10-15',
+            'period_end' => '2026-11-15',
+        ])->assertUnprocessable()->assertJsonValidationErrors('period_start');
+
+        $this->assertDatabaseCount('readings', 1);
+    }
+
+    public function test_filament_new_reading_uses_the_same_guard_as_api(): void
+    {
+        $subscriber = $this->subscriber();
+        $meter = Meter::create([
+            'subscriber_id' => $subscriber->id,
+            'unique_code' => 'FILAMENT-READ-RETIRED',
+            'removed_at' => '2026-10-01',
+        ]);
+        $class = new \ReflectionClass(\App\Filament\Resources\ReadingResource\Pages\CreateReading::class);
+        $page = $class->newInstanceWithoutConstructor();
+        $method = $class->getMethod('mutateFormDataBeforeCreate');
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $method->invoke($page, [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-11-12',
+            'current_reading' => 30,
+            'period_start' => '2026-11-01',
+            'period_end' => '2026-11-30',
+        ]);
+    }
+
     public function test_new_reading_on_removed_meter_is_rejected(): void
     {
         $subscriber = $this->subscriber();
