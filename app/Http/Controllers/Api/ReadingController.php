@@ -395,33 +395,20 @@ class ReadingController extends ApiController
             }
         }
 
-        if ($meter->removed_at !== null) {
-            throw ValidationException::withMessages([
-                'meter_id' => ['هذا العداد من السجل التاريخي وقد تم استبداله أو نزعه. اختر العداد الحالي.'],
-            ]);
-        }
-
         $lastReading = $meter->readings()->latest('id')->first();
         $previous = $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading;
         $current = (float) $data['current_reading'];
-        if ($current < $previous) {
-            throw ValidationException::withMessages([
-                'current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة ('.$previous.').'],
-            ]);
-        }
 
         $calculatedPeriod = $this->readingService->calculateReadingPeriod($meter->id);
         $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
         $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
-        if (! $periodStart || ! $periodEnd) {
-            throw ValidationException::withMessages(['period' => ['تعذر حساب فترة القراءة.']]);
-        }
-        if (Carbon::parse($periodEnd)->lt(Carbon::parse($periodStart))) {
-            throw ValidationException::withMessages(['period_end' => ['نهاية فترة القراءة يجب أن تكون بعد بدايتها.']]);
-        }
-        if ($meter->readings()->where('period_start', $periodStart)->where('period_end', $periodEnd)->exists()) {
-            throw ValidationException::withMessages(['period_start' => ['توجد قراءة مسجلة مسبقاً لنفس الفترة.']]);
-        }
+
+        app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
+            $meter,
+            $current,
+            $periodStart,
+            $periodEnd,
+        );
 
         $imagePath = null;
         $imageFile = $batchIndex === null ? $request->file('image') : $request->file("readings.$batchIndex.image");
