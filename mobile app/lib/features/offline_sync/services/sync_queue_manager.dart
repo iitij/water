@@ -50,15 +50,21 @@ class SyncQueueManager extends ChangeNotifier {
   bool? _isOnline;
   Timer? _retryTimer;
 
-  List<SyncQueueItem> get items => List<SyncQueueItem>.unmodifiable(_items);
+  // The local store may contain another user's operations on a shared device.
+  // UI consumers and counters must not reveal those other-account payloads.
+  List<SyncQueueItem> get items => List<SyncQueueItem>.unmodifiable(
+        _items.where(
+          (item) => canSyncForUser(item, _session.user?['id']?.toString()),
+        ),
+      );
   bool get isSyncing => _isSyncing;
   bool? get isOnline => _isOnline;
-  int get pendingCount => _items.length;
+  int get pendingCount => items.length;
   int get failedCount =>
-      _items.where((item) => item.status == SyncQueueStatus.failed).length;
+      items.where((item) => item.status == SyncQueueStatus.failed).length;
 
   /// صفوف تحتاج تدخلاً بشرياً (بيانات مرفوضة أو صلاحية) — لا تُعاد تلقائياً.
-  int get attentionCount => _items
+  int get attentionCount => items
       .where((item) => item.status == SyncQueueStatus.needsAttention)
       .length;
 
@@ -66,7 +72,7 @@ class SyncQueueManager extends ChangeNotifier {
   int get blockedCount => failedCount + attentionCount;
 
   /// عدد العمليات التي تنتظر مهلة إعادة المحاولة التلقائية.
-  int get waitingCount => _items
+  int get waitingCount => items
       .where((item) =>
           item.status == SyncQueueStatus.queued && item.nextAttemptAt != null)
       .length;
@@ -74,7 +80,7 @@ class SyncQueueManager extends ChangeNotifier {
   /// أقرب موعد لمحاولة قادمة، أو `null` إن لم يكن هناك شيء مجدول.
   DateTime? get nextRetryAt {
     DateTime? earliest;
-    for (final item in _items) {
+    for (final item in items) {
       final next = item.nextAttemptAt;
       if (next == null) continue;
       if (earliest == null || next.isBefore(earliest)) earliest = next;
@@ -644,7 +650,7 @@ class SyncQueueManager extends ChangeNotifier {
     _retryTimer?.cancel();
     _retryTimer = null;
     DateTime? earliest;
-    for (final item in _items) {
+    for (final item in items) {
       final next = item.nextAttemptAt;
       if (next == null || !next.isAfter(now)) continue;
       if (earliest == null || next.isBefore(earliest)) earliest = next;
