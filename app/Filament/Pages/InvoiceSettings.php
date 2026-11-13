@@ -77,10 +77,6 @@ class InvoiceSettings extends Page implements HasForms
             'inv_lbl_account_no' => Setting::get('inv_lbl_account_no', 'رقم الحساب'),
 
             // Tenant Row
-            'inv_show_tenant' => Setting::get('inv_show_tenant', '1') == '1',
-            'inv_lbl_tenant' => Setting::get('inv_lbl_tenant', 'المستأجر'),
-            'inv_show_tenant_phone' => Setting::get('inv_show_tenant_phone', '1') == '1',
-            'inv_lbl_tenant_phone' => Setting::get('inv_lbl_tenant_phone', 'هاتف المستأجر'),
 
             // Consumption Table
             'inv_show_prev_read' => Setting::get('inv_show_prev_read', '1') == '1',
@@ -199,8 +195,6 @@ class InvoiceSettings extends Page implements HasForms
                                 $this->buildFieldConfig('العنوان', 'inv_show_address', 'inv_lbl_address'),
                                 $this->buildFieldConfig('رقم الحساب', 'inv_show_account_no', 'inv_lbl_account_no'),
 
-                                $this->buildFieldConfig('المستأجر', 'inv_show_tenant', 'inv_lbl_tenant'),
-                                $this->buildFieldConfig('هاتف المستأجر', 'inv_show_tenant_phone', 'inv_lbl_tenant_phone'),
                             ]),
 
                         Tabs\Tab::make('فاتورة العداد (الاستهلاك والمبالغ)')
