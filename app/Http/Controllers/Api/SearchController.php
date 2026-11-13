@@ -151,8 +151,6 @@ class SearchController extends ApiController
                 $query->where('unique_code', 'like', "%{$term}%")
                     ->orWhereHas('subscriber.square', fn ($square) => $square->where('code', 'like', "%{$term}%"))
                     ->orWhere('path_number', 'like', "%{$term}%")
-                    ->orWhere('tenant_name', 'like', "%{$term}%")
-                    ->orWhere('tenant_phone', 'like', "%{$term}%")
                     ->orWhereHas('subscriber', function ($subscriberQuery) use ($term) {
                         $subscriberQuery->where('name', 'like', "%{$term}%")
                             ->orWhere('phone', 'like', "%{$term}%");
@@ -170,7 +168,6 @@ class SearchController extends ApiController
                     $meter->subscriber?->name,
                     $meter->subscriber?->square?->display_name,
                     $meter->path_number !== null ? 'مسار '.$meter->path_number : null,
-                    $meter->tenant_name,
                 ]),
                 'badge' => $meter->status === 'active' ? 'نشط' : ($meter->status === 'inactive' ? 'موقوف' : $meter->status),
                 'subscriber_id' => $meter->subscriber_id,
