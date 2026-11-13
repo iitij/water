@@ -262,7 +262,6 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       if (q.isEmpty) return true;
       return reading.meterCode?.toLowerCase().contains(q) == true ||
           reading.subscriberName?.toLowerCase().contains(q) == true ||
-          reading.tenantName?.toLowerCase().contains(q) == true ||
           reading.pathNumber?.toString().contains(q) == true;
     }).toList();
     filtered.sort((a, b) => b.readingDate.compareTo(a.readingDate));
