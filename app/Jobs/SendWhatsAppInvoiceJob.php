@@ -33,13 +33,13 @@ class SendWhatsAppInvoiceJob implements ShouldQueue
             return;
         }
 
-        $phone = $this->invoice->meter?->tenant_phone ?? $this->invoice->subscriber->phone;
+        $phone = $this->invoice->subscriber->phone;
         if (empty($phone)) {
             Log::info("WhatsApp Job: No phone number for invoice {$this->invoice->id}");
             return;
         }
 
-        $name = $this->invoice->meter?->tenant_name ?? $this->invoice->subscriber->name;
+        $name = $this->invoice->subscriber->name;
         $amount = number_format($this->invoice->total_amount + $this->invoice->previous_balance, 2) . ' ريال';
         $template = Setting::get('whatsapp_invoice_template', 'new_invoice_template');
 
