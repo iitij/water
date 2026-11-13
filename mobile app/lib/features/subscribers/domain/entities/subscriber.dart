@@ -79,7 +79,6 @@ class MeterBalance extends Equatable {
   const MeterBalance({
     required this.meterId,
     required this.uniqueCode,
-    this.tenantName,
     this.credit = 0,
     this.debit = 0,
     this.readingsCount = 0,
@@ -88,7 +87,6 @@ class MeterBalance extends Equatable {
   });
   final int meterId;
   final String uniqueCode;
-  final String? tenantName;
   final double credit;
   final double debit;
   final int readingsCount;
