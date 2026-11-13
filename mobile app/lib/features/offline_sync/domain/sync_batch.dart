@@ -20,3 +20,13 @@ bool isSyncEligible(SyncQueueItem item, DateTime now) {
 /// `SyncQueueOrder.sortForSync`).
 List<SyncQueueItem> eligibleForSync(List<SyncQueueItem> items, DateTime now) =>
     items.where((item) => isSyncEligible(item, now)).toList(growable: false);
+
+/// Prevent another signed-in account from attempting a locally persisted action.
+/// Legacy unowned rows may be adopted by an authenticated account, but actions
+/// explicitly assigned to a different account must remain untouched until that
+/// owner signs in again.
+bool canSyncForUser(SyncQueueItem item, String? activeUserId) {
+  if (activeUserId == null || activeUserId.isEmpty) return false;
+  final ownerId = item.ownerUserId;
+  return ownerId == null || ownerId.isEmpty || ownerId == activeUserId;
+}
