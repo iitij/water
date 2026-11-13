@@ -132,7 +132,7 @@ Future<void> sendInvoiceWhatsapp(BuildContext context, InvoiceModel invoice) asy
     return;
   }
   if (result.outcome == WhatsAppSendOutcome.noPhone) {
-    AppFeedback.error(context, 'لا يوجد رقم هاتف صالح للمشترك أو المستأجر.');
+    AppFeedback.error(context, 'لا يوجد رقم هاتف صالح للمشترك.');
     return;
   }
   if (result.outcome == WhatsAppSendOutcome.disabled) {
