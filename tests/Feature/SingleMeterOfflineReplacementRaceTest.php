@@ -81,7 +81,8 @@ class SingleMeterOfflineReplacementRaceTest extends TestCase
             'meter_id' => $currentId,
             'sync_uuid' => $newUuid,
         ]);
-        $this->assertSame(1, $subscriber->fresh()->historicalMeters()->count());
+        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+        $this->assertDatabaseCount('meters', 1);
         $this->assertSame($currentId, $subscriber->fresh()->currentMeter->id);
 
         // Replaying the same batch must never create a second reading on the new meter.
