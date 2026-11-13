@@ -14,7 +14,6 @@ class DashboardInvoiceModel extends DashboardInvoice {
     required super.status,
     super.subscriberId,
     super.meterId,
-    super.tenantName,
     super.subscriberPhone,
     super.trueRemainingAmount,
   });
@@ -35,9 +34,6 @@ class DashboardInvoiceModel extends DashboardInvoice {
       subscriberName: adminString(
         json['subscriber_name'] ?? subscriber['name'] ?? json['beneficiary_name'],
         'مشترك غير محدد',
-      ),
-      tenantName: adminNullableString(
-        json['tenant_name'] ?? meter['tenant_name'],
       ),
       subscriberPhone: adminNullableString(
         json['subscriber_phone'] ?? subscriber['phone'],
@@ -63,7 +59,6 @@ class DashboardInvoiceModel extends DashboardInvoice {
         'subscriber_id': subscriberId,
         'meter_id': meterId,
         'subscriber_name': subscriberName,
-        'tenant_name': tenantName,
         'subscriber_phone': subscriberPhone,
         'bill_date': billDate?.toIso8601String(),
         'total_amount': totalAmount,
