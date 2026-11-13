@@ -128,4 +128,30 @@ if (DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1
  ]));
  
  echo "PASS: MySQL one physical meter, irreversible legacy backfill and linked finance cleanup.\n";
+// A database skipping the 2026-11-12 migration might still contain two
+// CURRENT meters. Run the older migration before the final strict migration
+// to prove that the older preflight no longer blocks the owner-requested
+// cleanup or silently reuses an obsolete meter.
+Schema::table('meters', function (Blueprint $table): void {
+    $table->dropUnique('meters_one_per_subscriber');
+});
+$latestId = DB::table('meters')->insertGetId([
+    'unique_code' => 'mysql-meter-new-current',
+    'subscriber_id' => $subscriber,
+]);
+$olderMigration = require dirname(__DIR__, 2).'/database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php';
+$olderMigration->up();
+if (DB::table('meters')->where('id', $new)->exists()
+    || ! DB::table('meters')->where('id', $latestId)->exists()
+    || DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1) {
+    throw new RuntimeException('BUG: earlier migration did not erase duplicate current meter.');
+}
+$migration->up();
+$expectDuplicate(fn () => DB::table('meters')->insert([
+    'unique_code' => 'mysql-meter-final-duplicate',
+    'subscriber_id' => $subscriber,
+]));
+
+echo "PASS: pre-existing duplicate current meters also purge before the legacy migration.\n";
+
 
