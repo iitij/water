@@ -80,8 +80,7 @@ class _ReadingCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           if (presentation.isVisible('subscriber'))
                             Text(
-                              '${reading.subscriberName ?? 'مشترك'}'
-                              '${reading.tenantName == null ? '' : ' · ${reading.tenantName}'}',
+                              reading.subscriberName ?? 'مشترك',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall,
