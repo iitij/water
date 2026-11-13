@@ -388,7 +388,7 @@ Future<void> _afterGenerated(BuildContext context, InvoiceModel invoice) async {
 
 // ─── الحقول المشتركة ───────────────────────────────────────────────────────
 
-/// بحث المشترك/المستأجر الفوري + شارة التحديد.
+/// بحث المشترك الفوري + شارة التحديد.
 class SubscriberSearchField extends StatefulWidget {
   const SubscriberSearchField({super.key});
 
@@ -422,7 +422,7 @@ class _SubscriberSearchFieldState extends State<SubscriberSearchField> {
           children: <Widget>[
             AppTextField(
               controller: _controller,
-              label: 'المشترك / المستأجر',
+              label: 'المشترك',
               hint: 'اكتب للبحث: اسم، هاتف، أو كود عداد',
               onSubmitted: (value) => cubit.searchSubscribers(value),
               suffix: IconButton(
