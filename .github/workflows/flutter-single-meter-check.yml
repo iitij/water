@@ -4,28 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "mobile app/lib/core/l10n/subscriber_experience_strings.dart"
-      - "mobile app/lib/core/diagnostics/api_log_manager.dart"
-      - "mobile app/test/core/l10n/laravel_screen_strings_test.dart"
-      - "mobile app/test/core/diagnostics/api_log_manager_test.dart"
-      - "mobile app/test/ui/water_experience_test.dart"
-      - "mobile app/lib/features/meters/data/models/meter.dart"
-      - "mobile app/lib/features/meters/data/repositories/meters_repository_impl.dart"
-      - "mobile app/lib/features/meters/data/datasources/meters_remote_data_source.dart"
-      - "mobile app/lib/features/meters/domain/meters_repository.dart"
-      - "mobile app/lib/features/meters/presentation/pages/meter_replacement_dialog.dart"
-      - "mobile app/lib/features/offline_sync/domain/sync_batch_response_policy.dart"
-      - "mobile app/lib/features/offline_sync/services/sync_queue_manager.dart"
-      - "mobile app/lib/features/readings/data/repositories/readings_repository_impl.dart"
-      - "mobile app/test/features/offline_sync/sync_batch_response_policy_test.dart"
-      - "mobile app/test/features/meters/meter_replacement_dialog_test.dart"
-      - "mobile app/test/features/meters/offline_current_meter_test.dart"
-
-      - "mobile app/lib/features/subscribers/data/models/subscriber_model.dart"
-      - "mobile app/test/features/meters/data/models/meter_test.dart"
-      - "mobile app/test/features/subscribers/subscriber_list_options_test.dart"
-      - "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart"
-      - "mobile app/lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart"
+      - "mobile app/lib/**"
+      - "mobile app/test/**"
       - ".github/workflows/flutter-single-meter-check.yml"
   workflow_dispatch:
 
@@ -48,7 +28,7 @@ jobs:
         run: flutter pub get
       - name: Analyze changed Flutter modules
         run: |
-          dart analyze lib/core/l10n/subscriber_experience_strings.dart lib/core/diagnostics/api_log_manager.dart lib/features/readings/data/repositories/readings_repository_impl.dart lib/features/offline_sync/domain/sync_batch_response_policy.dart lib/features/offline_sync/services/sync_queue_manager.dart lib/features/meters/data/models/meter.dart lib/features/meters/data/datasources/meters_remote_data_source.dart lib/features/meters/domain/meters_repository.dart lib/features/meters/presentation/pages/meter_replacement_dialog.dart lib/features/meters/data/repositories/meters_repository_impl.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/data/models/subscriber_model.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
+          dart analyze lib/core/l10n/field_experience_strings.dart lib/features/meters/presentation/pages/meters_list_screen.dart lib/features/meters/presentation/widgets/meter_card_widget.dart lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart lib/features/subscribers/domain/entities/subscriber.dart lib/features/invoices/presentation/sheets/generate_invoice_sheets.dart lib/features/invoices/presentation/pages/invoice_create_edit_screen.dart lib/features/invoices/data/datasources/references_remote_datasource.dart lib/features/invoices/data/models/invoice_model.dart lib/features/payments/data/models/payment_model.dart lib/features/payments/presentation/pages/payment_form_screen.dart lib/features/readings/presentation/pages/field_reader_screen.dart lib/features/invoices/presentation/whatsapp/invoice_whatsapp_builder.dart lib/features/payments/presentation/whatsapp/payment_whatsapp_builder.dart lib/core/l10n/subscriber_experience_strings.dart lib/core/diagnostics/api_log_manager.dart lib/features/readings/data/repositories/readings_repository_impl.dart lib/features/offline_sync/domain/sync_batch_response_policy.dart lib/features/offline_sync/services/sync_queue_manager.dart lib/features/meters/data/models/meter.dart lib/features/meters/data/datasources/meters_remote_data_source.dart lib/features/meters/domain/meters_repository.dart lib/features/meters/presentation/pages/meter_replacement_dialog.dart lib/features/meters/data/repositories/meters_repository_impl.dart lib/features/meters/presentation/pages/meter_form_screen.dart lib/features/subscribers/data/models/subscriber_model.dart lib/features/subscribers/presentation/pages/subscriber_360_screen.dart
       - name: Single-meter Flutter tests
         run: flutter test test/features/meters/offline_current_meter_test.dart test/features/meters/meter_replacement_dialog_test.dart test/features/meters/data/models/meter_test.dart test/features/subscribers/subscriber_list_options_test.dart test/features/offline_sync/sync_batch_response_policy_test.dart test/features/offline_sync/sync_failure_planner_test.dart
       - name: Set up PHP for Laravel translation fixtures
