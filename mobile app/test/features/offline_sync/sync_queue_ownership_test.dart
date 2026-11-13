@@ -88,11 +88,11 @@ SyncQueueItem _reading(String id, String? owner, DateTime createdAt) =>
 void main() {
   const oldId = '9ca12035-39c0-4772-b3f1-a6a664981001';
   const newId = '9ca12035-39c0-4772-b3f1-a6a664981002';
-  final when = DateTime.utc(2026, 11, 14, 8);
+  final baseTime = DateTime.utc(2026, 11, 14, 8);
 
   test('owned operations are eligible only for the authenticated owner', () {
-    final old = _reading(oldId, '10', when);
-    final legacy = _reading(newId, null, when);
+    final old = _reading(oldId, '10', baseTime);
+    final legacy = _reading(newId, null, baseTime);
 
     expect(canSyncForUser(old, '11'), isFalse);
     expect(canSyncForUser(old, '10'), isTrue);
@@ -100,7 +100,7 @@ void main() {
     expect(canSyncForUser(old, ''), isFalse);
     expect(canSyncForUser(legacy, '11'), isTrue);
     expect(canSyncForUser(legacy, null), isFalse);
-    expect(eligibleForSync([old, legacy], when).length, 2,
+    expect(eligibleForSync([old, legacy], baseTime).length, 2,
         reason: 'ownership must be enforced by the manager');
   });
 
@@ -113,8 +113,8 @@ void main() {
     when(() => network.isConnected).thenAnswer((_) async => true);
 
     final repo = _QueueRepo([
-      _reading(oldId, '10', when),
-      _reading(newId, '11', when.add(const Duration(seconds: 1))),
+      _reading(oldId, '10', baseTime),
+      _reading(newId, '11', baseTime.add(const Duration(seconds: 1))),
     ]);
     final dio = Dio(BaseOptions(baseUrl: 'https://example.invalid'));
     final sentUuids = <String>[];
