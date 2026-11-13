@@ -2,7 +2,7 @@
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
   "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-11-12",
+  "updated_at": "2026-11-14",
   "preproduction_deferred_audit": {
    "report": "docs/v2/qa/PREPRODUCTION_AUDIT_2026-11-12_AR.md",
    "decision_date": "2026-11-12",
@@ -13,7 +13,7 @@
    "note": "These are additional release-gate repair items; existing historical done/partial/todo statuses are unchanged. Existing controls do not count as fixes."
   },
   "ux_revert": "بطلب المستخدم ألغيت دفعة UX-01 إلى UX-05 واستعيدت ملفاتها من 7feff2f؛ حُفظت أعمال UX-SIMPLIFY وإصلاح Dashboard المستقلة. flutter test --no-pub --concurrency=1: 468 PASS؛ flutter analyze --no-pub: No issues found!؛ السجلان mobile app/build/ux-revert-tests.log وux-revert-analyze.log.",
-  "branch": "arena/9da3be61-water",
+  "branch": "main",
   "status_values": [
    "todo",
    "doing",
@@ -1729,6 +1729,18 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/30",
  "evidence": "ملاحظة من مراجعة الشيفرة فقط؛ لم تُجر اختبارات قبول أو إصلاحات. التقرير: docs/v2/qa/PREPRODUCTION_AUDIT_2026-11-12_AR.md. لا ينفذ أثناء مرحلة التطوير الحالية؛ يفتح عند بوابة ما قبل الإنتاج."
+},
+{
+ "id": "SINGLE-METER-SYNC-OWNER-20261114",
+ "sprint": "S6",
+ "agent": "A2+A4+A5+A10",
+ "task": "عزل عمليات المزامنة المحلية وإحصاءاتها وإعادة المحاولة لكل حساب مستخدم على جهاز مشترك، مع الاحتفاظ بعمليات المستخدم السابق حتى تسجيل دخوله",
+ "files": "mobile app/lib/features/offline_sync/domain/sync_batch.dart; mobile app/lib/features/offline_sync/services/sync_queue_manager.dart; mobile app/test/features/offline_sync/sync_queue_ownership_test.dart; docs/v2/qa/SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md",
+ "status": "doing",
+ "verification_status": "pending_flutter_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/5krm/water/issues/37",
+ "evidence": "اختبار Flutter يغطي تبديل الحساب وبقاء العمليات للمالك ومنع إعادة محاولة حساب آخر. أُضيفت حالة SM-F14 للأجهزة الفعلية. لا يُعد نجاح CI قبولاً ميدانياً."
 }
 ]
 }
