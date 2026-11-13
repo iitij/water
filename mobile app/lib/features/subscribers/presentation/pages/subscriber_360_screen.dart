@@ -556,7 +556,7 @@ class _FinancialSummaryHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          '${SubscriberExperienceStrings.meterTitle(meter.meterId)} • ${meter.tenantName ?? meter.uniqueCode}',
+                          '${SubscriberExperienceStrings.meterTitle(meter.meterId)} • ${meter.uniqueCode}',
                           style: theme.textTheme.labelMedium,
                         ),
                         const Gap(5),
