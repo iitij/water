@@ -7,7 +7,7 @@ import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import 'quick_collector_state.dart';
 
-/// منطق `SCR-13` — بحث فوري (اسم مشترك/مستأجر/رقم فاتورة/مسار `4/1`) + فلتر المربع،
+/// منطق `SCR-13` — بحث فوري (اسم مشترك/رقم فاتورة/مسار `4/1`) + فلتر المربع،
 /// وتحصيل بلمسة واحدة عبر `CollectPaymentSheet`.
 class QuickCollectorCubit extends Cubit<QuickCollectorState> {
   QuickCollectorCubit({
