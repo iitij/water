@@ -10,8 +10,6 @@ class Meter {
     this.subscriberName,
     this.squareName,
     this.subscriptionStartDate,
-    this.tenantName,
-    this.tenantPhone,
     this.status = 'active',
     this.balance = 0,
     this.initialReading = 0,
@@ -30,8 +28,6 @@ class Meter {
   final String? subscriberName;
   final String? squareName;
   final DateTime? subscriptionStartDate;
-  final String? tenantName;
-  final String? tenantPhone;
   final String status;
   final double balance;
   final double initialReading;
@@ -56,8 +52,6 @@ class Meter {
     String? subscriberName,
     String? squareName,
     DateTime? subscriptionStartDate,
-    String? tenantName,
-    String? tenantPhone,
     String? status,
     double? balance,
     double? initialReading,
@@ -77,8 +71,6 @@ class Meter {
       squareName: squareName ?? this.squareName,
       subscriptionStartDate:
           subscriptionStartDate ?? this.subscriptionStartDate,
-      tenantName: tenantName ?? this.tenantName,
-      tenantPhone: tenantPhone ?? this.tenantPhone,
       status: status ?? this.status,
       balance: balance ?? this.balance,
       initialReading: initialReading ?? this.initialReading,
@@ -109,8 +101,6 @@ class Meter {
         json['subscription_start_date'] ??
             subscriber?['subscription_start_date'],
       ),
-      tenantName: _asString(json['tenant_name']),
-      tenantPhone: _asString(json['tenant_phone']),
       status: (json['status'] ?? 'active').toString(),
       balance: _asDouble(json['balance']) ?? 0,
       initialReading: _asDouble(json['initial_reading']) ?? 0,
@@ -137,8 +127,6 @@ class Meter {
     'subscriber_name': subscriberName,
     'square_name': squareName,
     'subscription_start_date': _dateString(subscriptionStartDate),
-    'tenant_name': tenantName,
-    'tenant_phone': tenantPhone,
     'status': status,
     'balance': balance,
     'initial_reading': initialReading,
@@ -155,24 +143,18 @@ class MeterDraft {
     required this.uniqueCode,
     required this.subscriberId,
     this.pathNumber,
-    this.tenantName,
-    this.tenantPhone,
     this.status = 'active',
   });
 
   final String uniqueCode;
   final int subscriberId;
   final int? pathNumber;
-  final String? tenantName;
-  final String? tenantPhone;
   final String status;
 
   Map<String, dynamic> toJson() => {
     'unique_code': uniqueCode.trim(),
     'subscriber_id': subscriberId,
     'path_number': pathNumber,
-    'tenant_name': _emptyToNull(tenantName),
-    'tenant_phone': _emptyToNull(tenantPhone),
     'status': status,
   };
 }
@@ -276,7 +258,3 @@ DateTime? _asDate(Object? value) =>
 String? _dateString(DateTime? value) =>
     value?.toIso8601String().split('T').first;
 
-String? _emptyToNull(String? value) {
-  final trimmed = value?.trim();
-  return trimmed == null || trimmed.isEmpty ? null : trimmed;
-}
