@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/database/app_database.dart';
 import 'package:water_project/features/meters/data/repositories/meters_repository_impl.dart';
+import 'package:water_project/features/meters/data/models/meter.dart';
+import 'package:water_project/features/readings/data/repositories/readings_repository_impl.dart';
+import 'package:water_project/features/readings/data/models/reading.dart';
 
 void main() {
   test('offline meter list excludes retired assignment and keeps new current meter', () async {
@@ -37,5 +40,24 @@ void main() {
     expect(subscriber.currentMeterId, 11);
     expect(subscriber.hasCurrentMeter, isTrue);
     expect(subscriber.meterCount, 1);
+
+    final readings = ReadingsRepositoryImpl(dio: dio, database: db);
+    final old = Meter.fromJson({
+      'id': 10, 'unique_code': 'OLD', 'subscriber_id': 3,
+      'removed_at': '2026-10-01',
+    });
+    await expectLater(readings.getMeterPeriod(old), throwsStateError);
+    await expectLater(
+      readings.submitReading(ReadingSubmission(
+        meterId: old.id,
+        readingDate: DateTime(2026, 11, 13),
+        periodStart: DateTime(2026, 11, 1),
+        periodEnd: DateTime(2026, 11, 30),
+        previousReading: 10,
+        currentReading: 20,
+      )),
+      throwsStateError,
+    );
+    expect(await db.getLatestCachedReading(old.id), isNull);
   });
 }
