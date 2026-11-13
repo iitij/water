@@ -70,22 +70,18 @@ class GlobalSearchTest extends TestCase
         $meter = $this->meter('MATCH', 1);
         $subscriber = $meter->subscriber;
         $otherMeter = $this->meter('OTHER-1', 11);
-        // Historic second meter can still own invoices and payments, but is
-        // not a second CURRENT meter for this subscriber.
-        $otherMeter->update([
-            'subscriber_id' => $subscriber->id,
-            'removed_at' => '2026-10-01',
-            'status' => 'inactive',
-        ]);
+        // A different subscriber's only meter must not leak into this route.
+        // The matching subscriber's meter-less general records remain visible.
         $invoiceIds = [];
         $paymentIds = [];
         foreach ([$meter->id, null, $otherMeter->id] as $index => $meterId) {
+            $ownerId = $index === 2 ? $otherMeter->subscriber_id : $subscriber->id;
             $invoice = Invoice::withoutEvents(fn () => Invoice::create([
-                'subscriber_id' => $subscriber->id, 'meter_id' => $meterId, 'invoice_type' => 'manual',
+                'subscriber_id' => $ownerId, 'meter_id' => $meterId, 'invoice_type' => 'manual',
                 'bill_number' => 'BILL-1-'.$index, 'bill_date' => '2026-11-03', 'total_amount' => 50, 'status' => 'issued',
             ]));
             $payment = Payment::withoutEvents(fn () => Payment::create([
-                'subscriber_id' => $subscriber->id, 'meter_id' => $meterId, 'user_id' => $user->id,
+                'subscriber_id' => $ownerId, 'meter_id' => $meterId, 'user_id' => $user->id,
                 'receipt_number' => 'RECEIPT-1-'.$index, 'reference_number' => 'REF-1',
                 'payment_date' => '2026-11-03', 'payment_method' => 'cash', 'amount' => 20,
             ]));
