@@ -6,7 +6,7 @@ import '../../core/widgets/shimmer_skeleton.dart';
 import '../../features/subscribers/domain/entities/subscriber.dart';
 import '../../features/subscribers/domain/repositories/subscribers_repository.dart';
 
-/// مكون اختيار المشترك/المستأجر وعداده القابل للبحث — يسلّمه فؤاد لأنور وأكرم (الخطة 5.2/ثالثاً).
+/// مكون اختيار المشترك وعداده الحالي القابل للبحث — يسلّمه فؤاد لأنور وأكرم (الخطة 5.2/ثالثاً).
 /// يعرض المشتركين مع بحث فوري، وعند اختيار مشترك يعرض عداداته (قائمة اختيار ثانية اختيارية).
 class SubscriberMeterSelectorWidget extends StatefulWidget {
   const SubscriberMeterSelectorWidget({
