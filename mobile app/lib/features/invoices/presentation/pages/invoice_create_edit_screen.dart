@@ -478,7 +478,7 @@ class _SubscriberPickerState extends State<_SubscriberPicker> {
                   option.squareName,
                   option.phone,
                   if (option.meters.isNotEmpty)
-                    option.meters.map((m) => m.uniqueCode).join('، '),
+                    option.meters.first.uniqueCode,
                 ].whereType<String>().join(' • ');
                 return InkWell(
                   onTap: () {
