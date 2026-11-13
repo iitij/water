@@ -296,7 +296,12 @@ class SyncQueueManager extends ChangeNotifier {
       // الصفوف التي تحتاج تدخلاً بشرياً (`failed`) لا تُعاد تلقائياً؛ يعيدها
       // المستخدم بزر «إعادة المحاولة». أما الأخطاء المؤقتة فتبقى `queued`
       // بمهلة تهدئة ويُعاد إرسالها تلقائياً عند انقضائها.
+      // A shared device can retain queued work from a previously signed-in
+      // account. Keep that work intact for its owner without attempting it
+      // under another user's session or blocking this account's operations.
+      final activeUserId = _session.user?['id']?.toString();
       final orderedIds = eligibleForSync(_items, now)
+          .where((item) => canSyncForUser(item, activeUserId))
           .map((item) => item.id)
           .toList(growable: false);
       _scheduleRetryWakeUp(now);
@@ -309,7 +314,8 @@ class SyncQueueManager extends ChangeNotifier {
 
         // احترام مهلة التهدئة: عنصر واحد ينتظر لا يجوز أن يعطّل بقية الطابور،
         // لكن الترتيب الصارم (FIFO) يبقى قائماً لكل ما حان وقته.
-        if (!item.isReadyAt(now)) {
+        if (!item.isReadyAt(now) ||
+            !canSyncForUser(item, currentUserId)) {
           continue;
         }
 
