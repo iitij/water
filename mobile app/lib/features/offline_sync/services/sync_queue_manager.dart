@@ -13,6 +13,7 @@ import '../../../core/network/network_info.dart';
 import '../../../core/sync/sync_retry_policy.dart';
 import '../domain/sync_batch.dart';
 import '../domain/sync_failure_planner.dart';
+import '../domain/sync_batch_response_policy.dart';
 import '../domain/sync_queue_item.dart';
 import '../domain/sync_queue_order.dart';
 import '../domain/sync_queue_repository.dart';
@@ -536,11 +537,7 @@ class SyncQueueManager extends ChangeNotifier {
       throw StateError('استجابة مزامنة القراءة غير مكتملة.');
     }
     final result = _asMap(results.first);
-    if (result == null || result['success'] != true) {
-      throw StateError(
-        result?['message']?.toString() ?? 'رفض الخادم مزامنة القراءة.',
-      );
-    }
+    ensureSyncBatchItemAccepted(result);
 
     final readingMap = _asMap(result['reading']) ?? _asMap(result['data']);
     final serverId = _toNullableInt(
@@ -608,11 +605,13 @@ class SyncQueueManager extends ChangeNotifier {
   }
 
   int? _statusCodeOf(Object error) {
+    if (error is SyncBatchItemRejected) return error.statusCode;
     if (error is DioException) return error.response?.statusCode;
     return null;
   }
 
   String? _serverMessageOf(Object error) {
+    if (error is SyncBatchItemRejected) return error.message;
     if (error is! DioException) return null;
     final body = _asMap(error.response?.data);
     final message = body?['message']?.toString();
