@@ -8,6 +8,7 @@ on:
       - "mobile app/lib/features/meters/data/repositories/meters_repository_impl.dart"
       - "mobile app/lib/features/subscribers/data/models/subscriber_model.dart"
       - "mobile app/test/features/meters/data/models/meter_test.dart"
+      - "mobile app/test/features/subscribers/subscriber_list_options_test.dart"
       - "mobile app/lib/features/meters/presentation/pages/meter_form_screen.dart"
       - "mobile app/lib/features/subscribers/presentation/widgets/subscriber_360_tabs.dart"
       - ".github/workflows/flutter-single-meter-check.yml"
