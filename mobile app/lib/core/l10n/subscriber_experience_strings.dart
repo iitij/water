@@ -6,7 +6,7 @@ abstract final class SubscriberExperienceStrings {
   static const path = 'رقم المسار';
   static const pathHint = 'كل المسارات';
   static const pathHelp =
-      'يعرض المشترك إذا طابق المسار عداده الحالي. لا تدخل مسارات العدادات السابقة في البحث التشغيلي.';
+      'يعرض المشترك عندما يطابق المسار عداده الوحيد المرتبط به.';
   static const invalidPath = 'أدخل رقم مسار صحيحاً من صفر فأكثر.';
   static const additionOrder = 'ترتيب إضافة المشترك';
   static const subscriptionDate = 'تاريخ بدء الاشتراك';
@@ -15,16 +15,16 @@ abstract final class SubscriberExperienceStrings {
   static String pathsLabel(List<int> paths) => 'المسار: ${paths.join('، ')}';
   static const profile = 'ملف المشترك';
   static const generalBalance = 'الحساب العام';
-  static const generalHint = 'اشتراك وطلبات وايت • مستقل عن العدادات';
+  static const generalHint = 'اشتراك وطلبات وايت • مستقل عن رصيد العداد';
   static const totalCredit = 'إجمالي الدائن';
   static const totalDebit = 'إجمالي المدين';
   static const uninvoicedFees = 'رسوم لم تُفوتر';
-  static const isolatedMeters = 'أرصدة العدادات مستقلة';
+  static const isolatedMeters = 'رصيد العداد مستقل';
   static const meter = 'عداد';
   static const credit = 'دائن';
   static const debit = 'مدين';
   static const currency = 'ريال';
-  static const meters = 'العداد الحالي وسجل العدادات السابقة';
+  static const meters = 'العداد المرتبط بالمشترك';
   static const invoices = 'الفواتير';
   static const payments = LaravelScreenStrings.payments;
   static const fees = 'رسوم الاشتراك';
