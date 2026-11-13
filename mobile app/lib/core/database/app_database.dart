@@ -357,9 +357,35 @@ class AppDatabase extends GeneratedDatabase {
     );
   }
 
-  Future<void> cacheMeters(Iterable<Map<String, dynamic>> meters) async {
+  Future<void> cacheMeters(
+    Iterable<Map<String, dynamic>> meters, {
+    bool fullSnapshot = false,
+  }) async {
+    final rows = meters.toList(growable: false);
+    // Only an unfiltered, fully paginated server response may authorize
+    // eviction of IDs missing from the server. A partial search cannot.
+    final authoritativeIds = <int>{};
+    if (fullSnapshot) {
+      for (final meter in rows) {
+        final id = _int(meter['id'] ?? meter['server_id']);
+        if (id == null || id <= 0) {
+          throw const FormatException('Invalid meter ID in authoritative snapshot');
+        }
+        authoritativeIds.add(id);
+      }
+    }
     await transaction(() async {
-      for (final meter in meters) {
+      if (fullSnapshot) {
+        final cached = await _select('SELECT server_id FROM cached_meters');
+        for (final row in cached) {
+          final cachedId = _int(row['server_id']);
+          if (cachedId == null || authoritativeIds.contains(cachedId)) continue;
+          await _execute('DELETE FROM cached_meter_periods WHERE meter_id = ?', [cachedId]);
+          await _execute('DELETE FROM cached_readings WHERE meter_id = ?', [cachedId]);
+          await _execute('DELETE FROM cached_meters WHERE server_id = ?', [cachedId]);
+        }
+      }
+      for (final meter in rows) {
         final id = _int(meter['id'] ?? meter['server_id']);
         if (id == null) continue;
         final subscriberId = _int(meter['subscriber_id'] ??
