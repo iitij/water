@@ -52,7 +52,13 @@ class MetersRepositoryImpl implements MetersRepository {
         }
         return remote;
       }).toList(growable: false);
-      await _database.cacheMeters(rows);
+      // Only an unfiltered full collection is authoritative. A search,
+      // square or status filter must not evict unrelated cached meters.
+      await _database.cacheMeters(
+        rows,
+        fullSnapshot: searchQuery.isEmpty && squareId == null &&
+            (status == null || status.isEmpty),
+      );
       return _normalizeAndFilter(
         rows.map(Meter.fromJson).toList(growable: false),
         query: searchQuery,
@@ -116,6 +122,7 @@ class MetersRepositoryImpl implements MetersRepository {
           .toList(growable: false);
       await _database.cacheMeters(
         meters.map((meter) => meter.toJson()).toList(growable: false),
+        fullSnapshot: true,
       );
     } on DioException catch (error) {
       if (!_isTransportFailure(error) && error.response?.statusCode != 404) rethrow;
