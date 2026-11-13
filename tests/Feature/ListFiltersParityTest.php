@@ -30,28 +30,31 @@ class ListFiltersParityTest extends TestCase
         $this->getJson('/api/subscribers?added_to=2026-11-01')->assertOk()->assertJsonPath('total', 1);
     }
 
-    public function test_exact_path_matches_secondary_meters_and_combines_with_square_and_addition_period(): void
+    public function test_exact_path_matches_single_meters_and_combines_with_square_and_addition_period(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum');
         $square = Square::create(['name' => 'Square']);
         $otherSquare = Square::create(['name' => 'Other']);
-        foreach ([[$square, [2, 10]], [$square, [1]], [$otherSquare, [10]]] as $index => [$area, $paths]) {
+        foreach ([[$square, 10], [$square, 1], [$otherSquare, 10]] as $index => [$area, $path]) {
             $subscriber = Subscriber::create(['name' => 'Sub '.$index, 'square_id' => $area->id, 'status' => 'active']);
             $subscriber->forceFill(['created_at' => '2026-11-03 12:00:00'])->save();
-            foreach ($paths as $pathIndex => $path) {
-                $subscriber->meters()->create([
-                    'unique_code' => $index.'-'.$path,
-                    'path_number' => $path,
-                    'status' => 'active',
-                    'removed_at' => $pathIndex < count($paths) - 1 ? '2026-11-02' : null,
-                ]);
-            }
+            $subscriber->meters()->create([
+                'unique_code' => $index.'-'.$path,
+                'path_number' => $path,
+                'status' => 'active',
+            ]);
         }
         $this->getJson('/api/subscribers?path_number=10&square_id='.$square->id.'&added_from=2026-11-03')
             ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.name', 'Sub 0');
         $this->getJson('/api/meters?path_number=1')->assertOk()->assertJsonPath('total', 1);
-        $subscriber->currentMeter()->update(['removed_at' => '2026-11-02', 'status' => 'inactive']);
-        $subscriber->meters()->create(['unique_code' => 'ZERO-PATH', 'path_number' => 0, 'status' => 'active']);
+
+        // Physical replacement, not a secondary/historical meter.
+        $old = $subscriber->currentMeter()->firstOrFail();
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(),
+            'reason' => 'إعادة تعيين المسار',
+            'new_meter' => ['unique_code' => 'ZERO-PATH', 'path_number' => 0],
+        ])->assertCreated();
         $this->getJson('/api/meters?path_number=0')->assertOk()->assertJsonPath('total', 1);
         $this->getJson('/api/subscribers?path_number=0')->assertOk()->assertJsonPath('total', 1);
     }
@@ -60,15 +63,18 @@ class ListFiltersParityTest extends TestCase
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum');
         $square = Square::create(['name' => 'Square']);
-        $subscriber = Subscriber::create(['name' => 'Sub', 'square_id' => $square->id, 'status' => 'active']);
         foreach ([10, 2] as $path) {
-            if ($path === 2) {
-                $subscriber->currentMeter()->update(['removed_at' => '2026-11-02', 'status' => 'inactive']);
-            }
-            $meter = $subscriber->meters()->create(['unique_code' => 'M-'.$path, 'path_number' => $path, 'status' => 'active']);
-            $invoice = Invoice::withoutEvents(fn () => Invoice::create(['subscriber_id' => $subscriber->id,
+            $subscriber = Subscriber::create([
+                'name' => 'Sub '.$path, 'square_id' => $square->id, 'status' => 'active',
+            ]);
+            $meter = $subscriber->meters()->create([
+                'unique_code' => 'M-'.$path, 'path_number' => $path, 'status' => 'active',
+            ]);
+            $invoice = Invoice::withoutEvents(fn () => Invoice::create([
+                'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter->id, 'invoice_type' => 'manual', 'bill_number' => 'FILTER-'.$path,
-                'bill_date' => '2020-01-01', 'total_amount' => 90, 'status' => 'issued']));
+                'bill_date' => '2020-01-01', 'total_amount' => 90, 'status' => 'issued',
+            ]));
             $invoice->forceFill(['created_at' => '2026-11-03 23:59:59'])->saveQuietly();
         }
         $this->getJson('/api/invoices?sort_by=path_number&sort_direction=asc&per_page=1&added_from=2026-11-03&added_to=2026-11-03')
