@@ -27,17 +27,13 @@ class ReadingResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('subscriber_id')
-                ->label('المشترك / المستأجر')
+                ->label('المشترك')
                 ->searchable()
                 ->options(function () {
                     $subscribers = \App\Models\Subscriber::with('currentMeter')->where('status', 'active')->get();
                     $results = [];
                     foreach ($subscribers as $subscriber) {
                         $results[(string)$subscriber->id] = $subscriber->name;
-                        if (($meter = $subscriber->currentMeter) && $meter->tenant_name) {
-                                $label = "{$subscriber->name} (عداد: {$meter->unique_code} - المستأجر: {$meter->tenant_name})";
-                                $results["{$subscriber->id}|{$meter->id}"] = $label;
-                        }
                     }
                     return $results;
                 })
@@ -47,21 +43,6 @@ class ReadingResource extends Resource
                     if (!$state) {
                         $set('meter_id', null);
                         $set('previous_reading', null);
-                        return;
-                    }
-
-                    if (strpos((string)$state, '|') !== false) {
-                        [$subId, $meterId] = explode('|', $state);
-                        $set('meter_id', (int)$meterId);
-                        $set('subscriber_id', (int)$subId);
-                        $meter = \App\Models\Meter::find($meterId);
-                        if ($meter) {
-                            $set('previous_reading', $meter->getLastReadingValue());
-                            $service = new \App\Services\ReadingService();
-                            $period = $service->calculateReadingPeriod($meter->id);
-                            $set('period_start', $period['period_start']);
-                            $set('period_end', $period['period_end']);
-                        }
                         return;
                     }
 
@@ -104,15 +85,13 @@ class ReadingResource extends Resource
                     if ($record || ! $state) return;
                     $meter = \App\Models\Meter::query()->whereNull('removed_at')->find($state);
                     if (! $meter) return;
-                    $set('subscriber_id', $meter->tenant_name
-                        ? "{$meter->subscriber_id}|{$meter->id}"
-                        : (string) $meter->subscriber_id);
+                    $set('subscriber_id', (string) $meter->subscriber_id);
                     $set('previous_reading', $meter->getLastReadingValue());
                     $period = app(\App\Services\ReadingService::class)->calculateReadingPeriod($meter->id);
                     $set('period_start', $period['period_start']);
                     $set('period_end', $period['period_end']);
                 })
-                ->getOptionLabelFromRecordUsing(fn ($record) => $record->tenant_name ? "{$record->unique_code} - {$record->tenant_name}" : $record->unique_code)
+                ->getOptionLabelFromRecordUsing(fn ($record) => $record->unique_code)
                 ->required()
                 ->searchable()
                 ->live()
@@ -121,7 +100,7 @@ class ReadingResource extends Resource
                         $meter = \App\Models\Meter::find($state);
                         if ($meter) {
                             $set('previous_reading', $meter->getLastReadingValue());
-                            $expectedSubValue = $meter->tenant_name ? "{$meter->subscriber_id}|{$meter->id}" : (string)$meter->subscriber_id;
+                            $expectedSubValue = (string) $meter->subscriber_id;
                             if ($get('subscriber_id') !== $expectedSubValue) {
                                 $set('subscriber_id', $expectedSubValue);
                             }
@@ -311,11 +290,7 @@ class ReadingResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('meter.subscriber.name')
-                    ->label('المشترك / المستأجر')
-                    ->formatStateUsing(function ($state, $record) {
-                        $tenant = $record->meter->tenant_name ?? null;
-                        return $tenant ? "{$state} ({$tenant})" : $state;
-                    })
+                    ->label('المشترك')
                     ->searchable()
                     ->sortable(),
 
