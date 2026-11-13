@@ -166,7 +166,6 @@ class MetersCubit extends Cubit<MetersState> {
     return [
       meter.uniqueCode,
       meter.subscriberName,
-      meter.tenantName,
     ].any((value) => value?.toLowerCase().contains(needle) ?? false);
   }
 
