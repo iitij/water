@@ -10,9 +10,9 @@ import '../../data/models/payment_model.dart';
 
 /// يبني رسالة واتساب سند القبض مطابقةً لـ `WhatsAppService::getPaymentMessageUrl`
 /// (`app/Services/WhatsAppService.php` سطر 172-222):
-///  - الهاتف: `meter.tenant_phone` ثم `subscriber.phone` (في النموذج يُقرأ
+///  - الهاتف: `subscriber.phone` (في النموذج يُقرأ
 ///    `subscriber_phone` الذي يجمع الأولوية في `PaymentModel.fromPaymentJson`).
-///  - الاسم: `meter.tenant_name` ثم `subscriber.name` → `displayName`.
+///  - الاسم: `subscriber.name` → `displayName`.
 ///  - `{invoice_remaining}` = `(total_amount + previous_balance) - credit_applied
 ///    - المدفوع قبل هذه الدفعة - مبلغها` (سطر 187-199).
 ///  - `{outstanding_balance}` و`{credit_balance}` من حساب المشترك العام.
