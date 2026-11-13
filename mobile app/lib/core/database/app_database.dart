@@ -178,8 +178,6 @@ class AppDatabase extends GeneratedDatabase {
       square_id INTEGER,
       square_name TEXT,
       subscription_start_date TEXT,
-      tenant_name TEXT,
-      tenant_phone TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       balance REAL NOT NULL DEFAULT 0,
       initial_reading REAL NOT NULL DEFAULT 0,
@@ -357,9 +355,9 @@ class AppDatabase extends GeneratedDatabase {
         await _execute(
           '''INSERT OR REPLACE INTO cached_meters(
              server_id, unique_code, path_number, subscriber_id, subscriber_name,
-             square_id, square_name, subscription_start_date, tenant_name, tenant_phone,
+             square_id, square_name, subscription_start_date,
              status, balance, initial_reading, last_reading, installed_at, removed_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
           [
             id,
             (meter['unique_code'] ?? '').toString(),
@@ -369,8 +367,6 @@ class AppDatabase extends GeneratedDatabase {
             _int(meter['square_id'] ?? subscriber?['square_id'] ?? square?['id']),
             squareLabelOrNull(meter['square_name'] ?? square?['name'], meter['square_code'] ?? square?['code']),
             _date(meter['subscription_start_date'] ?? subscriber?['subscription_start_date']),
-            meter['tenant_name'],
-            meter['tenant_phone'],
             (meter['status'] ?? 'active').toString(),
             _double(meter['balance']),
             _double(meter['initial_reading']),
@@ -404,8 +400,8 @@ class AppDatabase extends GeneratedDatabase {
     if (normalized != null && normalized.isNotEmpty) {
       final like = '%$normalized%';
       conditions.add('''(unique_code LIKE ? OR CAST(path_number AS TEXT) LIKE ?
-          OR subscriber_name LIKE ? OR tenant_name LIKE ?)''');
-      variables.addAll(List<Variable>.filled(4, Variable.withString(like)));
+          OR subscriber_name LIKE ?)''');
+      variables.addAll(List<Variable>.filled(3, Variable.withString(like)));
     }
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
     return _select(
@@ -504,8 +500,6 @@ class AppDatabase extends GeneratedDatabase {
         'square_id',
         'square_name',
         'subscription_start_date',
-        'tenant_name',
-        'tenant_phone',
         'status',
         'balance',
         'initial_reading',
@@ -714,7 +708,7 @@ class AppDatabase extends GeneratedDatabase {
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
     return _select(
       '''SELECT r.*, m.unique_code, m.path_number, m.square_id,
-                m.square_name, m.subscriber_name, m.tenant_name
+                m.square_name, m.subscriber_name
          FROM cached_readings r LEFT JOIN cached_meters m ON m.server_id = r.meter_id
          $where ORDER BY r.reading_date DESC, r.local_id DESC''',
       variables,
