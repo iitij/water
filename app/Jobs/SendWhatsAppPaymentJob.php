@@ -33,13 +33,13 @@ class SendWhatsAppPaymentJob implements ShouldQueue
             return;
         }
 
-        $phone = $this->payment->meter?->tenant_phone ?? $this->payment->subscriber->phone;
+        $phone = $this->payment->subscriber->phone;
         if (empty($phone)) {
             Log::info("WhatsApp Job: No phone number for payment {$this->payment->id}");
             return;
         }
 
-        $name = $this->payment->meter?->tenant_name ?? $this->payment->subscriber->name;
+        $name = $this->payment->subscriber->name;
         $amount = number_format($this->payment->amount, 2) . ' ريال';
         $template = Setting::get('whatsapp_payment_template', 'payment_receipt_template');
 
