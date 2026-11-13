@@ -1736,11 +1736,11 @@
  "agent": "A2+A4+A5+A10",
  "task": "عزل عمليات المزامنة المحلية وإحصاءاتها وإعادة المحاولة لكل حساب مستخدم على جهاز مشترك، مع الاحتفاظ بعمليات المستخدم السابق حتى تسجيل دخوله",
  "files": "mobile app/lib/features/offline_sync/domain/sync_batch.dart; mobile app/lib/features/offline_sync/services/sync_queue_manager.dart; mobile app/test/features/offline_sync/sync_queue_ownership_test.dart; docs/v2/qa/SINGLE_METER_FIELD_ACCEPTANCE_2026_11_14_AR.md",
- "status": "doing",
- "verification_status": "pending_flutter_ci",
+ "status": "done",
+ "verification_status": "flutter_full_ci_passed_752_tests_27_skipped",
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/37",
- "evidence": "اختبار Flutter يغطي تبديل الحساب وبقاء العمليات للمالك ومنع إعادة محاولة حساب آخر. أُضيفت حالة SM-F14 للأجهزة الفعلية. لا يُعد نجاح CI قبولاً ميدانياً."
+ "evidence": "Flutter Actions https://github.com/5krm/water/actions/runs/43523048127 على cdfbc24dd: dart analyze ناجح، اختبارات Flutter مركزة ناجحة، 752 PASS/27 SKIP وصفر فشل في المجموعة الكاملة؛ 3 اختبارات جديدة لعزل الحسابات ضمن المجموعة. تجربة أجهزة Android/Windows والطباعة SM-F14 لم تُنفذ، #37 مفتوحة."
 }
 ]
 }
