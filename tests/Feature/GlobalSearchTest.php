@@ -70,6 +70,13 @@ class GlobalSearchTest extends TestCase
         $meter = $this->meter('MATCH', 1);
         $subscriber = $meter->subscriber;
         $otherMeter = $this->meter('OTHER-1', 11);
+        // Historic second meter can still own invoices and payments, but is
+        // not a second CURRENT meter for this subscriber.
+        $otherMeter->update([
+            'subscriber_id' => $subscriber->id,
+            'removed_at' => '2026-10-01',
+            'status' => 'inactive',
+        ]);
         $invoiceIds = [];
         $paymentIds = [];
         foreach ([$meter->id, null, $otherMeter->id] as $index => $meterId) {
@@ -121,7 +128,9 @@ class GlobalSearchTest extends TestCase
     private function meter(string $code, int $path): Meter
     {
         $square = Square::firstOrCreate(['name' => 'حي الاختبار']);
-        $subscriber = Subscriber::firstOrCreate([
+        // Every operational meter belongs to a distinct subscriber. Do not
+        // revive the obsolete multi-current-meter test fixture.
+        $subscriber = Subscriber::create([
             'name' => 'مشترك الاختبار', 'square_id' => $square->id, 'status' => 'active',
         ]);
 
