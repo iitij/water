@@ -124,7 +124,7 @@ final class MeterDataPurger
             DB::afterCommit(static function () use ($ownedImages, $meterId): void {
                 try {
                     Storage::disk('public')->delete($ownedImages);
-                } catch (\\Throwable $exception) {
+                } catch (\Throwable $exception) {
                     Log::warning('Obsolete meter image cleanup failed', [
                         'meter_id' => $meterId,
                         'error' => $exception->getMessage(),
