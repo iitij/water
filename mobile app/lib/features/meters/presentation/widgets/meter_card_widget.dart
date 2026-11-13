@@ -170,14 +170,6 @@ class MeterCardWidget extends StatelessWidget {
                       ),
                   ],
                 ),
-                if (presentation.isVisible('tenant') &&
-                    meter.tenantName?.isNotEmpty == true) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    FieldExperienceStrings.tenantName(meter.tenantName!),
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
                 const SizedBox(height: 16),
                 if (presentation.isVisible('last_reading') ||
                     presentation.isVisible('balance'))
