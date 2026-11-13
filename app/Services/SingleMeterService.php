@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Meter;
+use App\Models\AuditEvent;
 use App\Models\Subscriber;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +105,75 @@ class SingleMeterService
 
             return $meter->refresh();
         });
+    }
+
+    /**
+     * Atomically retire one current meter and assign a replacement.
+     *
+     * This does not move invoices, payments, balances or readings. Outstanding
+     * financial obligations remain linked to the historical meter and continue
+     * to appear in the subscriber's consolidated statement.
+     */
+    public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
+    {
+        return DB::transaction(function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
+            $old = Meter::query()->lockForUpdate()->findOrFail($oldMeter->getKey());
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($old->subscriber_id);
+
+            if (! $old->isCurrent()) {
+                throw ValidationException::withMessages([
+                    'meter_id' => ['لا يمكن استبدال عداد تاريخي أو محذوف. اختر العداد الحالي.'],
+                ]);
+            }
+            if ($old->readings()->where('is_invoiced', false)->exists()) {
+                throw ValidationException::withMessages([
+                    'meter_id' => ['توجد قراءات غير مفوترة. أكمل الفوترة وتسوية آخر قراءة قبل الاستبدال.'],
+                ]);
+            }
+            if (array_key_exists('subscriber_id', $newMeterData)
+                && (int) $newMeterData['subscriber_id'] !== (int) $subscriber->id) {
+                throw ValidationException::withMessages([
+                    'subscriber_id' => ['لا يجوز تغيير المشترك أثناء استبدال عداده.'],
+                ]);
+            }
+
+            $newMeterData['subscriber_id'] = $subscriber->id;
+            $newMeterData['removed_at'] = null;
+            $newMeterData['status'] = $newMeterData['status'] ?? 'active';
+            $oldSnapshot = [
+                'id' => $old->id,
+                'unique_code' => $old->unique_code,
+                'subscriber_id' => $subscriber->id,
+                'balance' => (string) $old->balance,
+                'last_reading' => (string) ($old->readings()->latest('id')->value('current_reading') ?? $old->initial_reading),
+            ];
+
+            $old->update(['removed_at' => $removedAt, 'status' => 'inactive']);
+            // If creation fails, the outer transaction restores the old meter.
+            $replacement = $this->create($newMeterData);
+
+            AuditEvent::create([
+                'actor_user_id' => $actorId,
+                'event' => 'meter.replaced',
+                'entity_type' => 'meter',
+                'entity_id' => (string) $old->id,
+                'before' => $oldSnapshot,
+                'after' => [
+                    'replacement_meter_id' => $replacement->id,
+                    'subscriber_id' => $subscriber->id,
+                    'removed_at' => $removedAt,
+                    'reason' => $reason,
+                    'old_account_balance_retained' => true,
+                ],
+                'source' => 'api',
+                'occurred_at' => now(),
+            ]);
+
+            return [
+                'old_meter' => $old->refresh(),
+                'current_meter' => $replacement->load('subscriber.square'),
+            ];
+        }, 3);
     }
 
     private function ensureAvailable(int $subscriberId, ?int $exceptMeterId = null): void
