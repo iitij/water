@@ -4,8 +4,15 @@ on:
   push:
     branches: [main]
     paths:
+      - "app/**"
+      - "resources/views/**"
+      - "mobile app/lib/**"
       - ".github/workflows/audit-legacy-meter-ui.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
