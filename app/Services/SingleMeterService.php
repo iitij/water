@@ -74,6 +74,11 @@ class SingleMeterService
             $newRemoval = array_key_exists('removed_at', $data)
                 ? $data['removed_at']
                 : $meter->removed_at;
+            if ($newRemoval !== null) {
+                throw ValidationException::withMessages([
+                    'removed_at' => ['لا يُسمح بالاحتفاظ بعداد منزوع في السجل. استخدم استبدال العداد أو حذفه.'],
+                ]);
+            }
 
             if ($meter->removed_at === null && $newRemoval !== null
                 && $meter->readings()->where('is_invoiced', false)->exists()) {
@@ -108,11 +113,12 @@ class SingleMeterService
     }
 
     /**
-     * Atomically retire one current meter and assign a replacement.
+     * Replace one physical meter without keeping a second, historical record.
      *
-     * This does not move invoices, payments, balances or readings. Outstanding
-     * financial obligations remain linked to the historical meter and continue
-     * to appear in the subscriber's consolidated statement.
+     * Linked test readings, invoices, payments and ledger entries of the old
+     * meter are permanently erased in the same transaction. The new meter
+     * receives a fresh ID so offline requests for the old ID cannot be posted
+     * silently to the replacement.
      */
     public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
     {
@@ -122,12 +128,7 @@ class SingleMeterService
 
             if (! $old->isCurrent()) {
                 throw ValidationException::withMessages([
-                    'meter_id' => ['لا يمكن استبدال عداد تاريخي أو محذوف. اختر العداد الحالي.'],
-                ]);
-            }
-            if ($old->readings()->where('is_invoiced', false)->exists()) {
-                throw ValidationException::withMessages([
-                    'meter_id' => ['توجد قراءات غير مفوترة. أكمل الفوترة وتسوية آخر قراءة قبل الاستبدال.'],
+                    'meter_id' => ['لا يمكن استبدال عداد غير حالي.'],
                 ]);
             }
             if (array_key_exists('subscriber_id', $newMeterData)
@@ -139,38 +140,35 @@ class SingleMeterService
 
             $newMeterData['subscriber_id'] = $subscriber->id;
             $newMeterData['removed_at'] = null;
-            $newMeterData['status'] = $newMeterData['status'] ?? 'active';
-            $oldSnapshot = [
-                'id' => $old->id,
-                'unique_code' => $old->unique_code,
-                'subscriber_id' => $subscriber->id,
-                'balance' => (string) $old->balance,
-                'last_reading' => (string) ($old->readings()->latest('id')->value('current_reading') ?? $old->initial_reading),
-            ];
+            $newMeterData['status'] ??= 'active';
 
-            $old->update(['removed_at' => $removedAt, 'status' => 'inactive']);
-            // If creation fails, the outer transaction restores the old meter.
+            // Validate BEFORE deleting the old meter; rollback is still a final
+            // safety net for unique constraints and concurrent requests.
+            $this->ensurePathAvailable(
+                (int) $subscriber->square_id,
+                $newMeterData['path_number'] ?? null,
+                $old->id
+            );
+
+            app(MeterDataPurger::class)->purge((int) $old->id);
             $replacement = $this->create($newMeterData);
 
             AuditEvent::create([
                 'actor_user_id' => $actorId,
                 'event' => 'meter.replaced',
                 'entity_type' => 'meter',
-                'entity_id' => (string) $old->id,
-                'before' => $oldSnapshot,
+                'entity_id' => (string) $replacement->id,
+                'before' => null,
                 'after' => [
-                    'replacement_meter_id' => $replacement->id,
                     'subscriber_id' => $subscriber->id,
-                    'removed_at' => $removedAt,
                     'reason' => $reason,
-                    'old_account_balance_retained' => true,
+                    'old_meter_data_purged' => true,
                 ],
                 'source' => 'api',
                 'occurred_at' => now(),
             ]);
 
             return [
-                'old_meter' => $old->refresh(),
                 'current_meter' => $replacement->load('subscriber.square'),
             ];
         }, 3);
@@ -178,15 +176,14 @@ class SingleMeterService
 
     private function ensureAvailable(int $subscriberId, ?int $exceptMeterId = null): void
     {
-        $query = Meter::query()->where('subscriber_id', $subscriberId)->whereNull('removed_at');
+        $query = Meter::withTrashed()->where('subscriber_id', $subscriberId);
         if ($exceptMeterId !== null) {
             $query->where('id', '!=', $exceptMeterId);
         }
         if ($query->exists()) {
             throw ValidationException::withMessages([
                 'subscriber_id' => [
-                    'هذا المشترك مرتبط بعداد حالي بالفعل. يجب إنهاء ارتباط العداد '
-                    .'السابق وفق الإجراءات المعتمدة قبل تسجيل عداد جديد.',
+                    'هذا المشترك مرتبط بعداد بالفعل. لا يمكن إضافة عداد ثانٍ.',
                 ],
             ]);
         }
@@ -195,8 +192,7 @@ class SingleMeterService
     private function translateConcurrentAssignment(int $subscriberId, QueryException $exception, ?int $exceptMeterId = null): void
     {
         // Only translate the known uniqueness conflict; preserve other DB errors.
-        if (Meter::query()->where('subscriber_id', $subscriberId)
-            ->whereNull('removed_at')
+        if (Meter::withTrashed()->where('subscriber_id', $subscriberId)
             ->when($exceptMeterId !== null, fn ($query) => $query->where('id', '!=', $exceptMeterId))
             ->exists()) {
             $this->ensureAvailable($subscriberId, $exceptMeterId);
