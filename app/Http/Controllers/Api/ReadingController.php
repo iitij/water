@@ -394,41 +394,43 @@ class ReadingController extends ApiController
             }
         }
 
-        $lastReading = $meter->readings()->latest('id')->first();
-        $previous = $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading;
-        $current = (float) $data['current_reading'];
+        // Replacement also locks the physical meter row. Keep validation,
+        // period calculation and insertion inside that SAME row lock so a
+        // reading cannot slip between the preflight guard and meter deletion.
+        $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
+            $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
+            $lastReading = $locked->readings()->latest('id')->first();
+            $previous = $lastReading
+                ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
+            $current = (float) $data['current_reading'];
 
-        $calculatedPeriod = $this->readingService->calculateReadingPeriod($meter->id);
-        $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
-        $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
+            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
+            $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
+            $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
+            app(\\App\\Services\\CurrentMeterReadingGuard::class)->assertCanCreate(
+                $locked, $current, $periodStart, $periodEnd,
+            );
 
-        app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
-            $meter,
-            $current,
-            $periodStart,
-            $periodEnd,
-        );
-
-        $imagePath = null;
-        $imageFile = $batchIndex === null ? $request->file('image') : $request->file("readings.$batchIndex.image");
-        if ($imageFile && (int) $data['meter_id'] === $meter->id) {
-            $imagePath = $imageFile->store('readings', 'public');
-        } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
-            $decodedImage = base64_decode($data['image_base64'], true);
-            if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
-                $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
-                if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-                    $ext = 'jpg';
+            $imagePath = null;
+            $imageFile = $batchIndex === null
+                ? $request->file('image') : $request->file("readings.$batchIndex.image");
+            if ($imageFile) {
+                $imagePath = $imageFile->store('readings', 'public');
+            } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
+                $decodedImage = base64_decode($data['image_base64'], true);
+                if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
+                    $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
+                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                        $ext = 'jpg';
+                    }
+                    $storedName = 'readings/'.Str::uuid().'.'.$ext;
+                    Storage::disk('public')->put($storedName, $decodedImage);
+                    $imagePath = $storedName;
                 }
-                $storedName = 'readings/'.Str::uuid().'.'.$ext;
-                Storage::disk('public')->put($storedName, $decodedImage);
-                $imagePath = $storedName;
             }
-        }
 
-        $reading = DB::transaction(function () use ($meter, $data, $request, $previous, $current, $periodStart, $periodEnd, $imagePath) {
             return Reading::create([
-                'meter_id' => $meter->id,
+                'meter_id' => $locked->id,
                 'created_by' => $request->user()?->id,
                 'reading_date' => $data['reading_date'],
                 'actual_reading_date' => $data['actual_reading_date'] ?? null,
@@ -462,8 +464,17 @@ class ReadingController extends ApiController
             }
         }
 
+        $freshReading = $reading->fresh(['meter.subscriber.square', 'invoice']);
+        if ($freshReading === null) {
+            // The meter was replaced immediately after the reading committed.
+            // Return a permanent stale-meter error instead of a 500 response.
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'meter_id' => ['تم استبدال العداد أثناء إرسال القراءة. حدّث العدادات قبل المحاولة مجدداً.'],
+            ]);
+        }
+
         return [
-            'reading' => $this->decorateReading($reading->fresh(['meter.subscriber.square', 'invoice'])),
+            'reading' => $this->decorateReading($freshReading),
             'duplicate' => false,
             'invoice_issued' => $invoiceIssued,
             'invoice_data' => $invoice ? $this->invoicePayload($invoice, $request) : null,
