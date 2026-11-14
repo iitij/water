@@ -27,12 +27,16 @@ final class MeterDataPurger
             return;
         }
 
+        $invoiceIds = DB::table('invoices')->where('meter_id', $meterId)->pluck('id')->all();
+        // Collect the images for EVERY reading being deleted, including rare
+        // legacy rows attached to a purged invoice but missing meter_id.
+        // This must mirror the reading deletion predicate below.
         $imagePaths = DB::table('readings')
-            ->where('meter_id', $meterId)
+            ->where(function ($q) use ($meterId, $invoiceIds): void {
+                $q->where('meter_id', $meterId)->orWhereIn('invoice_id', $invoiceIds);
+            })
             ->whereNotNull('image_path')
             ->pluck('image_path')->all();
-
-        $invoiceIds = DB::table('invoices')->where('meter_id', $meterId)->pluck('id')->all();
         $paymentIds = DB::table('payments')
             ->where(function ($q) use ($meterId, $invoiceIds): void {
                 $q->where('meter_id', $meterId)->orWhereIn('invoice_id', $invoiceIds);
