@@ -407,7 +407,7 @@ class ReadingController extends ApiController
             $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
             $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
             $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
-            app(\\App\\Services\\CurrentMeterReadingGuard::class)->assertCanCreate(
+            app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
                 $locked, $current, $periodStart, $periodEnd,
             );
 
@@ -468,7 +468,7 @@ class ReadingController extends ApiController
         if ($freshReading === null) {
             // The meter was replaced immediately after the reading committed.
             // Return a permanent stale-meter error instead of a 500 response.
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'meter_id' => ['تم استبدال العداد أثناء إرسال القراءة. حدّث العدادات قبل المحاولة مجدداً.'],
             ]);
         }
