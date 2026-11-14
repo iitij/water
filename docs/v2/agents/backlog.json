@@ -1749,10 +1749,22 @@
  "task": "إلغاء مفهوم العدادات التاريخية نهائياً: الاحتفاظ بحد أقصى بسجل عداد واحد لكل مشترك، حذف العدادات المخالفة وقراءاتها وفواتيرها وسنداتها وقيودها المرتبطة، وتعزيز قيد MySQL ومسار الاستبدال وواجهة Flutter",
  "files": "app/Services/MeterDataPurger.php; app/Services/SingleMeterService.php; database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php; database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php; tests/Feature/StrictSingleMeterPurgeTest.php; tests/scripts/mysql_single_meter_smoke.php; docs/v2/qa/STRICT_SINGLE_METER_PURGE_2026_11_14_AR.md",
  "status": "done",
- "verification_status": "laravel_2842_assertions_mysql8_upgrade_pass_flutter_757_pass_27_skip",
+ "verification_status": "laravel_2847_assertions_142_warnings_mysql8_pass_flutter_759_pass_27_skip",
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/39",
- "evidence": "القاعدة الجديدة مطبقة على main: عداد فعلي واحد لكل مشترك، حذف دائم للأقدم والبيانات التابعة، حماية عدم حذف مستندات مشترك آخر، إعادة حساب أرصدة الصندوق المرتبط، وحذف سجلات الأعطال والزيارات دون ترك مراجع NULL. عند جلب القائمة الكاملة للعدادات في Flutter يحذف cache المتقادم حتى لو كانت القائمة فارغة، مع الحفاظ على بيانات البحث المفلتر. Laravel 2842 تحققاً و140 تحذيراً بلا فشل: https://github.com/5krm/water/actions/runs/43531066859 ؛ MySQL 8: https://github.com/5krm/water/actions/runs/43529984017 ؛ Flutter 757 PASS /27 SKIP: https://github.com/5krm/water/actions/runs/43530663550 ؛ UI audit: https://github.com/5krm/water/actions/runs/43530995563. لم يتم ترحيل قاعدة خادم المستخدم (#39)، ولا قبول الأجهزة (#37)."
+ "evidence": "تنفيذ عداد فعلي واحد لكل مشترك وحذف السجلات القديمة مرتبط باختبارات نجاح مثبتة: Laravel https://github.com/5krm/water/actions/runs/43538148704 (2847 assertion، 142 warning) على نسخة شيفرة تتضمن قفل قراءة API/Filament وجمع ملفات صور الفواتير المرتبطة؛ Flutter https://github.com/5krm/water/actions/runs/43536969867 (759 PASS، 27 SKIP) يتضمن منع حذف/إعادة عملية مستخدم آخر؛ MySQL 8 https://github.com/5krm/water/actions/runs/43529984017 نجاح فحص ترحيل بيانات متعددة. تقرير التدقيق المستقل docs/v2/qa/FINAL_STRICT_SINGLE_METER_INDEPENDENT_AUDIT_2026_11_14_AR.md. التنفيذ البرمجي مكتمل ضمن الاختبارات، لكن لم يُطبّق الترحيل على قاعدة خادم المستخدم (#39)، ولا اختبارات الأجهزة (#37)، والفجوات الميدانية في #40 لم تُغلق."
+},
+{
+ "id": "STRICT-METER-FINAL-AUDIT-20261114-01",
+ "sprint": "S6",
+ "agent": "A2+A3+A4+A5+A10",
+ "task": "إغلاق نتائج التدقيق النهائي التي تمنع ضمان صحة 100%: تنظيف SharedPreferences لسجلات الأعطال والزيارات، معالجة الدفعات الميدانية للعداد المحذوف دون حجب العناصر الصحيحة، اختبار تزامن MySQL فعلي، اختبار فشل DDL وترحيل قاعدة اختبار، وقبول Android/Windows والصور",
+ "files": "docs/v2/qa/FINAL_STRICT_SINGLE_METER_INDEPENDENT_AUDIT_2026_11_14_AR.md; mobile app/lib/features/readings/data/reading_fault_log.dart; mobile app/lib/features/field_route/data/route_visit_store.dart; app/Http/Controllers/Api/ReadingFaultController.php; app/Http/Controllers/Api/RouteVisitController.php",
+ "status": "todo",
+ "verification_status": "not_tested_issues_37_39_40_open",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/5krm/water/issues/40",
+ "evidence": "مراجعة مستقلة كشفت بقايا محلية ومشكلات دفعات وتزامن/DDL واختبار صور فعلي؛ انظر #40 والتقرير. لا تؤشَّر كمكتملة قبل نجاح جميع اختبارات القبول."
 }
 ]
 }
