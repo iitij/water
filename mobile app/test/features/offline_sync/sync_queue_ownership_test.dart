@@ -210,4 +210,65 @@ void main() {
     expect(repo.pending[newId]!.lastError, isNull);
     expect(repo.uploaded, isEmpty);
   });
+
+  test('discard does not erase another account operation by UUID', () async {
+    final session = _Session();
+    final network = _Network();
+    when(() => session.isReady).thenReturn(true);
+    when(() => session.isAuthenticated).thenReturn(true);
+    when(() => session.user).thenReturn(<String, dynamic>{'id': 11});
+    when(() => network.isConnected).thenAnswer((_) async => false);
+    final repo = _QueueRepo([
+      _reading(oldId, '10', baseTime),
+      _reading(newId, '11', baseTime),
+    ]);
+    final manager = SyncQueueManager(
+      dio: Dio(BaseOptions(baseUrl: 'https://example.invalid')),
+      repository: repo,
+      networkInfo: network,
+      session: session,
+    );
+    addTearDown(manager.dispose);
+    await manager.syncPending();
+
+    await manager.discard(oldId);
+    expect(repo.pending.containsKey(oldId), isTrue,
+        reason: 'another logged-in account cannot erase owner 10 work');
+    await manager.discard(newId);
+    expect(repo.pending.keys, [oldId],
+        reason: 'current account can still explicitly dismiss its own work');
+  });
+
+  test('enqueue rejects a UUID owned by a different signed-in account', () async {
+    final session = _Session();
+    final network = _Network();
+    when(() => session.isReady).thenReturn(true);
+    when(() => session.isAuthenticated).thenReturn(true);
+    when(() => session.user).thenReturn(<String, dynamic>{'id': 11});
+    when(() => network.isConnected).thenAnswer((_) async => false);
+    final previous = _reading(oldId, '10', baseTime);
+    final repo = _QueueRepo([previous]);
+    final manager = SyncQueueManager(
+      dio: Dio(BaseOptions(baseUrl: 'https://example.invalid')),
+      repository: repo,
+      networkInfo: network,
+      session: session,
+    );
+    addTearDown(manager.dispose);
+    await manager.syncPending();
+
+    await expectLater(
+      manager.enqueueReading(<String, dynamic>{
+        'sync_uuid': oldId,
+        'meter_id': 22,
+        'current_reading': 150,
+        'reading_date': '2026-11-14',
+      }),
+      throwsStateError,
+    );
+    expect(repo.pending.length, 1);
+    expect(repo.pending[oldId]!.ownerUserId, '10');
+    expect(repo.pending[oldId]!.payload['meter_id'], 42,
+        reason: 'the other account payload may not be overwritten or returned');
+  });
 }
