@@ -271,8 +271,9 @@ class SyncQueueManager extends ChangeNotifier {
   /// تنفيذات `SyncQueueRepository` (Drift وSharedPreferences على السواء).
   Future<void> discard(String id) async {
     if (_isSyncing) return;
-    final stillThere = _items.any((item) => item.id == id);
-    if (!stillThere) return;
+    final ownerId = _session.user?['id']?.toString();
+    final selected = _items.where((item) => item.id == id).firstOrNull;
+    if (selected == null || !canSyncForUser(selected, ownerId)) return;
     final remaining = (await _repository.loadAll())
         .where((item) => item.id != id)
         .toList(growable: false);
@@ -413,7 +414,17 @@ class SyncQueueManager extends ChangeNotifier {
     final itemId = _ensureUuid(preferredId);
     final existingIndex = _items.indexWhere((existing) => existing.id == itemId);
     if (existingIndex >= 0) {
-      return _items[existingIndex];
+      final existing = _items[existingIndex];
+      // An explicit UUID supplied by another account must never return that
+      // user's payload, nor silently turn this user's action into theirs.
+      if (!canSyncForUser(existing, ownerUserId)) {
+        throw StateError('معرّف العملية مرتبط بحساب مستخدم آخر.');
+      }
+      if (existing.type != type ||
+          jsonEncode(existing.payload) != jsonEncode(payload)) {
+        throw StateError('معرّف المزامنة مستخدم مسبقاً لعملية مختلفة.');
+      }
+      return existing;
     }
 
     final item = SyncQueueItem(
