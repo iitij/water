@@ -40,9 +40,9 @@
 
 | المجال | ما ثبت |
 | --- | --- |
-| <https://github.com/5krm/water/actions/runs/43529984099> | Laravel كامل: **2819 assertion**، و136 تحذيراً؛ لا اختبارات فاشلة |
+| <https://github.com/5krm/water/actions/runs/43531066859> | Laravel كامل: **2842 assertion**، و140 تحذيراً؛ لا اختبارات فاشلة |
 | <https://github.com/5krm/water/actions/runs/43529984017> | MySQL 8: رفض التعدد مع SoftDelete، وتجربة ترحيل سجل تاريخي وفاتورة وسند متصلين، وترقية قاعدة أقدم بها عدادان حاليان |
-| <https://github.com/5krm/water/actions/runs/43529846347> | Flutter: **754 PASS**، و27 SKIP، وتحليل ثابت ناجح |
+| <https://github.com/5krm/water/actions/runs/43530663550> | Flutter: **757 PASS**، و27 SKIP، وتحليل ثابت ناجح |
 
 تتضمن اختبارات `StrictSingleMeterPurgeTest.php` إثبات عدم ضياع بيانات مشترك آخر أو القيود العامة، مع حذف بيانات العداد السابق. هذه اختبارات قاعدة عابرة وتكامل محاكي **وليست تشغيل ترحيل على قاعدة الجهاز أو الخادم**.
 
