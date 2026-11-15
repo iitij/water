@@ -104,7 +104,6 @@ class FakeSubscribersRepository implements SubscribersRepository {
   @override
   Future<Map<String, dynamic>> collectPayment(int subscriberId, {required double amount, int? invoiceId, String method = 'cash', String? reason}) async =>
       {'message': 'تم تحصيل الدفعة بنجاح (وضع تجريبي)', 'payment': {'receipt_number': 'REC-DEMO-0001', 'amount': amount}};
-  @override
 }
 
 class FakeSubscriptionFeesRepository implements SubscriptionFeesRepository {

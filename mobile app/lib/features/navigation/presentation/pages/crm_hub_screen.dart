@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/navigation/module_catalog.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/permissions/permission_service.dart';
@@ -10,7 +9,6 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_motion.dart';
 import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../widgets/module_section.dart';
 

@@ -72,7 +72,7 @@ class ApiEndpoints {
   static String invoiceWhatsAppLink(int id) => 'invoices/$id/whatsapp-link';
   static String sendInvoiceWhatsApp(int id) => 'invoices/$id/send-whatsapp';
 
-  // Payments, subscription fees, and service requests.
+  // Payments and subscription fees.
   static const payments = 'payments';
   static const bulkDeletePayments = 'payments/bulk-delete';
   static String payment(int id) => 'payments/$id';

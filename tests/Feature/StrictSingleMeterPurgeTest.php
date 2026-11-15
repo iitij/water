@@ -110,12 +110,6 @@ class StrictSingleMeterPurgeTest extends TestCase
             'invoice_id' => $invoice,
             'amount' => 15,
         ]);
-        DB::table('service_requests')->insert([
-            'subscriber_id' => $subscriber->id,
-            'invoice_id' => $invoice,
-            'amount' => 20,
-            'service_date' => '2026-11-14',
-        ]);
         DB::table('reading_faults')->insert([
             'subscriber_id' => $subscriber->id,
             'meter_id' => $old->id,
@@ -155,7 +149,7 @@ class StrictSingleMeterPurgeTest extends TestCase
         $this->assertDatabaseCount('meters', 1);
         foreach ([
             'invoices', 'invoice_items', 'payments', 'readings', 'subscription_fees',
-            'service_requests', 'reading_faults', 'route_visits',
+            'reading_faults', 'route_visits',
         ] as $table) {
             $this->assertDatabaseCount($table, 0);
         }

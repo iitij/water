@@ -61,7 +61,7 @@ jobs:
           php -l app/Filament/Resources/SubscriberResource/RelationManagers/MetersRelationManager.php
           php -l app/Console/Commands/AuditSingleMeterConflicts.php
           php -l database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php
-          php -l database/migrations/2026_11_13_220000_drop_tenant_identity_from_meters.php
+          php -l database/migrations/2026_11_16_000001_final_retired_billing_cleanup.php
       - name: Single meter and subscriber metadata tests
         run: php artisan test --filter='SingleCurrentMeterTest|SubscriberListMetadataTest|FouadModulesApiTest|MobileApiIntegrationTest|FinancialReportsTest|WebMobileParityTest|PaymentVoidApprovalTest'
       - name: Full Laravel regression suite
