@@ -1,0 +1,27 @@
+name: Legacy feature removal audit
+on:
+  push:
+    paths:
+      - '.github/workflows/legacy-feature-audit.yml'
+      - 'app/**'
+      - 'mobile app/**'
+      - 'database/**'
+      - 'routes/**'
+      - 'resources/**'
+      - 'tests/**'
+      - 'config/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enumerate all remaining legacy feature references
+        shell: bash
+        run: |
+          echo "=== Paths containing references ==="
+          git grep -Il -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests || true
+          echo "=== Source locations (first 500) ==="
+          git grep -In -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests | head -500 || true
