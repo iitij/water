@@ -62,6 +62,8 @@ jobs:
           php -l app/Console/Commands/AuditSingleMeterConflicts.php
           php -l database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php
           php -l database/migrations/2026_11_16_000001_final_retired_billing_cleanup.php
+          # Review every active PHP source, not just a manually maintained shortlist.
+          find app database/migrations tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Single meter and subscriber metadata tests
         run: php artisan test --filter='SingleCurrentMeterTest|SubscriberListMetadataTest|FouadModulesApiTest|MobileApiIntegrationTest|FinancialReportsTest|WebMobileParityTest|PaymentVoidApprovalTest'
       - name: Full Laravel regression suite
