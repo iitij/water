@@ -115,6 +115,7 @@ abstract class ApiController extends Controller
         }
         $paths = ['subscribers' => 'meters', 'readings' => 'meter', 'invoices' => 'meter',
             'payments' => 'meter', 'subscription_fees' => 'meter', 'transactions' => 'meter',
+        ];
         if (isset($input['path_number'])) {
             if ($table === 'meters') {
                 $query->where('path_number', $input['path_number']);
