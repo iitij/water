@@ -358,7 +358,7 @@ class AppDatabase extends GeneratedDatabase {
           '''INSERT OR REPLACE INTO cached_subscribers(
              server_id, name, phone, address, square_id, square_name, status,
              subscription_start_date, balance, meters_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
           [
             id,
             (subscriber['name'] ?? '').toString(),

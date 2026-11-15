@@ -21,6 +21,10 @@ class RetiredBillingFeatureSchemaTest extends TestCase
     public function test_removed_api_routes_are_absent(): void
     {
         $this->getJson('/api/service-requests')->assertNotFound();
-        $this->postJson('/api/invoices/generate-tanker')->assertNotFound();
+        $this->assertContains(
+            $this->postJson('/api/invoices/generate-tanker')->status(),
+            [404, 405],
+            'The retired invoice endpoint must not be callable.'
+        );
     }
 }

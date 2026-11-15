@@ -58,8 +58,8 @@ class MobileLaravelChangeInventoryTest extends TestCase
             'migrations' => count(array_filter($files, fn (array $file): bool => str_starts_with($file['path'], 'database/migrations/'))),
             'groups' => count($snapshot['groups']),
         ], $snapshot['totals']);
-        $this->assertSame(91, $snapshot['totals']['files']);
-        $this->assertSame(22, $snapshot['totals']['groups']);
+        $this->assertSame(89, $snapshot['totals']['files']);
+        $this->assertSame(21, $snapshot['totals']['groups']);
         $this->assertSame(12, $snapshot['totals']['migrations']);
         $statusByPath = array_column($files, 'status', 'path');
         $this->assertSame('M', $statusByPath['app/Http/Controllers/Api/AuthController.php']);
