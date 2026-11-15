@@ -105,14 +105,7 @@ class _GenerateSheetBody extends StatelessWidget {
         submitLabel: 'إصدار فاتورة الاشتراك',
       );
     }
-    if (mode == GenerateInvoiceMode.tanker) {
-      return const _SheetChrome(
-        title: 'إصدار فاتورة وايت',
-        icon: Icons.local_shipping_outlined,
-        color: FinanceColors.tanker,
-        submitLabel: 'إصدار فاتورة الوايت',
-      );
-    }
+
     return const _SheetChrome(
       title: 'إصدار فاتورة عداد',
       icon: Icons.calculate_outlined,
@@ -125,8 +118,6 @@ class _GenerateSheetBody extends StatelessWidget {
     final InvoiceModel? invoice;
     if (mode == GenerateInvoiceMode.subscription) {
       invoice = await cubit.submitSubscriptionInvoice();
-    } else if (mode == GenerateInvoiceMode.tanker) {
-      invoice = await cubit.submitTankerInvoice();
     } else {
       invoice = await cubit.submitMeterInvoice();
     }
@@ -189,18 +180,10 @@ class _GenerateSheetBody extends StatelessWidget {
                     const SizedBox(height: 12),
                   ] else ...<Widget>[
                     AmountFromStateField(
-                      label: mode == GenerateInvoiceMode.subscription
-                          ? 'قسط الاشتراك'
-                          : 'رسوم الوايت',
-                      helperText: mode == GenerateInvoiceMode.subscription
-                          ? 'مجموع رسوم الاشتراك غير المفوترة — قابل للتعديل'
-                          : 'إجمالي طلبات الوايت المكتملة — قابل للتعديل',
-                      read: mode == GenerateInvoiceMode.subscription
-                          ? _readSubscription
-                          : _readTanker,
-                      write: mode == GenerateInvoiceMode.subscription
-                          ? _writeSubscription
-                          : _writeTanker,
+                      label: 'قسط الاشتراك',
+                      helperText: 'مجموع رسوم الاشتراك غير المفوترة — قابل للتعديل',
+                      read: _readSubscription,
+                      write: _writeSubscription,
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -226,11 +209,8 @@ class _GenerateSheetBody extends StatelessWidget {
 }
 
 double _readSubscription(InvoiceGenerationState state) => state.subscriptionInstallment;
-double _readTanker(InvoiceGenerationState state) => state.tankerInstallment;
 void _writeSubscription(InvoiceGenerationCubit cubit, double value) =>
     cubit.setSubscriptionInstallment(value);
-void _writeTanker(InvoiceGenerationCubit cubit, double value) =>
-    cubit.setTankerInstallment(value);
 
 /// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).
 /// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).

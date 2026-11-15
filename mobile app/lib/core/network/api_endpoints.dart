@@ -62,7 +62,6 @@ class ApiEndpoints {
   static const collectInvoicePayment = 'invoices/pay';
   static const generateMeterInvoice = 'invoices/generate-meter';
   static const generateSubscriptionInvoice = 'invoices/generate-subscription';
-  static const generateTankerInvoice = 'invoices/generate-tanker';
   static const bulkRecalculateInvoices = 'invoices/bulk-recalculate';
   static const bulkDeleteInvoices = 'invoices/bulk-delete';
   static String invoice(int id) => 'invoices/$id';
@@ -99,12 +98,6 @@ class ApiEndpoints {
   static const bulkDeleteSubscriptionFees = 'subscription-fees/bulk-delete';
   static String subscriptionFee(int id) => 'subscription-fees/$id';
   static String subscriptionFeeInvoice(int id) => 'subscription-fees/$id/invoice';
-
-  static const serviceRequests = 'service-requests';
-  static const bulkDeleteServiceRequests = 'service-requests/bulk-delete';
-  static String serviceRequest(int id) => 'service-requests/$id';
-  static String completeServiceRequest(int id) => 'service-requests/$id/complete';
-  static String serviceRequestInvoice(int id) => 'service-requests/$id/invoice';
 
   // Tariffs and general ledger.
   static const tariffs = 'tariffs';

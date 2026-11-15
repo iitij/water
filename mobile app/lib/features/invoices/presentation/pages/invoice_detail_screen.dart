@@ -309,7 +309,6 @@ class _AmountsCard extends StatelessWidget {
     final rows = <(String, String, Color?)>[
       ('قيمة الاستهلاك', CurrencyFormatter.withLabel(invoice.consumptionFee), null),
       ('قسط الاشتراك', CurrencyFormatter.withLabel(invoice.subscriptionInstallment), null),
-      ('رسوم الوايت', CurrencyFormatter.withLabel(invoice.tankerCharges), null),
       ('متأخرات سابقة', CurrencyFormatter.withLabel(invoice.previousBalance), AppColors.warning),
       ('خصم رصيد دائن', CurrencyFormatter.withLabel(invoice.creditApplied), AppColors.success),
       ('قيمة الفاتورة', CurrencyFormatter.withLabel(invoice.totalAmount), null),
@@ -693,7 +692,7 @@ class _ActionGrid extends StatelessWidget {
       final ok = await ConfirmDialog.show(
         context,
         title: 'حذف الفاتورة ${invoice.billNumber}',
-        message: 'سيُفكّ ارتباط القراءات والأقساط والوايت وتُعاد '
+        message: 'سيُفكّ ارتباط القراءات والأقساط وتُعاد '
             'توزيع الدفعات على هذا الحساب.',
         confirmLabel: 'حذف',
         destructive: true,

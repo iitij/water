@@ -109,22 +109,6 @@ class CrmHubScreen extends StatelessWidget {
             ],
           ),
         ),
-        const Gap(AppSpacing.lg),
-        AppReveal(
-          delay: const Duration(milliseconds: 140),
-          child: AppNotice(
-            title: 'طلبات الوايت والخدمات',
-            message:
-                'سجّل طلب الوايت من الميدان، وتابع تنفيذه، ثم حوّله إلى فاتورة مباشرة دون أي ورقة إضافية.',
-            icon: Icons.local_shipping_outlined,
-            color: AppColors.warning,
-            action: TextButton(
-              onPressed: () => context.push(RouteNames.serviceRequests),
-              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
-              child: const Text('فتح ${LaravelScreenStrings.serviceRequests}'),
-            ),
-          ),
-        ),
       ],
     );
   }

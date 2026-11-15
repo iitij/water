@@ -11,10 +11,9 @@ class FinanceRouteNames {
   /// `SCR-15` تفاصيل الفاتورة.
   static const String invoiceDetail = '/invoices/:id';
 
-  /// `SCR-16` نوافذ الإصدار الثلاث (تُفتح كـ sheet أو مسار مستقل للتابلت).
+  /// `SCR-16` نوافذ الإصدار (تُفتح كـ sheet أو مسار مستقل للتابلت).
   static const String invoiceGenerateMeter = '/invoices/generate/meter';
   static const String invoiceGenerateSubscription = '/invoices/generate/subscription';
-  static const String invoiceGenerateTanker = '/invoices/generate/tanker';
 
   /// إنشاء/تعديل يدوي.
   static const String invoiceIssue = '/issue-invoice';

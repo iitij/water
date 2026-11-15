@@ -14,7 +14,6 @@ import '../../../../core/l10n/square_strings.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/ui/list_presentation_controls.dart';
-import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscribers/domain/entities/subscriber.dart';
 import '../../../subscribers/domain/repositories/subscribers_repository.dart';
 import '../../../subscribers/presentation/cubit/subscriber360_cubit.dart';
@@ -508,11 +507,6 @@ class _SquareDetail extends StatelessWidget {
             ),
             BlocProvider<SubscriptionFeesCubit>(
               create: (_) => SubscriptionFeesCubit(deps.fees)
-                ..subscriberId = subscriber.id
-                ..load(),
-            ),
-            BlocProvider<ServiceRequestsCubit>(
-              create: (_) => ServiceRequestsCubit(deps.requests)
                 ..subscriberId = subscriber.id
                 ..load(),
             ),

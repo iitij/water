@@ -19,7 +19,6 @@ abstract interface class InvoicesRepository {
 
   Future<InvoiceModel> generateMeter(GenerateMeterInvoiceRequest request);
   Future<InvoiceModel> generateSubscription(GenerateSubscriptionInvoiceRequest request);
-  Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request);
 
   Future<void> delete(int id);
   Future<void> forceDelete(int id);

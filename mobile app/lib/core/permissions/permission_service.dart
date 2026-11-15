@@ -45,8 +45,6 @@ class PermissionService {
     'View:Square': <String>{'view_square', 'view_any_square'},
     'ViewAny:SubscriptionFee': <String>{'view_any_subscription_fee'},
     'View:SubscriptionFee': <String>{'view_subscription_fee', 'view_any_subscription_fee'},
-    'ViewAny:ServiceRequest': <String>{'view_any_service_request'},
-    'View:ServiceRequest': <String>{'view_service_request', 'view_any_service_request'},
     'ViewAny:Transaction': <String>{'view_any_transaction'},
     'View:Transaction': <String>{'view_transaction', 'view_any_transaction'},
     'ViewAny:User': <String>{'view_any_user'},

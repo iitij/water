@@ -25,8 +25,7 @@ class MigrateToLedger extends Command
             foreach ($invoices as $invoice) {
                 // The new charges are: total_amount + credit_applied. 
                 // Wait, if credit was applied, it means they had credit, but the invoice value is subtotal.
-                // Let's look at InvoiceService: $subtotal = $consumptionFee + $subscriptionAmount + $tankerCharges;
-                $subtotal = $invoice->consumption_fee + $invoice->subscription_installment + $invoice->tanker_charges;
+                $subtotal = $invoice->consumption_fee + $invoice->subscription_installment;
 
                 Transaction::create([
                     'subscriber_id' => $invoice->subscriber_id,

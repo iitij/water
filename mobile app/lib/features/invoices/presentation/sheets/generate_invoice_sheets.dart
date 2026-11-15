@@ -27,17 +27,15 @@ import '../widgets/invoice_actions.dart';
 
 part 'invoice_generate_sheet_body.dart';
 
-/// `SCR-16` — محركات إصدار الفواتير الثلاثة كأدراج سفلية، مطابقةً لـ
+/// `SCR-16` — محركات إصدار الفواتير كأدراج سفلية، مطابقةً لـ
 /// `InvoiceResource` Header Actions:
 ///  - عداد (`primary`/آلة حاسبة): من القراءات غير المفوترة + مفتاحا قسط الاشتراك
-///    ورسوم الوايت (`generateMeterInvoice` في Laravel يقرأ `has_subscription_fee`
-///    و`has_tanker_fee`).
-///  - اشتراك (`warning`/وثيقة) ووايت (`info`/شاحنة).
+///  - اشتراك (`warning`/وثيقة) والاشتراكات الدورية.
 ///
 /// الحقول كلها حية الحساب (subtotal → credit → net) قبل الإرسال، وتُطابق
 /// `InvoiceService::generateInvoice` سطر 62-108، مع التزام قاعدة العزل §3.4-1:
 /// فاتورة العداد تخصم من `meters.balance` وغيرُها من `subscribers.balance`.
-enum GenerateInvoiceMode { meter, subscription, tanker, manual }
+enum GenerateInvoiceMode { meter, subscription, manual }
 
 /// قائمة اختيار محرّك الإصدار (تُفتح من FAB في `SCR-14` ومن مسار `/invoices/generate`).
 Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) async {
@@ -59,7 +57,7 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
             icon: Icons.calculate_outlined,
             color: FinanceColors.meter,
             title: 'فاتورة عداد',
-            subtitle: 'من القراءات غير المفوترة + مفاتيح قسط الاشتراك ورسوم الوايت',
+            subtitle: 'من القراءات غير المفوترة + رسوم الاشتراك',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.meter),
           ),
           _PickerTile(
@@ -69,13 +67,7 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
             subtitle: 'للمشتركين الذين لديهم رسوم اشتراك غير مفوترة',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.subscription),
           ),
-          _PickerTile(
-            icon: Icons.local_shipping_outlined,
-            color: FinanceColors.tanker,
-            title: 'فاتورة وايت',
-            subtitle: 'لطلبات الوايت المكتملة غير المفوترة',
-            onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.tanker),
-          ),
+
           if (context.canCreateInvoices)
             _PickerTile(
               icon: Icons.edit_note_outlined,
@@ -106,9 +98,6 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
 Future<void> _openSheet(BuildContext context, GenerateInvoiceMode mode) {
   if (mode == GenerateInvoiceMode.subscription) {
     return GenerateSubscriptionInvoiceSheet.show(context);
-  }
-  if (mode == GenerateInvoiceMode.tanker) {
-    return GenerateTankerInvoiceSheet.show(context);
   }
   return GenerateMeterInvoiceSheet.show(context);
 }
@@ -166,32 +155,6 @@ class GenerateSubscriptionInvoiceSheet extends StatelessWidget {
       );
 }
 
-/// فاتورة وايت — نفس التسليم أعلاه (طلبات مكتملة غير مفوترة).
-class GenerateTankerInvoiceSheet extends StatelessWidget {
-  const GenerateTankerInvoiceSheet({super.key, this.preselectedSubscriberId});
-
-  final String? preselectedSubscriberId;
-
-  static Future<void> show(BuildContext context, {String? preselectedSubscriberId}) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _GenerateSheetHost(
-        parentContext: context,
-        mode: GenerateInvoiceMode.tanker,
-        preselectedSubscriberId: preselectedSubscriberId,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _GenerateSheetHost(
-        parentContext: context,
-        mode: GenerateInvoiceMode.tanker,
-        preselectedSubscriberId: preselectedSubscriberId,
-      );
-}
 
 class LiveSummaryCard extends StatelessWidget {
   const LiveSummaryCard({super.key});
@@ -203,7 +166,6 @@ class LiveSummaryCard extends StatelessWidget {
         final rows = <(String, String, Color?)>[
           ('استهلاك متوقع', CurrencyFormatter.withLabel(state.consumptionFee), null),
           ('قسط الاشتراك', CurrencyFormatter.withLabel(state.subscriptionInstallment), null),
-          ('رسوم الوايت', CurrencyFormatter.withLabel(state.tankerInstallment), null),
           (
             'رصيد دائن يُخصم',
             '- ${CurrencyFormatter.amount(state.creditApplied)}',
@@ -557,7 +519,7 @@ class IncludeReadingsToggle extends StatelessWidget {
   }
 }
 
-/// مفتاحا `has_subscription_fee` و`has_tanker_fee` مع منع التفعيل عند انعدام الطلبات.
+/// مفتاح `has_subscription_fee` مع منع التفعيل عند انعدام الطلبات.
 class FeeTogglesField extends StatelessWidget {
   const FeeTogglesField({super.key});
 
@@ -566,9 +528,7 @@ class FeeTogglesField extends StatelessWidget {
     return BlocBuilder<InvoiceGenerationCubit, InvoiceGenerationState>(
       buildWhen: (previous, next) =>
           previous.hasSubscriptionFee != next.hasSubscriptionFee ||
-          previous.hasUnpaidSubscriptionFee != next.hasUnpaidSubscriptionFee ||
-          previous.hasTankerFee != next.hasTankerFee ||
-          previous.hasPendingTanker != next.hasPendingTanker,
+          previous.hasUnpaidSubscriptionFee != next.hasUnpaidSubscriptionFee,
       builder: (context, state) {
         final cubit = context.read<InvoiceGenerationCubit>();
 
@@ -589,21 +549,6 @@ class FeeTogglesField extends StatelessWidget {
                 ),
               ),
             ),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              value: state.hasTankerFee,
-              onChanged: state.hasPendingTanker ? cubit.toggleTankerFee : null,
-              title: const Text('إضافة رسوم وايت', style: TextStyle(fontSize: 13)),
-              subtitle: Text(
-                state.hasPendingTanker
-                    ? 'طلبات مكتملة: ${CurrencyFormatter.withLabel(state.tankerInstallment)}'
-                    : 'لا توجد طلبات وايت مكتملة غير مفوترة',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: state.hasPendingTanker ? AppColors.neutral : AppColors.danger,
-                ),
-              ),
-            ),
           ],
         );
       },
@@ -611,7 +556,7 @@ class FeeTogglesField extends StatelessWidget {
   }
 }
 
-/// حقل مبلغ يقرأ من حالة الـ Cubit ويكتب فيها (اشتراك/وايت).
+/// حقل مبلغ يقرأ من حالة الـ Cubit ويكتب فيها (اشتراك).
 class AmountFromStateField extends StatefulWidget {
   const AmountFromStateField({
     super.key,

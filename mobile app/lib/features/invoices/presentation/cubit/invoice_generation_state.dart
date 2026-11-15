@@ -17,9 +17,6 @@ class InvoiceGenerationState extends Equatable {
     this.hasUnpaidSubscriptionFee = false,
     this.hasSubscriptionFee = false,
     this.subscriptionInstallment = 0,
-    this.hasPendingTanker = false,
-    this.hasTankerFee = false,
-    this.tankerInstallment = 0,
     this.notes,
     this.uninvoicedUnits = 0,
     this.unitPrice = 0,
@@ -41,9 +38,6 @@ class InvoiceGenerationState extends Equatable {
   final bool hasUnpaidSubscriptionFee;
   final bool hasSubscriptionFee;
   final double subscriptionInstallment;
-  final bool hasPendingTanker;
-  final bool hasTankerFee;
-  final double tankerInstallment;
   final String? notes;
 
   /// قراءات غير مفوترة للعداد المحدد (للمعاينة الفورية).
@@ -65,8 +59,7 @@ class InvoiceGenerationState extends Equatable {
 
   double get subtotal =>
       (includeReadings ? consumptionFee : 0) +
-      (hasSubscriptionFee ? subscriptionInstallment : 0) +
-      (hasTankerFee ? tankerInstallment : 0);
+      (hasSubscriptionFee ? subscriptionInstallment : 0);
 
   double get creditApplied {
     if (availableCredit <= 0 || subtotal <= 0) return 0;
@@ -82,15 +75,13 @@ class InvoiceGenerationState extends Equatable {
       selectedSubscriber != null &&
       (selectedMeter != null ||
           hasSubscriptionFee ||
-          hasTankerFee ||
-          subscriptionInstallment > 0 ||
-          tankerInstallment > 0);
+          subscriptionInstallment > 0);
 
   /// رسالة المنع نفسها التي يرميها Laravel عند عدم وجود ما يُفوتر.
   String? get blockingReason {
     if (selectedSubscriber == null) return 'اختر المشترك أولاً.';
     if (subtotal <= 0) {
-      return 'لا توجد قراءات جديدة أو طلبات وايت أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة.';
+      return 'لا توجد قراءات جديدة أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة.';
     }
     return null;
   }
@@ -109,9 +100,6 @@ class InvoiceGenerationState extends Equatable {
     bool? hasUnpaidSubscriptionFee,
     bool? hasSubscriptionFee,
     double? subscriptionInstallment,
-    bool? hasPendingTanker,
-    bool? hasTankerFee,
-    double? tankerInstallment,
     String? notes,
     double? uninvoicedUnits,
     double? unitPrice,
@@ -136,9 +124,6 @@ class InvoiceGenerationState extends Equatable {
         hasSubscriptionFee: hasSubscriptionFee ?? this.hasSubscriptionFee,
         subscriptionInstallment:
             subscriptionInstallment ?? this.subscriptionInstallment,
-        hasPendingTanker: hasPendingTanker ?? this.hasPendingTanker,
-        hasTankerFee: hasTankerFee ?? this.hasTankerFee,
-        tankerInstallment: tankerInstallment ?? this.tankerInstallment,
         notes: notes ?? this.notes,
         uninvoicedUnits: uninvoicedUnits ?? this.uninvoicedUnits,
         unitPrice: unitPrice ?? this.unitPrice,
@@ -159,8 +144,6 @@ class InvoiceGenerationState extends Equatable {
         includeReadings,
         hasSubscriptionFee,
         subscriptionInstallment,
-        hasTankerFee,
-        tankerInstallment,
         notes,
         uninvoicedUnits,
         unitPrice,

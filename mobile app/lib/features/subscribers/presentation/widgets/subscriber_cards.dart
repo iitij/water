@@ -174,11 +174,6 @@ class _SubscriberCard extends StatelessWidget {
                       label: const Text(SubscriberExperienceStrings.details),
                       onPressed: () => onOpen360(s),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.local_shipping_outlined, size: 20),
-                      tooltip: SubscriberExperienceStrings.tanker,
-                      onPressed: () => _quickTanker(context),
-                    ),
                   ],
                 ),
               ),
@@ -202,88 +197,6 @@ class _SubscriberCard extends StatelessWidget {
     }
   }
 
-  /// طلب وايت سريع: السعر الافتراضي = آخر طلب للمشترك أو 5000 + اختيار تاريخ الخدمة كما في Filament.
-  Future<void> _quickTanker(BuildContext context) async {
-    final cubit = context.read<SubscribersCubit>();
-    final requestsCubit = context.read<ServiceRequestsCubit>();
-    final defaultPrice = await cubit.quickTankerDefaultPrice(subscriber.id);
-    if (!context.mounted) return;
-    final amountCtrl = TextEditingController(
-      text: defaultPrice.toStringAsFixed(0),
-    );
-    final notesCtrl = TextEditingController();
-    var serviceDate = DateTime.now();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('طلب وايت سريع — ${subscriber.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'سعر الوايت (ريال)',
-                ),
-              ),
-              const SizedBox(height: 8),
-              AppSettingRow(
-                icon: Icons.calendar_month_rounded,
-                color: Theme.of(ctx).colorScheme.primary,
-                title: 'تاريخ الخدمة',
-                subtitle: serviceDate.toIso8601String().substring(0, 10),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: serviceDate,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2100),
-                  );
-                  if (picked != null) {
-                    setDialogState(() => serviceDate = picked);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: notesCtrl,
-                decoration: const InputDecoration(labelText: 'ملاحظات'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إلغاء'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final amount = double.tryParse(
-                  normalizeDigits(amountCtrl.text),
-                );
-                if (amount == null || amount <= 0) return;
-                await requestsCubit.create(
-                  subscriberId: subscriber.id,
-                  amount: amount,
-                  serviceDate: serviceDate.toIso8601String().substring(0, 10),
-                  notes: notesCtrl.text.isEmpty ? null : notesCtrl.text,
-                );
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('تم إضافة طلب الوايت بنجاح')),
-                  );
-                }
-              },
-              child: const Text('إضافة الطلب'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SubscriberPeek extends StatelessWidget {

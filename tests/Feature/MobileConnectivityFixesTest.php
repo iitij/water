@@ -357,7 +357,6 @@ class MobileConnectivityFixesTest extends TestCase
                 'outstanding_balance',
                 'credit_balance',
                 'uninvoiced_subscription_fee',
-                'pending_tanker_amount',
                 'open_invoices_count',
             ])
             ->assertJsonPath('invoice_id', $invoice->id)

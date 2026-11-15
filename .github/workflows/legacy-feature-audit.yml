@@ -1,4 +1,4 @@
-name: Legacy feature removal audit
+name: Retired feature removal gate
 on:
   push:
     paths:
@@ -14,14 +14,19 @@ on:
 permissions:
   contents: read
 jobs:
-  inventory:
+  reject-removed-feature:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Enumerate all remaining legacy feature references
+      - name: Reject retired billing and identity feature dependencies
         shell: bash
         run: |
-          echo "=== Paths containing references ==="
-          git grep -Il -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests || true
-          echo "=== Source locations (first 500) ==="
-          git grep -In -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests | head -500 || true
+          set -euo pipefail
+          # Upgrade-only scrubbers and acceptance tests mention old field names.
+          matches="$(git grep -In -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests || true)"
+          matches="$(printf '%s\n' "$matches" | grep -vE '^database/migrations/2026_11_16_000001_final_retired_billing_cleanup.php:|^tests/Feature/RetiredBillingFeatureSchemaTest.php:|^mobile app/lib/core/database/retired_cache_cleanup.dart:' || true)"
+          if [[ -n "$matches" ]]; then
+            printf 'Removed feature references are still active:\n%s\n' "$matches"
+            exit 1
+          fi
+          echo "No removed-feature references remain in active project source."

@@ -223,11 +223,6 @@ class _GenerateEngineRouteState extends State<_GenerateEngineRoute> {
         context,
         preselectedSubscriberId: widget.subscriberId,
       );
-    } else if (widget.engine == 'tanker') {
-      await GenerateTankerInvoiceSheet.show(
-        context,
-        preselectedSubscriberId: widget.subscriberId,
-      );
     } else if (widget.engine == 'manual') {
       if (!mounted) return;
       await Navigator.of(context).push<bool>(

@@ -301,8 +301,8 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         'فاتورة العداد',
         Icons.table_chart_outlined,
         settings,
-        const ['prev_read', 'curr_read', 'units', 'unit_price', 'cons_value', 'sub_fee', 'tanker', 'arrears', 'credit_applied'],
-        const ['القراءة السابقة', 'القراءة الحالية', 'وحدات الاستهلاك', 'سعر الوحدة', 'قيمة الاستهلاك', 'الاشتراك', 'رسوم الوايت', 'المتأخرات', 'الرصيد المخصوم'],
+        const ['prev_read', 'curr_read', 'units', 'unit_price', 'cons_value', 'sub_fee', 'arrears', 'credit_applied'],
+        const ['القراءة السابقة', 'القراءة الحالية', 'وحدات الاستهلاك', 'سعر الوحدة', 'قيمة الاستهلاك', 'الاشتراك', 'المتأخرات', 'الرصيد المخصوم'],
       ),
       _specialInvoiceTab(
         'فاتورة الاشتراك',
@@ -311,13 +311,7 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         'sub',
         'فاتورة الاشتراك',
       ),
-      _specialInvoiceTab(
-        'فاتورة الوايت',
-        Icons.local_shipping_outlined,
-        settings,
-        'tanker',
-        'فاتورة الوايت',
-      ),
+
       _fieldTab(
         'تذييل الفاتورة',
         Icons.vertical_align_bottom_rounded,

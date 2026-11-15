@@ -4,8 +4,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/ui/list_presentation_controls.dart';
-import 'package:water_project/features/service_requests/domain/repositories/service_requests_repository.dart';
-import 'package:water_project/features/service_requests/presentation/cubit/service_requests_cubit.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
 import 'package:water_project/features/subscribers/presentation/cubit/subscriber360_cubit.dart';
@@ -16,8 +14,6 @@ import 'package:water_project/features/subscription_fees/presentation/cubit/subs
 class _Subscribers extends Mock implements SubscribersRepository {}
 
 class _Fees extends Mock implements SubscriptionFeesRepository {}
-
-class _Requests extends Mock implements ServiceRequestsRepository {}
 
 const _subscriber = Subscriber(
   id: 1,
@@ -72,10 +68,8 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         final detail = _Detail();
         final fees = SubscriptionFeesCubit(_Fees());
-        final requests = ServiceRequestsCubit(_Requests());
         addTearDown(detail.close);
         addTearDown(fees.close);
-        addTearDown(requests.close);
         await tester.pumpWidget(
           MaterialApp(
             locale: const Locale('ar'),
@@ -85,7 +79,6 @@ void main() {
               providers: [
                 BlocProvider<Subscriber360Cubit>.value(value: detail),
                 BlocProvider.value(value: fees),
-                BlocProvider.value(value: requests),
               ],
               child: Subscriber360Screen(
                 subscriber: _subscriber,

@@ -81,11 +81,8 @@ class WhatsAppService
         if ($invoice->invoice_type === 'subscription') {
             $defaultMsg = "🧾 فاتورة رسوم اشتراك 🧾\nمرحباً بك {subscriber_name}،\nتم إصدار فاتورة رسوم اشتراك جديدة رقم (#{bill_number}).\n\nقيمة الرسوم: {subscription_fee} ريال\n{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n------------------------\n💵 الإجمالي المستحق: {total_amount} ريال\n------------------------\nالمحصل: {collector}\n\nللاطلاع على الفاتورة وتحميلها (PDF):\n{pdf_url}\n\nشكراً لتعاملكم معنا 🌹";
             $template = Setting::get('subscription_invoice_template', $defaultMsg);
-        } elseif ($invoice->invoice_type === 'tanker') {
-            $defaultMsg = "🧾 فاتورة رسوم وايت 🧾\nمرحباً بك {subscriber_name}،\nتم إصدار فاتورة رسوم وايت جديدة رقم (#{bill_number}).\n\nقيمة الرسوم: {tanker_fee} ريال\n{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n------------------------\n💵 الإجمالي المستحق: {total_amount} ريال\n------------------------\nالمحصل: {collector}\n\nللاطلاع على الفاتورة وتحميلها (PDF):\n{pdf_url}\n\nشكراً لتعاملكم معنا 🌹";
-            $template = Setting::get('tanker_invoice_template', $defaultMsg);
         } else {
-            $defaultMsg = "🌊 إشعار فاتورة استهلاك مياه 🌊\nمرحباً بك {subscriber_name}،\nتم إصدار فاتورتك رقم (#{bill_number}) للفترة من {period_start} إلى {period_end}.\n\n📌 تفاصيل القراءة والاستهلاك:\n• رقم العداد: {meter_code} | المربع: {square}\n• القراءة السابقة: {previous_reading}\n• القراءة الحالية: {current_reading}\n• كمية الاستهلاك: {consumption_units} وحدة (سعر الوحدة: {unit_price})\n\n💰 تفاصيل الرسوم والحساب:\n• قيمة الاستهلاك: {consumption_fee} ريال\n{if:subscription_fee}• رسوم الاشتراك: {subscription_fee} ريال{/if:subscription_fee}\n{if:tanker_fee}• رسوم الوايت: {tanker_fee} ريال{/if:tanker_fee}\n{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n------------------------\n💵 الإجمالي المستحق: {total_amount} ريال\n------------------------\n🧑‍💼 المحصل: {collector}\n\n📄 لمعاينة وتحميل الفاتورة الرسمية (PDF):\n{pdf_url}\n\nشكراً لدفعكم في الموعد المحدد 🌹";
+            $defaultMsg = "🌊 إشعار فاتورة استهلاك مياه 🌊\nمرحباً بك {subscriber_name}،\nتم إصدار فاتورتك رقم (#{bill_number}) للفترة من {period_start} إلى {period_end}.\n\n📌 تفاصيل القراءة والاستهلاك:\n• رقم العداد: {meter_code} | المربع: {square}\n• القراءة السابقة: {previous_reading}\n• القراءة الحالية: {current_reading}\n• كمية الاستهلاك: {consumption_units} وحدة (سعر الوحدة: {unit_price})\n\n💰 تفاصيل الرسوم والحساب:\n• قيمة الاستهلاك: {consumption_fee} ريال\n{if:subscription_fee}• رسوم الاشتراك: {subscription_fee} ريال{/if:subscription_fee}\n{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n------------------------\n💵 الإجمالي المستحق: {total_amount} ريال\n------------------------\n🧑‍💼 المحصل: {collector}\n\n📄 لمعاينة وتحميل الفاتورة الرسمية (PDF):\n{pdf_url}\n\nشكراً لدفعكم في الموعد المحدد 🌹";
             $template = Setting::get('reading_invoice_message_template', $defaultMsg);
         }
 
@@ -131,7 +128,6 @@ class WhatsAppService
                 '{unit_price}',
                 '{consumption_fee}',
                 '{subscription_fee}',
-                '{tanker_fee}',
                 '{previous_balance}',
                 '{collector}',
             ],
@@ -150,7 +146,6 @@ class WhatsAppService
                 $unitPrice,
                 number_format((float) $consumptionValue, 2),
                 number_format((float) ($invoice->subscription_installment ?? 0), 2),
-                number_format((float) ($invoice->tanker_charges ?? 0), 2),
                 number_format((float) ($invoice->previous_balance ?? 0), 2),
                 Auth::check() ? Auth::user()->name : 'إدارة المشروع',
             ],
@@ -160,7 +155,6 @@ class WhatsAppService
         // Handle conditional blocks
         $vars = [
             'subscription_fee' => (float) ($invoice->subscription_installment ?? 0),
-            'tanker_fee' => (float) ($invoice->tanker_charges ?? 0),
             'previous_balance' => (float) ($invoice->previous_balance ?? 0),
         ];
 

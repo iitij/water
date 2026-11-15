@@ -3,7 +3,6 @@ import 'package:get_it/get_it.dart';
 import 'package:water_project/core/fouad/api_client.dart';
 import 'package:water_project/core/fouad/currency_formatter.dart';
 import 'package:water_project/core/fouad/fouad_module.dart';
-import 'package:water_project/features/service_requests/domain/repositories/service_requests_repository.dart';
 import 'package:water_project/features/squares/domain/repositories/squares_repository.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
@@ -58,7 +57,6 @@ void main() {
       expect(GetIt.I.isRegistered<SquaresRepository>(), isTrue);
       expect(GetIt.I.isRegistered<SubscribersRepository>(), isTrue);
       expect(GetIt.I.isRegistered<SubscriptionFeesRepository>(), isTrue);
-      expect(GetIt.I.isRegistered<ServiceRequestsRepository>(), isTrue);
       expect(GetIt.I.isRegistered<TransactionsRepository>(), isTrue);
       expect(FouadModule.routes, isNotEmpty);
     });

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Meter;
 use App\Models\Reading;
-use App\Models\ServiceRequest;
 use App\Models\Setting;
 use App\Models\Square;
 use App\Models\SubscriptionFee;
@@ -153,8 +152,6 @@ class SquareController extends ApiController
                 $period = $readingService->calculateReadingPeriod($meter->id);
                 $subFee = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
                     ->where('status', 'uninvoiced')->sum('amount');
-                $tankerFee = (float) ServiceRequest::where('subscriber_id', $meter->subscriber_id)
-                    ->where('status', 'completed')->sum('amount');
 
                 $meter->setAttribute('last_reading', $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading);
                 $meter->setAttribute('period', [
@@ -163,8 +160,6 @@ class SquareController extends ApiController
                     'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
                     'has_subscription_fee' => $subFee > 0,
                     'subscription_installment' => $subFee,
-                    'has_tanker_fee' => $tankerFee > 0,
-                    'tanker_installment' => $tankerFee,
                 ]);
 
                 return $meter;

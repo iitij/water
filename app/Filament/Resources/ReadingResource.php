@@ -189,16 +189,11 @@ class ReadingResource extends Resource
                     $subscriber = $meter->subscriber;
                     
                     $hasSub = \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)->where('status', 'uninvoiced')->exists();
-                    $hasTanker = \App\Models\ServiceRequest::where('subscriber_id', $subscriber->id)->where('status', 'completed')->exists();
                     
                     $msg = "سيتم اصدار الفاتورة تلقائياً يرجى الاطلاع على الاتي قبل النقر على زر الاضافة:\n";
-                    if ($hasSub && $hasTanker) {
-                        $msg .= "هذا العميل لديه رسوم اشتراك ورسوم وايت غير مفوترة.";
-                    } elseif ($hasSub) {
-                        $msg .= "هذا العميل لديه رسوم اشتراك غير مفوترة.";
-                    } elseif ($hasTanker) {
-                        $msg .= "هذا العميل لديه رسوم وايت غير مفوترة.";
-                    }
+                     if ($hasSub) {
+                         $msg .= "هذا العميل لديه رسوم اشتراك غير مفوترة.";
+                     }
                     return new \Illuminate\Support\HtmlString('<div style="padding: 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: #92400e; background-color: #fffbeb; border-radius: 0.5rem;" role="alert"><span style="font-weight: 500;">' . nl2br(e($msg)) . '</span></div>');
                 })
                 ->visible(function ($get) {
@@ -210,8 +205,7 @@ class ReadingResource extends Resource
                     $subscriber = $meter->subscriber;
                     
                     $hasSub = \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)->where('status', 'uninvoiced')->exists();
-                    $hasTanker = \App\Models\ServiceRequest::where('subscriber_id', $subscriber->id)->where('status', 'completed')->exists();
-                    return $hasSub || $hasTanker;
+                    return $hasSub;
                 })
                 ->columnSpanFull(),
 
@@ -244,34 +238,6 @@ class ReadingResource extends Resource
                 ->prefix('ريال')
                 ->visible(fn(callable $get) => $get('has_subscription_fee')),
 
-            Forms\Components\Toggle::make('has_tanker_fee')
-                ->label('إضافة رسوم الوايت')
-                ->visible(function (callable $get) {
-                    if (\App\Models\Setting::get('auto_issue_invoice_on_reading', '0') != '1') return false;
-                    $meterId = $get('meter_id');
-                    if (!$meterId) return false;
-                    $meter = \App\Models\Meter::find($meterId);
-                    if (!$meter || !$meter->subscriber) return false;
-                    return \App\Models\ServiceRequest::where('subscriber_id', $meter->subscriber->id)->where('status', 'completed')->exists();
-                })
-                ->reactive()
-                ->afterStateUpdated(function($state, callable $set, callable $get) {
-                    if (!$state) {
-                        $set('tanker_installment', 0);
-                    } else {
-                        $meter = \App\Models\Meter::find($get('meter_id'));
-                        if ($meter && $meter->subscriber) {
-                            $set('tanker_installment', \App\Models\ServiceRequest::where('subscriber_id', $meter->subscriber->id)->where('status', 'completed')->sum('amount'));
-                        }
-                    }
-                }),
-
-            Forms\Components\TextInput::make('tanker_installment')
-                ->label('مبلغ الوايت')
-                ->numeric()
-                ->default(0)
-                ->prefix('ريال')
-                ->visible(fn(callable $get) => $get('has_tanker_fee')),
         ])->columns(2);
     }
 
@@ -380,7 +346,6 @@ class ReadingResource extends Resource
                                         meter: $meter,
                                         subscriptionInstallment: null,
                                         notes: null,
-                                        tankerInstallment: null
                                     );
                                     $invoicesCreated++;
                                 } catch (\Throwable $e) {

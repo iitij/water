@@ -8,11 +8,8 @@ import '../models/subscriber_model.dart';
 double _d(Object? v) => jDouble(v);
 
 class SubscribersRepositoryImpl implements SubscribersRepository {
-  SubscribersRepositoryImpl(this._remote, {this.tankerLookup});
+  SubscribersRepositoryImpl(this._remote);
   final SubscribersRemoteDatasource _remote;
-
-  /// حقن اختياري من وحدة طلبات الوايت لجلب آخر مبلغ (تجنباً للاعتماد الدائري).
-  final Future<double?> Function(int subscriberId)? tankerLookup;
 
   @override
   Future<List<Subscriber>> getSubscribers({String? query, int? squareId, SubscriberStatus? status, int? perPage}) =>
@@ -77,8 +74,4 @@ class SubscribersRepositoryImpl implements SubscribersRepository {
         'payment_method': method,
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
-
-  @override
-  Future<double?> lastTankerAmount(int subscriberId) async =>
-      tankerLookup == null ? null : tankerLookup!(subscriberId);
 }

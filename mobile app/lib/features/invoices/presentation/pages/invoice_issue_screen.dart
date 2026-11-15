@@ -17,8 +17,6 @@ class InvoiceIssueScreen extends StatelessWidget {
         icon: Icons.speed_rounded, route: FinanceRouteNames.invoiceGenerateMeter),
       (title: 'فاتورة اشتراك', description: 'فوترة رسوم الاشتراك والأقساط',
         icon: Icons.card_membership_outlined, route: FinanceRouteNames.invoiceGenerateSubscription),
-      (title: 'فاتورة وايت', description: 'فوترة طلب مياه مكتمل',
-        icon: Icons.local_shipping_outlined, route: FinanceRouteNames.invoiceGenerateTanker),
       (title: 'فاتورة يدوية', description: 'تحديد المبالغ وإصدار الفاتورة يدوياً',
         icon: Icons.edit_note_rounded, route: FinanceRouteNames.invoiceCreate),
     ];

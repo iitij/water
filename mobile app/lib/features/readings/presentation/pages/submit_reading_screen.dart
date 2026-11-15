@@ -64,7 +64,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _currentReadingController = TextEditingController();
   final _subscriptionInstallmentController = TextEditingController();
-  final _tankerInstallmentController = TextEditingController();
   final _imagePicker = ImagePicker();
 
   late Meter _meter;
@@ -81,7 +80,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   bool _isLoadingPeriod = true;
   bool _isSaving = false;
   bool _includeSubscriptionFee = false;
-  bool _includeTankerFee = false;
   bool _isRunningInvoiceAction = false;
   bool _isRecordingFault = false;
 
@@ -195,13 +193,9 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       setState(() {
         _period = period;
         _includeSubscriptionFee = period.hasSubscriptionFee;
-        _includeTankerFee = period.hasTankerFee;
         _subscriptionInstallmentController.text =
             period.subscriptionInstallment > 0
             ? _formatNumber(period.subscriptionInstallment)
-            : '0';
-        _tankerInstallmentController.text = period.tankerInstallment > 0
-            ? _formatNumber(period.tankerInstallment)
             : '0';
         _isLoadingPeriod = false;
       });
@@ -341,13 +335,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
           ).replaceAll(',', '.'),
         ) ??
         _period!.subscriptionInstallment;
-    final parsedTankerInstallment =
-        double.tryParse(
-          CompoundSearchQuery.normalizeDigits(
-            _tankerInstallmentController.text.trim(),
-          ).replaceAll(',', '.'),
-        ) ??
-        _period!.tankerInstallment;
 
     setState(() {
       _isSaving = true;
@@ -369,10 +356,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
           subscriptionInstallment:
               _period!.autoIssueInvoice && _includeSubscriptionFee
               ? parsedSubInstallment
-              : 0,
-          hasTankerFee: _period!.autoIssueInvoice && _includeTankerFee,
-          tankerInstallment: _period!.autoIssueInvoice && _includeTankerFee
-              ? parsedTankerInstallment
               : 0,
         ),
       );
@@ -482,7 +465,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   void dispose() {
     _currentReadingController.dispose();
     _subscriptionInstallmentController.dispose();
-    _tankerInstallmentController.dispose();
     super.dispose();
   }
 
@@ -661,15 +643,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                         selected: _includeSubscriptionFee,
                         onChanged: (value) =>
                             setState(() => _includeSubscriptionFee = value),
-                      ),
-                    if (period.hasTankerFee)
-                      _feeOption(
-                        title: 'إضافة رسوم الوايت',
-                        maxValue: period.tankerInstallment,
-                        controller: _tankerInstallmentController,
-                        selected: _includeTankerFee,
-                        onChanged: (value) =>
-                            setState(() => _includeTankerFee = value),
                       ),
                   ],
                   const SizedBox(height: 14),

@@ -22,7 +22,6 @@ class FinanceConfig {
     this.invoiceTemplate = defaultInvoiceTemplate,
     this.paymentTemplate = defaultPaymentTemplate,
     this.subscriptionInvoiceTemplate = defaultSubscriptionTemplate,
-    this.tankerInvoiceTemplate = defaultTankerTemplate,
     this.receiptMessageTemplate = defaultPaymentTemplate,
     this.thermalPaperWidthMm = 58,
     this.thermalPrintLogo = false,
@@ -43,7 +42,6 @@ class FinanceConfig {
   final String invoiceTemplate;
   final String paymentTemplate;
   final String subscriptionInvoiceTemplate;
-  final String tankerInvoiceTemplate;
   final String receiptMessageTemplate;
 
   /// إعدادات الطابعة الحرارية المحلية.
@@ -72,7 +70,6 @@ class FinanceConfig {
       'تفاصيل الرسوم والحساب:\n'
       '• قيمة الاستهلاك: {consumption_fee} ريال\n'
       '{if:subscription_fee}• رسوم الاشتراك: {subscription_fee} ريال{/if:subscription_fee}\n'
-      '{if:tanker_fee}• رسوم الوايت: {tanker_fee} ريال{/if:tanker_fee}\n'
       '{if:previous_balance}• متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n'
       '{if:credit_applied}• رصيد مخصوم: {credit_applied} ريال{/if:credit_applied}\n'
       '------------------------\n'
@@ -120,22 +117,6 @@ class FinanceConfig {
       '\n'
       'شكراً لتعاملكم معنا';
 
-  static const String defaultTankerTemplate =
-      'فاتورة رسوم وايت\n'
-      'الأخ :{subscriber_name}،\n'
-      'تم إصدار فاتورة رسوم وايت جديدة رقم (#{bill_number}).\n'
-      '\n'
-      'قيمة الرسوم: {tanker_fee} ريال\n'
-      '{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n'
-      '------------------------\n'
-      'الإجمالي المستحق: {total_amount} ريال\n'
-      '------------------------\n'
-      'المحصل: {collector}\n'
-      '\n'
-      'للاطلاع على الفاتورة وتحميلها (PDF):\n'
-      '{pdf_url}\n'
-      '\n'
-      'شكراً لتعاملكم معنا';
 
   FinanceConfig copyWith({
     bool? whatsappEnabled,
@@ -162,7 +143,6 @@ class FinanceConfig {
         invoiceTemplate: invoiceTemplate ?? this.invoiceTemplate,
         paymentTemplate: paymentTemplate ?? this.paymentTemplate,
         subscriptionInvoiceTemplate: subscriptionInvoiceTemplate,
-        tankerInvoiceTemplate: tankerInvoiceTemplate,
         receiptMessageTemplate: receiptMessageTemplate,
         thermalPaperWidthMm: thermalPaperWidthMm ?? this.thermalPaperWidthMm,
         thermalPrintLogo: thermalPrintLogo ?? this.thermalPrintLogo,
@@ -189,8 +169,6 @@ class FinanceConfig {
       subscriptionInvoiceTemplate:
           (json['subscription_invoice_template'] as String?) ??
               defaultSubscriptionTemplate,
-      tankerInvoiceTemplate:
-          (json['tanker_invoice_template'] as String?) ?? defaultTankerTemplate,
       receiptMessageTemplate:
           (json['payment_receipt_message_template'] as String?) ??
               defaultPaymentTemplate,

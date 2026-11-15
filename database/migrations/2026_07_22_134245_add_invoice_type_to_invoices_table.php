@@ -14,14 +14,12 @@ return new class extends Migration
     {
         Schema::table('invoices', function (Blueprint $table) {
             if (!Schema::hasColumn('invoices', 'invoice_type')) {
-                $table->string('invoice_type')->default('meter')->after('meter_id')->comment('نوع الفاتورة: meter, subscription, tanker');
+                $table->string('invoice_type')->default('meter')->after('meter_id')->comment('نوع الفاتورة: meter, subscription');
             }
         });
 
         // تحديث البيانات الحالية
         DB::table('invoices')->whereNotNull('meter_id')->update(['invoice_type' => 'meter']);
-        
-        DB::table('invoices')->whereNull('meter_id')->where('tanker_charges', '>', 0)->update(['invoice_type' => 'tanker']);
         
         DB::table('invoices')->whereNull('meter_id')->where('subscription_installment', '>', 0)->update(['invoice_type' => 'subscription']);
     }

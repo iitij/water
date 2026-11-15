@@ -237,10 +237,6 @@ class SubscribersCubit extends Cubit<SubscribersState> {
     }
   }
 
-  /// زر "طلب وايت" السريع: السعر الافتراضي من آخر طلب للمشترك أو 5000 (SCR-05).
-  Future<double> quickTankerDefaultPrice(int subscriberId) async =>
-      await _repo.lastTankerAmount(subscriberId) ?? 5000;
-
   Future<String> collectPayment(
     int subscriberId,
     double amount, {

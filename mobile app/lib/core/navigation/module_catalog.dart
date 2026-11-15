@@ -25,7 +25,7 @@ extension AppModuleGroupX on AppModuleGroup {
   String get description => switch (this) {
         AppModuleGroup.field => 'القراءات والعدادات والقارئ الميداني',
         AppModuleGroup.billing => 'سندات القبض والفواتير وشرائح التعرفة',
-        AppModuleGroup.crm => 'ملفات المشتركين والمربعات و${LaravelScreenStrings.serviceRequests}',
+        AppModuleGroup.crm => 'ملفات المشتركين والمربعات',
         AppModuleGroup.insights => '${LaravelScreenStrings.dashboard} والتقارير والتصدير',
         AppModuleGroup.admin => 'إعدادات المشروع وأدوات الإدارة',
         AppModuleGroup.system => 'المزامنة والملف الشخصي والمظهر',
@@ -149,7 +149,7 @@ abstract final class ModuleCatalog {
       id: 'invoices',
       group: AppModuleGroup.billing,
       title: LaravelScreenStrings.invoices,
-      subtitle: 'فواتير العدادات والاشتراكات والوايت',
+      subtitle: 'فواتير العدادات والاشتراكات',
       icon: Icons.receipt_long_rounded,
       color: AppColors.primary,
       route: RouteNames.invoices,
@@ -206,15 +206,7 @@ abstract final class ModuleCatalog {
       color: AppColors.warning,
       route: RouteNames.subscriptionFees,
     ),
-    AppModule(
-      id: 'service_requests',
-      group: AppModuleGroup.crm,
-      title: LaravelScreenStrings.serviceRequests,
-      subtitle: 'طلبات الوايت والإنجاز والفوترة',
-      icon: Icons.local_shipping_rounded,
-      color: AppColors.success,
-      route: RouteNames.serviceRequests,
-    ),
+
     AppModule(
       id: 'transactions',
       group: AppModuleGroup.crm,

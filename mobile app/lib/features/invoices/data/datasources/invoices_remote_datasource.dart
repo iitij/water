@@ -112,14 +112,6 @@ class InvoicesRemoteDataSource {
     ),
   );
 
-  /// #40 `POST /api/invoices/generate-tanker`
-  Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request) =>
-      _mutate(
-        () => _client.post(
-          FinanceEndpoints.invoicesGenerateTanker,
-          body: request.toJson(),
-        ),
-      );
 
   /// #41 `PUT /api/invoices/{id}` — تشغيل `Invoice::updated` (تحديث القيد + إعادة التوزيع).
   Future<InvoiceModel> update(int id, Map<String, dynamic> payload) =>

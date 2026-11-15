@@ -38,11 +38,10 @@ enum InvoiceStatus {
       };
 }
 
-/// نوع الفاتورة (محركات الإصدار الثلاثة).
+/// نوع الفاتورة (محركا الإصدار).
 enum InvoiceType {
   meter('meter', 'عداد'),
-  subscription('subscription', 'اشتراك'),
-  tanker('tanker', 'وايت');
+  subscription('subscription', 'اشتراك');
 
   const InvoiceType(this.wire, this.label);
 
@@ -59,8 +58,7 @@ enum InvoiceType {
 enum InvoiceItemType {
   consumption('consumption', 'استهلاك مياه'),
   previousBalance('previous_balance', 'متأخرات سابقة'),
-  subscription('subscription', 'رسوم اشتراك'),
-  tanker('tanker', 'رسوم خدمة وايت ماء');
+  subscription('subscription', 'رسوم اشتراك');
 
   const InvoiceItemType(this.wire, this.label);
 

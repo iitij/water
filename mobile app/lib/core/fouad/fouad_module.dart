@@ -4,11 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/service_requests/data/datasources/service_requests_remote_datasource.dart';
-import '../../features/service_requests/data/repositories/service_requests_repository_impl.dart';
-import '../../features/service_requests/domain/repositories/service_requests_repository.dart';
-import '../../features/service_requests/presentation/cubit/service_requests_cubit.dart';
-import '../../features/service_requests/presentation/pages/service_requests_screen.dart';
 import '../../features/squares/data/datasources/squares_remote_datasource.dart';
 import '../../features/squares/data/repositories/squares_repository_impl.dart';
 import '../../features/squares/domain/repositories/squares_repository.dart';
@@ -37,20 +32,18 @@ import '../../features/transactions/presentation/pages/transactions_screen.dart'
 import 'api_client.dart';
 import 'app_config.dart';
 
-/// حاوية تبعيات وحدات فؤاد (Dev 4) — المربعات، المشتركون، رسوم الاشتراك، طلبات الوايت، ودفتر الأستاذ.
+/// حاوية تبعيات وحدات فؤاد (Dev 4) — المربعات، المشتركون، رسوم الاشتراك ودفتر الأستاذ.
 class FouadDependencies {
   const FouadDependencies({
     required this.squares,
     required this.subscribers,
     required this.fees,
-    required this.requests,
     required this.transactions,
   });
 
   final SquaresRepository squares;
   final SubscribersRepository subscribers;
   final SubscriptionFeesRepository fees;
-  final ServiceRequestsRepository requests;
   final TransactionsRepository transactions;
 
   factory FouadDependencies.create({Dio? dio, bool? demoMode}) {
@@ -59,27 +52,21 @@ class FouadDependencies {
         squares: FakeSquaresRepository(),
         subscribers: FakeSubscribersRepository(),
         fees: FakeSubscriptionFeesRepository(),
-        requests: FakeServiceRequestsRepository(),
         transactions: FakeTransactionsRepository(),
       );
     }
     final api = ApiClient(dio: dio);
-    final requests = ServiceRequestsRepositoryImpl(ServiceRequestsRemoteDatasource(api));
     return FouadDependencies(
       squares: SquaresRepositoryImpl(SquaresRemoteDatasource(api)),
-      subscribers: SubscribersRepositoryImpl(
-        SubscribersRemoteDatasource(api),
-        tankerLookup: requests.lastAmountFor,
-      ),
+      subscribers: SubscribersRepositoryImpl(SubscribersRemoteDatasource(api)),
       fees: SubscriptionFeesRepositoryImpl(SubscriptionFeesRemoteDatasource(api)),
-      requests: requests,
       transactions: TransactionsRepositoryImpl(TransactionsRemoteDatasource(api)),
     );
   }
 }
 
 /// نقطة تركيب وحدات فؤاد (Dev 4) — تسجّل المستودعات في `GetIt.I` بشكل كسول وآمن (idempotent)
-/// وتوفّر مسارات `GoRouter` للشاشات السبع (`SCR-04..07`, `SCR-19`, `SCR-20`, `SCR-22`).
+/// وتوفّر مسارات `GoRouter` للشاشات الأساسية (`SCR-04..07`, `SCR-19`, `SCR-20`, `SCR-22`).
 class FouadModule {
   const FouadModule._();
 
@@ -114,9 +101,6 @@ class FouadModule {
     }
     if (!getIt.isRegistered<SubscriptionFeesRepository>()) {
       getIt.registerLazySingleton<SubscriptionFeesRepository>(() => created.fees);
-    }
-    if (!getIt.isRegistered<ServiceRequestsRepository>()) {
-      getIt.registerLazySingleton<ServiceRequestsRepository>(() => created.requests);
     }
     if (!getIt.isRegistered<TransactionsRepository>()) {
       getIt.registerLazySingleton<TransactionsRepository>(() => created.transactions);
@@ -155,9 +139,6 @@ class FouadModule {
                           ? SubscriberStatus.active
                           : null,
                     )..init(),
-                  ),
-                  BlocProvider<ServiceRequestsCubit>(
-                    create: (_) => ServiceRequestsCubit(d.requests),
                   ),
                 ],
                 child: const SubscribersScreen(),
@@ -215,11 +196,6 @@ class FouadModule {
                       ..subscriberId = subscriber.id
                       ..load(),
                   ),
-                  BlocProvider<ServiceRequestsCubit>(
-                    create: (_) => ServiceRequestsCubit(d.requests)
-                      ..subscriberId = subscriber.id
-                      ..load(),
-                  ),
                 ],
                 child: Subscriber360Screen(subscriber: subscriber),
               ),
@@ -247,11 +223,6 @@ class FouadModule {
                       ..subscriberId = subscriber.id
                       ..load(),
                   ),
-                  BlocProvider<ServiceRequestsCubit>(
-                    create: (_) => ServiceRequestsCubit(d.requests)
-                      ..subscriberId = subscriber.id
-                      ..load(),
-                  ),
                 ],
                 child: Subscriber360Screen(subscriber: subscriber),
               ),
@@ -272,20 +243,7 @@ class FouadModule {
             );
           },
         ),
-        GoRoute(
-          path: '/service-requests',
-          name: 'service-requests',
-          builder: (context, state) {
-            final d = deps;
-            return RepositoryProvider<SubscribersRepository>.value(
-              value: d.subscribers,
-              child: BlocProvider<ServiceRequestsCubit>(
-                create: (_) => ServiceRequestsCubit(d.requests)..load(),
-                child: const ServiceRequestsScreen(),
-              ),
-            );
-          },
-        ),
+
         GoRoute(
           path: '/transactions',
           name: 'transactions',
@@ -313,9 +271,6 @@ class FouadModule {
     }
     if (getIt.isRegistered<SubscriptionFeesRepository>()) {
       getIt.unregister<SubscriptionFeesRepository>();
-    }
-    if (getIt.isRegistered<ServiceRequestsRepository>()) {
-      getIt.unregister<ServiceRequestsRepository>();
     }
     if (getIt.isRegistered<TransactionsRepository>()) {
       getIt.unregister<TransactionsRepository>();

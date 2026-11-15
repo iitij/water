@@ -120,14 +120,13 @@ class InvoiceAccounting {
   }
 
   /// معاينة صافي الفاتورة قبل الإصدار: `subtotal - min(credit, subtotal)`
-  /// حيث `subtotal = consumption + subscription + tanker` (`InvoiceService` سطر 96-104).
+  /// حيث `subtotal = consumption + subscription` (`InvoiceService` سطر 96-104).
   static double previewNetPayable({
     required double consumptionFee,
     required double subscriptionInstallment,
-    required double tankerCharges,
     required double availableCredit,
   }) {
-    final subtotal = consumptionFee + subscriptionInstallment + tankerCharges;
+    final subtotal = consumptionFee + subscriptionInstallment;
     final creditApplied = availableCredit > 0 && subtotal > 0
         ? (availableCredit < subtotal ? availableCredit : subtotal)
         : 0.0;
@@ -138,10 +137,9 @@ class InvoiceAccounting {
   static double previewCreditApplied({
     required double consumptionFee,
     required double subscriptionInstallment,
-    required double tankerCharges,
     required double availableCredit,
   }) {
-    final subtotal = consumptionFee + subscriptionInstallment + tankerCharges;
+    final subtotal = consumptionFee + subscriptionInstallment;
     if (availableCredit <= 0 || subtotal <= 0) return 0;
     return availableCredit < subtotal ? availableCredit : subtotal;
   }

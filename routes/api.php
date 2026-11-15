@@ -16,7 +16,6 @@ use App\Http\Controllers\Api\ReadingFaultController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\RouteVisitController;
 use App\Http\Controllers\Api\SearchController;
-use App\Http\Controllers\Api\ServiceRequestController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SquareController;
 use App\Http\Controllers\Api\SubscriberController;
@@ -107,7 +106,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/pay', [InvoiceController::class, 'payFromPayload']);
     Route::post('/invoices/generate-meter', [InvoiceController::class, 'generateMeterInvoice']);
     Route::post('/invoices/generate-subscription', [InvoiceController::class, 'generateSubscriptionInvoice']);
-    Route::post('/invoices/generate-tanker', [InvoiceController::class, 'generateTankerInvoice']);
     Route::post('/invoices/bulk-recalculate', [InvoiceController::class, 'bulkRecalculate']);
     Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
     Route::post('/invoices/bulk-restore', [InvoiceController::class, 'bulkRestore']);
@@ -135,16 +133,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
-
-    // Subscription fees and tanker/service requests.
+    // Subscription fees.
     Route::post('/subscription-fees/bulk-delete', [SubscriptionFeeController::class, 'bulkDelete']);
     Route::post('/subscription-fees/{id}/invoice', [SubscriptionFeeController::class, 'invoice']);
     Route::apiResource('subscription-fees', SubscriptionFeeController::class)->parameters(['subscription-fees' => 'id']);
 
-    Route::post('/service-requests/bulk-delete', [ServiceRequestController::class, 'bulkDelete']);
-    Route::patch('/service-requests/{id}/complete', [ServiceRequestController::class, 'complete']);
-    Route::post('/service-requests/{id}/invoice', [ServiceRequestController::class, 'invoice']);
-    Route::apiResource('service-requests', ServiceRequestController::class)->parameters(['service-requests' => 'id']);
 
     // Tariffs, including soft-delete recovery.
     Route::post('/tariffs/bulk-delete', [TariffController::class, 'bulkDelete']);

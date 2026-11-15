@@ -93,8 +93,6 @@ class InvoiceSettings extends Page implements HasForms
             'inv_lbl_sub_fee' => Setting::get('inv_lbl_sub_fee', 'الاشتراك'),
             'inv_show_arrears' => Setting::get('inv_show_arrears', '1') == '1',
             'inv_lbl_arrears' => Setting::get('inv_lbl_arrears', 'المتأخرات'),
-            'inv_show_tanker' => Setting::get('inv_show_tanker', '0') == '1',
-            'inv_lbl_tanker' => Setting::get('inv_lbl_tanker', 'رسوم الوايت'),
             'inv_show_credit_applied' => Setting::get('inv_show_credit_applied', '1') == '1',
             'inv_lbl_credit_applied' => Setting::get('inv_lbl_credit_applied', 'رصيد مخصوم'),
 
@@ -116,16 +114,6 @@ class InvoiceSettings extends Page implements HasForms
             'sub_lbl_arrears' => Setting::get('sub_lbl_arrears', 'المتأخرات'),
             'sub_show_notes' => Setting::get('sub_show_notes', '1') == '1',
             'sub_lbl_notes' => Setting::get('sub_lbl_notes', 'ملاحظات'),
-
-            // Tanker Invoice
-            'tanker_inv_title_main' => Setting::get('tanker_inv_title_main', 'فاتورة وايت ماء'),
-            'tanker_inv_title_details' => Setting::get('tanker_inv_title_details', 'تفاصيل رسوم الوايت'),
-            'tanker_show_amount' => Setting::get('tanker_show_amount', '1') == '1',
-            'tanker_lbl_amount' => Setting::get('tanker_lbl_amount', 'قيمة الوايت'),
-            'tanker_show_arrears' => Setting::get('tanker_show_arrears', '1') == '1',
-            'tanker_lbl_arrears' => Setting::get('tanker_lbl_arrears', 'المتأخرات'),
-            'tanker_show_notes' => Setting::get('tanker_show_notes', '1') == '1',
-            'tanker_lbl_notes' => Setting::get('tanker_lbl_notes', 'ملاحظات'),
         ]);
     }
 
@@ -206,7 +194,6 @@ class InvoiceSettings extends Page implements HasForms
                                 $this->buildFieldConfig('سعر الوحدة', 'inv_show_unit_price', 'inv_lbl_unit_price'),
                                 $this->buildFieldConfig('قيمة الاستهلاك', 'inv_show_cons_value', 'inv_lbl_cons_value'),
                                 $this->buildFieldConfig('الاشتراك', 'inv_show_sub_fee', 'inv_lbl_sub_fee'),
-                                $this->buildFieldConfig('رسوم الوايت', 'inv_show_tanker', 'inv_lbl_tanker'),
                                 $this->buildFieldConfig('المتأخرات', 'inv_show_arrears', 'inv_lbl_arrears'),
                                 $this->buildFieldConfig('الرصيد المخصوم', 'inv_show_credit_applied', 'inv_lbl_credit_applied'),
                             ]),
@@ -223,17 +210,6 @@ class InvoiceSettings extends Page implements HasForms
                                 $this->buildFieldConfig('الملاحظات', 'sub_show_notes', 'sub_lbl_notes'),
                             ]),
 
-                        Tabs\Tab::make('فاتورة الوايت')
-                            ->icon('heroicon-o-truck')
-                            ->schema([
-                                Grid::make(2)->schema([
-                                    TextInput::make('tanker_inv_title_main')->label('عنوان الفاتورة الرئيسي')->required(),
-                                    TextInput::make('tanker_inv_title_details')->label('عنوان قسم التفاصيل')->required(),
-                                ]),
-                                $this->buildFieldConfig('مبلغ الوايت', 'tanker_show_amount', 'tanker_lbl_amount'),
-                                $this->buildFieldConfig('المتأخرات', 'tanker_show_arrears', 'tanker_lbl_arrears'),
-                                $this->buildFieldConfig('الملاحظات', 'tanker_show_notes', 'tanker_lbl_notes'),
-                            ]),
 
                         Tab::make('تذييل الفاتورة')
                             ->icon('heroicon-o-document-arrow-down')

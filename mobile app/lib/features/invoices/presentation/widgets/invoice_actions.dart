@@ -294,7 +294,7 @@ Future<void> showInvoiceActionSheet(
           final confirmed = await ConfirmDialog.show(
             context,
             title: 'حذف الفاتورة ${invoice.billNumber}',
-            message: 'سيُحذف الحذف الناعم، وتُفكّ ارتباط القراءات والأقساط والوايت، '
+            message: 'سيُحذف الحذف الناعم، وتُفكّ ارتباط القراءات والأقساط، '
                 'وتُعاد توزيع الدفعات تلقائياً.',
             confirmLabel: 'حذف',
             destructive: true,

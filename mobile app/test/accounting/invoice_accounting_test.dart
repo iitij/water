@@ -230,16 +230,14 @@ void main() {
         InvoiceAccounting.previewNetPayable(
           consumptionFee: 600,
           subscriptionInstallment: 200,
-          tankerCharges: 200,
           availableCredit: 400,
         ),
-        600,
+         400,
       );
       expect(
         InvoiceAccounting.previewCreditApplied(
           consumptionFee: 600,
           subscriptionInstallment: 200,
-          tankerCharges: 200,
           availableCredit: 400,
         ),
         400,
@@ -251,7 +249,6 @@ void main() {
         InvoiceAccounting.previewNetPayable(
           consumptionFee: 100,
           subscriptionInstallment: 0,
-          tankerCharges: 0,
           availableCredit: 900,
         ),
         0,
@@ -260,7 +257,6 @@ void main() {
         InvoiceAccounting.previewCreditApplied(
           consumptionFee: 100,
           subscriptionInstallment: 0,
-          tankerCharges: 0,
           availableCredit: 900,
         ),
         100,

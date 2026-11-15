@@ -15,7 +15,6 @@ return new class extends Migration
             $table->date('bill_date');
             $table->decimal('consumption_fee', 12, 2)->default(0)->comment('قيمة الاستهلاك');
             $table->decimal('subscription_installment', 12, 2)->default(0)->comment('قسط الاشتراك');
-            $table->decimal('tanker_charges', 12, 2)->default(0)->comment('رسوم الوايت');
             $table->decimal('previous_balance', 12, 2)->default(0)->comment('المتأخرات السابقة');
             $table->decimal('credit_applied', 12, 2)->default(0)->comment('رصيد دائن مخصوم');
             $table->decimal('total_amount', 12, 2)->default(0)->comment('الإجمالي النهائي');

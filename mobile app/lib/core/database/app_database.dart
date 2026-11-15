@@ -10,6 +10,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../models/square_label.dart';
 import 'database_encryption.dart';
+import 'retired_cache_cleanup.dart';
 
 /// Drift-backed SQLite store for the field/offline features.
 ///
@@ -54,7 +55,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -104,6 +105,39 @@ class AppDatabase extends GeneratedDatabase {
             if (!columns.any((column) => column['name'] == 'code')) {
               await customStatement('ALTER TABLE cached_squares ADD COLUMN code TEXT');
             }
+          }
+
+          if (from < 5 && to >= 5) {
+            // Rebuild rather than hiding removed columns: preserve all valid
+            // offline reading periods while eliminating obsolete feature data.
+            await customStatement('''
+              CREATE TABLE cached_meter_periods_clean (
+                meter_id INTEGER PRIMARY KEY,
+                last_reading REAL NOT NULL DEFAULT 0,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
+                has_subscription_fee INTEGER NOT NULL DEFAULT 0,
+                subscription_installment REAL NOT NULL DEFAULT 0,
+                cached_at TEXT NOT NULL
+              )
+            ''');
+            await customStatement('''
+              INSERT INTO cached_meter_periods_clean (
+                meter_id, last_reading, period_start, period_end,
+                auto_issue_invoice, has_subscription_fee,
+                subscription_installment, cached_at
+              )
+              SELECT meter_id, last_reading, period_start, period_end,
+                     auto_issue_invoice, has_subscription_fee,
+                     subscription_installment, cached_at
+              FROM cached_meter_periods
+            ''');
+            await customStatement('DROP TABLE cached_meter_periods');
+            await customStatement(
+              'ALTER TABLE cached_meter_periods_clean RENAME TO cached_meter_periods',
+            );
+            await purgeRetiredOfflineFields(this);
           }
         },
         beforeOpen: (_) async {
@@ -197,8 +231,6 @@ class AppDatabase extends GeneratedDatabase {
       auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
       has_subscription_fee INTEGER NOT NULL DEFAULT 0,
       subscription_installment REAL NOT NULL DEFAULT 0,
-      has_tanker_fee INTEGER NOT NULL DEFAULT 0,
-      tanker_installment REAL NOT NULL DEFAULT 0,
       cached_at TEXT NOT NULL
     )''',
     '''CREATE TABLE IF NOT EXISTS cached_readings (
@@ -326,7 +358,7 @@ class AppDatabase extends GeneratedDatabase {
           '''INSERT OR REPLACE INTO cached_subscribers(
              server_id, name, phone, address, square_id, square_name, status,
              subscription_start_date, balance, meters_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
           [
             id,
             (subscriber['name'] ?? '').toString(),
@@ -501,8 +533,7 @@ class AppDatabase extends GeneratedDatabase {
     await _execute(
       '''INSERT OR REPLACE INTO cached_meter_periods(
         meter_id, last_reading, period_start, period_end, auto_issue_invoice,
-        has_subscription_fee, subscription_installment, has_tanker_fee,
-        tanker_installment, cached_at
+        has_subscription_fee, subscription_installment, cached_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         meterId,
@@ -512,8 +543,6 @@ class AppDatabase extends GeneratedDatabase {
         _bool(period['auto_issue_invoice']) ? 1 : 0,
         _bool(period['has_subscription_fee']) ? 1 : 0,
         _double(period['subscription_installment']),
-        _bool(period['has_tanker_fee']) ? 1 : 0,
-        _double(period['tanker_installment']),
         _now(),
       ],
     );
@@ -593,8 +622,6 @@ class AppDatabase extends GeneratedDatabase {
         'auto_issue_invoice',
         'has_subscription_fee',
         'subscription_installment',
-        'has_tanker_fee',
-        'tanker_installment',
         'cached_at',
       ],
       'readings': <String>[

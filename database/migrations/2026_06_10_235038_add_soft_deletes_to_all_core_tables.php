@@ -18,7 +18,6 @@ return new class extends Migration
             'invoices',
             'invoice_items',
             'payments',
-            'service_requests'
         ];
 
         foreach ($tables as $table) {
@@ -40,7 +39,6 @@ return new class extends Migration
             'invoices',
             'invoice_items',
             'payments',
-            'service_requests'
         ];
 
         foreach ($tables as $tableName) {

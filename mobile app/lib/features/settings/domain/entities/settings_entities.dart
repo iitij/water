@@ -110,7 +110,6 @@ class WhatsAppSettings extends Equatable {
     required this.invoiceMessage,
     required this.paymentMessage,
     required this.subscriptionMessage,
-    required this.tankerMessage,
     required this.phoneNumberId,
     required this.accessToken,
     required this.invoiceTemplate,
@@ -125,7 +124,6 @@ class WhatsAppSettings extends Equatable {
         invoiceMessage: SettingsDefaults.invoiceMessage,
         paymentMessage: SettingsDefaults.paymentMessage,
         subscriptionMessage: SettingsDefaults.subscriptionMessage,
-        tankerMessage: SettingsDefaults.tankerMessage,
         phoneNumberId: '',
         accessToken: '',
         invoiceTemplate: 'new_invoice_template',
@@ -143,7 +141,6 @@ class WhatsAppSettings extends Equatable {
   final String invoiceMessage;
   final String paymentMessage;
   final String subscriptionMessage;
-  final String tankerMessage;
   final String phoneNumberId;
   final String accessToken;
   final String invoiceTemplate;
@@ -160,7 +157,6 @@ class WhatsAppSettings extends Equatable {
     String? invoiceMessage,
     String? paymentMessage,
     String? subscriptionMessage,
-    String? tankerMessage,
     String? phoneNumberId,
     String? accessToken,
     String? invoiceTemplate,
@@ -175,7 +171,6 @@ class WhatsAppSettings extends Equatable {
       invoiceMessage: invoiceMessage ?? this.invoiceMessage,
       paymentMessage: paymentMessage ?? this.paymentMessage,
       subscriptionMessage: subscriptionMessage ?? this.subscriptionMessage,
-      tankerMessage: tankerMessage ?? this.tankerMessage,
       phoneNumberId: phoneNumberId ?? this.phoneNumberId,
       accessToken: accessToken ?? this.accessToken,
       invoiceTemplate: invoiceTemplate ?? this.invoiceTemplate,
@@ -193,7 +188,6 @@ class WhatsAppSettings extends Equatable {
         invoiceMessage,
         paymentMessage,
         subscriptionMessage,
-        tankerMessage,
         phoneNumberId,
         accessToken,
         invoiceTemplate,

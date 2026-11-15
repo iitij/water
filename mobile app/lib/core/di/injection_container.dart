@@ -232,7 +232,7 @@ Future<void> configureDependencies({String? appVersion}) async {
   // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
   FinanceModule.ensure();
 
-  // Dev 4: Subscribers 360°, Squares, Subscription Fees, Tankers & Ledger.
+  // Dev 4: Subscribers 360°, Squares, Subscription Fees & Ledger.
   FouadModule.ensure(dio: dioClient.dio);
 
   // صندوق المحصّل (2.0 — الفصل 5.2): حالة واحدة مشتركة بين شاشة التحصيل

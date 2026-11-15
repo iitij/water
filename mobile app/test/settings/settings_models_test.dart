@@ -17,7 +17,6 @@ void main() {
     final receipt = TemplateSettingsModel.fromJson(TemplateKind.receipt, const <String, dynamic>{});
 
     expect(invoice.boolean('inv_show_bill_number'), isTrue);
-    expect(invoice.boolean('inv_show_tanker'), isFalse);
     expect(invoice.text('inv_lbl_credit_applied'), 'رصيد مخصوم');
     expect(invoice.boolean('inv_show_notes'), isTrue);
     expect(receipt.text('rect_amount_words_suffix'), 'ريال يمني لا غير');
@@ -30,17 +29,15 @@ void main() {
     expect(settings.invoiceMessage, contains('{unit_price}'));
     expect(settings.paymentMessage, contains('{payment_method}'));
     expect(settings.subscriptionMessage, contains('{collector}'));
-    expect(settings.tankerMessage, contains('{collector}'));
   });
 
-  test('WhatsApp model reads legacy aliases and writes all four template contracts', () {
+  test('WhatsApp model reads legacy aliases and writes the supported template contracts', () {
     final settings = WhatsAppSettingsModel.fromJson({
       'whatsapp_enabled': '1',
       'whatsapp_method': 'local_api',
       'reading_invoice_message_template': 'invoice',
       'payment_receipt_message_template': 'payment',
       'subscription_invoice_template': 'subscription',
-      'tanker_invoice_template': 'tanker',
       'whatsapp_access_token': 'secret',
     });
     final json = settings.toJson();
@@ -51,7 +48,6 @@ void main() {
     expect(json['reading_invoice_message_template'], 'invoice');
     expect(json['whatsapp_payment_message'], 'payment');
     expect(json['subscription_invoice_template'], 'subscription');
-    expect(json['tanker_invoice_template'], 'tanker');
     expect(settings.toCacheJson(), isNot(contains('whatsapp_access_token')));
   });
 

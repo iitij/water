@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Reading;
-use App\Models\ServiceRequest;
 use App\Models\Setting;
 use App\Models\SubscriptionFee;
 use App\Models\Tariff;
@@ -111,8 +110,6 @@ class ReadingController extends ApiController
         $period = $this->readingService->calculateReadingPeriod($meterId);
         $subscriptionAmount = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
             ->where('status', 'uninvoiced')->sum('amount');
-        $tankerAmount = (float) ServiceRequest::where('subscriber_id', $meter->subscriber_id)
-            ->where('status', 'completed')->sum('amount');
 
         return response()->json([
             'meter' => $meter,
@@ -122,8 +119,6 @@ class ReadingController extends ApiController
             'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
             'has_subscription_fee' => SubscriptionFee::where('subscriber_id', $meter->subscriber_id)->where('status', 'uninvoiced')->exists(),
             'subscription_installment' => $subscriptionAmount,
-            'has_tanker_fee' => ServiceRequest::where('subscriber_id', $meter->subscriber_id)->where('status', 'completed')->exists(),
-            'tanker_installment' => $tankerAmount,
         ]);
     }
 
@@ -241,8 +236,6 @@ class ReadingController extends ApiController
             'ids.*' => ['integer', 'distinct', 'exists:readings,id'],
             'has_subscription_fee' => ['sometimes', 'boolean'],
             'subscription_installment' => ['nullable', 'numeric', 'min:0'],
-            'has_tanker_fee' => ['sometimes', 'boolean'],
-            'tanker_installment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
         $readings = Reading::with('meter.subscriber')->whereIn('id', $data['ids'])->where('is_invoiced', false)->get();
@@ -265,7 +258,6 @@ class ReadingController extends ApiController
                     meter: $meter,
                     subscriptionInstallment: ($request->boolean('has_subscription_fee')) ? (float) ($data['subscription_installment'] ?? 0) : null,
                     notes: $data['notes'] ?? null,
-                    tankerInstallment: ($request->boolean('has_tanker_fee')) ? (float) ($data['tanker_installment'] ?? 0) : null,
                 );
                 $invoices[] = $invoice->load(['subscriber', 'meter', 'items']);
             } catch (\Throwable $exception) {
@@ -299,8 +291,6 @@ class ReadingController extends ApiController
             'readings.*.image_filename' => ['nullable', 'string', 'max:255'],
             'readings.*.has_subscription_fee' => ['sometimes', 'boolean'],
             'readings.*.subscription_installment' => ['nullable', 'numeric', 'min:0'],
-            'readings.*.has_tanker_fee' => ['sometimes', 'boolean'],
-            'readings.*.tanker_installment' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $results = [];
@@ -365,8 +355,6 @@ class ReadingController extends ApiController
             'image_filename' => ['nullable', 'string', 'max:255'],
             'has_subscription_fee' => ['sometimes', 'boolean'],
             'subscription_installment' => ['nullable', 'numeric', 'min:0'],
-            'has_tanker_fee' => ['sometimes', 'boolean'],
-            'tanker_installment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ];
     }
@@ -454,7 +442,6 @@ class ReadingController extends ApiController
                     meter: $meter,
                     subscriptionInstallment: ! empty($data['has_subscription_fee']) ? (float) ($data['subscription_installment'] ?? 0) : null,
                     notes: $data['notes'] ?? null,
-                    tankerInstallment: ! empty($data['has_tanker_fee']) ? (float) ($data['tanker_installment'] ?? 0) : null,
                 );
                 $invoiceIssued = true;
                 $invoice->load(['subscriber.square', 'meter', 'items', 'readings']);
@@ -515,7 +502,6 @@ class ReadingController extends ApiController
             'unit_price' => number_format($unitPrice, 2, '.', ''),
             'consumption_fee' => number_format((float) $invoice->consumption_fee, 2, '.', ''),
             'subscription_installment' => number_format((float) $invoice->subscription_installment, 2, '.', ''),
-            'tanker_charges' => number_format((float) $invoice->tanker_charges, 2, '.', ''),
             'previous_balance' => number_format((float) $invoice->previous_balance, 2, '.', ''),
             'credit_applied' => number_format((float) $invoice->credit_applied, 2, '.', ''),
             'collector' => $request->user()?->name ?? 'إدارة المشروع',

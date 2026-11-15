@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Reading;
-use App\Models\ServiceRequest;
 use App\Models\Setting;
 use App\Models\Subscriber;
 use Illuminate\Support\Facades\DB;
@@ -20,11 +19,10 @@ class InvoiceService
         ?\App\Models\Meter $meter = null,
         ?float $subscriptionInstallment = null,
         ?string $notes = null,
-        ?float $tankerInstallment = null,
         bool $includeReadings = true,
         string $invoiceType = 'meter'
     ): Invoice {
-        return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $tankerInstallment, $includeReadings, $invoiceType) {
+        return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $includeReadings, $invoiceType) {
             if ($includeReadings) {
                 if ($invoiceType !== 'meter') {
                     throw \Illuminate\Validation\ValidationException::withMessages([
@@ -84,22 +82,11 @@ class InvoiceService
                 $subscriptionAmount = $subscriptionInstallment;
             }
 
-            // 4. رسوم الوايت (شرطي) - بناءً على ما يحدده المستخدم
-            $pendingTankerRequests = collect();
-            $tankerCharges = 0;
-            if ($tankerInstallment !== null && $tankerInstallment > 0) {
-                $pendingTankerRequests = ServiceRequest::where('subscriber_id', $subscriber->id)
-                    ->where('status', 'completed')
-                    ->get();
-                $tankerCharges = $tankerInstallment;
-            }
 
             // 5. خصم الرصيد الدائن
-            $subtotal = $consumptionFee + $subscriptionAmount + $tankerCharges;
-            
-            // تحقق من وجود عناصر قابلة للفوترة (استهلاك، أقساط، أو وايت)
-            if ($uninvoicedReadings->isEmpty() && $subscriptionAmount <= 0 && $tankerCharges <= 0) {
-                throw new \Exception('لا توجد قراءات جديدة أو طلبات وايت أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة لهذا المشترك.');
+            $subtotal = $consumptionFee + $subscriptionAmount;
+            if ($uninvoicedReadings->isEmpty() && $subscriptionAmount <= 0) {
+                throw new \Exception('لا توجد قراءات جديدة أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة لهذا المشترك.');
             }
 
             $creditApplied = 0;
@@ -118,7 +105,7 @@ class InvoiceService
                 $billingPeriodStart = $firstReading->period_start ?? \Carbon\Carbon::parse($firstReading->reading_date)->startOfMonth()->toDateString();
                 $billingPeriodEnd = $lastReading->period_end ?? \Carbon\Carbon::parse($lastReading->reading_date)->endOfMonth()->toDateString();
             } else {
-                // في حال عدم وجود قراءات ولكن يوجد استحقاقات أخرى (اشتراك، وايت)
+                // في حال عدم وجود قراءات ولكن يوجد استحقاقات أخرى (اشتراك)
                 $billingPeriodStart = now()->startOfMonth()->toDateString();
                 $billingPeriodEnd = now()->toDateString();
             }
@@ -137,7 +124,6 @@ class InvoiceService
                 'billing_period_end' => $billingPeriodEnd,
                 'consumption_fee' => $consumptionFee,
                 'subscription_installment' => $subscriptionAmount,
-                'tanker_charges' => $tankerCharges,
                 'previous_balance' => $previousBalance,
                 'credit_applied' => $creditApplied,
                 'total_amount' => $totalAmount,
@@ -175,17 +161,7 @@ class InvoiceService
                     'amount' => $subscriptionAmount,
                 ];
             }
-
-            if ($tankerCharges > 0) {
-                $items[] = [
-                    'invoice_id' => $invoice->id,
-                    'type' => 'tanker',
-                    'description' => "رسوم خدمة وايت ماء",
-                    'amount' => $tankerCharges,
-                ];
-            }
-
-            // removed creditApplied item
+// removed creditApplied item
 
             foreach ($items as $item) {
                 InvoiceItem::create(array_merge($item, [
@@ -196,9 +172,6 @@ class InvoiceService
 
             // 9. تحديث حالة القراءات إلى مفوترة
             $uninvoicedReadings->each(fn ($r) => $r->update(['is_invoiced' => true, 'invoice_id' => $invoice->id]));
-
-            // 10. تحديث حالة طلبات الوايت
-            $pendingTankerRequests->each(fn ($r) => $r->update(['status' => 'invoiced', 'invoice_id' => $invoice->id]));
 
             // 11. تحديث رسوم الاشتراك
             $pendingSubscriptionFees->each(fn ($f) => $f->update(['status' => 'invoiced', 'invoice_id' => $invoice->id]));
@@ -266,7 +239,6 @@ class InvoiceService
                 'billing_period_end' => now()->toDateString(),
                 'consumption_fee' => 0,
                 'subscription_installment' => $subtotal,
-                'tanker_charges' => 0,
                 'previous_balance' => 0,
                 'credit_applied' => $creditApplied,
                 'total_amount' => $subtotal,
@@ -308,64 +280,4 @@ class InvoiceService
         });
     }
 
-    public function generateInvoiceForTankerFee(\App\Models\ServiceRequest $request, ?string $notes = null): Invoice
-    {
-        return DB::transaction(function () use ($request, $notes) {
-            $subscriber = $request->subscriber;
-            
-            $subtotal = (float) $request->amount;
-            $availableBalance = (float) $subscriber->balance;
-            $creditApplied = 0;
-            
-            if ($availableBalance > 0 && $subtotal > 0) {
-                $creditApplied = min($availableBalance, $subtotal);
-            }
-
-            $invoice = Invoice::create([
-                'subscriber_id' => $subscriber->id,
-                'meter_id' => null,
-                'invoice_type' => 'tanker',
-                'bill_number' => Invoice::generateBillNumber(),
-                'bill_date' => now()->toDateString(),
-                'billing_period_start' => now()->startOfMonth()->toDateString(),
-                'billing_period_end' => now()->toDateString(),
-                'consumption_fee' => 0,
-                'subscription_installment' => 0,
-                'tanker_charges' => $subtotal,
-                'previous_balance' => 0,
-                'credit_applied' => $creditApplied,
-                'total_amount' => $subtotal,
-                'amount_paid' => 0,
-                'status' => 'issued',
-                'notes' => $notes,
-            ]);
-
-            InvoiceItem::create([
-                'invoice_id' => $invoice->id,
-                'type' => 'tanker',
-                'description' => 'رسوم خدمة وايت ماء',
-                'amount' => $subtotal,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $request->update([
-                'status' => 'invoiced',
-                'invoice_id' => $invoice->id,
-            ]);
-
-            $transactionService = new TransactionService();
-            $transactionService->recordTransaction(
-                subscriber: $subscriber,
-                type: 'invoice',
-                amount: -$subtotal,
-                description: 'إصدار فاتورة رسوم وايت: ' . $invoice->bill_number,
-                meter: null,
-                reference: $invoice
-            );
-
-            $transactionService->updateSubscriberBalance($subscriber);
-            return $invoice;
-        });
-    }
 }

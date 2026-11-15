@@ -15,7 +15,7 @@ abstract final class SubscriberExperienceStrings {
   static String pathsLabel(List<int> paths) => 'المسار: ${paths.join('، ')}';
   static const profile = 'ملف المشترك';
   static const generalBalance = 'الحساب العام';
-  static const generalHint = 'اشتراك وطلبات وايت • مستقل عن رصيد العداد';
+  static const generalHint = 'اشتراك • مستقل عن رصيد العداد';
   static const totalCredit = 'إجمالي الدائن';
   static const totalDebit = 'إجمالي المدين';
   static const uninvoicedFees = 'رسوم لم تُفوتر';
@@ -28,7 +28,6 @@ abstract final class SubscriberExperienceStrings {
   static const invoices = 'الفواتير';
   static const payments = LaravelScreenStrings.payments;
   static const fees = 'رسوم الاشتراك';
-  static const tankers = LaravelScreenStrings.serviceRequests;
   static const statement = 'كشف الحساب';
   static const statementTitle = 'كشف حساب مشترك';
   static const project = 'مشروع مياه الوشاح';
@@ -46,7 +45,6 @@ abstract final class SubscriberExperienceStrings {
   static const allEntries = 'يشمل الحركات المطابقة للتصفية الحالية';
   static const details = 'عرض الملف';
   static const collect = 'تحصيل دفعة';
-  static const tanker = 'طلب وايت';
   static const balance = 'الرصيد الصافي';
   static const noSquare = 'بدون مربع';
   static const options = 'خيارات المشترك';

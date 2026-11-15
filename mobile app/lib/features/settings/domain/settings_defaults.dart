@@ -44,8 +44,6 @@ abstract final class SettingsDefaults {
       'thank_you': 'شكراً لدفعكم في الموعد / Thank you for your timely payment',
       'notes': 'الملاحظات',
     }),
-    'inv_show_tanker': false,
-    'inv_lbl_tanker': 'رسوم الوايت',
     'sub_inv_title_main': 'فاتورة اشتراك',
     'sub_inv_title_details': 'تفاصيل رسوم الاشتراك',
     'sub_show_amount': true,
@@ -54,14 +52,6 @@ abstract final class SettingsDefaults {
     'sub_lbl_arrears': 'المتأخرات',
     'sub_show_notes': true,
     'sub_lbl_notes': 'ملاحظات',
-    'tanker_inv_title_main': 'فاتورة وايت ماء',
-    'tanker_inv_title_details': 'تفاصيل رسوم الوايت',
-    'tanker_show_amount': true,
-    'tanker_lbl_amount': 'قيمة الوايت',
-    'tanker_show_arrears': true,
-    'tanker_lbl_arrears': 'المتأخرات',
-    'tanker_show_notes': true,
-    'tanker_lbl_notes': 'ملاحظات',
   };
 
   static final receipt = <String, Object?>{
@@ -124,7 +114,6 @@ abstract final class SettingsDefaults {
 تفاصيل الرسوم والحساب:
 • قيمة الاستهلاك: {consumption_fee} ريال
 {if:subscription_fee}• رسوم الاشتراك: {subscription_fee} ريال{/if:subscription_fee}
-{if:tanker_fee}• رسوم الوايت: {tanker_fee} ريال{/if:tanker_fee}
 {if:previous_balance}• متأخرات سابق: {previous_balance} ريال{/if:previous_balance}
 {if:credit_applied}• رصيد مخصوم: {credit_applied} ريال{/if:credit_applied}
 ------------------------
@@ -159,22 +148,6 @@ abstract final class SettingsDefaults {
 تم إصدار فاتورة رسوم اشتراك جديدة رقم (#{bill_number}).
 
 قيمة الرسوم: {subscription_fee} ريال
-{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}
-------------------------
-الإجمالي المستحق: {total_amount} ريال
-------------------------
-المحصل: {collector}
-
-للاطلاع على الفاتورة وتحميلها (PDF):
-{pdf_url}
-
-شكراً لتعاملكم معنا''';
-
-  static const tankerMessage = '''فاتورة رسوم وايت
-الأخ :{subscriber_name}،
-تم إصدار فاتورة رسوم وايت جديدة رقم (#{bill_number}).
-
-قيمة الرسوم: {tanker_fee} ريال
 {if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}
 ------------------------
 الإجمالي المستحق: {total_amount} ريال

@@ -9,7 +9,6 @@ abstract final class LaravelScreenStrings {
   static const invoices = 'الفواتير';
   static const payments = 'المدفوعات';
   static const subscriptionFees = 'طلبات الاشتراك';
-  static const serviceRequests = 'طلبات الوايت';
   static const transactions = 'سجل الحركات (الدفتر)';
   static const tariffs = 'التعرفة والتسعير';
   static const settings = 'الإعدادات';

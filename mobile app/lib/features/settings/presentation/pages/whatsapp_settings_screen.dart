@@ -212,11 +212,6 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
         field: 'subscriptionMessage',
         variables: WhatsAppTemplateSamples.subscriptionVariables,
       ),
-      (
-        title: 'فاتورة الوايت',
-        field: 'tankerMessage',
-        variables: WhatsAppTemplateSamples.tankerVariables,
-      ),
     ];
     return SettingsSectionCard(
       title: 'قوالب الرسائل والمعاينة الحية',
@@ -337,7 +332,7 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
       'invoiceMessage' => settings.copyWith(invoiceMessage: value),
       'paymentMessage' => settings.copyWith(paymentMessage: value),
       'subscriptionMessage' => settings.copyWith(subscriptionMessage: value),
-      _ => settings.copyWith(tankerMessage: value),
+      _ => settings,
     };
     context.read<WhatsAppSettingsCubit>().update(updated);
   }
@@ -347,7 +342,6 @@ class _WhatsAppSettingsViewState extends State<_WhatsAppSettingsView> {
       'invoiceMessage': settings.invoiceMessage,
       'paymentMessage': settings.paymentMessage,
       'subscriptionMessage': settings.subscriptionMessage,
-      'tankerMessage': settings.tankerMessage,
       'phoneNumberId': settings.phoneNumberId,
       'accessToken': settings.accessToken,
       'invoiceTemplate': settings.invoiceTemplate,

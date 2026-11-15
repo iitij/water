@@ -9,8 +9,6 @@ import 'package:water_project/features/devices/presentation/cubit/devices_cubit.
 import 'package:water_project/features/global_search/data/global_search_repository.dart';
 import 'package:water_project/features/global_search/data/models/global_search_models.dart';
 import 'package:water_project/features/global_search/presentation/cubit/global_search_cubit.dart';
-import 'package:water_project/features/service_requests/domain/repositories/service_requests_repository.dart';
-import 'package:water_project/features/service_requests/presentation/cubit/service_requests_cubit.dart';
 import 'package:water_project/features/settings/domain/entities/settings_entities.dart';
 import 'package:water_project/features/settings/domain/repositories/settings_repository.dart';
 import 'package:water_project/features/settings/presentation/cubit/general_settings_cubit.dart';
@@ -27,7 +25,6 @@ class _Settings extends Mock implements SettingsRepository {}
 class _Search extends Mock implements GlobalSearchRepository {}
 class _Devices extends Mock implements DevicesRepository {}
 class _Squares extends Mock implements SquaresRepository {}
-class _Requests extends Mock implements ServiceRequestsRepository {}
 
 // Audit reproductions intentionally assert the intended behavior. Failures are
 // evidence of unresolved bugs; no production implementation is changed here.
@@ -120,17 +117,6 @@ void main() {
     final pending = cubit.load();
     await cubit.close();
     response.complete([]);
-    await expectLater(pending, completes);
-  });
-
-  test('leaving service requests while loading does not throw after close', () async {
-    final repository = _Requests();
-    final response = Completer<TankerPage>();
-    when(() => repository.getRequests()).thenAnswer((_) => response.future);
-    final cubit = ServiceRequestsCubit(repository);
-    final pending = cubit.load();
-    await cubit.close();
-    response.complete(const TankerPage(requests: []));
     await expectLater(pending, completes);
   });
 

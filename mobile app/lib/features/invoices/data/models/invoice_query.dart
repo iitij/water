@@ -176,8 +176,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
     this.includeReadings = true,
     this.hasSubscriptionFee = false,
     this.subscriptionInstallment = 0,
-    this.hasTankerFee = false,
-    this.tankerInstallment = 0,
     this.notes,
   });
 
@@ -186,8 +184,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
   final bool includeReadings;
   final bool hasSubscriptionFee;
   final double subscriptionInstallment;
-  final bool hasTankerFee;
-  final double tankerInstallment;
   final String? notes;
 
   /// جسم الطلب لـ `POST /api/invoices/generate-meter` (§2.3-38).
@@ -199,8 +195,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
     'subscription_installment': hasSubscriptionFee
         ? subscriptionInstallment
         : 0,
-    'has_tanker_fee': hasTankerFee,
-    'tanker_installment': hasTankerFee ? tankerInstallment : 0,
     if (notes != null && notes!.isNotEmpty) 'notes': notes,
   };
 
@@ -211,8 +205,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
     includeReadings,
     hasSubscriptionFee,
     subscriptionInstallment,
-    hasTankerFee,
-    tankerInstallment,
     notes,
   ];
 }
@@ -249,34 +241,6 @@ class GenerateSubscriptionInvoiceRequest extends Equatable {
   ];
 }
 
-class GenerateTankerInvoiceRequest extends Equatable {
-  const GenerateTankerInvoiceRequest({
-    required this.subscriberId,
-    required this.tankerInstallment,
-    this.serviceRequestIds = const <int>[],
-    this.notes,
-  });
-
-  final int subscriberId;
-  final double tankerInstallment;
-  final List<int> serviceRequestIds;
-  final String? notes;
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-    'subscriber_id': subscriberId,
-    'tanker_installment': tankerInstallment,
-    if (serviceRequestIds.isNotEmpty) 'service_request_ids': serviceRequestIds,
-    if (notes != null && notes!.isNotEmpty) 'notes': notes,
-  };
-
-  @override
-  List<Object?> get props => <Object?>[
-    subscriberId,
-    tankerInstallment,
-    serviceRequestIds,
-    notes,
-  ];
-}
 
 /// نتيجة عملية (إعادة احتساب/حذف جماعي) مطابقة لشكل `bulk-*` المقترح.
 class BulkActionResult extends Equatable {

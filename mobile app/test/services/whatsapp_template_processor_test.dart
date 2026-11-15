@@ -10,7 +10,7 @@ import 'package:water_project/features/invoices/presentation/whatsapp/invoice_wh
 ///  - المتغيرات `{name}` `{receipt_number}` `{amount}` `{invoice_remaining}`
 ///    `{outstanding_balance}` `{credit_balance}` `{pdf_link}` (سطر 187-215).
 ///  - البلوكات الشرطية `{if:key}...{/if:key}` تظهر فقط إذا كان الرقم > 0.
-///  - هاتف المستأجر له الأولوية على هاتف المشترك.
+///  - هاتف المشترك هو جهة الاتصال المعتمدة.
 void main() {
   group('WhatsAppTemplateProcessor.render', () {
     test('يستبدل المتغيرات المعروفة ويترك المجهولة كما هي', () {
@@ -56,19 +56,19 @@ void main() {
     });
 
     test('البلوك الشرطي متعدد الأسطر يُزال كاملاً (dotAll)', () {
-      const template = 'رأس\n{if:tanker_fee}سطر ١\nسطر ٢\n{/if:tanker_fee}ذيل';
+      const template = 'رأس\n{if:subscription_fee}سطر ١\nسطر ٢\n{/if:subscription_fee}ذيل';
 
       final removed = WhatsAppTemplateProcessor.render(
         template: template,
         variables: const <String, String>{},
-        conditionalValues: const <String, num>{'tanker_fee': 0},
+        conditionalValues: const <String, num>{'subscription_fee': 0},
       );
       expect(removed, 'رأس\nذيل');
 
       final kept = WhatsAppTemplateProcessor.render(
         template: template,
         variables: const <String, String>{},
-        conditionalValues: const <String, num>{'tanker_fee': 500},
+        conditionalValues: const <String, num>{'subscription_fee': 500},
       );
       expect(kept, contains('سطر ١'));
       expect(kept, contains('سطر ٢'));
@@ -174,10 +174,9 @@ void main() {
       expect(invoice.messageRecipientName, 'صالح');
     });
 
-    test('قالب الاشتراك والوايت يُنتقيان حسب نوع الفاتورة', () {
+    test('قالب الاشتراك يُنتقيان حسب نوع الفاتورة', () {
       const typed = FinanceConfig(
         subscriptionInvoiceTemplate: 'اشتراك: {subscription_fee}',
-        tankerInvoiceTemplate: 'وايت: {tanker_fee}',
       );
 
       final subscription = const InvoiceModel(
@@ -187,19 +186,11 @@ void main() {
         billNumber: 'SUB-1',
         subscriptionInstallment: 2000,
       );
-      final tanker = const InvoiceModel(
-        id: 12,
-        subscriberId: 3,
-        invoiceType: InvoiceType.tanker,
-        billNumber: 'TNK-1',
-        tankerCharges: 3000,
-      );
 
       expect(
         InvoiceWhatsAppBuilder.renderMessage(typed, subscription),
         'اشتراك: 2,000',
       );
-      expect(InvoiceWhatsAppBuilder.renderMessage(typed, tanker), 'وايت: 3,000');
     });
   });
 }

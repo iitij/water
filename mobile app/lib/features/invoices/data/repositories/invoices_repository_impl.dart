@@ -57,10 +57,6 @@ class InvoicesRepositoryImpl
   ) => _remote.generateSubscription(request);
 
   @override
-  Future<InvoiceModel> generateTanker(GenerateTankerInvoiceRequest request) =>
-      _remote.generateTanker(request);
-
-  @override
   Future<void> delete(int id) => _remote.delete(id);
 
   @override

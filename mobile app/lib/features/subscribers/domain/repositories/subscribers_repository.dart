@@ -27,6 +27,4 @@ abstract class SubscribersRepository {
   Future<List<LedgerEntry>> getStatement(int subscriberId, {PartyFilter party = const PartyAll()});
   Future<List<Square>> getSquaresLookup();
   Future<Map<String, dynamic>> collectPayment(int subscriberId, {required double amount, int? invoiceId, String method = 'cash', String? reason});
-  /// آخر مبلغ وايت للمشترك (السعر الافتراضي لزر "طلب وايت" السريع) أو null.
-  Future<double?> lastTankerAmount(int subscriberId);
 }

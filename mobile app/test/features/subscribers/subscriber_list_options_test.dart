@@ -7,8 +7,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/l10n/list_options_strings.dart';
 import 'package:water_project/core/l10n/subscriber_experience_strings.dart';
 import 'package:water_project/core/ui/list_presentation_controls.dart';
-import 'package:water_project/features/service_requests/domain/repositories/service_requests_repository.dart';
-import 'package:water_project/features/service_requests/presentation/cubit/service_requests_cubit.dart';
 import 'package:water_project/features/subscribers/data/models/subscriber_model.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
@@ -16,8 +14,6 @@ import 'package:water_project/features/subscribers/presentation/cubit/subscriber
 import 'package:water_project/features/subscribers/presentation/pages/subscribers_screen.dart';
 
 class _Subscribers extends Mock implements SubscribersRepository {}
-
-class _Requests extends Mock implements ServiceRequestsRepository {}
 
 void main() {
   test('parses all paths numerically and preserves actual addition time', () {
@@ -187,16 +183,13 @@ void main() {
         ],
       );
       final cubit = SubscribersCubit(repo);
-      final requests = ServiceRequestsCubit(_Requests());
       addTearDown(cubit.close);
-      addTearDown(requests.close);
       await cubit.load();
       await tester.pumpWidget(
         MaterialApp(
           home: MultiBlocProvider(
             providers: [
               BlocProvider.value(value: cubit),
-              BlocProvider.value(value: requests),
             ],
             child: const SubscribersScreen(),
           ),

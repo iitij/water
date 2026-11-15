@@ -6,7 +6,6 @@ use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Reading;
-use App\Models\ServiceRequest;
 use App\Models\Setting;
 use App\Models\Square;
 use App\Models\Subscriber;

@@ -276,40 +276,6 @@ class SubscriberResource extends Resource
                             ->send();
                     }),
 
-                Action::make('add_service')
-                    ->label('طلب وايت')
-                    ->icon('heroicon-o-truck')
-                    ->color('info')
-                    ->form([
-                        Forms\Components\TextInput::make('amount')
-                            ->label('سعر الوايت')
-                            ->numeric()
-                            ->required()
-                            ->prefix('ريال'),
-
-                        Forms\Components\DatePicker::make('service_date')
-                            ->label('تاريخ الخدمة')
-                            ->default(now())
-                            ->required(),
-
-                        Forms\Components\Textarea::make('notes')
-                            ->label('ملاحظات')
-                            ->rows(2),
-                    ])
-                    ->action(function (Subscriber $record, array $data): void {
-                        $record->serviceRequests()->create([
-                            'service_type' => 'water_tanker',
-                            'amount' => $data['amount'],
-                            'service_date' => $data['service_date'],
-                            'status' => 'completed',
-                            'notes' => $data['notes'] ?? null,
-                        ]);
-
-                        Notification::make()
-                            ->title('تم إضافة طلب الوايت')
-                            ->success()
-                            ->send();
-                    }),
 
                 ViewAction::make(),
                 EditAction::make(),
@@ -328,7 +294,6 @@ class SubscriberResource extends Resource
             RelationManagers\InvoicesRelationManager::class,
             RelationManagers\PaymentsRelationManager::class,
             RelationManagers\SubscriptionFeesRelationManager::class,
-            RelationManagers\ServiceRequestsRelationManager::class,
         ];
     }
 

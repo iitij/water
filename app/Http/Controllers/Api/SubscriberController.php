@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Payment;
-use App\Models\ServiceRequest;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Models\SubscriptionFee;
@@ -86,7 +85,6 @@ class SubscriberController extends ApiController
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
             'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name'])->latest('payment_date')->latest('id'),
             'subscriptionFees' => fn ($q) => $q->latest(),
-            'serviceRequests' => fn ($q) => $q->latest('service_date'),
             'transactions' => fn ($q) => $q->latest(),
         ])->findOrFail($id);
 
@@ -165,7 +163,6 @@ class SubscriberController extends ApiController
             || $subscriber->invoices()->withTrashed()->exists()
             || $subscriber->payments()->exists()
             || $subscriber->subscriptionFees()->exists()
-            || $subscriber->serviceRequests()->exists()
             || $subscriber->transactions()->exists();
     }
 
@@ -321,8 +318,6 @@ class SubscriberController extends ApiController
             + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
         $uninvoicedFee = (float) SubscriptionFee::where('subscriber_id', $subscriber->id)
             ->where('status', 'uninvoiced')->sum('amount');
-        $tankerAmount = (float) ServiceRequest::where('subscriber_id', $subscriber->id)
-            ->where('status', 'completed')->sum('amount');
 
         return response()->json([
             'subscriber_id' => $subscriber->id,
@@ -335,7 +330,6 @@ class SubscriberController extends ApiController
             'outstanding_balance' => round($outstanding, 2),
             'credit_balance' => round($credit, 2),
             'uninvoiced_subscription_fee' => round($uninvoicedFee, 2),
-            'pending_tanker_amount' => round($tankerAmount, 2),
             'open_invoices_count' => $invoices->count(),
         ]);
     }
@@ -422,7 +416,6 @@ class SubscriberController extends ApiController
     {
         return match ($type) {
             'subscription' => 'رسوم اشتراك',
-            'tanker' => 'رسوم وايت',
             default => 'استهلاك مياه',
         };
     }

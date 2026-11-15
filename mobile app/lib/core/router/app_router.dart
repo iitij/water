@@ -279,7 +279,7 @@ class AppRouter {
           // ── Dev 3: Finance, Invoices, Payments & Tariffs (SCR-13..18, 21) ──
           ...FinanceModule.routes,
 
-          // ── Dev 4: Squares, Subscribers 360°, Fees, Tankers & Ledger (SCR-04..07, 19, 20, 22) ──
+          // ── Dev 4: Squares, Subscribers 360°, Fees & Ledger (SCR-04..07, 19, 20, 22) ──
           ...FouadModule.routes,
 
           // ── Dev 5: Dashboard, Reports, Settings, RBAC & Exports (SCR-03, 23..27) ──

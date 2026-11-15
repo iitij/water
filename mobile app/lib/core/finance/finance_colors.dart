@@ -17,14 +17,10 @@ class FinanceColors {
   /// اشتراك/رسوم دورية.
   static const Color subscription = AppColors.violet;
 
-  /// فاتورة وايت (نقل بالصهريج).
-  static const Color tanker = AppColors.warning;
 
-
-  /// لون المحرك حسب نوع الفاتورة (`meter|subscription|tanker`).
+  /// لون المحرك حسب نوع الفاتورة (`meter|subscription`).
   static Color forEngine(String engine) => switch (engine) {
         'subscription' => subscription,
-        'tanker' => tanker,
         _ => meter,
       };
 }

@@ -19,8 +19,6 @@ import 'package:water_project/features/meters/domain/meters_repository.dart';
 import 'package:water_project/features/meters/presentation/widgets/meter_card_widget.dart';
 import 'package:water_project/features/readings/domain/readings_repository.dart';
 import 'package:water_project/features/readings/presentation/pages/field_reader_screen.dart';
-import 'package:water_project/features/service_requests/domain/repositories/service_requests_repository.dart';
-import 'package:water_project/features/service_requests/presentation/cubit/service_requests_cubit.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
 import 'package:water_project/features/subscribers/presentation/cubit/subscriber360_cubit.dart';
@@ -35,8 +33,6 @@ import 'package:water_project/features/subscription_fees/presentation/pages/subs
 class _Subscribers extends Mock implements SubscribersRepository {}
 
 class _Fees extends Mock implements SubscriptionFeesRepository {}
-
-class _Requests extends Mock implements ServiceRequestsRepository {}
 
 class _Meters extends Mock implements MetersRepository {}
 
@@ -144,9 +140,6 @@ Widget _app(Widget screen, {bool dark = false, double scale = 1}) =>
 Widget _list({void Function(Subscriber)? onOpen}) => MultiBlocProvider(
   providers: [
     BlocProvider<SubscribersCubit>(create: (_) => _ListCubit()),
-    BlocProvider<ServiceRequestsCubit>(
-      create: (_) => ServiceRequestsCubit(_Requests()),
-    ),
   ],
   child: SubscribersScreen(onOpen360: onOpen),
 );
@@ -161,9 +154,6 @@ Widget _detail({
     ),
     BlocProvider<SubscriptionFeesCubit>(
       create: (_) => SubscriptionFeesCubit(_Fees()),
-    ),
-    BlocProvider<ServiceRequestsCubit>(
-      create: (_) => ServiceRequestsCubit(_Requests()),
     ),
   ],
   child: Subscriber360Screen(
@@ -507,7 +497,6 @@ void main() {
       'الفواتير',
       'المدفوعات',
       'رسوم الاشتراك',
-      'طلبات الوايت',
       'كشف الحساب',
       SubscriberExperienceStrings.meters,
     ]) {

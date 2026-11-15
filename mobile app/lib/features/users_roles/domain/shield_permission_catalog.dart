@@ -10,7 +10,6 @@ ShieldPermissionCatalog standardShieldPermissionCatalog() {
     'Meter': LaravelScreenStrings.meters,
     'Square': LaravelScreenStrings.squares,
     'SubscriptionFee': LaravelScreenStrings.subscriptionFees,
-    'ServiceRequest': LaravelScreenStrings.serviceRequests,
     'Tariff': LaravelScreenStrings.tariffs,
     'Transaction': LaravelScreenStrings.transactions,
     'User': LaravelScreenStrings.users,

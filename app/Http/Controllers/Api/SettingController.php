@@ -10,7 +10,7 @@ use Illuminate\Validation\Rule;
 class SettingController extends ApiController
 {
     private const SECRET_KEYS = ['whatsapp_access_token'];
-    private const INVOICE_PREFIXES = ['invoice_', 'inv_', 'sub_', 'tanker_', 'site_favicon'];
+    private const INVOICE_PREFIXES = ['invoice_', 'inv_', 'sub_', 'site_favicon'];
 
     public function index(Request $request)
     {

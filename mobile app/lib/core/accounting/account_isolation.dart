@@ -19,7 +19,7 @@ class AccountIsolation {
           : 's$subscriberId:$invoiceType';
 
   /// مفتاح مجموعة توزيع الدفعات (FIFO): العداد إن وُجد، وإلا الحساب العام للمشترك.
-  /// ملاحظة: لا دخل لـ `invoice_type` هنا — فواتير الاشتراك والوايت تتشارك الحساب
+  /// ملاحظة: لا دخل لـ `invoice_type` هنا — فواتير الاشتراك تتشارك الحساب
   /// العام للمشترك (`meter_id == null`) تماماً كما في `distributePayment`.
   static String allocationGroupKey({
     required int subscriberId,
@@ -43,7 +43,7 @@ enum AccountKind {
   /// `meters.balance` — فواتير/سندات `meter_id != null`.
   meter,
 
-  /// `subscribers.balance` — فواتير/سندات `meter_id == null` (اشتراك + وايت).
+  /// `subscribers.balance` — فواتير/سندات `meter_id == null` (اشتراك).
   subscriberGeneral;
 
   String get label => switch (this) {

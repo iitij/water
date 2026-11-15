@@ -357,16 +357,15 @@
             }
 
             $isSub = $invoice->invoice_type === 'subscription';
-            $isTanker = $invoice->invoice_type === 'tanker';
 
             // DYNAMIC CONFIGURATION
             $chk = function($key) { return Setting::get($key, '1') == '1'; };
             $lbl = function($key, $default) { return Setting::get($key, $default); };
 
-            $mainTitle = $isSub ? $lbl('sub_inv_title_main', 'فاتورة اشتراك') : ($isTanker ? $lbl('tanker_inv_title_main', 'فاتورة وايت ماء') : $lbl('inv_title_main', 'فاتورة استهلاك مياه'));
-            $detailsTitle = $isSub ? $lbl('sub_inv_title_details', 'تفاصيل رسوم الاشتراك') : ($isTanker ? $lbl('tanker_inv_title_details', 'تفاصيل رسوم الوايت') : $lbl('inv_title_consumption', 'تفاصيل الاستهلاك'));
-            $showNotes = $isSub ? $chk('sub_show_notes') : ($isTanker ? $chk('tanker_show_notes') : $chk('inv_show_notes'));
-            $notesLabel = $isSub ? $lbl('sub_lbl_notes', 'الملاحظات') : ($isTanker ? $lbl('tanker_lbl_notes', 'الملاحظات') : $lbl('inv_lbl_notes', 'الملاحظات'));
+            $mainTitle = $isSub ? $lbl('sub_inv_title_main', 'فاتورة اشتراك') : $lbl('inv_title_main', 'فاتورة استهلاك مياه');
+            $detailsTitle = $isSub ? $lbl('sub_inv_title_details', 'تفاصيل رسوم الاشتراك') : $lbl('inv_title_consumption', 'تفاصيل الاستهلاك');
+            $showNotes = $isSub ? $chk('sub_show_notes') : $chk('inv_show_notes');
+            $notesLabel = $isSub ? $lbl('sub_lbl_notes', 'الملاحظات') : $lbl('inv_lbl_notes', 'الملاحظات');
 
             $formatPhone = function($phone) {
             if (!$phone || $phone === '-') return '-';
@@ -387,7 +386,7 @@
             $infoFields = [];
             if($chk('inv_show_bill_number')) $infoFields[] = ['l' => $lbl('inv_lbl_bill_number', 'رقم الفاتورة'), 'v' => preg_replace('/[^0-9]/', '', $invoice->bill_number), 'is_ltr' => true];
             
-            if ($isSub || $isTanker) {
+            if ($isSub) {
                 $infoFields[] = ['l' => 'التاريخ', 'v' => \Carbon\Carbon::parse($invoice->bill_date)->format('d/m/Y')];
             } else {
                 if($chk('inv_show_date_from')) $infoFields[] = ['l' => $lbl('inv_lbl_date_from', 'من تاريخ'), 'v' => \Carbon\Carbon::parse($invoice->billing_period_start ?? \Carbon\Carbon::parse($invoice->bill_date)->subMonth()->startOfMonth())->format('d/m/Y')];
@@ -420,15 +419,7 @@
                     $consHeaders[] = $lbl('sub_lbl_arrears', 'المتأخرات');
                     $consValues[] = number_format($invoice->previous_balance, 2);
                 }
-            } elseif ($isTanker) {
-                if($chk('tanker_show_amount')) {
-                    $consHeaders[] = $lbl('tanker_lbl_amount', 'قيمة الوايت');
-                    $consValues[] = '<strong style="font-size:12px;">' . number_format($invoice->tanker_charges, 2) . '</strong>';
-                }
-                if($chk('tanker_show_arrears')) {
-                    $consHeaders[] = $lbl('tanker_lbl_arrears', 'المتأخرات');
-                    $consValues[] = number_format($invoice->previous_balance, 2);
-                }
+
             } else {
                 if($chk('inv_show_prev_read')) {
                 $consHeaders[] = $lbl('inv_lbl_prev_read', 'القراءة السابقة');
@@ -453,10 +444,6 @@
                 if($chk('inv_show_sub_fee') && $invoice->subscription_installment > 0) {
                 $consHeaders[] = $lbl('inv_lbl_sub_fee', 'الاشتراك');
                 $consValues[] = number_format($invoice->subscription_installment, 2);
-                }
-                if($chk('inv_show_tanker') && $invoice->tanker_charges > 0) {
-                $consHeaders[] = $lbl('inv_lbl_tanker', 'رسوم الوايت');
-                $consValues[] = number_format($invoice->tanker_charges, 2);
                 }
                 if($chk('inv_show_arrears')) {
                 $consHeaders[] = $lbl('inv_lbl_arrears', 'المتأخرات');

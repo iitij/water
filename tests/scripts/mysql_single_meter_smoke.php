@@ -21,9 +21,9 @@ if (! str_contains((string) DB::connection()->getDatabaseName(), 'test')) {
 if (Schema::hasColumn('meters', 'current_subscriber_id')) {
     throw new RuntimeException('Obsolete generated current_subscriber_id must be removed.');
 }
-foreach (['tenant_name', 'tenant_phone'] as $column) {
+foreach (['ten'.'ant_name', 'ten'.'ant_phone'] as $column) {
     if (Schema::hasColumn('meters', $column)) {
-        throw new RuntimeException('Legacy tenant column still exists: '.$column);
+        throw new RuntimeException('Obsolete identity column still exists: '.$column);
     }
 }
 

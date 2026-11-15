@@ -34,8 +34,6 @@ import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/widgets/payment_actions.dart';
 import '../../../readings/domain/readings_repository.dart';
 import '../../../readings/presentation/widgets/record_reading_sheet.dart';
-import '../../../service_requests/domain/entities/service_request.dart';
-import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscription_fees/domain/entities/subscription_fee.dart';
 import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/subscriber.dart';
@@ -58,7 +56,6 @@ bool _has360Cubits(BuildContext context) {
   try {
     context.read<Subscriber360Cubit>();
     context.read<SubscriptionFeesCubit>();
-    context.read<ServiceRequestsCubit>();
     return true;
   } catch (_) {
     return false;
@@ -94,11 +91,6 @@ class Subscriber360Screen extends StatelessWidget {
             ),
             BlocProvider<SubscriptionFeesCubit>(
               create: (_) => SubscriptionFeesCubit(deps.fees)
-                ..subscriberId = subscriber.id
-                ..load(),
-            ),
-            BlocProvider<ServiceRequestsCubit>(
-              create: (_) => ServiceRequestsCubit(deps.requests)
                 ..subscriberId = subscriber.id
                 ..load(),
             ),
@@ -232,7 +224,7 @@ class _Subscriber360View extends StatelessWidget {
         final detail = state.detail;
         final activeSubscriber = detail?.subscriber ?? subscriber;
         return DefaultTabController(
-          length: 6,
+          length: 5,
           child: SubPageScaffold(
             title: activeSubscriber.name,
             subtitle: SubscriberExperienceStrings.profile,
@@ -312,7 +304,6 @@ class _Subscriber360View extends StatelessWidget {
                           payments: detail.payments,
                         ),
                         _FeesTab(meters: detail.summary.meterBalances),
-                        const _RequestsTab(),
                         _StatementTab(subscriberName: activeSubscriber.name),
                       ],
                     ),
@@ -324,7 +315,7 @@ class _Subscriber360View extends StatelessWidget {
   }
 }
 
-/// All six sections remain visible without a horizontally hidden tab rail.
+/// All five sections remain visible without a horizontally hidden tab rail.
 class _SubscriberSections extends StatelessWidget {
   const _SubscriberSections();
 
@@ -337,7 +328,6 @@ class _SubscriberSections extends StatelessWidget {
       (Icons.receipt_long_outlined, SubscriberExperienceStrings.invoices),
       (Icons.payments_outlined, SubscriberExperienceStrings.payments),
       (Icons.card_membership_outlined, SubscriberExperienceStrings.fees),
-      (Icons.local_shipping_outlined, SubscriberExperienceStrings.tankers),
       (Icons.account_balance_outlined, SubscriberExperienceStrings.statement),
     ];
     return AnimatedBuilder(
@@ -348,7 +338,7 @@ class _SubscriberSections extends StatelessWidget {
           builder: (context, constraints) {
             final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
             final columns = constraints.maxWidth > 700
-                ? 6
+                ? 5
                 : largeText
                 ? 2
                 : 3;

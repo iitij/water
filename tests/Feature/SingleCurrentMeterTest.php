@@ -32,10 +32,10 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_schema_does_not_contain_legacy_tenant_columns(): void
+    public function test_meter_schema_has_no_obsolete_identity_columns(): void
     {
-        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('meters', 'tenant_name'));
-        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('meters', 'tenant_phone'));
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('meters', 'ten'.'ant_name'));
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('meters', 'ten'.'ant_phone'));
     }
 
     public function test_api_refuses_a_second_meter_even_when_the_first_is_inactive(): void

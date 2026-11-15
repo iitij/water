@@ -102,13 +102,6 @@ const _destinations = <_Destination>[
     page: false,
   ),
   (
-    source: 'Resources/ServiceRequestResource',
-    label: LaravelScreenStrings.serviceRequests,
-    route: RouteNames.serviceRequests,
-    module: 'service_requests',
-    page: false,
-  ),
-  (
     source: 'Resources/Transactions/TransactionResource',
     label: LaravelScreenStrings.transactions,
     route: RouteNames.transactions,
@@ -194,7 +187,6 @@ void main() {
       'Invoices': SubscriberExperienceStrings.invoices,
       'Payments': SubscriberExperienceStrings.payments,
       'SubscriptionFees': SubscriberExperienceStrings.fees,
-      'ServiceRequests': SubscriberExperienceStrings.tankers,
     };
     for (final tab in tabs.entries) {
       expect(

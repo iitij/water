@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('invoice_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
-            $table->string('type', 50)->comment('consumption/subscription/tanker/previous_balance/credit');
+            $table->string('type', 50)->comment('consumption/subscription/previous_balance/credit');
             $table->string('description', 255);
             $table->decimal('amount', 12, 2);
             $table->timestamps();

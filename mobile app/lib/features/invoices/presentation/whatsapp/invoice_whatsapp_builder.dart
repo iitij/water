@@ -8,10 +8,10 @@ import '../../domain/accounting/finance_enums.dart';
 
 /// يبني رسالة واتساب الفاتورة مطابقةً لـ `WhatsAppService::getInvoiceMessageUrl`
 /// (`app/Services/WhatsAppService.php` سطر 60-186):
-///  - اختيار القالب حسب `invoice_type` (عداد/اشتراك/وايت).
+///  - اختيار القالب حسب `invoice_type` (عداد/اشتراك).
 ///  - هاتف المشترك فقط (`subscriber.phone`).
 ///  - المتغيرات `total_amount = total_amount + previous_balance - credit_applied`.
-///  - البلوكات الشرطية `{if:subscription_fee}` و`{if:tanker_fee}` و`{if:previous_balance}`
+///  - البلوكات الشرطية `{if:subscription_fee}` و`{if:previous_balance}`
 ///    و`{if:credit_applied}`.
 class InvoiceWhatsAppBuilder {
   InvoiceWhatsAppBuilder({required FinanceConfigRepository configRepository})
@@ -50,7 +50,6 @@ class InvoiceWhatsAppBuilder {
   }) {
     final template = switch (invoice.invoiceType) {
       InvoiceType.subscription => config.subscriptionInvoiceTemplate,
-      InvoiceType.tanker => config.tankerInvoiceTemplate,
       InvoiceType.meter => config.invoiceTemplate,
     };
 
@@ -75,7 +74,6 @@ class InvoiceWhatsAppBuilder {
       'unit_price': CurrencyFormatter.amount(unitPrice),
       'consumption_fee': CurrencyFormatter.amount(invoice.consumptionFee),
       'subscription_fee': CurrencyFormatter.amount(invoice.subscriptionInstallment),
-      'tanker_fee': CurrencyFormatter.amount(invoice.tankerCharges),
       'previous_balance': CurrencyFormatter.amount(invoice.previousBalance),
       'credit_applied': CurrencyFormatter.amount(invoice.creditApplied),
       'collector': collectorName ?? 'إدارة المشروع',
@@ -85,7 +83,6 @@ class InvoiceWhatsAppBuilder {
 
     final conditional = <String, num>{
       'subscription_fee': invoice.subscriptionInstallment,
-      'tanker_fee': invoice.tankerCharges,
       'previous_balance': invoice.previousBalance,
       'credit_applied': invoice.creditApplied,
     };

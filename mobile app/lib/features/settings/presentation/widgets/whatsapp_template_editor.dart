@@ -133,7 +133,6 @@ abstract final class WhatsAppTemplateSamples {
     'consumption_fee': '3750',
     'consumption_value': '3750',
     'subscription_fee': '500',
-    'tanker_fee': '0',
     'previous_balance': '0',
     'credit_applied': '0',
     'credit_balance': '0',
@@ -151,7 +150,7 @@ abstract final class WhatsAppTemplateSamples {
   static const invoiceVariables = [
     'subscriber_name', 'bill_number', 'period_start', 'period_end', 'meter_code',
     'previous_reading', 'current_reading', 'consumption_units', 'unit_price',
-    'consumption_fee', 'subscription_fee', 'tanker_fee', 'previous_balance',
+    'consumption_fee', 'subscription_fee', 'previous_balance',
     'credit_applied', 'total_amount', 'collector', 'pdf_url',
   ];
 
@@ -162,11 +161,6 @@ abstract final class WhatsAppTemplateSamples {
 
   static const subscriptionVariables = [
     'subscriber_name', 'bill_number', 'subscription_fee', 'previous_balance',
-    'total_amount', 'collector', 'pdf_url',
-  ];
-
-  static const tankerVariables = [
-    'subscriber_name', 'bill_number', 'tanker_fee', 'previous_balance',
     'total_amount', 'collector', 'pdf_url',
   ];
 }

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Models\SubscriptionFee;
-use App\Models\ServiceRequest;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -90,31 +89,6 @@ class FouadModulesApiTest extends TestCase
             ->assertJsonPath('0.running_balance', 0);
     }
 
-    public function test_service_request_complete_and_ledger_filters(): void
-    {
-        $square = Square::create(['name' => 'مربع 1']);
-        $subscriber = Subscriber::create(['name' => 'مشترك وايت', 'square_id' => $square->id, 'status' => 'active']);
-        $request = ServiceRequest::create([
-            'subscriber_id' => $subscriber->id, 'service_type' => 'water_tanker',
-            'amount' => 7000, 'service_date' => now()->toDateString(), 'status' => 'pending',
-        ]);
-
-        $this->actingAs($this->user, 'sanctum')
-            ->patchJson("/api/service-requests/{$request->id}/complete")
-            ->assertOk()
-            ->assertJsonPath('service_request.status', 'completed');
-
-        $this->actingAs($this->user, 'sanctum')
-            ->getJson('/api/service-requests?status=completed')
-            ->assertOk()
-            ->assertJsonPath('total_sum', 7000);
-
-        Transaction::create(['subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => 7000, 'description' => 'سند']);
-        $this->actingAs($this->user, 'sanctum')
-            ->getJson('/api/transactions?type=credit')
-            ->assertOk()
-            ->assertJsonCount(1);
-    }
 
     public function test_subscription_fees_summary(): void
     {

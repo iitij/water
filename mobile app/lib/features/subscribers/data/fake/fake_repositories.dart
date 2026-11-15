@@ -1,5 +1,3 @@
-import '../../../service_requests/domain/entities/service_request.dart';
-import '../../../service_requests/domain/repositories/service_requests_repository.dart';
 import '../../../squares/domain/entities/square.dart';
 import '../../../squares/domain/repositories/squares_repository.dart';
 import '../../../subscription_fees/domain/entities/subscription_fee.dart';
@@ -107,7 +105,6 @@ class FakeSubscribersRepository implements SubscribersRepository {
   Future<Map<String, dynamic>> collectPayment(int subscriberId, {required double amount, int? invoiceId, String method = 'cash', String? reason}) async =>
       {'message': 'تم تحصيل الدفعة بنجاح (وضع تجريبي)', 'payment': {'receipt_number': 'REC-DEMO-0001', 'amount': amount}};
   @override
-  Future<double?> lastTankerAmount(int subscriberId) async => 7000;
 }
 
 class FakeSubscriptionFeesRepository implements SubscriptionFeesRepository {
@@ -136,42 +133,6 @@ class FakeSubscriptionFeesRepository implements SubscriptionFeesRepository {
   Future<Map<String, dynamic>> invoiceFee(int id) async => {'message': 'تم إصدار الفاتورة (وضع تجريبي)', 'invoice': {'bill_number': 'INV-DEMO-001'}};
 }
 
-class FakeServiceRequestsRepository implements ServiceRequestsRepository {
-  static const _reqs = <ServiceRequest>[
-    ServiceRequest(id: 1, subscriberId: 1, subscriberName: 'أحمد محمد الحداد', amount: 7000, serviceDate: '2026-10-20', status: TankerStatus.pending, notes: 'التوصيل قبل المغرب'),
-    ServiceRequest(id: 2, subscriberId: 3, subscriberName: 'خالد عمر باوزير', amount: 5000, serviceDate: '2026-10-18', status: TankerStatus.completed),
-    ServiceRequest(id: 3, subscriberId: 2, subscriberName: 'فاطمة علي السقاف', amount: 5000, serviceDate: '2026-10-10', status: TankerStatus.paid, invoiceId: 9, invoiceNumber: 'INV-202610-0009'),
-  ];
-  @override
-  Future<TankerPage> getRequests({TankerStatus? status, int? subscriberId, String? from, String? until}) async {
-    final list = _reqs.where((r) =>
-        (status == null || r.status == status) &&
-        (subscriberId == null || r.subscriberId == subscriberId) &&
-        (from == null || r.serviceDate.compareTo(from) >= 0) &&
-        (until == null || r.serviceDate.compareTo(until) <= 0)).toList();
-    return TankerPage(requests: list, totalSum: list.fold(0, (a, r) => a + r.amount));
-  }
-
-  @override
-  Future<ServiceRequest> createRequest({required int subscriberId, required double amount, required String serviceDate, TankerStatus status = TankerStatus.completed, String? notes}) async =>
-      ServiceRequest(id: 99, subscriberId: subscriberId, amount: amount, serviceDate: serviceDate, status: status, notes: notes);
-  @override
-  Future<ServiceRequest> updateRequest(ServiceRequest r) async => r;
-  @override
-  Future<void> deleteRequest(int id) async {}
-  @override
-  Future<int> bulkDelete(List<int> ids) async => ids.length;
-  @override
-  Future<ServiceRequest> markCompleted(int id) async =>
-      ServiceRequest(id: id, subscriberId: 1, amount: 7000, serviceDate: '2026-10-20', status: TankerStatus.completed);
-  @override
-  Future<Map<String, dynamic>> invoiceRequest(int id) async => {'message': 'تم إصدار الفاتورة (وضع تجريبي)', 'invoice': {'bill_number': 'INV-DEMO-002'}};
-  @override
-  Future<double?> lastAmountFor(int subscriberId) async {
-    final matches = _reqs.where((r) => r.subscriberId == subscriberId);
-    return matches.isEmpty ? null : matches.first.amount;
-  }
-}
 
 class FakeTransactionsRepository implements TransactionsRepository {
   @override

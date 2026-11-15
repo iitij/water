@@ -9,9 +9,9 @@ import '../../domain/accounting/invoice_accounting.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import 'invoice_generation_state.dart';
 
-/// يدير النوافذ الثلاث لإصدار الفواتير (`SCR-16`) بنفس تسلسل منطق Filament
-/// `InvoiceResource::generate_invoice` (مفاتيح قسط الاشتراك والوايت) ثم يستدعي
-/// `InvoiceService` على الخادم عبر المسارات الثلاثة.
+/// يدير نوافذ إصدار الفواتير لإصدار الفواتير (`SCR-16`) بنفس تسلسل منطق Filament
+/// `InvoiceResource::generate_invoice` (مفتاح قسط الاشتراك) ثم يستدعي
+/// `InvoiceService` على الخادم عبر مسارات الفوترة.
 class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
   InvoiceGenerationCubit({
     required InvoicesRepository invoicesRepository,
@@ -96,12 +96,10 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
       final results = await Future.wait(<Future<Object>>[
         _references.metersOf(subscriber.id),
         _references.uninvoicedSubscriptionFees(subscriber.id),
-        _references.pendingTankerAmount(subscriber.id),
       ]);
 
       final meters = results[0] as List<MeterOption>;
       final subscriptionSum = results[1] as double;
-      final tankerSum = results[2] as double;
 
       // منطق Filament: إذا كان للمشترك عداد واحد فقط يُختار تلقائياً.
       final autoMeter = meters.length == 1 ? meters.single : state.selectedMeter;
@@ -110,9 +108,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
         hasUnpaidSubscriptionFee: subscriptionSum > 0,
         hasSubscriptionFee: subscriptionSum > 0 ? state.hasSubscriptionFee : false,
         subscriptionInstallment: subscriptionSum > 0 ? subscriptionSum : 0,
-        hasPendingTanker: tankerSum > 0,
-        hasTankerFee: tankerSum > 0 ? state.hasTankerFee : false,
-        tankerInstallment: tankerSum > 0 ? tankerSum : 0,
         selectedMeter: autoMeter,
       ));
 
@@ -138,18 +133,8 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
     ));
   }
 
-  void toggleTankerFee(bool enabled) {
-    emit(state.copyWith(
-      hasTankerFee: enabled,
-      tankerInstallment: enabled ? state.tankerInstallment : 0,
-    ));
-  }
-
   void setSubscriptionInstallment(double value) =>
       emit(state.copyWith(subscriptionInstallment: value));
-
-  void setTankerInstallment(double value) =>
-      emit(state.copyWith(tankerInstallment: value));
 
   void setIncludeReadings(bool value) => emit(state.copyWith(includeReadings: value));
 
@@ -210,8 +195,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
           includeReadings: state.includeReadings,
           hasSubscriptionFee: state.hasSubscriptionFee,
           subscriptionInstallment: state.subscriptionInstallment,
-          hasTankerFee: state.hasTankerFee,
-          tankerInstallment: state.tankerInstallment,
           notes: state.notes,
         ),
       );
@@ -246,28 +229,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
     }
   }
 
-  Future<InvoiceModel?> submitTankerInvoice() async {
-    final subscriber = state.selectedSubscriber;
-    if (subscriber == null) {
-      emit(state.copyWith(errorMessage: 'اختر المشترك أولاً.'));
-      return null;
-    }
-    emit(state.copyWith(submitting: true, clearError: true));
-    try {
-      final invoice = await _repository.generateTanker(
-        GenerateTankerInvoiceRequest(
-          subscriberId: subscriber.id,
-          tankerInstallment: state.tankerInstallment,
-          notes: state.notes,
-        ),
-      );
-      emit(state.copyWith(submitting: false, createdInvoice: invoice));
-      return invoice;
-    } catch (error) {
-      emit(state.copyWith(submitting: false, errorMessage: _read(error)));
-      return null;
-    }
-  }
 
   static String _read(Object error) {
     final text = error.toString();

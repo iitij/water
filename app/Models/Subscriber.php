@@ -72,11 +72,6 @@ class Subscriber extends Model
         return $this->hasMany(Payment::class);
     }
 
-    public function serviceRequests(): HasMany
-    {
-        return $this->hasMany(ServiceRequest::class);
-    }
-
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);

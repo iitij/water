@@ -25,7 +25,6 @@ import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
-import '../../../service_requests/presentation/cubit/service_requests_cubit.dart';
 import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
@@ -45,7 +44,6 @@ typedef CollectPaymentLauncher =
 bool _hasSubscribersCubits(BuildContext context) {
   try {
     context.read<SubscribersCubit>();
-    context.read<ServiceRequestsCubit>();
     return true;
   } catch (_) {
     return false;
@@ -141,9 +139,6 @@ class SubscribersScreen extends StatelessWidget {
             BlocProvider<SubscribersCubit>(
               create: (_) => SubscribersCubit(deps.subscribers)..init(),
             ),
-            BlocProvider<ServiceRequestsCubit>(
-              create: (_) => ServiceRequestsCubit(deps.requests),
-            ),
           ],
           child: _SubscribersView(
             onOpen360: onOpen360,
@@ -196,11 +191,6 @@ class _SubscribersView extends StatelessWidget {
               ),
               BlocProvider<SubscriptionFeesCubit>(
                 create: (_) => SubscriptionFeesCubit(deps.fees)
-                  ..subscriberId = subscriber.id
-                  ..load(),
-              ),
-              BlocProvider<ServiceRequestsCubit>(
-                create: (_) => ServiceRequestsCubit(deps.requests)
                   ..subscriberId = subscriber.id
                   ..load(),
               ),

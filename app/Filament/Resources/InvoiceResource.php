@@ -103,12 +103,6 @@ class InvoiceResource extends Resource
                         ->default(0)
                         ->prefix('ريال'),
 
-                    Forms\Components\TextInput::make('tanker_charges')
-                        ->label('رسوم الوايت')
-                        ->numeric()
-                        ->default(0)
-                        ->prefix('ريال'),
-
                     Forms\Components\TextInput::make('credit_applied')
                         ->label('خصم رصيد دائن')
                         ->numeric()
@@ -467,7 +461,6 @@ class InvoiceResource extends Resource
                                 meter: null,
                                 subscriptionInstallment: (float) $data['subscription_installment'],
                                 notes: null,
-                                tankerInstallment: null,
                                 includeReadings: false,
                                 invoiceType: 'subscription'
                             );
@@ -486,64 +479,6 @@ class InvoiceResource extends Resource
                         }
                     }),
 
-                \Filament\Actions\Action::make('generate_tanker_invoice')
-                    ->label('إصدار فاتورة وايت')
-                    ->icon('heroicon-o-truck')
-                    ->color('info')
-                    ->form([
-                        Forms\Components\Select::make('subscriber_id')
-                            ->label('المشترك')
-                            ->searchable()
-                            ->options(function () {
-                                return \App\Models\Subscriber::where('status', 'active')
-                                    ->whereHas('serviceRequests', fn($q) => $q->where('status', 'completed'))
-                                    ->pluck('name', 'id');
-                            })
-                            ->required()
-                            ->reactive()
-                            ->afterStateUpdated(function (callable $set, $state) {
-                                if ($state) {
-                                    $sum = \App\Models\ServiceRequest::where('subscriber_id', $state)->where('status', 'completed')->sum('amount');
-                                    $set('tanker_installment', $sum);
-                                } else {
-                                    $set('tanker_installment', 0);
-                                }
-                            }),
-                        Forms\Components\TextInput::make('tanker_installment')
-                            ->label('رسوم الوايت')
-                            ->numeric()
-                            ->required()
-                            ->prefix('ريال')
-                            ->helperText('المبلغ الإجمالي لطلبات الوايت المكتملة'),
-                    ])
-                    ->action(function (array $data) {
-                        $subscriber = \App\Models\Subscriber::find($data['subscriber_id']);
-                        $service = new \App\Services\InvoiceService();
-                        
-                        try {
-                            $invoice = $service->generateInvoice(
-                                subscriber: $subscriber,
-                                meter: null,
-                                subscriptionInstallment: null,
-                                notes: null,
-                                tankerInstallment: (float) $data['tanker_installment'],
-                                includeReadings: false,
-                                invoiceType: 'tanker'
-                            );
-                            
-                            \Filament\Notifications\Notification::make()
-                                ->title('تم الإصدار بنجاح')
-                                ->body("فاتورة رقم: {$invoice->bill_number}")
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
-                                ->title('خطأ في إصدار الفاتورة')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
 
                 \Filament\Actions\Action::make('generate_invoice')
                     ->label('إصدار فاتورة عداد')
@@ -566,9 +501,6 @@ class InvoiceResource extends Resource
                             ->afterStateUpdated(function (callable $set, callable $get, $state) {
                                 if (!$state) {
                                     $set('meter_id', null);
-                                    $set('has_pending_tanker_request', false);
-                                    $set('has_tanker_fee', false);
-                                    $set('tanker_installment', 0);
                                     return;
                                 }
 
@@ -598,16 +530,6 @@ class InvoiceResource extends Resource
                                     $set('has_unpaid_subscription_fee', false);
                                     $set('has_subscription_fee', false);
                                     $set('subscription_installment', 0);
-                                }
-
-                                $pendingTankers = \App\Models\ServiceRequest::where('subscriber_id', $subIdInt)->where('status', 'completed')->get();
-                                if ($pendingTankers->isNotEmpty()) {
-                                    $set('has_pending_tanker_request', true);
-                                    $set('tanker_installment', $pendingTankers->sum('amount'));
-                                } else {
-                                    $set('has_pending_tanker_request', false);
-                                    $set('has_tanker_fee', false);
-                                    $set('tanker_installment', 0);
                                 }
                             }),
 
@@ -654,35 +576,6 @@ class InvoiceResource extends Resource
                             ->visible(fn(callable $get) => $get('has_subscription_fee'))
                             ->helperText('أدخل مبلغ القسط لهذا الشهر'),
 
-                        Forms\Components\Hidden::make('has_pending_tanker_request')
-                            ->default(false),
-
-                        Forms\Components\Toggle::make('has_tanker_fee')
-                            ->label('إضافة رسوم وايت')
-                            ->disabled(fn(callable $get) => !$get('has_pending_tanker_request'))
-                            ->hint(fn(callable $get) => $get('subscriber_id') && !$get('has_pending_tanker_request') ? 'لا توجد طلبات وايت لهذا المشترك' : null)
-                            ->hintColor('danger')
-                            ->reactive()
-                            ->afterStateUpdated(function($state, callable $set, callable $get) {
-                                if (!$state) {
-                                    $set('tanker_installment', 0);
-                                } else {
-                                    $subId = $get('subscriber_id');
-                                    if ($subId) {
-                                        $subIdInt = (int) $subId;
-                                        $sum = \App\Models\ServiceRequest::where('subscriber_id', $subIdInt)->where('status', 'completed')->sum('amount');
-                                        $set('tanker_installment', $sum);
-                                    }
-                                }
-                            }),
-                            
-                        Forms\Components\TextInput::make('tanker_installment')
-                            ->label('مبلغ الوايت')
-                            ->numeric()
-                            ->default(0)
-                            ->prefix('ريال')
-                            ->visible(fn(callable $get) => $get('has_tanker_fee'))
-                            ->helperText('أدخل إجمالي مبلغ طلبات الوايت'),
 
                         Forms\Components\Textarea::make('notes')
                             ->label('ملاحظات')
@@ -700,7 +593,6 @@ class InvoiceResource extends Resource
                                 meter: $meter,
                                 subscriptionInstallment: (float) ($data['has_subscription_fee'] ? ($data['subscription_installment'] ?? 0) : 0),
                                 notes: $data['notes'] ?? null,
-                                tankerInstallment: (float) ($data['has_tanker_fee'] ? ($data['tanker_installment'] ?? 0) : 0),
                                 includeReadings: true,
                                 invoiceType: 'meter'
                             );

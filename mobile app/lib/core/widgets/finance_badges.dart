@@ -33,7 +33,6 @@ class InvoiceTypeBadge extends StatelessWidget {
     final (label, icon, color) = switch (type) {
       'meter' => ('عداد', Icons.speed_rounded, AppColors.primary),
       'subscription' => ('اشتراك', Icons.autorenew_rounded, AppColors.info),
-      'tanker' => ('وايت', Icons.local_shipping_outlined, AppColors.warning),
       _ => (type, Icons.receipt_long_rounded, AppColors.neutral),
     };
     return _Badge(

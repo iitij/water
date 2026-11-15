@@ -47,8 +47,6 @@ void main() {
         'auto_issue_invoice': true,
         'has_subscription_fee': true,
         'subscription_installment': '50.00',
-        'has_tanker_fee': true,
-        'tanker_installment': 20,
       });
 
       expect(period.lastReading, 100.25);
@@ -57,8 +55,6 @@ void main() {
       expect(period.autoIssueInvoice, isTrue);
       expect(period.hasSubscriptionFee, isTrue);
       expect(period.subscriptionInstallment, 50);
-      expect(period.hasTankerFee, isTrue);
-      expect(period.tankerInstallment, 20);
     });
 
     test('offline submission payload carries the sync UUID and consumption', () {

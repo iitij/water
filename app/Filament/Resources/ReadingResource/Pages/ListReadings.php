@@ -20,14 +20,12 @@ class ListReadings extends ListRecords
                             $invoiceService = new \App\Services\InvoiceService();
                             
                             $subscriptionInstallment = (isset($data['has_subscription_fee']) && $data['has_subscription_fee']) ? (float) ($data['subscription_installment'] ?? 0) : null;
-                            $tankerInstallment = (isset($data['has_tanker_fee']) && $data['has_tanker_fee']) ? (float) ($data['tanker_installment'] ?? 0) : null;
                             
                             $invoiceService->generateInvoice(
                                 subscriber: $record->meter->subscriber,
                                 meter: $record->meter,
                                 subscriptionInstallment: $subscriptionInstallment,
                                 notes: null,
-                                tankerInstallment: $tankerInstallment
                             );
                             \Filament\Notifications\Notification::make()
                                 ->title('تم إصدار الفاتورة تلقائياً')

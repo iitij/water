@@ -18,7 +18,7 @@ void main() {
     expect(paths, containsAll([
       RouteNames.squares, RouteNames.subscribers, RouteNames.meters,
       RouteNames.readings, RouteNames.invoices, RouteNames.payments,
-      RouteNames.tariffs, RouteNames.subscriptionFees, RouteNames.serviceRequests,
+      RouteNames.tariffs, RouteNames.subscriptionFees,
       RouteNames.transactions,
       RouteNames.settings, RouteNames.exports, RouteNames.dashboard,
       RouteNames.reports, RouteNames.profile, RouteNames.offlineSync,

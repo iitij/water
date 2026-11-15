@@ -93,7 +93,6 @@ class SubscriberOption {
     this.balance = 0,
     this.meters = const <MeterOption>[],
     this.uninvoicedSubscriptionFee = 0,
-    this.pendingTankerAmount = 0,
   });
 
   final int id;
@@ -106,10 +105,7 @@ class SubscriberOption {
   /// الرصيد العام للمشترك (موجب = دائن).
   final double balance;
   final List<MeterOption> meters;
-
-  /// مجاميع تُستخدم لملء مفاتيح `has_subscription_fee` / `has_tanker_fee`.
   final double uninvoicedSubscriptionFee;
-  final double pendingTankerAmount;
 
   bool get isActive => status == null || status == 'active';
 
@@ -145,9 +141,6 @@ class SubscriberOption {
       uninvoicedSubscriptionFee: JsonUtils.asDouble(
         json['uninvoiced_subscription_fee'] ?? json['subscription_fee_uninvoiced'],
       ),
-      pendingTankerAmount: JsonUtils.asDouble(
-        json['pending_tanker_amount'] ?? json['tanker_amount'],
-      ),
     );
   }
 
@@ -161,7 +154,6 @@ class SubscriberOption {
         balance: balance,
         meters: meters ?? this.meters,
         uninvoicedSubscriptionFee: uninvoicedSubscriptionFee,
-        pendingTankerAmount: pendingTankerAmount,
       );
 
   @override
@@ -185,7 +177,6 @@ class SubscriberDueSummary {
     this.outstandingBalance = 0,
     this.creditBalance = 0,
     this.uninvoicedSubscriptionFee = 0,
-    this.pendingTankerAmount = 0,
     this.openInvoicesCount = 0,
   });
 
@@ -201,7 +192,6 @@ class SubscriberDueSummary {
   final double outstandingBalance;
   final double creditBalance;
   final double uninvoicedSubscriptionFee;
-  final double pendingTankerAmount;
   final int openInvoicesCount;
 
   bool get hasInvoiceToCollect => latestUnpaidInvoiceId != null;
@@ -214,7 +204,6 @@ class SubscriberDueSummary {
         outstandingBalance: JsonUtils.asDouble(json['outstanding_balance']),
         creditBalance: JsonUtils.asDouble(json['credit_balance']),
         uninvoicedSubscriptionFee: JsonUtils.asDouble(json['uninvoiced_subscription_fee']),
-        pendingTankerAmount: JsonUtils.asDouble(json['pending_tanker_amount']),
         openInvoicesCount: JsonUtils.asInt(json['open_invoices_count']),
       );
 
@@ -292,32 +281,6 @@ class ReferencesRemoteDataSource {
         query: <String, dynamic>{
           'subscriber_id': subscriberId,
           'status': 'uninvoiced',
-          'per_page': 1,
-        },
-      );
-      final map = JsonUtils.asMap(response);
-      if (map != null) {
-        final total = JsonUtils.asDoubleOrNull(map['total_sum']);
-        if (total != null) return total;
-      }
-      final items = JsonUtils.unwrapList(response);
-      return items.fold<double>(
-        0,
-        (sum, item) => sum + JsonUtils.asDouble(item['amount']),
-      );
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  /// مجموع طلبات الوايت المكتملة (لمفتاح `has_tanker_fee`).
-  Future<double> pendingTankerAmount(int subscriberId) async {
-    try {
-      final response = await _client.getRaw(
-        FinanceEndpoints.serviceRequests,
-        query: <String, dynamic>{
-          'subscriber_id': subscriberId,
-          'status': 'completed',
           'per_page': 1,
         },
       );

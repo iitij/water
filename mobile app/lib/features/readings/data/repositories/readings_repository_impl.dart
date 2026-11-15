@@ -85,8 +85,6 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       autoIssueInvoice: autoIssue,
       hasSubscriptionFee: _truthy(cachedPeriod?['has_subscription_fee']),
       subscriptionInstallment: _asDouble(cachedPeriod?['subscription_installment']) ?? 0,
-      hasTankerFee: _truthy(cachedPeriod?['has_tanker_fee']),
-      tankerInstallment: _asDouble(cachedPeriod?['tanker_installment']) ?? 0,
       isOfflineEstimate: true,
     );
   }

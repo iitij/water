@@ -146,8 +146,6 @@ class MeterPeriodResponse {
     this.autoIssueInvoice = false,
     this.hasSubscriptionFee = false,
     this.subscriptionInstallment = 0,
-    this.hasTankerFee = false,
-    this.tankerInstallment = 0,
     this.isOfflineEstimate = false,
   });
 
@@ -157,8 +155,6 @@ class MeterPeriodResponse {
   final bool autoIssueInvoice;
   final bool hasSubscriptionFee;
   final double subscriptionInstallment;
-  final bool hasTankerFee;
-  final double tankerInstallment;
   final bool isOfflineEstimate;
 
   factory MeterPeriodResponse.fromJson(Map<String, dynamic> json) {
@@ -169,8 +165,6 @@ class MeterPeriodResponse {
       autoIssueInvoice: _bool(json['auto_issue_invoice']),
       hasSubscriptionFee: _bool(json['has_subscription_fee']),
       subscriptionInstallment: _double(json['subscription_installment']) ?? 0,
-      hasTankerFee: _bool(json['has_tanker_fee']),
-      tankerInstallment: _double(json['tanker_installment']) ?? 0,
     );
   }
 
@@ -181,8 +175,6 @@ class MeterPeriodResponse {
     autoIssueInvoice: autoIssueInvoice,
     hasSubscriptionFee: hasSubscriptionFee,
     subscriptionInstallment: subscriptionInstallment,
-    hasTankerFee: hasTankerFee,
-    tankerInstallment: tankerInstallment,
     isOfflineEstimate: true,
   );
 
@@ -193,8 +185,6 @@ class MeterPeriodResponse {
     'auto_issue_invoice': autoIssueInvoice,
     'has_subscription_fee': hasSubscriptionFee,
     'subscription_installment': subscriptionInstallment,
-    'has_tanker_fee': hasTankerFee,
-    'tanker_installment': tankerInstallment,
   };
 }
 
@@ -210,8 +200,6 @@ class ReadingSubmission {
     this.autoIssueInvoice = false,
     this.hasSubscriptionFee = false,
     this.subscriptionInstallment = 0,
-    this.hasTankerFee = false,
-    this.tankerInstallment = 0,
   });
 
   final int meterId;
@@ -224,8 +212,6 @@ class ReadingSubmission {
   final bool autoIssueInvoice;
   final bool hasSubscriptionFee;
   final double subscriptionInstallment;
-  final bool hasTankerFee;
-  final double tankerInstallment;
 
   double get consumption => currentReading - previousReading;
 
@@ -244,8 +230,6 @@ class ReadingSubmission {
     'consumption_units': consumption,
     'has_subscription_fee': hasSubscriptionFee,
     'subscription_installment': subscriptionInstallment,
-    'has_tanker_fee': hasTankerFee,
-    'tanker_installment': tankerInstallment,
     'auto_issue_invoice': autoIssueInvoice,
   };
 }
@@ -269,7 +253,6 @@ class InvoiceSummary {
     this.unitPrice,
     this.consumptionFee,
     this.subscriptionInstallment,
-    this.tankerCharges,
     this.previousBalance,
     this.creditApplied,
   });
@@ -291,7 +274,6 @@ class InvoiceSummary {
   final double? unitPrice;
   final double? consumptionFee;
   final double? subscriptionInstallment;
-  final double? tankerCharges;
   final double? previousBalance;
   final double? creditApplied;
 
@@ -313,7 +295,6 @@ class InvoiceSummary {
     unitPrice: _double(json['unit_price']),
     consumptionFee: _double(json['consumption_fee']),
     subscriptionInstallment: _double(json['subscription_installment']),
-    tankerCharges: _double(json['tanker_charges']),
     previousBalance: _double(json['previous_balance']),
     creditApplied: _double(json['credit_applied']),
   );
