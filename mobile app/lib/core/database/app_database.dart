@@ -534,7 +534,7 @@ class AppDatabase extends GeneratedDatabase {
       '''INSERT OR REPLACE INTO cached_meter_periods(
         meter_id, last_reading, period_start, period_end, auto_issue_invoice,
         has_subscription_fee, subscription_installment, cached_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         meterId,
         _double(period['last_reading']),
