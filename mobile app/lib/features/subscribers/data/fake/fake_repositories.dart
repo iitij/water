@@ -1,7 +1,5 @@
 import '../../../squares/domain/entities/square.dart';
 import '../../../squares/domain/repositories/squares_repository.dart';
-import '../../../subscription_fees/domain/entities/subscription_fee.dart';
-import '../../../subscription_fees/domain/repositories/subscription_fees_repository.dart';
 import '../../../transactions/domain/entities/ledger_transaction.dart';
 import '../../../transactions/domain/repositories/transactions_repository.dart';
 import '../../domain/entities/subscriber.dart';
@@ -61,8 +59,6 @@ class FakeSubscribersRepository implements SubscribersRepository {
         generalBalance: sub.generalBalance,
         totalCredit: sub.creditBalance,
         totalDebit: sub.debitBalance,
-        remainingSubscriptionFee: 15000,
-        subscriptionFeeStatus: 'uninvoiced',
         meterBalances: const [
           MeterBalance(meterId: 11, uniqueCode: 'W-1001', credit: 0, debit: 9500, readingsCount: 12),
         ],
@@ -90,7 +86,7 @@ class FakeSubscribersRepository implements SubscribersRepository {
     const all = <LedgerEntry>[
       LedgerEntry(id: 3, type: 'payment', amount: 8200, description: 'سند قبض REC-202609-0012', createdAt: '2026-09-05 10:30', runningBalance: -1300),
       LedgerEntry(id: 2, type: 'invoice', amount: -9500, meterId: 11, party: 'عداد رقم: 11 (W-1001)', description: 'فاتورة INV-202610-0001', createdAt: '2026-10-01 09:00', runningBalance: -9500),
-      LedgerEntry(id: 1, type: 'invoice', amount: -3000, description: 'فاتورة اشتراك INV-202608-0003', createdAt: '2026-08-15 11:00', runningBalance: -3000),
+      LedgerEntry(id: 1, type: 'invoice', amount: -3000, description: 'فاتورة مياه INV-202608-0003', createdAt: '2026-08-15 11:00', runningBalance: -3000),
     ];
     return switch (party) {
       PartyAll() => all,
@@ -104,32 +100,6 @@ class FakeSubscribersRepository implements SubscribersRepository {
   @override
   Future<Map<String, dynamic>> collectPayment(int subscriberId, {required double amount, int? invoiceId, String method = 'cash', String? reason}) async =>
       {'message': 'تم تحصيل الدفعة بنجاح (وضع تجريبي)', 'payment': {'receipt_number': 'REC-DEMO-0001', 'amount': amount}};
-}
-
-class FakeSubscriptionFeesRepository implements SubscriptionFeesRepository {
-  static const _fees = <SubscriptionFee>[
-    SubscriptionFee(id: 1, subscriberId: 1, subscriberName: 'أحمد محمد الحداد', meterId: 11, meterCode: 'W-1001', amount: 15000, status: FeeStatus.uninvoiced, createdAt: '2026-08-01'),
-    SubscriptionFee(id: 2, subscriberId: 2, subscriberName: 'فاطمة علي السقاف', amount: 15000, status: FeeStatus.paid, invoiceId: 5, invoiceNumber: 'INV-202608-0003', createdAt: '2026-08-03'),
-  ];
-  @override
-  Future<FeesPage> getFees({FeeStatus? status, int? subscriberId}) async {
-    final list = _fees.where((f) => (status == null || f.status == status) && (subscriberId == null || f.subscriberId == subscriberId)).toList();
-    final total = list.fold<double>(0, (a, f) => a + f.amount);
-    final invoiced = list.where((f) => f.status != FeeStatus.uninvoiced).fold<double>(0, (a, f) => a + f.amount);
-    return FeesPage(fees: list, totalSum: total, invoicedSum: invoiced, remainingSum: total - invoiced);
-  }
-
-  @override
-  Future<SubscriptionFee> createFee({required int subscriberId, int? meterId, required double amount, FeeStatus status = FeeStatus.uninvoiced, String? notes}) async =>
-      SubscriptionFee(id: 99, subscriberId: subscriberId, meterId: meterId, amount: amount, status: status, notes: notes);
-  @override
-  Future<SubscriptionFee> updateFee(SubscriptionFee fee) async => fee;
-  @override
-  Future<void> deleteFee(int id) async {}
-  @override
-  Future<int> bulkDelete(List<int> ids) async => ids.length;
-  @override
-  Future<Map<String, dynamic>> invoiceFee(int id) async => {'message': 'تم إصدار الفاتورة (وضع تجريبي)', 'invoice': {'bill_number': 'INV-DEMO-001'}};
 }
 
 

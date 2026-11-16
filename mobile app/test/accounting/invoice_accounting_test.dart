@@ -91,20 +91,6 @@ void main() {
       );
     });
 
-    test('فاتورة الاشتراك في مجموعة دين مختلفة عن فاتورة العداد', () {
-      final meter = _invoice(id: 1, totalAmount: 500, meterId: 77);
-      final subscription = _invoice(
-        id: 2,
-        totalAmount: 300,
-        invoiceType: InvoiceType.subscription,
-        isLatest: true,
-      );
-
-      expect(
-        InvoiceAccounting.trueRemaining(subscription, <InvoiceModel>[meter, subscription]),
-        300,
-      );
-    });
   });
 
   group('latest invoice + display', () {
@@ -229,15 +215,13 @@ void main() {
       expect(
         InvoiceAccounting.previewNetPayable(
           consumptionFee: 600,
-          subscriptionInstallment: 200,
           availableCredit: 400,
         ),
-         400,
+        200,
       );
       expect(
         InvoiceAccounting.previewCreditApplied(
           consumptionFee: 600,
-          subscriptionInstallment: 200,
           availableCredit: 400,
         ),
         400,
@@ -248,7 +232,6 @@ void main() {
       expect(
         InvoiceAccounting.previewNetPayable(
           consumptionFee: 100,
-          subscriptionInstallment: 0,
           availableCredit: 900,
         ),
         0,
@@ -256,7 +239,6 @@ void main() {
       expect(
         InvoiceAccounting.previewCreditApplied(
           consumptionFee: 100,
-          subscriptionInstallment: 0,
           availableCredit: 900,
         ),
         100,

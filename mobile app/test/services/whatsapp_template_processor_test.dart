@@ -174,23 +174,5 @@ void main() {
       expect(invoice.messageRecipientName, 'صالح');
     });
 
-    test('قالب الاشتراك يُنتقيان حسب نوع الفاتورة', () {
-      const typed = FinanceConfig(
-        subscriptionInvoiceTemplate: 'اشتراك: {subscription_fee}',
-      );
-
-      final subscription = const InvoiceModel(
-        id: 11,
-        subscriberId: 3,
-        invoiceType: InvoiceType.subscription,
-        billNumber: 'SUB-1',
-        subscriptionInstallment: 2000,
-      );
-
-      expect(
-        InvoiceWhatsAppBuilder.renderMessage(typed, subscription),
-        'اشتراك: 2,000',
-      );
-    });
   });
 }

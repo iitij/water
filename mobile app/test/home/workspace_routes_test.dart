@@ -54,7 +54,6 @@ void main() {
 
   for (final choice in {
     'فاتورة عداد': FinanceRouteNames.invoiceGenerateMeter,
-    'فاتورة اشتراك': FinanceRouteNames.invoiceGenerateSubscription,
     'فاتورة يدوية': FinanceRouteNames.invoiceCreate,
   }.entries) {
     testWidgets('invoice choice ${choice.key} opens its existing engine', (tester) async {

@@ -95,13 +95,6 @@ const _destinations = <_Destination>[
     page: false,
   ),
   (
-    source: 'Resources/SubscriptionFeeResource',
-    label: LaravelScreenStrings.subscriptionFees,
-    route: RouteNames.subscriptionFees,
-    module: 'fees',
-    page: false,
-  ),
-  (
     source: 'Resources/Transactions/TransactionResource',
     label: LaravelScreenStrings.transactions,
     route: RouteNames.transactions,
@@ -186,7 +179,6 @@ void main() {
       'Meters': SubscriberExperienceStrings.meters,
       'Invoices': SubscriberExperienceStrings.invoices,
       'Payments': SubscriberExperienceStrings.payments,
-      'SubscriptionFees': SubscriberExperienceStrings.fees,
     };
     for (final tab in tabs.entries) {
       expect(

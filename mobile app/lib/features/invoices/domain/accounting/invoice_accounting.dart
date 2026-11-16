@@ -123,10 +123,9 @@ class InvoiceAccounting {
   /// حيث `subtotal = consumption + subscription` (`InvoiceService` سطر 96-104).
   static double previewNetPayable({
     required double consumptionFee,
-    required double subscriptionInstallment,
     required double availableCredit,
   }) {
-    final subtotal = consumptionFee + subscriptionInstallment;
+    final subtotal = consumptionFee;
     final creditApplied = availableCredit > 0 && subtotal > 0
         ? (availableCredit < subtotal ? availableCredit : subtotal)
         : 0.0;
@@ -136,10 +135,9 @@ class InvoiceAccounting {
   /// مقدار الرصيد الدائن الذي سيُخصم عند الإصدار (للعرض في نافذة الإصدار).
   static double previewCreditApplied({
     required double consumptionFee,
-    required double subscriptionInstallment,
     required double availableCredit,
   }) {
-    final subtotal = consumptionFee + subscriptionInstallment;
+    final subtotal = consumptionFee;
     if (availableCredit <= 0 || subtotal <= 0) return 0;
     return availableCredit < subtotal ? availableCredit : subtotal;
   }

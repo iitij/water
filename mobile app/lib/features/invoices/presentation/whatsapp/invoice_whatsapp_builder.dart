@@ -48,10 +48,7 @@ class InvoiceWhatsAppBuilder {
     String? collectorName,
     String? pdfUrl,
   }) {
-    final template = switch (invoice.invoiceType) {
-      InvoiceType.subscription => config.subscriptionInvoiceTemplate,
-      InvoiceType.meter => config.invoiceTemplate,
-    };
+    final template = config.invoiceTemplate;
 
     final firstReading = invoice.readings.isEmpty ? null : invoice.readings.first;
     final lastReading = invoice.readings.isEmpty ? null : invoice.readings.last;
@@ -73,7 +70,6 @@ class InvoiceWhatsAppBuilder {
       'consumption_units': _num(invoice.consumptionUnits),
       'unit_price': CurrencyFormatter.amount(unitPrice),
       'consumption_fee': CurrencyFormatter.amount(invoice.consumptionFee),
-      'subscription_fee': CurrencyFormatter.amount(invoice.subscriptionInstallment),
       'previous_balance': CurrencyFormatter.amount(invoice.previousBalance),
       'credit_applied': CurrencyFormatter.amount(invoice.creditApplied),
       'collector': collectorName ?? 'إدارة المشروع',
@@ -82,7 +78,6 @@ class InvoiceWhatsAppBuilder {
     };
 
     final conditional = <String, num>{
-      'subscription_fee': invoice.subscriptionInstallment,
       'previous_balance': invoice.previousBalance,
       'credit_applied': invoice.creditApplied,
     };

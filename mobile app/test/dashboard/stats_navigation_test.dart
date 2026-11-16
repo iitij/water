@@ -108,7 +108,6 @@ void main() {
           FouadDependencies(
             squares: demo.squares,
             subscribers: subscribers,
-            fees: demo.fees,
             transactions: demo.transactions,
           ),
         );

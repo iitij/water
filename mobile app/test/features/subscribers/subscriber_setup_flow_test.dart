@@ -11,19 +11,14 @@ import 'package:water_project/features/squares/domain/entities/square.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
 import 'package:water_project/features/subscribers/presentation/pages/subscriber_form_screen.dart';
-import 'package:water_project/features/subscription_fees/domain/entities/subscription_fee.dart';
-import 'package:water_project/features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import 'package:water_project/features/subscription_fees/presentation/widgets/setup_fee_dialog.dart';
 
 class _Subscribers extends Mock implements SubscribersRepository {}
 class _Meters extends Mock implements MetersRepository {}
-class _Fees extends Mock implements SubscriptionFeesRepository {}
 class _Permissions extends Mock implements PermissionService {}
 
 void main() {
   late _Subscribers subscribers;
   late _Meters meters;
-  late _Fees fees;
   late _Permissions permissions;
   final operations = <String>[];
   final strings = AppStrings.ar;
@@ -37,7 +32,6 @@ void main() {
     operations.clear();
     subscribers = _Subscribers();
     meters = _Meters();
-    fees = _Fees();
     permissions = _Permissions();
     when(() => permissions.can(any())).thenReturn(true);
     when(() => subscribers.getSquaresLookup()).thenAnswer((_) async => const [Square(id: 7, name: 'المربع الأول')]);
@@ -54,11 +48,6 @@ void main() {
       expect(draft.subscriberId, 101);
       return const Meter(id: 501, uniqueCode: 'TEST-501', subscriberId: 101, squareId: 7);
     });
-    when(() => fees.createFee(subscriberId: 101, meterId: 501, amount: 300, notes: null))
-        .thenAnswer((_) async {
-      operations.add('fee');
-      return const SubscriptionFee(id: 701, subscriberId: 101, meterId: 501, amount: 300);
-    });
   });
 
   Future<void> mount(WidgetTester tester) async {
@@ -72,7 +61,7 @@ void main() {
         child: const Text('open'),
         onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SubscriberFormScreen(
           initialSquareId: 7, repository: subscribers, metersRepository: meters,
-          feesRepository: fees, permissions: permissions,
+          permissions: permissions,
         ))),
       )))));
     await tester.tap(find.text('open'));
@@ -95,21 +84,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   }
 
-  testWidgets('subscriber then meter then fee use the saved server identities', (tester) async {
+  testWidgets('subscriber then meter complete without fee dialog', (tester) async {
     await mount(tester);
     await saveSubscriberAndMeter(tester);
-    expect(find.byType(SetupFeeDialog), findsOneWidget);
-    final dialog = tester.widget<SetupFeeDialog>(find.byType(SetupFeeDialog));
-    expect(dialog.subscriberId, 101);
-    expect(dialog.meterId, 501);
-    await tester.enterText(find.descendant(of: find.byType(SetupFeeDialog), matching: find.byType(TextFormField)).first, '٣٠٠');
-    await tester.tap(find.widgetWithText(FilledButton, strings.save));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(operations, ['subscriber', 'meter', 'fee']);
-    expect(find.text('open'), findsOneWidget);
+    expect(operations, ['subscriber', 'meter']);
+    expect(find.byType(SubscriberFormScreen), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
 
   testWidgets('cancelling the meter preserves one subscriber and avoids duplicate creation', (tester) async {
     await mount(tester);
@@ -125,24 +107,6 @@ void main() {
     verify(() => subscribers.createSubscriber(any())).called(1);
   });
 
-  testWidgets('fee failure leaves the final step open without recreating prior records', (tester) async {
-    when(() => fees.createFee(subscriberId: 101, meterId: 501, amount: 300, notes: null))
-        .thenThrow(Exception('تعذر حفظ رسوم الاشتراك'));
-    await mount(tester);
-    await saveSubscriberAndMeter(tester);
-    await tester.enterText(find.descendant(of: find.byType(SetupFeeDialog), matching: find.byType(TextFormField)).first, '300');
-    await tester.tap(find.widgetWithText(FilledButton, strings.save));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(SetupFeeDialog), findsOneWidget);
-    expect(operations, ['subscriber', 'meter']);
-    verify(() => subscribers.createSubscriber(any())).called(1);
-    verify(() => meters.saveMeter(any(), meterId: null)).called(1);
-    await tester.tap(find.text(strings.setupSkipFee));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(SubscriberFormScreen), findsNothing);
-  });
 
   testWidgets('missing meter permission hides the chained creation action', (tester) async {
     when(() => permissions.can('Create:Meter')).thenReturn(false);
