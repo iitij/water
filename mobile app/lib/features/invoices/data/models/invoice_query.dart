@@ -174,16 +174,12 @@ class GenerateMeterInvoiceRequest extends Equatable {
     required this.subscriberId,
     required this.meterId,
     this.includeReadings = true,
-    this.hasSubscriptionFee = false,
-    this.subscriptionInstallment = 0,
     this.notes,
   });
 
   final int subscriberId;
   final int meterId;
   final bool includeReadings;
-  final bool hasSubscriptionFee;
-  final double subscriptionInstallment;
   final String? notes;
 
   /// جسم الطلب لـ `POST /api/invoices/generate-meter` (§2.3-38).
@@ -191,10 +187,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
     'subscriber_id': subscriberId,
     'meter_id': meterId,
     'include_readings': includeReadings,
-    'has_subscription_fee': hasSubscriptionFee,
-    'subscription_installment': hasSubscriptionFee
-        ? subscriptionInstallment
-        : 0,
     if (notes != null && notes!.isNotEmpty) 'notes': notes,
   };
 
@@ -203,40 +195,6 @@ class GenerateMeterInvoiceRequest extends Equatable {
     subscriberId,
     meterId,
     includeReadings,
-    hasSubscriptionFee,
-    subscriptionInstallment,
-    notes,
-  ];
-}
-
-class GenerateSubscriptionInvoiceRequest extends Equatable {
-  const GenerateSubscriptionInvoiceRequest({
-    required this.subscriberId,
-    required this.subscriptionInstallment,
-    this.meterId,
-    this.notes,
-  });
-
-  final int subscriberId;
-  final double subscriptionInstallment;
-
-  /// رسوم الاشتراك قد تكون مرتبطة بعداد (`SubscriptionFee.meter_id`) — الاختياري هنا
-  /// يحدّد أي الرسوم تُضمَّن، ويبقى `meter_id` للفاتورة `null` حفاظاً على العزل.
-  final int? meterId;
-  final String? notes;
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-    'subscriber_id': subscriberId,
-    'subscription_installment': subscriptionInstallment,
-    if (meterId != null) 'fee_meter_id': meterId,
-    if (notes != null && notes!.isNotEmpty) 'notes': notes,
-  };
-
-  @override
-  List<Object?> get props => <Object?>[
-    subscriberId,
-    subscriptionInstallment,
-    meterId,
     notes,
   ];
 }

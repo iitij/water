@@ -10,7 +10,7 @@ import '../../domain/repositories/invoices_repository.dart';
 import 'invoice_generation_state.dart';
 
 /// يدير نوافذ إصدار الفواتير لإصدار الفواتير (`SCR-16`) بنفس تسلسل منطق Filament
-/// `InvoiceResource::generate_invoice` (مفتاح قسط الاشتراك) ثم يستدعي
+/// `InvoiceResource::generate_invoice` ثم يستدعي
 /// `InvoiceService` على الخادم عبر مسارات الفوترة.
 class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
   InvoiceGenerationCubit({
@@ -33,81 +33,12 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
   Future<void> bootstrap({String? preselectedSubscriberId}) async {
     emit(state.copyWith(loadingReferences: true, clearError: true));
     try {
-      final results = await Future.wait(<Future<Object>>[
-        _references.squares(),
-        _references.subscribers(status: 'active', limit: 500),
-        _tariffs.activePrice(),
-      ]);
-
-      final subscribers = results[1] as List<SubscriberOption>;
-      final unitPrice = results[2] as double;
-
-      SubscriberOption? preselected;
-      if (preselectedSubscriberId != null) {
-        final id = int.tryParse(preselectedSubscriberId);
-        final matches = subscribers.where((s) => s.id == id).toList();
-        preselected = matches.isEmpty ? null : matches.first;
-      }
-
-      emit(state.copyWith(
-        loadingReferences: false,
-        squares: results[0] as List<SquareOption>,
-        subscribers: subscribers,
-        unitPrice: unitPrice,
-        selectedSubscriber: preselected,
-      ));
-
-      if (preselected != null) {
-        await _hydrateSubscriber(preselected);
-      }
-    } catch (error) {
-      emit(state.copyWith(loadingReferences: false, errorMessage: '$error'));
-    }
-  }
-
-  Future<void> searchSubscribers(String query) async {
-    try {
-      final results = await Future.wait(<Future<Object>>[
-        _references.subscribers(search: query, status: 'active', limit: 100),
-        _tariffs.activePrice(),
-      ]);
-      emit(state.copyWith(
-        subscribers: results[0] as List<SubscriberOption>,
-        unitPrice: results[1] as double,
-      ));
-    } catch (error) {
-      emit(state.copyWith(errorMessage: '$error'));
-    }
-  }
-
-  /// اختيار المشترك/العداد — يعيد حساب المفاتيح الأربعة (كما في `afterStateUpdated`).
-  /// يفرّغ الاختيار الحالي (يُستخدم من شارة «المشترك المحدد»).
-  void clearSubscriber() {
-    emit(state.copyWith(clearSubscriber: true, clearMeter: true));
-  }
-
-  Future<void> selectSubscriber(SubscriberOption subscriber) async {
-    emit(state.copyWith(selectedSubscriber: subscriber, clearMeter: true));
-    await _hydrateSubscriber(subscriber);
-  }
-
-  Future<void> _hydrateSubscriber(SubscriberOption subscriber) async {
-    try {
-      final results = await Future.wait(<Future<Object>>[
-        _references.metersOf(subscriber.id),
-        _references.uninvoicedSubscriptionFees(subscriber.id),
-      ]);
-
-      final meters = results[0] as List<MeterOption>;
-      final subscriptionSum = results[1] as double;
+      final meters = await _references.metersOf(subscriber.id);
 
       // منطق Filament: إذا كان للمشترك عداد واحد فقط يُختار تلقائياً.
       final autoMeter = meters.length == 1 ? meters.single : state.selectedMeter;
 
       emit(state.copyWith(
-        hasUnpaidSubscriptionFee: subscriptionSum > 0,
-        hasSubscriptionFee: subscriptionSum > 0 ? state.hasSubscriptionFee : false,
-        subscriptionInstallment: subscriptionSum > 0 ? subscriptionSum : 0,
         selectedMeter: autoMeter,
       ));
 
@@ -122,19 +53,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
     await _recomputeAccountFacts();
   }
 
-  void toggleSubscriptionFee(bool enabled) {
-    emit(state.copyWith(
-      hasSubscriptionFee: enabled,
-      subscriptionInstallment: enabled
-          ? (state.subscriptionInstallment > 0
-              ? state.subscriptionInstallment
-              : 0)
-          : 0,
-    ));
-  }
-
-  void setSubscriptionInstallment(double value) =>
-      emit(state.copyWith(subscriptionInstallment: value));
 
   void setIncludeReadings(bool value) => emit(state.copyWith(includeReadings: value));
 
@@ -193,31 +111,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
           subscriberId: subscriber.id,
           meterId: meter.id,
           includeReadings: state.includeReadings,
-          hasSubscriptionFee: state.hasSubscriptionFee,
-          subscriptionInstallment: state.subscriptionInstallment,
-          notes: state.notes,
-        ),
-      );
-      emit(state.copyWith(submitting: false, createdInvoice: invoice));
-      return invoice;
-    } catch (error) {
-      emit(state.copyWith(submitting: false, errorMessage: _read(error)));
-      return null;
-    }
-  }
-
-  Future<InvoiceModel?> submitSubscriptionInvoice() async {
-    final subscriber = state.selectedSubscriber;
-    if (subscriber == null) {
-      emit(state.copyWith(errorMessage: 'اختر المشترك أولاً.'));
-      return null;
-    }
-    emit(state.copyWith(submitting: true, clearError: true));
-    try {
-      final invoice = await _repository.generateSubscription(
-        GenerateSubscriptionInvoiceRequest(
-          subscriberId: subscriber.id,
-          subscriptionInstallment: state.subscriptionInstallment,
           notes: state.notes,
         ),
       );

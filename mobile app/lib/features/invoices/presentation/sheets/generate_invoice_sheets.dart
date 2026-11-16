@@ -29,13 +29,12 @@ part 'invoice_generate_sheet_body.dart';
 
 /// `SCR-16` — محركات إصدار الفواتير كأدراج سفلية، مطابقةً لـ
 /// `InvoiceResource` Header Actions:
-///  - عداد (`primary`/آلة حاسبة): من القراءات غير المفوترة + مفتاحا قسط الاشتراك
-///  - اشتراك (`warning`/وثيقة) والاشتراكات الدورية.
+///  - عداد (`primary`/آلة حاسبة): من القراءات غير المفوترة
 ///
 /// الحقول كلها حية الحساب (subtotal → credit → net) قبل الإرسال، وتُطابق
 /// `InvoiceService::generateInvoice` سطر 62-108، مع التزام قاعدة العزل §3.4-1:
 /// فاتورة العداد تخصم من `meters.balance` وغيرُها من `subscribers.balance`.
-enum GenerateInvoiceMode { meter, subscription, manual }
+enum GenerateInvoiceMode { meter, manual }
 
 /// قائمة اختيار محرّك الإصدار (تُفتح من FAB في `SCR-14` ومن مسار `/invoices/generate`).
 Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) async {
@@ -57,15 +56,8 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
             icon: Icons.calculate_outlined,
             color: FinanceColors.meter,
             title: 'فاتورة عداد',
-            subtitle: 'من القراءات غير المفوترة + رسوم الاشتراك',
+            subtitle: 'من القراءات غير المفوترة',
             onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.meter),
-          ),
-          _PickerTile(
-            icon: Icons.assignment_outlined,
-            color: FinanceColors.subscription,
-            title: 'فاتورة اشتراك',
-            subtitle: 'للمشتركين الذين لديهم رسوم اشتراك غير مفوترة',
-            onTap: () => Navigator.of(sheetContext).pop(GenerateInvoiceMode.subscription),
           ),
 
           if (context.canCreateInvoices)
@@ -96,9 +88,6 @@ Future<GenerateInvoiceMode?> showGenerateInvoicePicker(BuildContext context) asy
 }
 
 Future<void> _openSheet(BuildContext context, GenerateInvoiceMode mode) {
-  if (mode == GenerateInvoiceMode.subscription) {
-    return GenerateSubscriptionInvoiceSheet.show(context);
-  }
   return GenerateMeterInvoiceSheet.show(context);
 }
 
@@ -128,33 +117,6 @@ class GenerateMeterInvoiceSheet extends StatelessWidget {
       );
 }
 
-/// فاتورة اشتراك — يُسلَّم لفؤاد (`SCR-07` لوحة 360°) ولأسامة (`SCR-03`).
-class GenerateSubscriptionInvoiceSheet extends StatelessWidget {
-  const GenerateSubscriptionInvoiceSheet({super.key, this.preselectedSubscriberId});
-
-  final String? preselectedSubscriberId;
-
-  static Future<void> show(BuildContext context, {String? preselectedSubscriberId}) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _GenerateSheetHost(
-        parentContext: context,
-        mode: GenerateInvoiceMode.subscription,
-        preselectedSubscriberId: preselectedSubscriberId,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _GenerateSheetHost(
-        parentContext: context,
-        mode: GenerateInvoiceMode.subscription,
-        preselectedSubscriberId: preselectedSubscriberId,
-      );
-}
-
 
 class LiveSummaryCard extends StatelessWidget {
   const LiveSummaryCard({super.key});
@@ -165,7 +127,6 @@ class LiveSummaryCard extends StatelessWidget {
       builder: (context, state) {
         final rows = <(String, String, Color?)>[
           ('استهلاك متوقع', CurrencyFormatter.withLabel(state.consumptionFee), null),
-          ('قسط الاشتراك', CurrencyFormatter.withLabel(state.subscriptionInstallment), null),
           (
             'رصيد دائن يُخصم',
             '- ${CurrencyFormatter.amount(state.creditApplied)}',
@@ -519,92 +480,6 @@ class IncludeReadingsToggle extends StatelessWidget {
   }
 }
 
-/// مفتاح `has_subscription_fee` مع منع التفعيل عند انعدام الطلبات.
-class FeeTogglesField extends StatelessWidget {
-  const FeeTogglesField({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<InvoiceGenerationCubit, InvoiceGenerationState>(
-      buildWhen: (previous, next) =>
-          previous.hasSubscriptionFee != next.hasSubscriptionFee ||
-          previous.hasUnpaidSubscriptionFee != next.hasUnpaidSubscriptionFee,
-      builder: (context, state) {
-        final cubit = context.read<InvoiceGenerationCubit>();
-
-        return Column(
-          children: <Widget>[
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              value: state.hasSubscriptionFee,
-              onChanged: state.hasUnpaidSubscriptionFee ? cubit.toggleSubscriptionFee : null,
-              title: const Text('إضافة رسوم اشتراك', style: TextStyle(fontSize: 13)),
-              subtitle: Text(
-                state.hasUnpaidSubscriptionFee
-                    ? 'غير مفوترة: ${CurrencyFormatter.withLabel(state.subscriptionInstallment)}'
-                    : 'لا توجد طلبات اشتراك غير مفوترة لهذا المشترك',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: state.hasUnpaidSubscriptionFee ? AppColors.neutral : AppColors.danger,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// حقل مبلغ يقرأ من حالة الـ Cubit ويكتب فيها (اشتراك).
-class AmountFromStateField extends StatefulWidget {
-  const AmountFromStateField({
-    super.key,
-    required this.label,
-    required this.helperText,
-    required this.read,
-    required this.write,
-  });
-
-  final String label;
-  final String helperText;
-  final double Function(InvoiceGenerationState state) read;
-  final void Function(InvoiceGenerationCubit cubit, double value) write;
-
-  @override
-  State<AmountFromStateField> createState() => _AmountFromStateFieldState();
-}
-
-class _AmountFromStateFieldState extends State<AmountFromStateField> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    final value = widget.read(context.read<InvoiceGenerationCubit>().state);
-    if (value > 0) {
-      _controller.text = value.toStringAsFixed(0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AppNumericField(
-        controller: _controller,
-        label: widget.label,
-        prefixText: 'ريال',
-        helperText: widget.helperText,
-        onChanged: (value) => widget.write(
-          context.read<InvoiceGenerationCubit>(),
-          double.tryParse(value.trim()) ?? 0,
-        ),
-      );
-}
 
 class GenerationNotesField extends StatefulWidget {
   const GenerationNotesField({super.key});

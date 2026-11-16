@@ -14,9 +14,6 @@ class InvoiceGenerationState extends Equatable {
     this.selectedSubscriber,
     this.selectedMeter,
     this.includeReadings = true,
-    this.hasUnpaidSubscriptionFee = false,
-    this.hasSubscriptionFee = false,
-    this.subscriptionInstallment = 0,
     this.notes,
     this.uninvoicedUnits = 0,
     this.unitPrice = 0,
@@ -35,9 +32,6 @@ class InvoiceGenerationState extends Equatable {
   final MeterOption? selectedMeter;
 
   final bool includeReadings;
-  final bool hasUnpaidSubscriptionFee;
-  final bool hasSubscriptionFee;
-  final double subscriptionInstallment;
   final String? notes;
 
   /// قراءات غير مفوترة للعداد المحدد (للمعاينة الفورية).
@@ -56,10 +50,7 @@ class InvoiceGenerationState extends Equatable {
 
   // ─── الحساب الحي (يطابق `InvoiceService` سطر 92-108) ────────────────────
   double get consumptionFee => uninvoicedUnits * unitPrice;
-
-  double get subtotal =>
-      (includeReadings ? consumptionFee : 0) +
-      (hasSubscriptionFee ? subscriptionInstallment : 0);
+  double get subtotal => includeReadings ? consumptionFee : 0;
 
   double get creditApplied {
     if (availableCredit <= 0 || subtotal <= 0) return 0;
@@ -73,15 +64,13 @@ class InvoiceGenerationState extends Equatable {
   bool get canSubmit =>
       !submitting &&
       selectedSubscriber != null &&
-      (selectedMeter != null ||
-          hasSubscriptionFee ||
-          subscriptionInstallment > 0);
+      selectedMeter != null;
 
   /// رسالة المنع نفسها التي يرميها Laravel عند عدم وجود ما يُفوتر.
   String? get blockingReason {
     if (selectedSubscriber == null) return 'اختر المشترك أولاً.';
     if (subtotal <= 0) {
-      return 'لا توجد قراءات جديدة أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة.';
+      return 'لا توجد قراءات جديدة لإصدار فاتورة.';
     }
     return null;
   }
@@ -97,9 +86,6 @@ class InvoiceGenerationState extends Equatable {
     MeterOption? selectedMeter,
     bool clearMeter = false,
     bool? includeReadings,
-    bool? hasUnpaidSubscriptionFee,
-    bool? hasSubscriptionFee,
-    double? subscriptionInstallment,
     String? notes,
     double? uninvoicedUnits,
     double? unitPrice,
@@ -119,11 +105,6 @@ class InvoiceGenerationState extends Equatable {
             : (selectedSubscriber ?? this.selectedSubscriber),
         selectedMeter: clearMeter ? null : (selectedMeter ?? this.selectedMeter),
         includeReadings: includeReadings ?? this.includeReadings,
-        hasUnpaidSubscriptionFee:
-            hasUnpaidSubscriptionFee ?? this.hasUnpaidSubscriptionFee,
-        hasSubscriptionFee: hasSubscriptionFee ?? this.hasSubscriptionFee,
-        subscriptionInstallment:
-            subscriptionInstallment ?? this.subscriptionInstallment,
         notes: notes ?? this.notes,
         uninvoicedUnits: uninvoicedUnits ?? this.uninvoicedUnits,
         unitPrice: unitPrice ?? this.unitPrice,
@@ -142,8 +123,6 @@ class InvoiceGenerationState extends Equatable {
         selectedSubscriber,
         selectedMeter,
         includeReadings,
-        hasSubscriptionFee,
-        subscriptionInstallment,
         notes,
         uninvoicedUnits,
         unitPrice,

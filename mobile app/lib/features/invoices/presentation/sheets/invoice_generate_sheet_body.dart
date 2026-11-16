@@ -97,14 +97,6 @@ class _GenerateSheetBody extends StatelessWidget {
   final BuildContext parentContext;
 
   _SheetChrome _chrome() {
-    if (mode == GenerateInvoiceMode.subscription) {
-      return const _SheetChrome(
-        title: 'إصدار فاتورة اشتراك',
-        icon: Icons.assignment_outlined,
-        color: FinanceColors.subscription,
-        submitLabel: 'إصدار فاتورة الاشتراك',
-      );
-    }
 
     return const _SheetChrome(
       title: 'إصدار فاتورة عداد',
@@ -115,12 +107,7 @@ class _GenerateSheetBody extends StatelessWidget {
   }
 
   Future<void> _submit(BuildContext sheetContext, InvoiceGenerationCubit cubit) async {
-    final InvoiceModel? invoice;
-    if (mode == GenerateInvoiceMode.subscription) {
-      invoice = await cubit.submitSubscriptionInvoice();
-    } else {
-      invoice = await cubit.submitMeterInvoice();
-    }
+    final InvoiceModel? invoice = await cubit.submitMeterInvoice();
 
     if (sheetContext.mounted) Navigator.of(sheetContext).pop();
     if (invoice == null || !parentContext.mounted) return;
@@ -176,16 +163,8 @@ class _GenerateSheetBody extends StatelessWidget {
                     const SizedBox(height: 4),
                     const IncludeReadingsToggle(),
                     const SizedBox(height: 4),
-                    const FeeTogglesField(),
                     const SizedBox(height: 12),
-                  ] else ...<Widget>[
-                    AmountFromStateField(
-                      label: 'قسط الاشتراك',
-                      helperText: 'مجموع رسوم الاشتراك غير المفوترة — قابل للتعديل',
-                      read: _readSubscription,
-                      write: _writeSubscription,
-                    ),
-                    const SizedBox(height: 12),
+                  ]
                   ],
                   const GenerationNotesField(),
                   const SizedBox(height: 16),
@@ -208,9 +187,6 @@ class _GenerateSheetBody extends StatelessWidget {
   }
 }
 
-double _readSubscription(InvoiceGenerationState state) => state.subscriptionInstallment;
-void _writeSubscription(InvoiceGenerationCubit cubit, double value) =>
-    cubit.setSubscriptionInstallment(value);
 
 /// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).
 /// شكل الدراج حسب المحرّك (عنوان/أيقونة/لون/زر الإرسال).

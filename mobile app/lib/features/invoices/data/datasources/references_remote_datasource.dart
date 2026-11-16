@@ -92,7 +92,6 @@ class SubscriberOption {
     this.status,
     this.balance = 0,
     this.meters = const <MeterOption>[],
-    this.uninvoicedSubscriptionFee = 0,
   });
 
   final int id;
@@ -105,7 +104,6 @@ class SubscriberOption {
   /// الرصيد العام للمشترك (موجب = دائن).
   final double balance;
   final List<MeterOption> meters;
-  final double uninvoicedSubscriptionFee;
 
   bool get isActive => status == null || status == 'active';
 
@@ -138,9 +136,6 @@ class SubscriberOption {
           .map(MeterOption.fromJson)
           .take(1)
           .toList(),
-      uninvoicedSubscriptionFee: JsonUtils.asDouble(
-        json['uninvoiced_subscription_fee'] ?? json['subscription_fee_uninvoiced'],
-      ),
     );
   }
 
@@ -153,7 +148,6 @@ class SubscriberOption {
         status: status,
         balance: balance,
         meters: meters ?? this.meters,
-        uninvoicedSubscriptionFee: uninvoicedSubscriptionFee,
       );
 
   @override
@@ -176,7 +170,6 @@ class SubscriberDueSummary {
     this.dueAmount = 0,
     this.outstandingBalance = 0,
     this.creditBalance = 0,
-    this.uninvoicedSubscriptionFee = 0,
     this.openInvoicesCount = 0,
   });
 
@@ -191,7 +184,6 @@ class SubscriberDueSummary {
   /// إجمالي الدين على المشترك وكل عداداته (`getOutstandingBalance` + مجاميع العدادات).
   final double outstandingBalance;
   final double creditBalance;
-  final double uninvoicedSubscriptionFee;
   final int openInvoicesCount;
 
   bool get hasInvoiceToCollect => latestUnpaidInvoiceId != null;
@@ -203,7 +195,6 @@ class SubscriberDueSummary {
         dueAmount: JsonUtils.asDouble(json['due_amount'] ?? json['amount_due']),
         outstandingBalance: JsonUtils.asDouble(json['outstanding_balance']),
         creditBalance: JsonUtils.asDouble(json['credit_balance']),
-        uninvoicedSubscriptionFee: JsonUtils.asDouble(json['uninvoiced_subscription_fee']),
         openInvoicesCount: JsonUtils.asInt(json['open_invoices_count']),
       );
 
@@ -273,29 +264,5 @@ class ReferencesRemoteDataSource {
     }
   }
 
-  /// مجموع رسوم الاشتراك غير المفوترة (لمفتاح `has_subscription_fee`).
-  Future<double> uninvoicedSubscriptionFees(int subscriberId) async {
-    try {
-      final response = await _client.getRaw(
-        FinanceEndpoints.subscriptionFees,
-        query: <String, dynamic>{
-          'subscriber_id': subscriberId,
-          'status': 'uninvoiced',
-          'per_page': 1,
-        },
-      );
-      final map = JsonUtils.asMap(response);
-      if (map != null) {
-        final total = JsonUtils.asDoubleOrNull(map['total_sum']);
-        if (total != null) return total;
-      }
-      final items = JsonUtils.unwrapList(response);
-      return items.fold<double>(
-        0,
-        (sum, item) => sum + JsonUtils.asDouble(item['amount']),
-      );
-    } catch (_) {
-      return 0;
-    }
-  }
+
 }
