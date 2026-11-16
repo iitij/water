@@ -47,21 +47,42 @@ return new class extends Migration {
             });
         }
         if (Schema::hasTable('settings')) {
-            DB::table('settings')->where('key', 'subscription_fee')
-                ->orWhere('key', 'like', '%sub_fee%')
+            DB::table('settings')->whereIn('key', [
+                'subscription_fee',
+                'subscription_invoice_template',
+                'whatsapp_subscription_message',
+            ])->orWhere('key', 'like', '%sub_fee%')
                 ->orWhere('key', 'like', 'sub_inv_%')
                 ->orWhere('key', 'like', 'sub_show_%')
                 ->orWhere('key', 'like', 'sub_lbl_%')
-                ->orWhere('key', 'subscription_invoice_template')
                 ->delete();
-            // Old custom templates must not keep the retired charge or placeholder.
-            DB::table('settings')->where(function ($q): void {
-                $q->where('key', 'like', '%template%')
-                    ->orWhere('key', 'like', '%message%');
-            })->where(function ($q): void {
-                $q->where('value', 'like', '%subscription_fee%')
-                    ->orWhere('value', 'like', '%رسوم الاشتراك%');
-            })->delete();
+
+            // Retain unrelated water-invoice customizations. Remove only
+            // retired charge lines, not a complete customer-facing template.
+            $templates = DB::table('settings')
+                ->where(function ($query): void {
+                    $query->where('key', 'like', '%template%')
+                        ->orWhere('key', 'like', '%message%');
+                })->whereNotNull('value')->get(['id', 'value']);
+
+            foreach ($templates as $template) {
+                $original = (string) $template->value;
+                $lines = preg_split('/\r\n|\n|\r/', $original) ?: [$original];
+                $retained = array_values(array_filter($lines, static function (string $line): bool {
+                    return ! str_contains($line, 'subscription_fee')
+                        && ! str_contains($line, 'رسوم الاشتراك')
+                        && ! str_contains($line, 'رسوم اشتراك');
+                }));
+                if (count($retained) === count($lines)) {
+                    continue;
+                }
+                $cleaned = trim(implode("\n", $retained));
+                if ($cleaned === '') {
+                    DB::table('settings')->where('id', $template->id)->delete();
+                } else {
+                    DB::table('settings')->where('id', $template->id)->update(['value' => $cleaned]);
+                }
+            }
         }
         if (Schema::hasTable('permissions')) {
             $ids = DB::table('permissions')->where('name', 'like', '%SubscriptionFee%')->pluck('id');
