@@ -107,7 +107,6 @@ class WhatsAppSettingsCubit extends Cubit<WhatsAppSettingsState> {
       final templates = [
         settings.invoiceMessage,
         settings.paymentMessage,
-        settings.subscriptionMessage,
       ];
       if (templates.any((template) => template.trim().isEmpty)) {
         emit(state.copyWith(errorMessage: 'لا يمكن حفظ قالب رسالة فارغ.'));

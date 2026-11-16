@@ -69,7 +69,6 @@ class WhatsAppSettingsModel extends WhatsAppSettings {
     required super.autoSendPayment,
     required super.invoiceMessage,
     required super.paymentMessage,
-    required super.subscriptionMessage,
     required super.phoneNumberId,
     required super.accessToken,
     required super.invoiceTemplate,
@@ -99,10 +98,6 @@ class WhatsAppSettingsModel extends WhatsAppSettings {
         json['whatsapp_payment_message'] ?? json['payment_receipt_message_template'],
         defaults.paymentMessage,
       ),
-      subscriptionMessage: adminString(
-        json['whatsapp_subscription_message'] ?? json['subscription_invoice_template'],
-        defaults.subscriptionMessage,
-      ),
       phoneNumberId: adminString(json['whatsapp_phone_number_id']),
       accessToken: maskedTokens.contains(rawToken.toLowerCase()) ? '' : rawToken,
       invoiceTemplate: adminString(
@@ -126,8 +121,6 @@ class WhatsAppSettingsModel extends WhatsAppSettings {
         'reading_invoice_message_template': invoiceMessage,
         'whatsapp_payment_message': paymentMessage,
         'payment_receipt_message_template': paymentMessage,
-        'whatsapp_subscription_message': subscriptionMessage,
-        'subscription_invoice_template': subscriptionMessage,
         'whatsapp_phone_number_id': phoneNumberId,
         // Blank means "leave the existing server secret unchanged".
         if (accessToken.trim().isNotEmpty) 'whatsapp_access_token': accessToken.trim(),
