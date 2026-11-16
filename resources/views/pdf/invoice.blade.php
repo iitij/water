@@ -356,16 +356,15 @@
             $watermarkBase64 = $logoBase64;
             }
 
-            $isSub = $invoice->invoice_type === 'subscription';
 
             // DYNAMIC CONFIGURATION
             $chk = function($key) { return Setting::get($key, '1') == '1'; };
             $lbl = function($key, $default) { return Setting::get($key, $default); };
 
-            $mainTitle = $isSub ? $lbl('sub_inv_title_main', 'فاتورة اشتراك') : $lbl('inv_title_main', 'فاتورة استهلاك مياه');
-            $detailsTitle = $isSub ? $lbl('sub_inv_title_details', 'تفاصيل رسوم الاشتراك') : $lbl('inv_title_consumption', 'تفاصيل الاستهلاك');
-            $showNotes = $isSub ? $chk('sub_show_notes') : $chk('inv_show_notes');
-            $notesLabel = $isSub ? $lbl('sub_lbl_notes', 'الملاحظات') : $lbl('inv_lbl_notes', 'الملاحظات');
+            $mainTitle = $lbl('inv_title_main', 'فاتورة استهلاك مياه');
+            $detailsTitle = $lbl('inv_title_consumption', 'تفاصيل الاستهلاك');
+            $showNotes = $chk('inv_show_notes');
+            $notesLabel = $lbl('inv_lbl_notes', 'الملاحظات');
 
             $formatPhone = function($phone) {
             if (!$phone || $phone === '-') return '-';
@@ -386,12 +385,8 @@
             $infoFields = [];
             if($chk('inv_show_bill_number')) $infoFields[] = ['l' => $lbl('inv_lbl_bill_number', 'رقم الفاتورة'), 'v' => preg_replace('/[^0-9]/', '', $invoice->bill_number), 'is_ltr' => true];
             
-            if ($isSub) {
-                $infoFields[] = ['l' => 'التاريخ', 'v' => \Carbon\Carbon::parse($invoice->bill_date)->format('d/m/Y')];
-            } else {
                 if($chk('inv_show_date_from')) $infoFields[] = ['l' => $lbl('inv_lbl_date_from', 'من تاريخ'), 'v' => \Carbon\Carbon::parse($invoice->billing_period_start ?? \Carbon\Carbon::parse($invoice->bill_date)->subMonth()->startOfMonth())->format('d/m/Y')];
                 if($chk('inv_show_date_to')) $infoFields[] = ['l' => $lbl('inv_lbl_date_to', 'إلى تاريخ'), 'v' => \Carbon\Carbon::parse($invoice->billing_period_end ?? \Carbon\Carbon::parse($invoice->bill_date)->subMonth()->endOfMonth())->format('d/m/Y')];
-            }
             $infoChunks = array_chunk($infoFields, 3);
 
             // 2. Subscriber Info Array
@@ -410,17 +405,7 @@
             $consHeaders = [];
             $consValues = [];
 
-            if ($isSub) {
-                if($chk('sub_show_amount')) {
-                    $consHeaders[] = $lbl('sub_lbl_amount', 'قيمة الاشتراك');
-                    $consValues[] = '<strong style="font-size:12px;">' . number_format($invoice->subscription_installment, 2) . '</strong>';
-                }
-                if($chk('sub_show_arrears')) {
-                    $consHeaders[] = $lbl('sub_lbl_arrears', 'المتأخرات');
-                    $consValues[] = number_format($invoice->previous_balance, 2);
-                }
 
-            } else {
                 if($chk('inv_show_prev_read')) {
                 $consHeaders[] = $lbl('inv_lbl_prev_read', 'القراءة السابقة');
                 $consValues[] = number_format($previous_reading, 2);
@@ -441,10 +426,6 @@
                 $consHeaders[] = $lbl('inv_lbl_cons_value', 'قيمة الاستهلاك');
                 $consValues[] = '<strong style="font-size:12px;">' . number_format($invoice->consumption_fee, 2) . '</strong>';
                 }
-                if($chk('inv_show_sub_fee') && $invoice->subscription_installment > 0) {
-                $consHeaders[] = $lbl('inv_lbl_sub_fee', 'الاشتراك');
-                $consValues[] = number_format($invoice->subscription_installment, 2);
-                }
                 if($chk('inv_show_arrears')) {
                 $consHeaders[] = $lbl('inv_lbl_arrears', 'المتأخرات');
                 $consValues[] = number_format($invoice->previous_balance, 2);
@@ -454,7 +435,6 @@
                 $consHeaders[] = $lbl('inv_lbl_credit_applied', 'رصيد مخصوم');
                 $consValues[] = '<strong style="color: #059669; font-size:12px;">' . number_format($invoice->credit_applied, 2) . '</strong>';
                 }
-            }
 
             @endphp
 

@@ -13,16 +13,10 @@ class CreateInvoice extends CreateRecord
     {
         $subscriber = \App\Models\Subscriber::findOrFail($data['subscriber_id']);
         $consumption = (float) ($data['consumption_fee'] ?? 0);
-        if ($consumption > 0) {
-            // This form does not expose a meter selector; resolve the one
-            // current meter, never silently bill a previously removed one.
-            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber);
-            $data['meter_id'] = $meter->id;
-            $data['invoice_type'] = 'meter';
-        } else {
-            $data['meter_id'] = null;
-            $data['invoice_type'] = 'subscription';
-        }
+        // Invoices are now exclusively for water consumption.
+        $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber);
+        $data['meter_id'] = $meter->id;
+        $data['invoice_type'] = 'meter';
         $data['status'] = 'issued';
 
         return $data;

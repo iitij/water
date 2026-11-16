@@ -89,8 +89,6 @@ class InvoiceSettings extends Page implements HasForms
             'inv_lbl_unit_price' => Setting::get('inv_lbl_unit_price', 'سعر الوحدة'),
             'inv_show_cons_value' => Setting::get('inv_show_cons_value', '1') == '1',
             'inv_lbl_cons_value' => Setting::get('inv_lbl_cons_value', 'قيمة الاستهلاك'),
-            'inv_show_sub_fee' => Setting::get('inv_show_sub_fee', '1') == '1',
-            'inv_lbl_sub_fee' => Setting::get('inv_lbl_sub_fee', 'الاشتراك'),
             'inv_show_arrears' => Setting::get('inv_show_arrears', '1') == '1',
             'inv_lbl_arrears' => Setting::get('inv_lbl_arrears', 'المتأخرات'),
             'inv_show_credit_applied' => Setting::get('inv_show_credit_applied', '1') == '1',
@@ -106,14 +104,6 @@ class InvoiceSettings extends Page implements HasForms
             'inv_lbl_notes' => Setting::get('inv_lbl_notes', 'الملاحظات'),
 
             // Subscription Invoice
-            'sub_inv_title_main' => Setting::get('sub_inv_title_main', 'فاتورة اشتراك'),
-            'sub_inv_title_details' => Setting::get('sub_inv_title_details', 'تفاصيل رسوم الاشتراك'),
-            'sub_show_amount' => Setting::get('sub_show_amount', '1') == '1',
-            'sub_lbl_amount' => Setting::get('sub_lbl_amount', 'قيمة الاشتراك'),
-            'sub_show_arrears' => Setting::get('sub_show_arrears', '1') == '1',
-            'sub_lbl_arrears' => Setting::get('sub_lbl_arrears', 'المتأخرات'),
-            'sub_show_notes' => Setting::get('sub_show_notes', '1') == '1',
-            'sub_lbl_notes' => Setting::get('sub_lbl_notes', 'ملاحظات'),
         ]);
     }
 
@@ -193,21 +183,8 @@ class InvoiceSettings extends Page implements HasForms
                                 $this->buildFieldConfig('وحدات الاستهلاك', 'inv_show_units', 'inv_lbl_units'),
                                 $this->buildFieldConfig('سعر الوحدة', 'inv_show_unit_price', 'inv_lbl_unit_price'),
                                 $this->buildFieldConfig('قيمة الاستهلاك', 'inv_show_cons_value', 'inv_lbl_cons_value'),
-                                $this->buildFieldConfig('الاشتراك', 'inv_show_sub_fee', 'inv_lbl_sub_fee'),
                                 $this->buildFieldConfig('المتأخرات', 'inv_show_arrears', 'inv_lbl_arrears'),
                                 $this->buildFieldConfig('الرصيد المخصوم', 'inv_show_credit_applied', 'inv_lbl_credit_applied'),
-                            ]),
-
-                        Tabs\Tab::make('فاتورة الاشتراك')
-                            ->icon('heroicon-o-document-currency-dollar')
-                            ->schema([
-                                Grid::make(2)->schema([
-                                    TextInput::make('sub_inv_title_main')->label('عنوان الفاتورة الرئيسي')->required(),
-                                    TextInput::make('sub_inv_title_details')->label('عنوان قسم التفاصيل')->required(),
-                                ]),
-                                $this->buildFieldConfig('مبلغ الاشتراك', 'sub_show_amount', 'sub_lbl_amount'),
-                                $this->buildFieldConfig('المتأخرات', 'sub_show_arrears', 'sub_lbl_arrears'),
-                                $this->buildFieldConfig('الملاحظات', 'sub_show_notes', 'sub_lbl_notes'),
                             ]),
 
 

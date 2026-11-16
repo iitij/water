@@ -293,7 +293,6 @@ class SubscriberResource extends Resource
             RelationManagers\MetersRelationManager::class,
             RelationManagers\InvoicesRelationManager::class,
             RelationManagers\PaymentsRelationManager::class,
-            RelationManagers\SubscriptionFeesRelationManager::class,
         ];
     }
 

@@ -51,11 +51,6 @@ class InvoiceResource extends Resource
                             // Auto-fill outstanding balance
                             $set('previous_balance', $subscriber->getOutstandingBalance());
 
-                            // Check remaining subscription fee
-                            $remaining = $subscriber->getRemainingSubscriptionFee();
-                            if ($remaining > 0) {
-                                $set('subscription_installment', 0);
-                            }
                         }),
 
                     Forms\Components\TextInput::make('bill_number')
@@ -97,11 +92,6 @@ class InvoiceResource extends Resource
                         ->default(0)
                         ->prefix('ريال'),
 
-                    Forms\Components\TextInput::make('subscription_installment')
-                        ->label('قسط الاشتراك')
-                        ->numeric()
-                        ->default(0)
-                        ->prefix('ريال'),
 
                     Forms\Components\TextInput::make('credit_applied')
                         ->label('خصم رصيد دائن')
@@ -421,64 +411,6 @@ class InvoiceResource extends Resource
 
             ])
             ->headerActions([
-                \Filament\Actions\Action::make('generate_subscription_invoice')
-                    ->label('إصدار فاتورة اشتراك')
-                    ->icon('heroicon-o-document-text')
-                    ->color('warning')
-                    ->form([
-                        Forms\Components\Select::make('subscriber_id')
-                            ->label('المشترك')
-                            ->searchable()
-                            ->options(function () {
-                                return \App\Models\Subscriber::where('status', 'active')
-                                    ->whereHas('subscriptionFees', fn($q) => $q->where('status', 'uninvoiced'))
-                                    ->pluck('name', 'id');
-                            })
-                            ->required()
-                            ->reactive()
-                            ->afterStateUpdated(function (callable $set, $state) {
-                                if ($state) {
-                                    $sum = \App\Models\SubscriptionFee::where('subscriber_id', $state)->where('status', 'uninvoiced')->sum('amount');
-                                    $set('subscription_installment', $sum);
-                                } else {
-                                    $set('subscription_installment', 0);
-                                }
-                            }),
-                        Forms\Components\TextInput::make('subscription_installment')
-                            ->label('قسط الاشتراك')
-                            ->numeric()
-                            ->required()
-                            ->prefix('ريال')
-                            ->helperText('أدخل مبلغ القسط'),
-                    ])
-                    ->action(function (array $data) {
-                        $subscriber = \App\Models\Subscriber::find($data['subscriber_id']);
-                        $service = new \App\Services\InvoiceService();
-                        
-                        try {
-                            $invoice = $service->generateInvoice(
-                                subscriber: $subscriber,
-                                meter: null,
-                                subscriptionInstallment: (float) $data['subscription_installment'],
-                                notes: null,
-                                includeReadings: false,
-                                invoiceType: 'subscription'
-                            );
-                            
-                            \Filament\Notifications\Notification::make()
-                                ->title('تم الإصدار بنجاح')
-                                ->body("فاتورة رقم: {$invoice->bill_number}")
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
-                                ->title('خطأ في إصدار الفاتورة')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
-
 
                 \Filament\Actions\Action::make('generate_invoice')
                     ->label('إصدار فاتورة عداد')
@@ -512,25 +444,7 @@ class InvoiceResource extends Resource
                                     $set('meter_id', null);
                                 }
 
-                                $subscriberModel = null;
-                                if ($subIdInt) {
-                                    $subscriberModel = \App\Models\Subscriber::find($subIdInt);
-                                }
 
-                                if ($subscriberModel) {
-                                    $remainingSub = \App\Models\SubscriptionFee::where('subscriber_id', $subscriberModel->id)->where('status', 'uninvoiced')->sum('amount');
-                                    if ($remainingSub > 0) {
-                                        $set('has_unpaid_subscription_fee', true);
-                                    } else {
-                                        $set('has_unpaid_subscription_fee', false);
-                                        $set('has_subscription_fee', false);
-                                        $set('subscription_installment', 0);
-                                    }
-                                } else {
-                                    $set('has_unpaid_subscription_fee', false);
-                                    $set('has_subscription_fee', false);
-                                    $set('subscription_installment', 0);
-                                }
                             }),
 
                         Forms\Components\Select::make('meter_id')
@@ -543,38 +457,6 @@ class InvoiceResource extends Resource
                             ->required()
                             ->visible(fn(callable $get) => filled($get('subscriber_id')))
                             ->searchable(),
-
-                        Forms\Components\Hidden::make('has_unpaid_subscription_fee')
-                            ->default(false),
-
-                        Forms\Components\Toggle::make('has_subscription_fee')
-                            ->label('إضافة رسوم اشتراك')
-                            ->disabled(fn(callable $get) => !$get('has_unpaid_subscription_fee'))
-                            ->hint(fn(callable $get) => $get('subscriber_id') && !$get('has_unpaid_subscription_fee') ? 'لا توجد طلبات اشتراك لهذا المشترك' : null)
-                            ->hintColor('danger')
-                            ->reactive()
-                            ->afterStateUpdated(function($state, callable $set, callable $get) {
-                                if (!$state) {
-                                    $set('subscription_installment', 0);
-                                } else {
-                                    $subId = $get('subscriber_id');
-                                    if ($subId) {
-                                        $subIdInt = (int) $subId;
-                                        $subscriber = \App\Models\Subscriber::find($subIdInt);
-                                        if ($subscriber) {
-                                            $set('subscription_installment', \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)->where('status', 'uninvoiced')->sum('amount'));
-                                        }
-                                    }
-                                }
-                            }),
-
-                        Forms\Components\TextInput::make('subscription_installment')
-                            ->label('قسط الاشتراك')
-                            ->numeric()
-                            ->default(0)
-                            ->prefix('ريال')
-                            ->visible(fn(callable $get) => $get('has_subscription_fee'))
-                            ->helperText('أدخل مبلغ القسط لهذا الشهر'),
 
 
                         Forms\Components\Textarea::make('notes')
@@ -591,7 +473,6 @@ class InvoiceResource extends Resource
                             $invoice = $service->generateInvoice(
                                 subscriber: $subscriber,
                                 meter: $meter,
-                                subscriptionInstallment: (float) ($data['has_subscription_fee'] ? ($data['subscription_installment'] ?? 0) : 0),
                                 notes: $data['notes'] ?? null,
                                 includeReadings: true,
                                 invoiceType: 'meter'

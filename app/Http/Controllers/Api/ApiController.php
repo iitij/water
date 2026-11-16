@@ -23,7 +23,6 @@ abstract class ApiController extends Controller
         'invoices' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'bill_number', 'bill_date', 'total_amount', 'amount_paid', 'status', 'created_at', 'beneficiary_name' => 'subscriber.name', 'subscriber_name' => 'subscriber.name', 'total_due' => ['expression' => 'COALESCE(invoices.total_amount, 0) + COALESCE(invoices.previous_balance, 0)']],
         'payments' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'payment_date', 'amount', 'created_at', 'subscriber_name' => 'subscriber.name', 'user_name' => 'user.name'],
         'void_requests' => ['created_at', 'path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'receipt_number', 'amount', 'void_requested_at', 'subscriber_name' => 'subscriber.name'],
-        'subscription_fees' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'amount', 'status', 'created_at', 'subscriber_name' => 'subscriber.name', 'meter_code' => 'meter.unique_code', 'invoice_number' => 'invoice.bill_number'],
         'squares' => ['id', 'name', 'code', 'created_at', 'subscribers_count' => '@subscribers_count'],
         'tariffs' => ['id', 'name', 'unit_price', 'start_date', 'end_date', 'created_at', 'updated_at', 'deleted_at'],
         'transactions' => ['path_number' => 'meter.path_number', 'square_name' => 'subscriber.square.name', 'id', 'created_at', 'amount', 'type', 'subscriber_name' => 'subscriber.name'],
@@ -101,7 +100,7 @@ abstract class ApiController extends Controller
         $squareRelations = [
             'subscribers' => 'square', 'meters' => 'subscriber.square',
             'readings' => 'meter.subscriber.square', 'invoices' => 'subscriber.square',
-            'payments' => 'subscriber.square', 'subscription_fees' => 'subscriber.square',
+            'payments' => 'subscriber.square',
             'transactions' => 'subscriber.square',
             'cash_sessions' => 'square',
         ];
@@ -114,12 +113,12 @@ abstract class ApiController extends Controller
             }
         }
         $paths = ['subscribers' => 'meters', 'readings' => 'meter', 'invoices' => 'meter',
-            'payments' => 'meter', 'subscription_fees' => 'meter', 'transactions' => 'meter',
+            'payments' => 'meter', 'transactions' => 'meter',
         ];
         if (isset($input['path_number'])) {
             if ($table === 'meters') {
                 $query->where('path_number', $input['path_number']);
-            } elseif (in_array($table, ['invoices', 'payments', 'subscription_fees', 'transactions'], true)) {
+            } elseif (in_array($table, ['invoices', 'payments', 'transactions'], true)) {
                 $path = $input['path_number'];
                 $query->where(function ($builder) use ($path) {
                     $builder->whereHas('meter', fn ($meter) => $meter->where('path_number', $path))
