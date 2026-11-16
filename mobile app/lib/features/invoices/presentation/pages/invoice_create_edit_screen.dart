@@ -39,7 +39,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
   late final TextEditingController _consumption =
       _num(widget.invoice?.consumptionFee);
   late final TextEditingController _previousBalance = _num(widget.invoice?.previousBalance);
-  late final TextEditingController _subscription = _num(widget.invoice?.subscriptionInstallment);
   late final TextEditingController _credit = _num(widget.invoice?.creditApplied);
   late final TextEditingController _total = _num(
     (widget.invoice?.totalAmount ?? 0) > 0
@@ -47,9 +46,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
         : _autoTotal(widget.invoice),
   );
 
-  static double _autoTotal(InvoiceModel? invoice) =>
-      (invoice?.consumptionFee ?? 0) +
-      (invoice?.subscriptionInstallment ?? 0);
+  static double _autoTotal(InvoiceModel? invoice) => (invoice?.consumptionFee ?? 0);
   late final TextEditingController _notes =
       TextEditingController(text: widget.invoice?.notes ?? '');
 
@@ -74,7 +71,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     for (final controller in <TextEditingController>[
       _consumption,
       _previousBalance,
-      _subscription,
       _credit,
       _total,
       _notes,
@@ -88,7 +84,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       TextEditingController(text: value == null || value == 0 ? '' : value.toString());
 
   double get _liveTotal =>
-      _parse(_consumption) + _parse(_subscription);
+      _parse(_consumption);
 
   static double _parse(TextEditingController controller) =>
       double.tryParse(controller.text.trim()) ?? 0;
@@ -112,7 +108,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       'status': isEditing ? _status.wire : InvoiceStatus.issued.wire,
       'consumption_fee': _parse(_consumption),
       'previous_balance': _parse(_previousBalance),
-      'subscription_installment': _parse(_subscription),
       'credit_applied': _parse(_credit),
       'total_amount': _parse(_total) > 0 ? _parse(_total) : _liveTotal,
       if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
@@ -201,7 +196,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
             const SizedBox(height: 16),
             const SectionHeading(
               title: 'تفاصيل المبالغ',
-              subtitle: 'الإجمالي يُحسب تلقائياً من الاستهلاك + الاشتراك',
+              subtitle: 'الإجمالي يُحسب من الاستهلاك',
               icon: Icons.calculate_outlined,
             ),
             const SizedBox(height: 8),
@@ -225,13 +220,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
             ),
             const SizedBox(height: 10),
             AppNumericField(
-              controller: _subscription,
-              label: 'قسط الاشتراك',
-              prefixText: 'ريال',
-              onChanged: (_) => _syncTotal(),
-            ),
-            const SizedBox(height: 10),
-            AppNumericField(
               controller: _credit,
               label: 'خصم رصيد دائن',
               prefixText: 'ريال',
@@ -241,7 +229,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               controller: _total,
               label: 'الإجمالي',
               prefixText: 'ريال',
-              helperText: 'فارغ = محسوب تلقائياً من الاستهلاك + الاشتراك',
+              helperText: 'فارغ = محسوب تلقائياً من الاستهلاك',
             ),
             const SizedBox(height: 10),
             AppTextField(

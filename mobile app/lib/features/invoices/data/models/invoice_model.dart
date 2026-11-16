@@ -24,7 +24,6 @@ class InvoiceModel extends Equatable {
     this.periodStart,
     this.periodEnd,
     this.consumptionFee = 0,
-    this.subscriptionInstallment = 0,
     this.previousBalance = 0,
     this.creditApplied = 0,
     this.totalAmount = 0,
@@ -54,7 +53,6 @@ class InvoiceModel extends Equatable {
   final DateTime? periodEnd;
 
   final double consumptionFee;
-  final double subscriptionInstallment;
   final double previousBalance;
   final double creditApplied;
   final double totalAmount;
@@ -158,9 +156,6 @@ class InvoiceModel extends Equatable {
       periodStart: JsonUtils.asDate(json['billing_period_start']),
       periodEnd: JsonUtils.asDate(json['billing_period_end']),
       consumptionFee: JsonUtils.asDouble(json['consumption_fee']),
-      subscriptionInstallment: JsonUtils.asDouble(
-        json['subscription_installment'],
-      ),
       previousBalance: JsonUtils.asDouble(json['previous_balance']),
       creditApplied: JsonUtils.asDouble(json['credit_applied']),
       totalAmount: JsonUtils.asDouble(json['total_amount']),
@@ -202,7 +197,6 @@ class InvoiceModel extends Equatable {
     'billing_period_start': DateFormat.day(periodStart),
     'billing_period_end': DateFormat.day(periodEnd),
     'consumption_fee': consumptionFee,
-    'subscription_installment': subscriptionInstallment,
     'previous_balance': previousBalance,
     'credit_applied': creditApplied,
     'total_amount': totalAmount,
@@ -219,7 +213,6 @@ class InvoiceModel extends Equatable {
     'bill_date': DateFormat.day(billDate),
     'status': status.wire,
     'consumption_fee': consumptionFee,
-    'subscription_installment': subscriptionInstallment,
     'previous_balance': previousBalance,
     'credit_applied': creditApplied,
     'total_amount': totalAmount,
@@ -233,7 +226,6 @@ class InvoiceModel extends Equatable {
     double? previousBalance,
     double? creditApplied,
     double? consumptionFee,
-    double? subscriptionInstallment,
     String? notes,
     DateTime? billDate,
     bool? isLatestInvoice,
@@ -253,8 +245,6 @@ class InvoiceModel extends Equatable {
     periodStart: periodStart,
     periodEnd: periodEnd,
     consumptionFee: consumptionFee ?? this.consumptionFee,
-    subscriptionInstallment:
-        subscriptionInstallment ?? this.subscriptionInstallment,
     previousBalance: previousBalance ?? this.previousBalance,
     creditApplied: creditApplied ?? this.creditApplied,
     totalAmount: totalAmount ?? this.totalAmount,

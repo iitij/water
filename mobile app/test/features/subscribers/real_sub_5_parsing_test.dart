@@ -32,8 +32,6 @@ void main() {
       generalBalance: jDouble(summaryJson['general_balance']),
       totalCredit: jDouble(summaryJson['total_credit_balance']),
       totalDebit: jDouble(summaryJson['total_debit_balance']),
-      remainingSubscriptionFee: jDouble(summaryJson['remaining_subscription_fee']),
-      subscriptionFeeStatus: jStr(summaryJson['subscription_fee_status']) ?? 'paid',
       meterBalances: meters,
     );
     expect(summary.totalDebit, 7200.0);

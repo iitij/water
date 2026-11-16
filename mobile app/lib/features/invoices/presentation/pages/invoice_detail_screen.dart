@@ -308,7 +308,6 @@ class _AmountsCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final rows = <(String, String, Color?)>[
       ('قيمة الاستهلاك', CurrencyFormatter.withLabel(invoice.consumptionFee), null),
-      ('قسط الاشتراك', CurrencyFormatter.withLabel(invoice.subscriptionInstallment), null),
       ('متأخرات سابقة', CurrencyFormatter.withLabel(invoice.previousBalance), AppColors.warning),
       ('خصم رصيد دائن', CurrencyFormatter.withLabel(invoice.creditApplied), AppColors.success),
       ('قيمة الفاتورة', CurrencyFormatter.withLabel(invoice.totalAmount), null),

@@ -104,15 +104,11 @@ class FinancialSummary extends Equatable {
     this.generalBalance = 0,
     this.totalCredit = 0,
     this.totalDebit = 0,
-    this.remainingSubscriptionFee = 0,
-    this.subscriptionFeeStatus = 'paid',
     this.meterBalances = const [],
   });
   final double generalBalance;
   final double totalCredit;
   final double totalDebit;
-  final double remainingSubscriptionFee;
-  final String subscriptionFeeStatus;
   final List<MeterBalance> meterBalances;
   @override
   List<Object?> get props => [

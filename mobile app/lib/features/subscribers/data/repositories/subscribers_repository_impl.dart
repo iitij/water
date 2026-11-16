@@ -27,8 +27,6 @@ class SubscribersRepositoryImpl implements SubscribersRepository {
         generalBalance: _d(summaryJson['general_balance']),
         totalCredit: _d(summaryJson['total_credit_balance']),
         totalDebit: _d(summaryJson['total_debit_balance']),
-        remainingSubscriptionFee: _d(summaryJson['remaining_subscription_fee']),
-        subscriptionFeeStatus: jStr(summaryJson['subscription_fee_status']) ?? 'paid',
         meterBalances: meters,
       ),
       metersRaw: metersJson,

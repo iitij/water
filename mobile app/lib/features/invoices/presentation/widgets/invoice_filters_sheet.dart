@@ -91,7 +91,6 @@ class _InvoiceFiltersSheetState extends State<InvoiceFiltersSheet> {
   static const List<(String, String)> _typeOptions = <(String, String)>[
     ('', 'كل الأنواع'),
     ('meter', 'فاتورة عداد'),
-    ('subscription', 'رسوم اشتراك'),
   ];
 
   static const List<(String, String)> _trashedOptions = <(String, String)>[
