@@ -34,6 +34,8 @@ jobs:
           coverage: none
       - name: Install Laravel dependencies for cross-app localization contract tests
         working-directory: .
-        run: composer install --no-interaction --no-progress --prefer-dist
+        run: |
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
       - name: Flutter test
         run: flutter test --no-pub
