@@ -69,4 +69,25 @@ class SubscriptionFeeRetirementTest extends TestCase
         }
     }
 
+
+    public function test_legacy_subscription_invoice_generator_is_rejected_internally(): void
+    {
+        $square = \App\Models\Square::create(['name' => 'مربع اختبار الإزالة']);
+        $subscriber = \App\Models\Subscriber::create([
+            'name' => 'مشترك اختبار',
+            'square_id' => $square->id,
+            'status' => 'active',
+        ]);
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        try {
+            app(\App\Services\InvoiceService::class)->generateInvoice(
+                subscriber: $subscriber,
+                includeReadings: false,
+                invoiceType: 'subscription',
+            );
+        } finally {
+            $this->assertDatabaseCount('invoices', 0);
+        }
+    }
+
 }

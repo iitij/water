@@ -21,6 +21,14 @@ class InvoiceService
         bool $includeReadings = true,
         string $invoiceType = 'meter'
     ): Invoice {
+        // Reject obsolete internal callers even when they bypass the public
+        // API and try to create a charge-only invoice without meter readings.
+        if ($invoiceType !== 'meter') {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'invoice_type' => ['لا يمكن إصدار فواتير رسوم الاشتراك بعد إزالة هذه الميزة.'],
+            ]);
+        }
+
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
             if ($includeReadings) {
                 if ($invoiceType !== 'meter') {
