@@ -122,18 +122,26 @@ class AppDatabase extends GeneratedDatabase {
                 cached_at TEXT NOT NULL
               )
             ''');
-            await customStatement('''
-              INSERT INTO cached_meter_periods_clean (
-                meter_id, last_reading, period_start, period_end,
-                auto_issue_invoice, has_subscription_fee,
-                subscription_installment, cached_at
-              )
-              SELECT meter_id, last_reading, period_start, period_end,
-                     auto_issue_invoice, has_subscription_fee,
-                     subscription_installment, cached_at
-              FROM cached_meter_periods
-            ''');
-            await customStatement('DROP TABLE cached_meter_periods');
+            // Very old field databases did not have a period cache at all.
+            // Migrate it only if it exists; fresh v5 still gets the new table.
+            final legacyPeriodTable = await _select(
+              "SELECT name FROM sqlite_master "
+              "WHERE type = 'table' AND name = 'cached_meter_periods'",
+            );
+            if (legacyPeriodTable.isNotEmpty) {
+              await customStatement('''
+                INSERT INTO cached_meter_periods_clean (
+                  meter_id, last_reading, period_start, period_end,
+                  auto_issue_invoice, has_subscription_fee,
+                  subscription_installment, cached_at
+                )
+                SELECT meter_id, last_reading, period_start, period_end,
+                       auto_issue_invoice, has_subscription_fee,
+                       subscription_installment, cached_at
+                FROM cached_meter_periods
+              ''');
+              await customStatement('DROP TABLE cached_meter_periods');
+            }
             await customStatement(
               'ALTER TABLE cached_meter_periods_clean RENAME TO cached_meter_periods',
             );

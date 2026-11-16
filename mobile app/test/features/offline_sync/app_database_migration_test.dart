@@ -2,10 +2,11 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/database/app_database.dart';
 
-/// ترحيل Drift إلى v4 مع حفظ بيانات الأجهزة القديمة.
+/// ترحيل Drift إلى v5 مع حفظ بيانات الأجهزة القديمة.
 ///
 /// الاختبار يبني قاعدة **بإصدار v1** كما كانت على أجهزة الميدان فعلاً (بلا
 /// `owner_user_id` ولا `next_attempt_at` ولا `last_status_code`)، ثم يفتحها
@@ -119,7 +120,7 @@ void main() {
     return file;
   }
 
-  test('v1 → v4 يضيف الأعمدة الجديدة ويحفظ الطابور والبيانات', () async {
+  test('v1 → v5 يضيف الأعمدة الجديدة ويحفظ الطابور والبيانات', () async {
     final file = await createLegacyDatabase();
     final db = AppDatabase(NativeDatabase(file));
 
@@ -169,7 +170,7 @@ void main() {
     final version = await second
         .customSelect('PRAGMA user_version')
         .getSingle();
-    expect(version.data['user_version'], 4);
+    expect(version.data['user_version'], 5);
 
     final columns = await second
         .customSelect('PRAGMA table_info(pending_sync_actions)')
@@ -184,7 +185,7 @@ void main() {
     await second.close();
   });
 
-  test('v3 → v4 يحفظ الصفوف ويضيف معرفاً فارغاً دون توليده', () async {
+  test('v3 → v5 يحفظ الصفوف ويضيف معرفاً فارغاً دون توليده', () async {
     final file = await createLegacyDatabase(version: 3);
     final db = AppDatabase(NativeDatabase(file));
     final squares = await db.getCachedSquares();
@@ -233,4 +234,69 @@ void main() {
       expect((await restored.getCachedSquares()).single['name'], 'نسخة قديمة');
     },
   );
+
+  test('v4 to v5 retains offline periods and queue ownership while removing retired charges', () async {
+    final file = await createLegacyDatabase(version: 3);
+    final old = sqlite3.sqlite3.open(file.path);
+    try {
+      old.execute('''
+        CREATE TABLE cached_meter_periods (
+          meter_id INTEGER PRIMARY KEY,
+          last_reading REAL NOT NULL DEFAULT 0,
+          period_start TEXT NOT NULL,
+          period_end TEXT NOT NULL,
+          auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
+          has_subscription_fee INTEGER NOT NULL DEFAULT 0,
+          subscription_installment REAL NOT NULL DEFAULT 0,
+          has_tanker_fee INTEGER NOT NULL DEFAULT 0,
+          tanker_installment REAL NOT NULL DEFAULT 0,
+          cached_at TEXT NOT NULL
+        )
+      ''');
+      old.execute('''
+        INSERT INTO cached_meter_periods
+          (meter_id, last_reading, period_start, period_end,
+          has_subscription_fee, subscription_installment, has_tanker_fee,
+          tanker_installment, cached_at)
+        VALUES (51, 42, '2026-10-01', '2026-10-31', 1, 150, 1, 900,
+                '2026-10-22')
+      ''');
+      old.execute('''
+        CREATE TABLE cached_settings (
+          setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at TEXT
+        )
+      ''');
+      old.execute(
+        "INSERT INTO cached_settings(setting_key, setting_value) "
+        "VALUES ('tanker_enabled', '1')",
+      );
+      old.execute(
+        'UPDATE pending_sync_actions SET payload_json = ? WHERE id = ?',
+        ['{"meter_id":51,"has_tanker_fee":true,"tanker_installment":900,"current_reading":88}',
+         'legacy-action-1'],
+      );
+      old.execute('PRAGMA user_version = 4');
+    } finally {
+      old.dispose();
+    }
+
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    final period = await db.getCachedMeterPeriod(51);
+    expect(period, isNotNull);
+    expect(period!['last_reading'], 42.0);
+    expect(period['subscription_installment'], 150.0);
+    expect(period.containsKey('has_tanker_fee'), isFalse);
+    expect(period.containsKey('tanker_installment'), isFalse);
+
+    final queue = await db.getPendingActions();
+    expect(queue, hasLength(1));
+    final payload = queue.single['payload_json'] as String;
+    expect(payload, contains('current_reading'));
+    expect(payload, isNot(contains('has_tanker_fee')));
+    expect(payload, isNot(contains('tanker_installment')));
+    expect(queue.single['id'], 'legacy-action-1');
+    expect((await db.customSelect("SELECT * FROM cached_settings WHERE setting_key = 'tanker_enabled'").get()), isEmpty);
+  });
+
 }

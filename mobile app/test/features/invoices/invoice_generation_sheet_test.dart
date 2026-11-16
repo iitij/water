@@ -61,7 +61,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
-      expect(find.byType(SwitchListTile), findsNWidgets(3));
+      expect(find.byType(SwitchListTile), findsNWidgets(2));
       await tester.tap(find.byType(SwitchListTile).first);
       await tester.pump();
       expect(

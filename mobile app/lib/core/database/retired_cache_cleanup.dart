@@ -28,9 +28,16 @@ Future<void> purgeRetiredOfflineFields(GeneratedDatabase db) async {
       );
     }
   }
-  await db.customStatement(
-    "DELETE FROM cached_settings WHERE "
-    "setting_key LIKE '%tanker%' OR setting_key LIKE '%tenant%' "
-    "OR setting_value LIKE '%tanker_fee%'",
-  );
+  // Early database versions did not create the settings cache table.
+  final settingsTable = await db.customSelect(
+    "SELECT name FROM sqlite_master "
+    "WHERE type = 'table' AND name = 'cached_settings'",
+  ).get();
+  if (settingsTable.isNotEmpty) {
+    await db.customStatement(
+      "DELETE FROM cached_settings WHERE "
+      "setting_key LIKE '%tanker%' OR setting_key LIKE '%tenant%' "
+      "OR setting_value LIKE '%tanker_fee%'",
+    );
+  }
 }
