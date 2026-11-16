@@ -293,10 +293,8 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
     if (!await _save() || !mounted) return;
     final subscriber = _savedSubscriber!;
     setState(() => _saving = true);
-    Meter? savedMeter;
     await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => MeterFormScreen(
       repository: meters, initialSubscriberId: subscriber.id,
-      onSaved: (meter) => savedMeter = meter,
     )));
     if (!mounted) return;
     // Both persisted records survive cancellation; do not offer to re-create

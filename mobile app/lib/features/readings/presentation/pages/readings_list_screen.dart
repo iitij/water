@@ -7,7 +7,6 @@ import 'package:get_it/get_it.dart';
 
 import '../../../../core/database/offline_pack_downloader.dart';
 import '../../../../core/l10n/app_strings.dart';
-import '../../../../core/l10n/field_experience_strings.dart';
 import '../../../../core/l10n/field_list_options_strings.dart';
 import '../../../../core/l10n/laravel_screen_strings.dart';
 import '../../../../core/l10n/list_options_strings.dart';

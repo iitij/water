@@ -12,7 +12,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:water_project/core/l10n/subscriber_experience_strings.dart';
 import 'package:water_project/core/theme/app_colors.dart';
 import 'package:water_project/core/theme/app_theme.dart';
-import 'package:water_project/core/ui/app_filters.dart';
 import 'package:water_project/core/ui/app_tiles.dart';
 import 'package:water_project/features/meters/data/models/meter.dart';
 import 'package:water_project/features/meters/domain/meters_repository.dart';

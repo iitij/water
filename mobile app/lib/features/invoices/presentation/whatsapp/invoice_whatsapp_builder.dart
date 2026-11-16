@@ -4,7 +4,6 @@ import '../../../../core/settings/finance_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../data/models/invoice_model.dart';
-import '../../domain/accounting/finance_enums.dart';
 
 /// يبني رسالة واتساب الفاتورة مطابقةً لـ `WhatsAppService::getInvoiceMessageUrl`
 /// (`app/Services/WhatsAppService.php` سطر 60-186):
