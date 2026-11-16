@@ -191,7 +191,7 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseCount('invoices', 0);
     }
 
-    public function test_non_consumption_service_invoice_can_refer_to_only_meter(): void
+    public function test_retired_fee_only_invoice_is_rejected(): void
     {
         $subscriber = $this->subscriber();
         $meter = Meter::create([
@@ -204,7 +204,8 @@ class SingleCurrentMeterTest extends TestCase
             'meter_id' => $meter->id,
             'invoice_type' => 'subscription',
             'subscription_installment' => 15,
-        ])->assertCreated()->assertJsonPath('invoice.meter_id', $meter->id);
+        ])->assertUnprocessable()->assertJsonValidationErrors('invoice_type');
+        $this->assertDatabaseCount('invoices', 0);
     }
 
     public function test_filament_manual_consumption_invoice_uses_only_meter(): void

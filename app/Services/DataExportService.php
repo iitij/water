@@ -52,9 +52,6 @@ class DataExportService
             'إجمالي الرصيد المدين (ر.ي)',
             'صافي الرصيد (ر.ي)',
             'حالة المشترك',
-            'رسوم الاشتراك المقررة (ر.ي)',
-            'المدفوع من رسوم الاشتراك (ر.ي)',
-            'المتبقي من رسوم الاشتراك (ر.ي)',
             'تاريخ بدء الاشتراك',
             'تاريخ التسجيل',
         ];
@@ -100,7 +97,6 @@ class DataExportService
                 default => $sub->status ?? 'نشط',
             };
 
-            $remainingFee = $sub->getRemainingSubscriptionFee();
 
             $startDate = $sub->subscription_start_date ? Carbon::parse($sub->subscription_start_date)->format('Y-m-d') : '-';
             $createdAt = $sub->created_at ? Carbon::parse($sub->created_at)->format('Y-m-d H:i') : '-';
@@ -118,9 +114,6 @@ class DataExportService
                 Cell::fromValue(round($totalDebit, 2)),
                 Cell::fromValue(round($netBalance, 2)),
                 Cell::fromValue($subStatus),
-                Cell::fromValue((float)($sub->initial_subscription_fee ?? 0)),
-                Cell::fromValue((float)($sub->subscription_fee_paid ?? 0)),
-                Cell::fromValue(round($remainingFee, 2)),
                 Cell::fromValue($startDate),
                 Cell::fromValue($createdAt),
             ];
@@ -230,7 +223,6 @@ class DataExportService
                 Cell::fromValue($periodStart),
                 Cell::fromValue($periodEnd),
                 Cell::fromValue((float)($inv->consumption_fee ?? 0)),
-                Cell::fromValue((float)($inv->subscription_installment ?? 0)),
                 Cell::fromValue((float)($inv->previous_balance ?? 0)),
                 Cell::fromValue((float)($inv->total_amount ?? 0)),
                 Cell::fromValue(round($totalWithPrev, 2)),

@@ -6,7 +6,6 @@ use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
 use App\Models\Square;
-use App\Models\SubscriptionFee;
 use App\Services\ReadingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -150,16 +149,12 @@ class SquareController extends ApiController
             ->map(function (Meter $meter) use ($readingService) {
                 $lastReading = $meter->readings()->latest('id')->first();
                 $period = $readingService->calculateReadingPeriod($meter->id);
-                $subFee = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
-                    ->where('status', 'uninvoiced')->sum('amount');
 
                 $meter->setAttribute('last_reading', $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading);
                 $meter->setAttribute('period', [
                     'period_start' => $period['period_start'],
                     'period_end' => $period['period_end'],
                     'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
-                    'has_subscription_fee' => $subFee > 0,
-                    'subscription_installment' => $subFee,
                 ]);
 
                 return $meter;

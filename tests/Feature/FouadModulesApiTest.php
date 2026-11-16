@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Square;
 use App\Models\Subscriber;
-use App\Models\SubscriptionFee;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,7 +61,6 @@ class FouadModulesApiTest extends TestCase
         $meter = $subscriber->meters()->create([
             'unique_code' => 'W-1', 'status' => 'active', 'balance' => -9500,
         ]);
-        SubscriptionFee::create(['subscriber_id' => $subscriber->id, 'amount' => 15000, 'status' => 'uninvoiced']);
 
         $this->actingAs($this->user, 'sanctum')
             ->getJson("/api/subscribers/{$subscriber->id}")
@@ -70,7 +68,6 @@ class FouadModulesApiTest extends TestCase
             ->assertJsonPath('financial_summary.general_balance', 2000)
             ->assertJsonPath('financial_summary.total_credit_balance', 2000)
             ->assertJsonPath('financial_summary.total_debit_balance', 9500)
-            ->assertJsonPath('financial_summary.remaining_subscription_fee', 15000)
             ->assertJsonPath('meters.0.meter_debit', 9500);
         $this->assertNotNull($meter);
     }
@@ -90,17 +87,11 @@ class FouadModulesApiTest extends TestCase
     }
 
 
-    public function test_subscription_fees_summary(): void
+    public function test_retired_subscription_fee_endpoint_is_unavailable(): void
     {
-        $square = Square::create(['name' => 'مربع 1']);
-        $subscriber = Subscriber::create(['name' => 'مشترك رسوم', 'square_id' => $square->id, 'status' => 'active']);
-        SubscriptionFee::create(['subscriber_id' => $subscriber->id, 'amount' => 15000, 'status' => 'uninvoiced']);
-        SubscriptionFee::create(['subscriber_id' => $subscriber->id, 'amount' => 15000, 'status' => 'paid']);
-
         $this->actingAs($this->user, 'sanctum')
             ->getJson('/api/subscription-fees')
-            ->assertOk()
-            ->assertJsonPath('total_sum', 30000)
-            ->assertJsonPath('remaining_sum', 15000);
+            ->assertNotFound();
     }
+
 }

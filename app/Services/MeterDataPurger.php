@@ -67,10 +67,6 @@ final class MeterDataPurger
 
         DB::table('reading_faults')->where('meter_id', $meterId)->delete();
         DB::table('route_visits')->where('meter_id', $meterId)->delete();
-        DB::table('subscription_fees')
-            ->where(function ($q) use ($meterId, $invoiceIds): void {
-                $q->where('meter_id', $meterId)->orWhereIn('invoice_id', $invoiceIds);
-            })->delete();
 
         DB::table('readings')
             ->where(function ($q) use ($meterId, $invoiceIds): void {

@@ -6,7 +6,6 @@ use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
-use App\Models\SubscriptionFee;
 use App\Models\Tariff;
 use App\Services\InvoiceService;
 use App\Services\ReadingService;
@@ -108,8 +107,6 @@ class ReadingController extends ApiController
 
         $lastReading = $meter->readings()->latest('id')->first();
         $period = $this->readingService->calculateReadingPeriod($meterId);
-        $subscriptionAmount = (float) SubscriptionFee::where('subscriber_id', $meter->subscriber_id)
-            ->where('status', 'uninvoiced')->sum('amount');
 
         return response()->json([
             'meter' => $meter,
@@ -117,8 +114,6 @@ class ReadingController extends ApiController
             'period_start' => $period['period_start'],
             'period_end' => $period['period_end'],
             'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
-            'has_subscription_fee' => SubscriptionFee::where('subscriber_id', $meter->subscriber_id)->where('status', 'uninvoiced')->exists(),
-            'subscription_installment' => $subscriptionAmount,
         ]);
     }
 
@@ -234,8 +229,6 @@ class ReadingController extends ApiController
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer', 'distinct', 'exists:readings,id'],
-            'has_subscription_fee' => ['sometimes', 'boolean'],
-            'subscription_installment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
         $readings = Reading::with('meter.subscriber')->whereIn('id', $data['ids'])->where('is_invoiced', false)->get();
@@ -353,8 +346,6 @@ class ReadingController extends ApiController
             'image' => ['nullable', 'image', 'max:5120'],
             'image_base64' => ['nullable', 'string'],
             'image_filename' => ['nullable', 'string', 'max:255'],
-            'has_subscription_fee' => ['sometimes', 'boolean'],
-            'subscription_installment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ];
     }
@@ -501,7 +492,6 @@ class ReadingController extends ApiController
             'consumption_units' => $units,
             'unit_price' => number_format($unitPrice, 2, '.', ''),
             'consumption_fee' => number_format((float) $invoice->consumption_fee, 2, '.', ''),
-            'subscription_installment' => number_format((float) $invoice->subscription_installment, 2, '.', ''),
             'previous_balance' => number_format((float) $invoice->previous_balance, 2, '.', ''),
             'credit_applied' => number_format((float) $invoice->credit_applied, 2, '.', ''),
             'collector' => $request->user()?->name ?? 'إدارة المشروع',

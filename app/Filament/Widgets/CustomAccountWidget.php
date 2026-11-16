@@ -42,12 +42,9 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
                     try {
                         $invoiceService = new \App\Services\InvoiceService();
                         
-                        $subscriptionInstallment = (isset($data['has_subscription_fee']) && $data['has_subscription_fee']) ? (float) ($data['subscription_installment'] ?? 0) : null;
-                        
                         $invoiceService->generateInvoice(
                             subscriber: $record->meter->subscriber,
                             meter: $record->meter,
-                            subscriptionInstallment: $subscriptionInstallment,
                             notes: null,
                         );
                         \Filament\Notifications\Notification::make()
@@ -139,19 +136,7 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
             ->modalWidth('2xl')
             ->createAnother(false)
             ->using(fn (array $data) => app(\App\Services\SingleMeterService::class)->create($data))
-            ->extraModalFooterActions(fn (Action $action): array => [
-                $action->makeModalSubmitAction('saveAndAddSubscriptionFee', arguments: ['addSubscriptionFee' => true])
-                    ->label('حفظ واضافة رسوم اشتراك')
-                    ->color('info'),
-            ])
-            ->after(function (array $arguments, \App\Models\Meter $record, \Livewire\Component $livewire) {
-                if ($arguments['addSubscriptionFee'] ?? false) {
-                    $livewire->replaceMountedAction('createSubscriptionFee', [
-                        'subscriber_id' => $record->subscriber_id,
-                        'meter_id' => $record->id,
-                    ]);
-                }
-            })
+
             ->mountUsing(function ($form, array $arguments) {
                 $form->fill([
                     'subscriber_id' => $arguments['subscriber_id'] ?? null,

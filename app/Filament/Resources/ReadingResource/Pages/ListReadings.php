@@ -19,12 +19,9 @@ class ListReadings extends ListRecords
                         try {
                             $invoiceService = new \App\Services\InvoiceService();
                             
-                            $subscriptionInstallment = (isset($data['has_subscription_fee']) && $data['has_subscription_fee']) ? (float) ($data['subscription_installment'] ?? 0) : null;
-                            
                             $invoiceService->generateInvoice(
                                 subscriber: $record->meter->subscriber,
                                 meter: $record->meter,
-                                subscriptionInstallment: $subscriptionInstallment,
                                 notes: null,
                             );
                             \Filament\Notifications\Notification::make()
