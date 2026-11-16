@@ -218,12 +218,7 @@ class _GenerateEngineRouteState extends State<_GenerateEngineRoute> {
     if (_opened) return;
     _opened = true;
 
-    if (widget.engine == 'subscription') {
-      await GenerateSubscriptionInvoiceSheet.show(
-        context,
-        preselectedSubscriberId: widget.subscriberId,
-      );
-    } else if (widget.engine == 'manual') {
+    if (widget.engine == 'manual') {
       if (!mounted) return;
       await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(builder: (_) => const InvoiceCreateEditScreen()),

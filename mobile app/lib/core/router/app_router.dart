@@ -316,9 +316,7 @@ class AppRouter {
                         id: dashInvoice.id,
                         subscriberId: dashInvoice.subscriberId ?? 0,
                         meterId: dashInvoice.meterId,
-                        invoiceType: dashInvoice.meterId != null
-                            ? InvoiceType.meter
-                            : InvoiceType.subscription,
+                        invoiceType: InvoiceType.meter,
                         billNumber: dashInvoice.billNumber,
                         billDate: dashInvoice.billDate,
                         totalAmount: dashInvoice.totalAmount,

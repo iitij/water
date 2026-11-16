@@ -40,8 +40,7 @@ enum InvoiceStatus {
 
 /// نوع الفاتورة (محركا الإصدار).
 enum InvoiceType {
-  meter('meter', 'عداد'),
-  subscription('subscription', 'اشتراك');
+  meter('meter', 'عداد');
 
   const InvoiceType(this.wire, this.label);
 
@@ -57,8 +56,7 @@ enum InvoiceType {
 /// نوع بند الفاتورة (`invoice_items.type`).
 enum InvoiceItemType {
   consumption('consumption', 'استهلاك مياه'),
-  previousBalance('previous_balance', 'متأخرات سابقة'),
-  subscription('subscription', 'رسوم اشتراك');
+  previousBalance('previous_balance', 'متأخرات سابقة');
 
   const InvoiceItemType(this.wire, this.label);
 

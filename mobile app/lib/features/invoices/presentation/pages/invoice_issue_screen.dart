@@ -15,8 +15,6 @@ class InvoiceIssueScreen extends StatelessWidget {
     const options = [
       (title: 'فاتورة عداد', description: 'إصدار فاتورة من القراءات المسجلة',
         icon: Icons.speed_rounded, route: FinanceRouteNames.invoiceGenerateMeter),
-      (title: 'فاتورة اشتراك', description: 'فوترة رسوم الاشتراك والأقساط',
-        icon: Icons.card_membership_outlined, route: FinanceRouteNames.invoiceGenerateSubscription),
       (title: 'فاتورة يدوية', description: 'تحديد المبالغ وإصدار الفاتورة يدوياً',
         icon: Icons.edit_note_rounded, route: FinanceRouteNames.invoiceCreate),
     ];

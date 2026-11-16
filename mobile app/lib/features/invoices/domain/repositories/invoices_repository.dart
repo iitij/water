@@ -18,7 +18,6 @@ abstract interface class InvoicesRepository {
   Future<InvoiceModel> update(int id, Map<String, dynamic> payload);
 
   Future<InvoiceModel> generateMeter(GenerateMeterInvoiceRequest request);
-  Future<InvoiceModel> generateSubscription(GenerateSubscriptionInvoiceRequest request);
 
   Future<void> delete(int id);
   Future<void> forceDelete(int id);

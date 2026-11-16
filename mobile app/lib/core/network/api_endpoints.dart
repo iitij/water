@@ -61,7 +61,6 @@ class ApiEndpoints {
   static const invoiceBillingPeriods = 'invoices/billing-periods';
   static const collectInvoicePayment = 'invoices/pay';
   static const generateMeterInvoice = 'invoices/generate-meter';
-  static const generateSubscriptionInvoice = 'invoices/generate-subscription';
   static const bulkRecalculateInvoices = 'invoices/bulk-recalculate';
   static const bulkDeleteInvoices = 'invoices/bulk-delete';
   static String invoice(int id) => 'invoices/$id';
@@ -72,7 +71,7 @@ class ApiEndpoints {
   static String invoiceWhatsAppLink(int id) => 'invoices/$id/whatsapp-link';
   static String sendInvoiceWhatsApp(int id) => 'invoices/$id/send-whatsapp';
 
-  // Payments and subscription fees.
+  // Payments.
   static const payments = 'payments';
   static const bulkDeletePayments = 'payments/bulk-delete';
   static String payment(int id) => 'payments/$id';
@@ -94,10 +93,6 @@ class ApiEndpoints {
   static const devices = 'devices';
   static String device(int id) => 'devices/$id';
 
-  static const subscriptionFees = 'subscription-fees';
-  static const bulkDeleteSubscriptionFees = 'subscription-fees/bulk-delete';
-  static String subscriptionFee(int id) => 'subscription-fees/$id';
-  static String subscriptionFeeInvoice(int id) => 'subscription-fees/$id/invoice';
 
   // Tariffs and general ledger.
   static const tariffs = 'tariffs';

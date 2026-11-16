@@ -38,11 +38,10 @@ class RouteNames {
   static const paymentCreate = '/payments/create';
   static const tariffs = '/tariffs';
 
-  // Dev 4: Squares, Subscribers 360°, Subscription Fees & Ledger
+  // Dev 4: Squares, Subscribers 360°, Ledger
   static const squares = '/squares';
   static const subscribers = '/subscribers';
   static const subscriberNew = '/subscribers/new';
-  static const subscriptionFees = '/subscription-fees';
   static const transactions = '/transactions';
 
   // Dev 5: Dashboard, Reports, Settings Studio & Exports

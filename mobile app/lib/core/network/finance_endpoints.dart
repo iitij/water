@@ -15,7 +15,6 @@ class FinanceEndpoints {
   static const String invoicesSearch = '/invoices/search';
   static const String invoicesBillingPeriods = '/invoices/billing-periods';
   static const String invoicesGenerateMeter = '/invoices/generate-meter';
-  static const String invoicesGenerateSubscription = '/invoices/generate-subscription';
   static const String invoicesBulkDelete = '/invoices/bulk-delete';
   static const String invoicesBulkRestore = '/invoices/bulk-restore';
   static const String invoicesBulkForceDelete = '/invoices/bulk-force-delete';
@@ -71,7 +70,6 @@ class FinanceEndpoints {
   static const String squares = '/squares';
   static const String subscribers = '/subscribers';
   static const String meters = '/meters';
-  static const String subscriptionFees = '/subscription-fees';
 
   // ─── الإعدادات التي تقرأها طبقة الطباعة/الواتساب (الكتابة ملك Dev 5) ────────
   static const String settings = '/settings';

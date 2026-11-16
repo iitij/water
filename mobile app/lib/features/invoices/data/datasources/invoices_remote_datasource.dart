@@ -102,16 +102,6 @@ class InvoicesRemoteDataSource {
         ),
       );
 
-  /// #39 `POST /api/invoices/generate-subscription`
-  Future<InvoiceModel> generateSubscription(
-    GenerateSubscriptionInvoiceRequest request,
-  ) => _mutate(
-    () => _client.post(
-      FinanceEndpoints.invoicesGenerateSubscription,
-      body: request.toJson(),
-    ),
-  );
-
 
   /// #41 `PUT /api/invoices/{id}` — تشغيل `Invoice::updated` (تحديث القيد + إعادة التوزيع).
   Future<InvoiceModel> update(int id, Map<String, dynamic> payload) =>

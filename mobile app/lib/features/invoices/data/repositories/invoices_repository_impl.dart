@@ -51,10 +51,6 @@ class InvoicesRepositoryImpl
   Future<InvoiceModel> generateMeter(GenerateMeterInvoiceRequest request) =>
       _remote.generateMeter(request);
 
-  @override
-  Future<InvoiceModel> generateSubscription(
-    GenerateSubscriptionInvoiceRequest request,
-  ) => _remote.generateSubscription(request);
 
   @override
   Future<void> delete(int id) => _remote.delete(id);
