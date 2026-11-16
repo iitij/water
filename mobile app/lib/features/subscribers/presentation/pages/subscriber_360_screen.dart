@@ -34,8 +34,6 @@ import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/widgets/payment_actions.dart';
 import '../../../readings/domain/readings_repository.dart';
 import '../../../readings/presentation/widgets/record_reading_sheet.dart';
-import '../../../subscription_fees/domain/entities/subscription_fee.dart';
-import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 import '../cubit/subscriber360_cubit.dart';
@@ -55,7 +53,6 @@ typedef AddMeterLauncher =
 bool _has360Cubits(BuildContext context) {
   try {
     context.read<Subscriber360Cubit>();
-    context.read<SubscriptionFeesCubit>();
     return true;
   } catch (_) {
     return false;
@@ -88,11 +85,6 @@ class Subscriber360Screen extends StatelessWidget {
             BlocProvider<Subscriber360Cubit>(
               create: (_) =>
                   Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
-            ),
-            BlocProvider<SubscriptionFeesCubit>(
-              create: (_) => SubscriptionFeesCubit(deps.fees)
-                ..subscriberId = subscriber.id
-                ..load(),
             ),
           ],
           child: _Subscriber360View(
@@ -224,7 +216,7 @@ class _Subscriber360View extends StatelessWidget {
         final detail = state.detail;
         final activeSubscriber = detail?.subscriber ?? subscriber;
         return DefaultTabController(
-          length: 5,
+          length: 4,
           child: SubPageScaffold(
             title: activeSubscriber.name,
             subtitle: SubscriberExperienceStrings.profile,
@@ -303,7 +295,6 @@ class _Subscriber360View extends StatelessWidget {
                           subscriber: activeSubscriber,
                           payments: detail.payments,
                         ),
-                        _FeesTab(meters: detail.summary.meterBalances),
                         _StatementTab(subscriberName: activeSubscriber.name),
                       ],
                     ),
@@ -327,7 +318,6 @@ class _SubscriberSections extends StatelessWidget {
       (Icons.speed_outlined, SubscriberExperienceStrings.meters),
       (Icons.receipt_long_outlined, SubscriberExperienceStrings.invoices),
       (Icons.payments_outlined, SubscriberExperienceStrings.payments),
-      (Icons.card_membership_outlined, SubscriberExperienceStrings.fees),
       (Icons.account_balance_outlined, SubscriberExperienceStrings.statement),
     ];
     return AnimatedBuilder(
@@ -477,7 +467,7 @@ class _FinancialSummaryHeader extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final largeText = MediaQuery.textScalerOf(context).scale(14) > 19;
-              final columns = constraints.maxWidth < 330 || largeText ? 1 : 3;
+              final columns = constraints.maxWidth < 330 || largeText ? 1 : 2;
               final width =
                   (constraints.maxWidth - 8 * (columns - 1)) / columns;
               return Wrap(
@@ -500,15 +490,6 @@ class _FinancialSummaryHeader extends StatelessWidget {
                       value: summary.totalDebit,
                       icon: Icons.north_east_rounded,
                       color: AppSemantic.resolve(context, AppColors.danger),
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: _HeroStat(
-                      label: SubscriberExperienceStrings.uninvoicedFees,
-                      value: summary.remainingSubscriptionFee,
-                      icon: Icons.pending_actions_outlined,
-                      color: AppSemantic.resolve(context, AppColors.warning),
                     ),
                   ),
                 ],

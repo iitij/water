@@ -101,7 +101,7 @@ abstract final class WorkspaceCatalog {
       keywords: 'إضافة subscriber', shortcut: true,
     ),
     WorkspaceEntry(
-      title: 'إصدار فاتورة', description: 'عداد أو اشتراك',
+      title: 'إصدار فاتورة', description: 'عداد المياه',
       icon: Icons.add_card_rounded, route: RouteNames.invoiceIssue,
       group: WorkspaceGroup.finance, permissions: ['Create:Invoice'],
       keywords: 'إنشاء فاتورة يدوية invoice', shortcut: true,
@@ -117,12 +117,6 @@ abstract final class WorkspaceCatalog {
       icon: Icons.grid_view_rounded, route: RouteNames.squares,
       group: WorkspaceGroup.customers, permissions: ['ViewAny:Square'],
       keywords: 'حارات مناطق square',
-    ),
-    WorkspaceEntry(
-      title: LaravelScreenStrings.subscriptionFees, description: 'الاشتراكات والأقساط وفواتيرها',
-      icon: Icons.card_membership_outlined, route: RouteNames.subscriptionFees,
-      group: WorkspaceGroup.customers, permissions: ['ViewAny:SubscriptionFee'],
-      keywords: 'تأسيس رسوم subscription',
     ),
 
     WorkspaceEntry(

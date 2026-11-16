@@ -19,11 +19,6 @@ import '../../features/subscribers/presentation/cubit/subscribers_cubit.dart';
 import '../../features/subscribers/presentation/pages/subscriber_360_screen.dart';
 import '../../features/subscribers/presentation/pages/subscriber_form_screen.dart';
 import '../../features/subscribers/presentation/pages/subscribers_screen.dart';
-import '../../features/subscription_fees/data/datasources/subscription_fees_remote_datasource.dart';
-import '../../features/subscription_fees/data/repositories/subscription_fees_repository_impl.dart';
-import '../../features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import '../../features/subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
-import '../../features/subscription_fees/presentation/pages/subscription_fees_screen.dart';
 import '../../features/transactions/data/datasources/transactions_remote_datasource.dart';
 import '../../features/transactions/data/repositories/transactions_repository_impl.dart';
 import '../../features/transactions/domain/repositories/transactions_repository.dart';
@@ -32,18 +27,16 @@ import '../../features/transactions/presentation/pages/transactions_screen.dart'
 import 'api_client.dart';
 import 'app_config.dart';
 
-/// حاوية تبعيات وحدات فؤاد (Dev 4) — المربعات، المشتركون، رسوم الاشتراك ودفتر الأستاذ.
+/// حاوية تبعيات وحدات فؤاد (Dev 4) — المربعات والمشتركون ودفتر الأستاذ.
 class FouadDependencies {
   const FouadDependencies({
     required this.squares,
     required this.subscribers,
-    required this.fees,
     required this.transactions,
   });
 
   final SquaresRepository squares;
   final SubscribersRepository subscribers;
-  final SubscriptionFeesRepository fees;
   final TransactionsRepository transactions;
 
   factory FouadDependencies.create({Dio? dio, bool? demoMode}) {
@@ -51,7 +44,6 @@ class FouadDependencies {
       return FouadDependencies(
         squares: FakeSquaresRepository(),
         subscribers: FakeSubscribersRepository(),
-        fees: FakeSubscriptionFeesRepository(),
         transactions: FakeTransactionsRepository(),
       );
     }
@@ -59,7 +51,6 @@ class FouadDependencies {
     return FouadDependencies(
       squares: SquaresRepositoryImpl(SquaresRemoteDatasource(api)),
       subscribers: SubscribersRepositoryImpl(SubscribersRemoteDatasource(api)),
-      fees: SubscriptionFeesRepositoryImpl(SubscriptionFeesRemoteDatasource(api)),
       transactions: TransactionsRepositoryImpl(TransactionsRemoteDatasource(api)),
     );
   }
@@ -98,9 +89,6 @@ class FouadModule {
     }
     if (!getIt.isRegistered<SubscribersRepository>()) {
       getIt.registerLazySingleton<SubscribersRepository>(() => created.subscribers);
-    }
-    if (!getIt.isRegistered<SubscriptionFeesRepository>()) {
-      getIt.registerLazySingleton<SubscriptionFeesRepository>(() => created.fees);
     }
     if (!getIt.isRegistered<TransactionsRepository>()) {
       getIt.registerLazySingleton<TransactionsRepository>(() => created.transactions);
@@ -191,11 +179,6 @@ class FouadModule {
                   BlocProvider<Subscriber360Cubit>(
                     create: (_) => Subscriber360Cubit(d.subscribers)..load(subscriber.id),
                   ),
-                  BlocProvider<SubscriptionFeesCubit>(
-                    create: (_) => SubscriptionFeesCubit(d.fees)
-                      ..subscriberId = subscriber.id
-                      ..load(),
-                  ),
                 ],
                 child: Subscriber360Screen(subscriber: subscriber),
               ),
@@ -218,27 +201,8 @@ class FouadModule {
                   BlocProvider<Subscriber360Cubit>(
                     create: (_) => Subscriber360Cubit(d.subscribers)..load(subscriber.id),
                   ),
-                  BlocProvider<SubscriptionFeesCubit>(
-                    create: (_) => SubscriptionFeesCubit(d.fees)
-                      ..subscriberId = subscriber.id
-                      ..load(),
-                  ),
                 ],
                 child: Subscriber360Screen(subscriber: subscriber),
-              ),
-            );
-          },
-        ),
-        GoRoute(
-          path: '/subscription-fees',
-          name: 'subscription-fees',
-          builder: (context, state) {
-            final d = deps;
-            return RepositoryProvider<SubscribersRepository>.value(
-              value: d.subscribers,
-              child: BlocProvider<SubscriptionFeesCubit>(
-                create: (_) => SubscriptionFeesCubit(d.fees)..load(),
-                child: const SubscriptionFeesScreen(),
               ),
             );
           },
@@ -268,9 +232,6 @@ class FouadModule {
     }
     if (getIt.isRegistered<SubscribersRepository>()) {
       getIt.unregister<SubscribersRepository>();
-    }
-    if (getIt.isRegistered<SubscriptionFeesRepository>()) {
-      getIt.unregister<SubscriptionFeesRepository>();
     }
     if (getIt.isRegistered<TransactionsRepository>()) {
       getIt.unregister<TransactionsRepository>();

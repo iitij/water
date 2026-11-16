@@ -149,7 +149,7 @@ abstract final class ModuleCatalog {
       id: 'invoices',
       group: AppModuleGroup.billing,
       title: LaravelScreenStrings.invoices,
-      subtitle: 'فواتير العدادات والاشتراكات',
+      subtitle: 'فواتير العدادات',
       icon: Icons.receipt_long_rounded,
       color: AppColors.primary,
       route: RouteNames.invoices,
@@ -196,15 +196,6 @@ abstract final class ModuleCatalog {
       color: AppColors.info,
       route: RouteNames.squares,
       requiredPermissions: <String>['ViewAny:Square', 'View:Square'],
-    ),
-    AppModule(
-      id: 'fees',
-      group: AppModuleGroup.crm,
-      title: LaravelScreenStrings.subscriptionFees,
-      subtitle: 'رسوم التأسيس وإصدار فواتير الأقساط',
-      icon: Icons.card_membership_rounded,
-      color: AppColors.warning,
-      route: RouteNames.subscriptionFees,
     ),
 
     AppModule(

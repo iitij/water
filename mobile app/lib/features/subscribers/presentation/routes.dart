@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/fouad/fouad_module.dart';
 import '../../../shared/widgets/subscriber_meter_selector.dart';
-import '../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../domain/entities/subscriber.dart';
 import 'cubit/subscriber360_cubit.dart';
 import 'cubit/subscribers_cubit.dart';
@@ -30,7 +29,6 @@ class SubscribersRoutes {
           return MultiBlocProvider(
             providers: [
               BlocProvider(create: (_) => Subscriber360Cubit(deps.subscribers)..load(subscriber.id)),
-              BlocProvider(create: (_) => SubscriptionFeesCubit(deps.fees)..subscriberId = subscriber.id..load()),
             ],
             child: Subscriber360Screen(subscriber: subscriber),
           );

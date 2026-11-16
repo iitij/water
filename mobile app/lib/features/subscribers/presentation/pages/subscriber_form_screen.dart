@@ -15,20 +15,17 @@ import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../../meters/presentation/pages/meter_form_screen.dart';
 import '../../../squares/domain/entities/square.dart';
-import '../../../subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import '../../../subscription_fees/presentation/widgets/setup_fee_dialog.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 
 /// SCR-06 — نموذج إضافة/تعديل مشترك (هاتف يمني +967، تاريخ بدء الاشتراك، مربع، حالة).
 class SubscriberFormScreen extends StatefulWidget {
   const SubscriberFormScreen({super.key, this.existing, this.initialSquareId, this.repository,
-    this.metersRepository, this.feesRepository, this.permissions});
+    this.metersRepository, this.permissions});
   final Subscriber? existing;
   final int? initialSquareId;
   final SubscribersRepository? repository;
   final MetersRepository? metersRepository;
-  final SubscriptionFeesRepository? feesRepository;
   final PermissionService? permissions;
 
   @override
@@ -302,13 +299,6 @@ class _SubscriberFormScreenState extends State<SubscriberFormScreen> {
       onSaved: (meter) => savedMeter = meter,
     )));
     if (!mounted) return;
-    if (savedMeter != null && _permissions?.can('Create:SubscriptionFee') == true) {
-      final fees = widget.feesRepository ?? FouadModule.deps.fees;
-      await showDialog<bool>(context: context, barrierDismissible: false,
-        builder: (_) => SetupFeeDialog(repository: fees,
-          subscriberId: savedMeter!.subscriberId ?? subscriber.id, meterId: savedMeter!.id));
-      if (!mounted) return;
-    }
     // Both persisted records survive cancellation; do not offer to re-create
     // the same subscriber by leaving its populated create form behind.
     Navigator.of(context).pop(true);

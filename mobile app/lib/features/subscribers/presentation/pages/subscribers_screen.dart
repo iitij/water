@@ -25,7 +25,6 @@ import '../../../admin_shared/presentation/widgets/admin_widgets.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../payments/domain/repositories/payments_repository.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
-import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 import '../cubit/subscriber360_cubit.dart';
@@ -188,11 +187,6 @@ class _SubscribersView extends StatelessWidget {
               BlocProvider<Subscriber360Cubit>(
                 create: (_) =>
                     Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
-              ),
-              BlocProvider<SubscriptionFeesCubit>(
-                create: (_) => SubscriptionFeesCubit(deps.fees)
-                  ..subscriberId = subscriber.id
-                  ..load(),
               ),
             ],
             child: Subscriber360Screen(

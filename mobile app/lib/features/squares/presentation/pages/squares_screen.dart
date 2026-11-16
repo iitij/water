@@ -19,7 +19,6 @@ import '../../../subscribers/domain/repositories/subscribers_repository.dart';
 import '../../../subscribers/presentation/cubit/subscriber360_cubit.dart';
 import '../../../subscribers/presentation/pages/subscriber_360_screen.dart';
 import '../../../subscribers/presentation/pages/subscriber_form_screen.dart';
-import '../../../subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 import '../../domain/entities/square.dart';
 import '../cubit/squares_cubit.dart';
 
@@ -504,11 +503,6 @@ class _SquareDetail extends StatelessWidget {
             BlocProvider<Subscriber360Cubit>(
               create: (_) =>
                   Subscriber360Cubit(deps.subscribers)..load(subscriber.id),
-            ),
-            BlocProvider<SubscriptionFeesCubit>(
-              create: (_) => SubscriptionFeesCubit(deps.fees)
-                ..subscriberId = subscriber.id
-                ..load(),
             ),
           ],
           child: Subscriber360Screen(subscriber: subscriber),
