@@ -25,17 +25,12 @@ class InvoiceService
         // API and try to create a charge-only invoice without meter readings.
         if ($invoiceType !== 'meter') {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'invoice_type' => ['لا يمكن إصدار فواتير رسوم الاشتراك بعد إزالة هذه الميزة.'],
+                'invoice_type' => ['نوع الفاتورة غير مدعوم؛ يُسمح بفواتير استهلاك المياه فقط.'],
             ]);
         }
 
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
             if ($includeReadings) {
-                if ($invoiceType !== 'meter') {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'invoice_type' => ['لا يمكن تضمين قراءات استهلاك في فاتورة خدمات غير مخصصة للعداد.'],
-                    ]);
-                }
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             }
             $unitPrice = \App\Models\Tariff::getActivePrice();
