@@ -51,7 +51,17 @@ return new class extends Migration {
                 ->orWhere('key', 'like', '%sub_fee%')
                 ->orWhere('key', 'like', 'sub_inv_%')
                 ->orWhere('key', 'like', 'sub_show_%')
-                ->orWhere('key', 'like', 'sub_lbl_%')->delete();
+                ->orWhere('key', 'like', 'sub_lbl_%')
+                ->orWhere('key', 'subscription_invoice_template')
+                ->delete();
+            // Old custom templates must not keep the retired charge or placeholder.
+            DB::table('settings')->where(function ($q): void {
+                $q->where('key', 'like', '%template%')
+                    ->orWhere('key', 'like', '%message%');
+            })->where(function ($q): void {
+                $q->where('value', 'like', '%subscription_fee%')
+                    ->orWhere('value', 'like', '%رسوم الاشتراك%');
+            })->delete();
         }
         if (Schema::hasTable('permissions')) {
             $ids = DB::table('permissions')->where('name', 'like', '%SubscriptionFee%')->pluck('id');
