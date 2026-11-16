@@ -36,8 +36,6 @@ ThermalTicket buildInvoiceThermalTicket(
       ),
       ThermalSyntax.field('قيمة الاستهلاك', CurrencyFormatter.amount(invoice.consumptionFee)),
     ],
-    if (invoice.subscriptionInstallment > 0)
-      ThermalSyntax.field('رسوم الاشتراك', CurrencyFormatter.amount(invoice.subscriptionInstallment)),
     if (invoice.previousBalance > 0)
       ThermalSyntax.field('متأخرات سابقة', CurrencyFormatter.amount(invoice.previousBalance)),
     if (invoice.creditApplied > 0)
