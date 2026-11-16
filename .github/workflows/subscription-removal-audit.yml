@@ -2,6 +2,7 @@ name: Subscription fee retirement audit
 on:
   push:
     branches:
+      - main
       - 'remove-subscription-fees-*'
     paths:
       - 'app/**'

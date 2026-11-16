@@ -2,6 +2,7 @@ name: Subscription removal Flutter checks
 on:
   push:
     branches:
+      - main
       - 'remove-subscription-fees-*'
     paths:
       - 'mobile app/**'
