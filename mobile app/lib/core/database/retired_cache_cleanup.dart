@@ -18,16 +18,11 @@ Future<void> purgeRetiredOfflineFields(GeneratedDatabase db) async {
       continue; // Preserve malformed actions for explicit sync diagnostics.
     }
     if (value is! Map<String, dynamic>) continue;
-    final data = Map<String, dynamic>.of(value);
-    final oldLength = data.length;
-    data.remove('has_tanker_fee');
-    data.remove('tanker_installment');
-    data.remove('has_subscription_fee');
-    data.remove('subscription_installment');
-    if (data.length != oldLength) {
+    final sanitized = _withoutRetiredCharges(value);
+    if (jsonEncode(sanitized) != jsonEncode(value)) {
       await db.customStatement(
         'UPDATE pending_sync_actions SET payload_json = ? WHERE id = ?',
-        [jsonEncode(data), id],
+        [jsonEncode(sanitized), id],
       );
     }
   }
@@ -48,4 +43,25 @@ Future<void> purgeRetiredOfflineFields(GeneratedDatabase db) async {
       "OR setting_value LIKE '%subscription_fee%' OR setting_value LIKE '%رسوم الاشتراك%'",
     );
   }
+}
+
+const _retiredChargeFields = <String>{
+  'has_tanker_fee',
+  'tanker_installment',
+  'has_subscription_fee',
+  'subscription_installment',
+};
+
+/// Traverse batch requests too: nested reading payloads may contain old fee
+/// flags, but reading values, UUIDs and reconciliation details must survive.
+Object? _withoutRetiredCharges(Object? value) {
+  if (value is Map) {
+    return <String, dynamic>{
+      for (final entry in value.entries)
+        if (!_retiredChargeFields.contains(entry.key.toString()))
+          entry.key.toString(): _withoutRetiredCharges(entry.value),
+    };
+  }
+  if (value is List) return value.map(_withoutRetiredCharges).toList();
+  return value;
 }

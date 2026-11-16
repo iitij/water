@@ -29,3 +29,14 @@ jobs:
         run: |
           set -euo pipefail
           git grep -n -i -E 'SubscriptionFee|subscription_fees|subscription_installment|subscriptionFee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم اشتراك|قسط الاشتراك' -- app routes database resources 'mobile app/lib' 'mobile app/test' tests || true
+      - name: Block reintroduction of retired fee logic in active source
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Historical identifiers are deliberately retained only inside
+          # the offline upgraders that erase them from installed databases.
+          if git grep -n -i -E 'SubscriptionFee|subscription_fees|subscription_installment|subscriptionFee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم اشتراك|قسط الاشتراك' -- app routes resources 'mobile app/lib' ':(exclude)mobile app/lib/core/database/app_database.dart' ':(exclude)mobile app/lib/core/database/retired_cache_cleanup.dart'; then
+            echo 'ERROR: retired subscription fee code returned to the active runtime.'
+            exit 1
+          fi
+

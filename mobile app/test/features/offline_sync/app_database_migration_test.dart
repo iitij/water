@@ -272,7 +272,7 @@ void main() {
       );
       old.execute(
         'UPDATE pending_sync_actions SET payload_json = ? WHERE id = ?',
-        ['{"meter_id":51,"has_tanker_fee":true,"tanker_installment":900,"has_subscription_fee":true,"subscription_installment":150,"current_reading":88}',
+        ['{"meter_id":51,"has_tanker_fee":true,"tanker_installment":900,"has_subscription_fee":true,"subscription_installment":150,"readings":[{"current_reading":88,"subscription_installment":12}],"current_reading":88}',
          'legacy-action-1'],
       );
       old.execute('PRAGMA user_version = 4');
@@ -298,8 +298,51 @@ void main() {
     expect(payload, isNot(contains('tanker_installment')));
     expect(payload, isNot(contains('has_subscription_fee')));
     expect(payload, isNot(contains('subscription_installment')));
+    expect(payload, contains('current_reading'));
     expect(queue.single['id'], 'legacy-action-1');
     expect((await db.customSelect("SELECT * FROM cached_settings WHERE setting_key = 'tanker_enabled'").get()), isEmpty);
+  });
+
+
+  test('v5 to v6 rebuilds period cache and preserves the essential reading period', () async {
+    final file = await createLegacyDatabase(version: 3);
+    final old = sqlite3.sqlite3.open(file.path);
+    try {
+      old.execute('''
+        CREATE TABLE cached_meter_periods (
+          meter_id INTEGER PRIMARY KEY,
+          last_reading REAL NOT NULL DEFAULT 0,
+          period_start TEXT NOT NULL,
+          period_end TEXT NOT NULL,
+          auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
+          has_subscription_fee INTEGER NOT NULL DEFAULT 0,
+          subscription_installment REAL NOT NULL DEFAULT 0,
+          cached_at TEXT NOT NULL
+        )
+      ''');
+      old.execute('''
+        INSERT INTO cached_meter_periods
+          (meter_id, last_reading, period_start, period_end,
+           auto_issue_invoice, has_subscription_fee, subscription_installment, cached_at)
+        VALUES (91, 17, '2026-10-01', '2026-10-31', 1, 1, 150, '2026-10-22')
+      ''');
+      old.execute('PRAGMA user_version = 5');
+    } finally {
+      old.dispose();
+    }
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final row = (await upgraded.getCachedMeterPeriod(91))!;
+    expect(row['last_reading'], 17.0);
+    expect(row['period_start'], '2026-10-01');
+    expect(row['period_end'], '2026-10-31');
+    expect(row['auto_issue_invoice'], 1);
+    expect(row, isNot(contains('has_subscription_fee')));
+    expect(row, isNot(contains('subscription_installment')));
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(cached_meter_periods)').get();
+    expect(columns.map((column) => column.data['name']),
+        isNot(contains('subscription_installment')));
   });
 
 }
