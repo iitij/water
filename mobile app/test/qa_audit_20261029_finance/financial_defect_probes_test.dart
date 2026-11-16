@@ -18,14 +18,11 @@ import 'package:water_project/features/payments/presentation/cubit/quick_collect
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
 import 'package:water_project/features/subscribers/presentation/cubit/subscribers_cubit.dart';
-import 'package:water_project/features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import 'package:water_project/features/subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 
 class _Payments extends Mock implements PaymentsRepository {}
 class _References extends Mock implements ReferencesRemoteDataSource {}
 class _Subscribers extends Mock implements SubscribersRepository {}
 class _Meters extends Mock implements MetersRepository {}
-class _Fees extends Mock implements SubscriptionFeesRepository {}
 class _Invoices extends Mock implements InvoicesRepository {}
 
 InvoiceModel _invoice(int id, {int subscriberId = 1, int meterId = 10, double due = 100}) =>
@@ -137,16 +134,5 @@ void main() {
       await assertion;
     });
 
-    test('closing subscription fees during load throws StateError', () async {
-      final repo = _Fees();
-      final response = Completer<FeesPage>();
-      when(() => repo.getFees(status: null, subscriberId: null)).thenAnswer((_) => response.future);
-      final cubit = SubscriptionFeesCubit(repo);
-      final pending = cubit.load();
-      final assertion = expectLater(pending, completes);
-      await cubit.close();
-      response.complete(const FeesPage(fees: []));
-      await assertion;
-    });
   }, skip: !const bool.fromEnvironment('RUN_KNOWN_BUG_PROBES'));
 }

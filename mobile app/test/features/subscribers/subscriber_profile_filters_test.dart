@@ -8,12 +8,9 @@ import 'package:water_project/features/subscribers/domain/entities/subscriber.da
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
 import 'package:water_project/features/subscribers/presentation/cubit/subscriber360_cubit.dart';
 import 'package:water_project/features/subscribers/presentation/pages/subscriber_360_screen.dart';
-import 'package:water_project/features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import 'package:water_project/features/subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
 
 class _Subscribers extends Mock implements SubscribersRepository {}
 
-class _Fees extends Mock implements SubscriptionFeesRepository {}
 
 const _subscriber = Subscriber(
   id: 1,
@@ -67,9 +64,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final detail = _Detail();
-        final fees = SubscriptionFeesCubit(_Fees());
         addTearDown(detail.close);
-        addTearDown(fees.close);
         await tester.pumpWidget(
           MaterialApp(
             locale: const Locale('ar'),
@@ -78,7 +73,6 @@ void main() {
             home: MultiBlocProvider(
               providers: [
                 BlocProvider<Subscriber360Cubit>.value(value: detail),
-                BlocProvider.value(value: fees),
               ],
               child: Subscriber360Screen(
                 subscriber: _subscriber,

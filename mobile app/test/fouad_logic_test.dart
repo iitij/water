@@ -6,7 +6,6 @@ import 'package:water_project/core/fouad/fouad_module.dart';
 import 'package:water_project/features/squares/domain/repositories/squares_repository.dart';
 import 'package:water_project/features/subscribers/domain/entities/subscriber.dart';
 import 'package:water_project/features/subscribers/domain/repositories/subscribers_repository.dart';
-import 'package:water_project/features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
 import 'package:water_project/features/transactions/domain/repositories/transactions_repository.dart';
 
 void main() {
@@ -56,7 +55,6 @@ void main() {
       expect(GetIt.I.isRegistered<FouadDependencies>(), isTrue);
       expect(GetIt.I.isRegistered<SquaresRepository>(), isTrue);
       expect(GetIt.I.isRegistered<SubscribersRepository>(), isTrue);
-      expect(GetIt.I.isRegistered<SubscriptionFeesRepository>(), isTrue);
       expect(GetIt.I.isRegistered<TransactionsRepository>(), isTrue);
       expect(FouadModule.routes, isNotEmpty);
     });

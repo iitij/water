@@ -38,10 +38,10 @@ void main() {
   });
 
   test('legacy and Shield grants expose the same navigation', () {
-    user(grants: ['view_any_subscriber', 'view_any_subscription_fee',
+    user(grants: ['view_any_subscriber',
       'view_any_setting', 'create_reading', 'view_any_invoice']);
     final legacy = WorkspaceCatalog.visible(permissions.can).map((e) => e.route).toList();
-    user(grants: ['ViewAny:Subscriber', 'ViewAny:SubscriptionFee',
+    user(grants: ['ViewAny:Subscriber',
       'ViewAny:Setting', 'Create:Reading', 'ViewAny:Invoice']);
     expect(WorkspaceCatalog.visible(permissions.can).map((e) => e.route), legacy);
     expect(permissions.can('Create:Subscriber'), isFalse);

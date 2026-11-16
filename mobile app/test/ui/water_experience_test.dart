@@ -25,14 +25,9 @@ import 'package:water_project/features/subscribers/presentation/cubit/subscriber
 import 'package:water_project/features/subscribers/presentation/cubit/subscribers_cubit.dart';
 import 'package:water_project/features/subscribers/presentation/pages/subscriber_360_screen.dart';
 import 'package:water_project/features/subscribers/presentation/pages/subscribers_screen.dart';
-import 'package:water_project/features/subscription_fees/domain/entities/subscription_fee.dart';
-import 'package:water_project/features/subscription_fees/domain/repositories/subscription_fees_repository.dart';
-import 'package:water_project/features/subscription_fees/presentation/cubit/subscription_fees_cubit.dart';
-import 'package:water_project/features/subscription_fees/presentation/pages/subscription_fees_screen.dart';
 
 class _Subscribers extends Mock implements SubscribersRepository {}
 
-class _Fees extends Mock implements SubscriptionFeesRepository {}
 
 class _Meters extends Mock implements MetersRepository {}
 
@@ -88,38 +83,6 @@ class _DetailCubit extends Subscriber360Cubit {
 
 const _previewKey = ValueKey('experience-preview');
 
-const _fee = SubscriptionFee(
-  id: 11,
-  subscriberId: 42,
-  subscriberName: 'أحمد أحمد الشتيوي',
-  amount: 17500,
-  createdAt: '2026-11-04',
-);
-
-_Fees _feeRepository() {
-  final repository = _Fees();
-  when(
-    () => repository.getFees(
-      status: any(named: 'status'),
-      subscriberId: any(named: 'subscriberId'),
-    ),
-  ).thenAnswer((invocation) async {
-    final status = invocation.namedArguments[#status] as FeeStatus?;
-    return FeesPage(
-      fees: status == null || status == _fee.status ? [_fee] : [],
-      totalSum: 284500,
-      invoicedSum: 267000,
-      remainingSum: 17500,
-    );
-  });
-  return repository;
-}
-
-Widget _feeList(_Fees repository, {VoidCallback? onAdd}) =>
-    BlocProvider<SubscriptionFeesCubit>(
-      create: (_) => SubscriptionFeesCubit(repository)..load(),
-      child: SubscriptionFeesScreen(onAddFee: onAdd),
-    );
 
 Widget _app(Widget screen, {bool dark = false, double scale = 1}) =>
     MaterialApp(
@@ -151,9 +114,6 @@ Widget _detail({
   providers: [
     BlocProvider<Subscriber360Cubit>(
       create: (_) => _DetailCubit(invoices: invoices),
-    ),
-    BlocProvider<SubscriptionFeesCubit>(
-      create: (_) => SubscriptionFeesCubit(_Fees()),
     ),
   ],
   child: Subscriber360Screen(
@@ -263,38 +223,6 @@ void main() {
   });
 
   for (final dark in [false, true]) {
-    for (final width in [320.0, 390.0, 1280.0]) {
-      testWidgets('fees keep filters and rows usable at $width, dark=$dark', (
-        tester,
-      ) async {
-        _size(tester, width, height: 760);
-        final repository = _feeRepository();
-        var additions = 0;
-        await tester.pumpWidget(
-          _app(
-            _feeList(repository, onAdd: () => additions++),
-            dark: dark,
-            scale: 1.6,
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        expect(find.text(_fee.subscriberName!), findsOneWidget);
-        await tester.tap(find.byTooltip('إضافة رسوم'));
-        expect(additions, 1);
-        final partiallyPaid = find.byWidgetPredicate(
-          (widget) => widget is AppFilterChip && widget.label == 'مسدد جزئياً',
-        );
-        await tester.ensureVisible(partiallyPaid);
-        await tester.tap(partiallyPaid);
-        await tester.pumpAndSettle();
-        verify(
-          () => repository.getFees(status: FeeStatus.partiallyPaid),
-        ).called(1);
-        expect(find.text('لا توجد رسوم اشتراك مطابقة'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      });
-    }
     for (final width in [390.0, 1280.0]) {
       testWidgets('capture redesigned lists at $width, dark=$dark', (
         tester,
@@ -306,11 +234,6 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(tester.getSize(find.byType(AppStatStrip)).height, lessThan(136));
         await _preview(tester, 'list-subscribers-$mode-${width.toInt()}');
-        await tester.pumpWidget(_app(_feeList(_feeRepository()), dark: dark));
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        expect(tester.getSize(find.byType(AppStatStrip)).height, lessThan(136));
-        await _preview(tester, 'list-fees-$mode-${width.toInt()}');
       });
     }
   }
