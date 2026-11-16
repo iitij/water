@@ -23,7 +23,7 @@ void main() {
   setUp(() async => GetIt.I.reset());
   tearDown(() async => GetIt.I.reset());
   for (final dark in [false, true]) {
-    testWidgets('meter invoice sheet opens, toggles and closes (dark: $dark)', (
+    testWidgets('meter invoice sheet opens, toggles reading inclusion and closes (dark: $dark)', (
       tester,
     ) async {
       final invRepo = MockInvoicesRepository();
@@ -61,7 +61,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
-      expect(find.byType(SwitchListTile), findsNWidgets(2));
+      expect(find.byType(SwitchListTile), findsOneWidget);
       await tester.tap(find.byType(SwitchListTile).first);
       await tester.pump();
       expect(

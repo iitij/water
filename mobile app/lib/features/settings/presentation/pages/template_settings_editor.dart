@@ -149,7 +149,7 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
                     children: [
                       Expanded(
                         child: Text(
-                          _isInvoice ? 'تبويبات تصميم الفاتورة السبعة' : 'تبويبات تصميم السند الخمسة',
+                          _isInvoice ? 'تبويبات تصميم الفاتورة الخمسة' : 'تبويبات تصميم السند الخمسة',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -301,15 +301,8 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
         'فاتورة العداد',
         Icons.table_chart_outlined,
         settings,
-        const ['prev_read', 'curr_read', 'units', 'unit_price', 'cons_value', 'sub_fee', 'arrears', 'credit_applied'],
-        const ['القراءة السابقة', 'القراءة الحالية', 'وحدات الاستهلاك', 'سعر الوحدة', 'قيمة الاستهلاك', 'الاشتراك', 'المتأخرات', 'الرصيد المخصوم'],
-      ),
-      _specialInvoiceTab(
-        'فاتورة الاشتراك',
-        Icons.request_quote_outlined,
-        settings,
-        'sub',
-        'فاتورة الاشتراك',
+        const ['prev_read', 'curr_read', 'units', 'unit_price', 'cons_value', 'arrears', 'credit_applied'],
+        const ['القراءة السابقة', 'القراءة الحالية', 'وحدات الاستهلاك', 'سعر الوحدة', 'قيمة الاستهلاك', 'المتأخرات', 'الرصيد المخصوم'],
       ),
 
       _fieldTab(
@@ -409,41 +402,6 @@ class _TemplateSettingsEditorState extends State<TemplateSettingsEditor> {
     ];
   }
 
-  _EditorTab _specialInvoiceTab(
-    String title,
-    IconData icon,
-    TemplateSettings settings,
-    String prefix,
-    String sectionTitle,
-  ) {
-    return _EditorTab(
-      title,
-      icon,
-      Column(
-        children: [
-          SettingsSectionCard(
-            title: sectionTitle,
-            children: [
-              SettingsFormGrid(
-                children: [
-                  _textField('${prefix}_inv_title_main', 'عنوان الفاتورة الرئيسي', required: true),
-                  _textField('${prefix}_inv_title_details', 'عنوان قسم التفاصيل', required: true),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SettingsFormGrid(
-            children: [
-              _specialField(settings, 'قيمة الفاتورة', '${prefix}_show_amount', '${prefix}_lbl_amount'),
-              _specialField(settings, 'المتأخرات', '${prefix}_show_arrears', '${prefix}_lbl_arrears'),
-              _specialField(settings, 'الملاحظات', '${prefix}_show_notes', '${prefix}_lbl_notes'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   _EditorTab _fieldTab(
     String title,

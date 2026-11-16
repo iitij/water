@@ -7,7 +7,7 @@ import 'package:water_project/features/users_roles/domain/shield_permission_cata
 import 'package:water_project/features/users_roles/presentation/widgets/role_matrix_editor.dart';
 
 void main() {
-  testWidgets('Select All selects the full 155-permission Shield matrix', (tester) async {
+  testWidgets('Select All selects the current Shield matrix without retired fee permissions', (tester) async {
     const role = Role(
       id: 0,
       name: 'auditor',
@@ -25,11 +25,11 @@ void main() {
       ),
     );
 
-    expect(find.text('0 من 155 صلاحية محددة'), findsOneWidget);
+    expect(find.text('0 من ${standardShieldPermissionCatalog().allNames.length} صلاحية محددة'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('select-all-permissions')));
     await tester.pump();
 
-    expect(find.text('155 من 155 صلاحية محددة'), findsOneWidget);
+    expect(find.text('${standardShieldPermissionCatalog().allNames.length} من ${standardShieldPermissionCatalog().allNames.length} صلاحية محددة'), findsOneWidget);
   });
 
   testWidgets('super_admin matrix is read-only', (tester) async {
@@ -54,7 +54,7 @@ void main() {
       find.byKey(const ValueKey('select-all-permissions')),
     );
     expect(selectAll.onChanged, isNull);
-    expect(find.text('155 من 155 صلاحية محددة'), findsOneWidget);
+    expect(find.text('${standardShieldPermissionCatalog().allNames.length} من ${standardShieldPermissionCatalog().allNames.length} صلاحية محددة'), findsOneWidget);
   });
 
   testWidgets('view-only role exposes its matrix without allowing changes or saves', (tester) async {

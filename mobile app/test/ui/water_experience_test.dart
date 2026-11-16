@@ -398,7 +398,7 @@ void main() {
     expect(opened?.id, _subscriber.id);
   });
 
-  testWidgets('all six subscriber sections and collection remain reachable', (
+  testWidgets('all four subscriber sections and collection remain reachable', (
     tester,
   ) async {
     _size(tester, 390);
@@ -418,7 +418,6 @@ void main() {
     for (final label in [
       'الفواتير',
       'المدفوعات',
-      'رسوم الاشتراك',
       'كشف الحساب',
       SubscriberExperienceStrings.meters,
     ]) {
@@ -536,10 +535,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await _preview(tester, 'subscriber-dark');
-    await tester.tap(find.text('رسوم الاشتراك'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    await _preview(tester, 'subscriber-fees-dark');
     await tester.pumpWidget(_app(_detail()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
