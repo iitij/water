@@ -36,7 +36,6 @@ abstract final class SettingsDefaults {
       'units': 'وحدات الاستهلاك',
       'unit_price': 'سعر الوحدة',
       'cons_value': 'قيمة الاستهلاك',
-      'sub_fee': 'الاشتراك',
       'arrears': 'المتأخرات',
       'credit_applied': 'رصيد مخصوم',
       'collector': 'المحصل',
@@ -44,14 +43,6 @@ abstract final class SettingsDefaults {
       'thank_you': 'شكراً لدفعكم في الموعد / Thank you for your timely payment',
       'notes': 'الملاحظات',
     }),
-    'sub_inv_title_main': 'فاتورة اشتراك',
-    'sub_inv_title_details': 'تفاصيل رسوم الاشتراك',
-    'sub_show_amount': true,
-    'sub_lbl_amount': 'قيمة الاشتراك',
-    'sub_show_arrears': true,
-    'sub_lbl_arrears': 'المتأخرات',
-    'sub_show_notes': true,
-    'sub_lbl_notes': 'ملاحظات',
   };
 
   static final receipt = <String, Object?>{
@@ -113,7 +104,6 @@ abstract final class SettingsDefaults {
 
 تفاصيل الرسوم والحساب:
 • قيمة الاستهلاك: {consumption_fee} ريال
-{if:subscription_fee}• رسوم الاشتراك: {subscription_fee} ريال{/if:subscription_fee}
 {if:previous_balance}• متأخرات سابق: {previous_balance} ريال{/if:previous_balance}
 {if:credit_applied}• رصيد مخصوم: {credit_applied} ريال{/if:credit_applied}
 ------------------------
@@ -143,19 +133,5 @@ abstract final class SettingsDefaults {
 
 شكراً لتعاملكم معنا''';
 
-  static const subscriptionMessage = '''فاتورة رسوم اشتراك
-الأخ: {subscriber_name}،
-تم إصدار فاتورة رسوم اشتراك جديدة رقم (#{bill_number}).
 
-قيمة الرسوم: {subscription_fee} ريال
-{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}
-------------------------
-الإجمالي المستحق: {total_amount} ريال
-------------------------
-المحصل: {collector}
-
-للاطلاع على الفاتورة وتحميلها (PDF):
-{pdf_url}
-
-شكراً لتعاملكم معنا''';
 }

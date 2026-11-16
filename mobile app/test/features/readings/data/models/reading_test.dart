@@ -45,16 +45,12 @@ void main() {
         'period_start': '2026-06-01',
         'period_end': '2026-06-30',
         'auto_issue_invoice': true,
-        'has_subscription_fee': true,
-        'subscription_installment': '50.00',
       });
 
       expect(period.lastReading, 100.25);
       expect(period.periodStart, DateTime(2026, 6, 1));
       expect(period.periodEnd, DateTime(2026, 6, 30));
       expect(period.autoIssueInvoice, isTrue);
-      expect(period.hasSubscriptionFee, isTrue);
-      expect(period.subscriptionInstallment, 50);
     });
 
     test('offline submission payload carries the sync UUID and consumption', () {

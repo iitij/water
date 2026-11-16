@@ -63,7 +63,6 @@ class SubmitReadingScreen extends StatefulWidget {
 class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _currentReadingController = TextEditingController();
-  final _subscriptionInstallmentController = TextEditingController();
   final _imagePicker = ImagePicker();
 
   late Meter _meter;
@@ -79,7 +78,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   String? _errorMessage;
   bool _isLoadingPeriod = true;
   bool _isSaving = false;
-  bool _includeSubscriptionFee = false;
   bool _isRunningInvoiceAction = false;
   bool _isRecordingFault = false;
 
@@ -192,11 +190,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       if (!mounted) return;
       setState(() {
         _period = period;
-        _includeSubscriptionFee = period.hasSubscriptionFee;
-        _subscriptionInstallmentController.text =
-            period.subscriptionInstallment > 0
-            ? _formatNumber(period.subscriptionInstallment)
-            : '0';
         _isLoadingPeriod = false;
       });
     } catch (error) {
@@ -328,14 +321,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       return;
     }
 
-    final parsedSubInstallment =
-        double.tryParse(
-          CompoundSearchQuery.normalizeDigits(
-            _subscriptionInstallmentController.text.trim(),
-          ).replaceAll(',', '.'),
-        ) ??
-        _period!.subscriptionInstallment;
-
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -351,12 +336,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
           currentReading: currentReading,
           imagePath: _imagePath,
           autoIssueInvoice: _period!.autoIssueInvoice,
-          hasSubscriptionFee:
-              _period!.autoIssueInvoice && _includeSubscriptionFee,
-          subscriptionInstallment:
-              _period!.autoIssueInvoice && _includeSubscriptionFee
-              ? parsedSubInstallment
-              : 0,
         ),
       );
       if (!mounted) return;
@@ -464,7 +443,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
   @override
   void dispose() {
     _currentReadingController.dispose();
-    _subscriptionInstallmentController.dispose();
     super.dispose();
   }
 
@@ -635,15 +613,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                       icon: Icons.warning_amber_rounded,
                     ),
                     const SizedBox(height: 8),
-                    if (period.hasSubscriptionFee)
-                      _feeOption(
-                        title: 'إضافة قسط رسوم الاشتراك',
-                        maxValue: period.subscriptionInstallment,
-                        controller: _subscriptionInstallmentController,
-                        selected: _includeSubscriptionFee,
-                        onChanged: (value) =>
-                            setState(() => _includeSubscriptionFee = value),
-                      ),
                   ],
                   const SizedBox(height: 14),
                   _imageControl(),
@@ -855,91 +824,6 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     );
   }
 
-  Widget _feeOption({
-    required String title,
-    required double maxValue,
-    required TextEditingController controller,
-    required bool selected,
-    required ValueChanged<bool> onChanged,
-  }) => AppCard(
-    padding: EdgeInsets.zero,
-    child: Column(
-      children: <Widget>[
-        InkWell(
-          onTap: () => onChanged(!selected),
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppRadius.xl),
-          ),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 14, 10),
-            child: Row(
-              children: <Widget>[
-                const AppGlyph(
-                  icon: Icons.receipt_long_rounded,
-                  size: 36,
-                  neutral: true,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'إجمالي المتبقي: ${_formatNumber(maxValue)} ريال',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                ),
-                Switch.adaptive(value: selected, onChanged: onChanged),
-              ],
-            ),
-          ),
-        ),
-        if (selected)
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(14, 0, 14, 14),
-            child: TextFormField(
-              controller: controller,
-              textDirection: TextDirection.ltr,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'مبلغ القسط المطلوب إضافته للفاتورة',
-                suffixText: 'ريال',
-                helperText:
-                    'يمكنك تعديل المبلغ لتحصيل قسط جزئي (الحد الأعلى ${_formatNumber(maxValue)} ريال)',
-                isDense: true,
-              ),
-              validator: (val) {
-                if (!selected) return null;
-                final parsed = double.tryParse(
-                  CompoundSearchQuery.normalizeDigits(
-                    val ?? '',
-                  ).replaceAll(',', '.'),
-                );
-                if (parsed == null || parsed < 0) {
-                  return 'أدخل مبلغاً رقمياً صالحاً.';
-                }
-                if (maxValue > 0 && parsed > maxValue) {
-                  return 'لا يمكن تجاوز إجمالي المتبقي (${_formatNumber(maxValue)}).';
-                }
-                return null;
-              },
-            ),
-          ),
-      ],
-    ),
-  );
 
   Widget _imageControl() {
     final path = _imagePath;

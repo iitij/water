@@ -11,7 +11,6 @@ import '../../../../core/permissions/permission_service.dart';
 import '../../../../core/ui/app_controls.dart';
 import '../../../../core/ui/app_surfaces.dart';
 import '../../../../core/ui/app_tiles.dart';
-import '../../../meters/data/models/meter.dart';
 import '../../../meters/domain/meters_repository.dart';
 import '../../../meters/presentation/pages/meter_form_screen.dart';
 import '../../../squares/domain/entities/square.dart';

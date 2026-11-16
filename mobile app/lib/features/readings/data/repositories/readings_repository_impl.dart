@@ -83,8 +83,6 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       periodStart: result.periodStart,
       periodEnd: result.periodEnd,
       autoIssueInvoice: autoIssue,
-      hasSubscriptionFee: _truthy(cachedPeriod?['has_subscription_fee']),
-      subscriptionInstallment: _asDouble(cachedPeriod?['subscription_installment']) ?? 0,
       isOfflineEstimate: true,
     );
   }

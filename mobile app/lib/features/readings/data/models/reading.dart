@@ -144,8 +144,6 @@ class MeterPeriodResponse {
     required this.periodStart,
     required this.periodEnd,
     this.autoIssueInvoice = false,
-    this.hasSubscriptionFee = false,
-    this.subscriptionInstallment = 0,
     this.isOfflineEstimate = false,
   });
 
@@ -153,8 +151,6 @@ class MeterPeriodResponse {
   final DateTime periodStart;
   final DateTime periodEnd;
   final bool autoIssueInvoice;
-  final bool hasSubscriptionFee;
-  final double subscriptionInstallment;
   final bool isOfflineEstimate;
 
   factory MeterPeriodResponse.fromJson(Map<String, dynamic> json) {
@@ -163,8 +159,6 @@ class MeterPeriodResponse {
       periodStart: _date(json['period_start']) ?? DateTime.now(),
       periodEnd: _date(json['period_end']) ?? DateTime.now(),
       autoIssueInvoice: _bool(json['auto_issue_invoice']),
-      hasSubscriptionFee: _bool(json['has_subscription_fee']),
-      subscriptionInstallment: _double(json['subscription_installment']) ?? 0,
     );
   }
 
@@ -173,8 +167,6 @@ class MeterPeriodResponse {
     periodStart: periodStart,
     periodEnd: periodEnd,
     autoIssueInvoice: autoIssueInvoice,
-    hasSubscriptionFee: hasSubscriptionFee,
-    subscriptionInstallment: subscriptionInstallment,
     isOfflineEstimate: true,
   );
 
@@ -183,8 +175,6 @@ class MeterPeriodResponse {
     'period_start': _dateOnly(periodStart),
     'period_end': _dateOnly(periodEnd),
     'auto_issue_invoice': autoIssueInvoice,
-    'has_subscription_fee': hasSubscriptionFee,
-    'subscription_installment': subscriptionInstallment,
   };
 }
 
@@ -198,8 +188,6 @@ class ReadingSubmission {
     required this.currentReading,
     this.imagePath,
     this.autoIssueInvoice = false,
-    this.hasSubscriptionFee = false,
-    this.subscriptionInstallment = 0,
   });
 
   final int meterId;
@@ -210,8 +198,6 @@ class ReadingSubmission {
   final double currentReading;
   final String? imagePath;
   final bool autoIssueInvoice;
-  final bool hasSubscriptionFee;
-  final double subscriptionInstallment;
 
   double get consumption => currentReading - previousReading;
 
@@ -228,8 +214,6 @@ class ReadingSubmission {
     // Kept in the local queue payload so offline rows show the real
     // consumption before the server recalculates it on sync.
     'consumption_units': consumption,
-    'has_subscription_fee': hasSubscriptionFee,
-    'subscription_installment': subscriptionInstallment,
     'auto_issue_invoice': autoIssueInvoice,
   };
 }
@@ -252,7 +236,6 @@ class InvoiceSummary {
     this.consumptionUnits,
     this.unitPrice,
     this.consumptionFee,
-    this.subscriptionInstallment,
     this.previousBalance,
     this.creditApplied,
   });
@@ -273,7 +256,6 @@ class InvoiceSummary {
   final double? consumptionUnits;
   final double? unitPrice;
   final double? consumptionFee;
-  final double? subscriptionInstallment;
   final double? previousBalance;
   final double? creditApplied;
 
@@ -294,7 +276,6 @@ class InvoiceSummary {
     consumptionUnits: _double(json['consumption_units']),
     unitPrice: _double(json['unit_price']),
     consumptionFee: _double(json['consumption_fee']),
-    subscriptionInstallment: _double(json['subscription_installment']),
     previousBalance: _double(json['previous_balance']),
     creditApplied: _double(json['credit_applied']),
   );
