@@ -7,7 +7,6 @@ use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Square;
 use App\Models\Subscriber;
-use App\Models\SubscriptionFee;
 use App\Models\Transaction;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
@@ -67,7 +66,6 @@ class SubscriberController extends ApiController
             'status' => ['sometimes', 'in:active,inactive,suspended'],
             'subscription_start_date' => ['nullable', 'date'],
             'address' => ['nullable', 'string'],
-            'initial_subscription_fee' => ['sometimes', 'numeric', 'min:0'],
         ]);
         $data['status'] ??= 'active';
         $subscriber = Subscriber::create($data)->load('square');
@@ -84,7 +82,6 @@ class SubscriberController extends ApiController
             'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
             'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name'])->latest('payment_date')->latest('id'),
-            'subscriptionFees' => fn ($q) => $q->latest(),
             'transactions' => fn ($q) => $q->latest(),
         ])->findOrFail($id);
 
@@ -111,7 +108,6 @@ class SubscriberController extends ApiController
             'status' => ['sometimes', 'required', 'in:active,inactive,suspended'],
             'subscription_start_date' => ['sometimes', 'nullable', 'date'],
             'address' => ['sometimes', 'nullable', 'string'],
-            'initial_subscription_fee' => ['sometimes', 'numeric', 'min:0'],
         ]);
         $subscriber->update($data);
 
@@ -162,7 +158,6 @@ class SubscriberController extends ApiController
         return $subscriber->meters()->exists()
             || $subscriber->invoices()->withTrashed()->exists()
             || $subscriber->payments()->exists()
-            || $subscriber->subscriptionFees()->exists()
             || $subscriber->transactions()->exists();
     }
 
@@ -316,8 +311,6 @@ class SubscriberController extends ApiController
             + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
         $credit = max(0, (float) $subscriber->balance)
             + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
-        $uninvoicedFee = (float) SubscriptionFee::where('subscriber_id', $subscriber->id)
-            ->where('status', 'uninvoiced')->sum('amount');
 
         return response()->json([
             'subscriber_id' => $subscriber->id,
@@ -329,7 +322,6 @@ class SubscriberController extends ApiController
             'due_amount' => $latestUnpaid ? round((float) $latestUnpaid->getRemainingAmount(), 2) : 0.0,
             'outstanding_balance' => round($outstanding, 2),
             'credit_balance' => round($credit, 2),
-            'uninvoiced_subscription_fee' => round($uninvoicedFee, 2),
             'open_invoices_count' => $invoices->count(),
         ]);
     }
@@ -401,8 +393,6 @@ class SubscriberController extends ApiController
             'general_debit_balance' => round(max(0, -$generalBalance), 2),
             'meters_credit_balance' => round($meterCredit, 2),
             'meters_debit_balance' => round($meterDebit, 2),
-            'remaining_subscription_fee' => round($subscriber->getRemainingSubscriptionFee(), 2),
-            'subscription_fee_status' => $subscriber->getSubscriptionFeeStatus(),
         ];
     }
 
@@ -415,7 +405,6 @@ class SubscriberController extends ApiController
     private function invoiceTypeLabel(?string $type): string
     {
         return match ($type) {
-            'subscription' => 'رسوم اشتراك',
             default => 'استهلاك مياه',
         };
     }

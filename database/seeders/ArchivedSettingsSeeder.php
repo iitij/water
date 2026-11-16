@@ -68,17 +68,6 @@ class ArchivedSettingsSeeder extends Seeder
     'created_at' => '2026-06-09 03:22:03',
     'updated_at' => '2026-06-09 03:22:03',
   ],
-  5 => 
-  [
-    'id' => 6,
-    'key' => 'subscription_fee',
-    'type' => 'text',
-    'value' => '0',
-    'image_path' => NULL,
-    'label' => 'رسوم الاشتراك',
-    'created_at' => '2026-06-09 03:22:03',
-    'updated_at' => '2026-06-09 03:22:03',
-  ],
   6 => 
   [
     'id' => 7,

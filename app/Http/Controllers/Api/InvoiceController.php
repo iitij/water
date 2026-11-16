@@ -9,7 +9,6 @@ use App\Models\Meter;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Subscriber;
-use App\Models\SubscriptionFee;
 use App\Models\Tariff;
 use App\Models\Transaction;
 use App\Services\InvoiceService;
@@ -161,13 +160,12 @@ class InvoiceController extends ApiController
         $data = $request->validate([
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
-            'invoice_type' => ['sometimes', 'in:meter,subscription'],
+            'invoice_type' => ['sometimes', 'in:meter'],
             'bill_number' => ['nullable', 'string', 'max:50', 'unique:invoices,bill_number'],
             'bill_date' => ['nullable', 'date'],
             'billing_period_start' => ['nullable', 'date'],
             'billing_period_end' => ['nullable', 'date', 'after_or_equal:billing_period_start'],
             'consumption_fee' => ['sometimes', 'numeric', 'min:0'],
-            'subscription_installment' => ['sometimes', 'numeric', 'min:0'],
             'previous_balance' => ['sometimes', 'numeric', 'min:0'],
             'credit_applied' => ['sometimes', 'numeric', 'min:0'],
             'total_amount' => ['nullable', 'numeric', 'min:0'],
@@ -176,7 +174,7 @@ class InvoiceController extends ApiController
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
         $isConsumption = (float) ($data['consumption_fee'] ?? 0) > 0;
-        $invoiceType = $data['invoice_type'] ?? (($meter || $isConsumption) ? 'meter' : 'subscription');
+        $invoiceType = 'meter';
         if ($isConsumption && $invoiceType !== 'meter') {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'invoice_type' => ['لا يمكن إضافة رسوم استهلاك إلى فاتورة خدمات غير مخصصة للاستهلاك.'],
@@ -185,7 +183,7 @@ class InvoiceController extends ApiController
         if ($invoiceType === 'meter') {
             $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
         }
-        $components = (float) ($data['consumption_fee'] ?? 0) + (float) ($data['subscription_installment'] ?? 0);
+        $components = (float) ($data['consumption_fee'] ?? 0);
         $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
@@ -196,7 +194,6 @@ class InvoiceController extends ApiController
                 'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
                 'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
                 'consumption_fee' => $data['consumption_fee'] ?? 0,
-                'subscription_installment' => $data['subscription_installment'] ?? 0,
                 'previous_balance' => $data['previous_balance'] ?? 0,
                 'credit_applied' => $data['credit_applied'] ?? 0,
                 'total_amount' => $data['total_amount'] ?? $components,
@@ -230,12 +227,11 @@ class InvoiceController extends ApiController
         $data = $request->validate([
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['sometimes', 'nullable', 'integer', 'exists:meters,id'],
-            'invoice_type' => ['sometimes', 'in:meter,subscription'],
+            'invoice_type' => ['sometimes', 'in:meter'],
             'bill_date' => ['sometimes', 'required', 'date'],
             'billing_period_start' => ['sometimes', 'nullable', 'date'],
             'billing_period_end' => ['sometimes', 'nullable', 'date'],
             'consumption_fee' => ['sometimes', 'numeric', 'min:0'],
-            'subscription_installment' => ['sometimes', 'numeric', 'min:0'],
             'previous_balance' => ['sometimes', 'numeric', 'min:0'],
             'credit_applied' => ['sometimes', 'numeric', 'min:0'],
             'total_amount' => ['sometimes', 'numeric', 'min:0'],
@@ -259,8 +255,8 @@ class InvoiceController extends ApiController
                 $data['meter_id'] = null;
             }
             $invoice->fill($data);
-            if (! array_key_exists('total_amount', $data) && array_intersect(array_keys($data), ['consumption_fee', 'subscription_installment'])) {
-                $invoice->total_amount = (float) $invoice->consumption_fee + (float) $invoice->subscription_installment;
+            if (! array_key_exists('total_amount', $data) && array_key_exists('consumption_fee', $data)) {
+                $invoice->total_amount = (float) $invoice->consumption_fee;
             }
             $invoice->save();
             $invoice->refresh();
@@ -397,55 +393,15 @@ class InvoiceController extends ApiController
         $data = $request->validate([
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['required', 'integer', 'exists:meters,id'],
-            'has_subscription_fee' => ['sometimes', 'boolean'],
-            'subscription_installment' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
         $meter = Meter::with('subscriber')->where('subscriber_id', $data['subscriber_id'])->findOrFail($data['meter_id']);
-        $subscription = $request->boolean('has_subscription_fee')
-            ? (float) ($data['subscription_installment'] ?? $meter->subscriber->getRemainingSubscriptionFee()) : null;
-
         return $this->generateResponse(fn () => $invoiceService->generateInvoice(
             subscriber: $meter->subscriber,
             meter: $meter,
-            subscriptionInstallment: $subscription,
             notes: $data['notes'] ?? null,
         ));
     }
-
-    public function generateSubscriptionInvoice(Request $request, InvoiceService $invoiceService)
-    {
-        $this->authorizeApi(Invoice::class, 'create');
-        $data = $request->validate([
-            'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
-            'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
-            'subscription_fee_id' => ['nullable', 'integer', 'exists:subscription_fees,id'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
-            'subscription_installment' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string'],
-        ]);
-        if (! empty($data['subscription_fee_id'])) {
-            $fee = SubscriptionFee::with(['subscriber', 'meter'])->findOrFail($data['subscription_fee_id']);
-            if ($fee->subscriber_id !== (int) $data['subscriber_id'] || $fee->status !== 'uninvoiced') {
-                return response()->json(['message' => 'رسوم الاشتراك المحددة غير متاحة لهذا المشترك.'], 422);
-            }
-
-            return $this->generateResponse(fn () => $invoiceService->generateInvoiceForSubscriptionFee($fee, $data['notes'] ?? null));
-        }
-        $subscriber = Subscriber::findOrFail($data['subscriber_id']);
-        $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
-        $amount = (float) ($data['subscription_installment'] ?? $data['amount'] ?? $subscriber->getRemainingSubscriptionFee());
-
-        return $this->generateResponse(fn () => $invoiceService->generateInvoice(
-            subscriber: $subscriber,
-            meter: $meter,
-            subscriptionInstallment: $amount,
-            notes: $data['notes'] ?? null,
-            includeReadings: false,
-            invoiceType: 'subscription',
-        ));
-    }
-
 
     public function pay(Request $request, int $id, PaymentService $paymentService)
     {
@@ -481,7 +437,7 @@ class InvoiceController extends ApiController
             ->when($invoice->meter_id, fn ($q) => $q->where('meter_id', $invoice->meter_id), fn ($q) => $q->whereNull('meter_id'))
             ->get();
         $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
-        $invoice->total_amount = (float) $invoice->consumption_fee + (float) $invoice->subscription_installment;
+        $invoice->total_amount = (float) $invoice->consumption_fee;
         DB::transaction(function () use ($invoice, $paymentService) {
             $invoice->save();
             $this->syncItems($invoice);
@@ -629,7 +585,6 @@ class InvoiceController extends ApiController
     {
         $components = [
             'consumption' => [(float) $invoice->consumption_fee, 'استهلاك مياه'],
-            'subscription' => [(float) $invoice->subscription_installment, 'رسوم اشتراك'],
             'previous_balance' => [(float) $invoice->previous_balance, 'متأخرات سابقة'],
         ];
         foreach ($components as $type => [$amount, $description]) {

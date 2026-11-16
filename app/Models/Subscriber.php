@@ -19,18 +19,12 @@ class Subscriber extends Model
         'address',
         'square_id',
         'balance',
-        'initial_subscription_fee',
-        'subscription_fee_paid',
-        'is_subscription_fee_fully_paid',
         'status',
         'subscription_start_date',
     ];
 
     protected $casts = [
         'balance' => 'decimal:2',
-        'initial_subscription_fee' => 'decimal:2',
-        'subscription_fee_paid' => 'decimal:2',
-        'is_subscription_fee_fully_paid' => 'boolean',
         'subscription_start_date' => 'date',
     ];
 
@@ -62,10 +56,6 @@ class Subscriber extends Model
         return $this->hasMany(Invoice::class);
     }
 
-    public function subscriptionFees()
-    {
-        return $this->hasMany(SubscriptionFee::class);
-    }
 
     public function payments(): HasMany
     {
@@ -87,33 +77,5 @@ class Subscriber extends Model
         return max(0, -1 * (float) $this->balance);
     }
 
-    /**
-     * الباقي من رسوم الاشتراك (غير المفوترة)
-     */
-    public function getRemainingSubscriptionFee(): float
-    {
-        return (float) $this->subscriptionFees()->where('status', 'uninvoiced')->sum('amount');
-    }
 
-    /**
-     * الحصول على حالة رسوم الاشتراك بدقة
-     * @return string (uninvoiced, invoiced, partially_paid, paid)
-     */
-    public function getSubscriptionFeeStatus(): string
-    {
-        if ($this->subscriptionFees()->where('status', 'uninvoiced')->exists()) {
-            return 'uninvoiced';
-        }
-        if ($this->subscriptionFees()->where('status', 'partially_paid')->exists()) {
-            return 'partially_paid';
-        }
-        if ($this->subscriptionFees()->where('status', 'invoiced')->exists()) {
-            return 'invoiced';
-        }
-        if ($this->subscriptionFees()->where('status', 'paid')->exists()) {
-            return 'paid';
-        }
-        
-        return 'paid';
-    }
 }

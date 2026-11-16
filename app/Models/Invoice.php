@@ -20,7 +20,6 @@ class Invoice extends Model
         'billing_period_start',
         'billing_period_end',
         'consumption_fee',
-        'subscription_installment',
         'previous_balance',
         'credit_applied',
         'total_amount',
@@ -34,7 +33,6 @@ class Invoice extends Model
         'billing_period_start' => 'date',
         'billing_period_end' => 'date',
         'consumption_fee' => 'decimal:2',
-        'subscription_installment' => 'decimal:2',
         'previous_balance' => 'decimal:2',
         'credit_applied' => 'decimal:2',
         'total_amount' => 'decimal:2',
@@ -93,13 +91,7 @@ class Invoice extends Model
                 'is_invoiced' => false,
                 'invoice_id' => null
             ]);
-
-            // Unlink subscription fees
-            \App\Models\SubscriptionFee::where('invoice_id', $invoice->id)->update([
-                'status' => 'uninvoiced',
-                'invoice_id' => null
-            ]);
-// Delete financial transactions related to this invoice
+            // Delete financial transactions related to this invoice
             \App\Models\Transaction::where('reference_type', Invoice::class)
                 ->where('reference_id', $invoice->id)
                 ->delete();
@@ -231,10 +223,8 @@ class Invoice extends Model
 
             if ($trueRemaining <= 0) {
                 $this->updateQuietly(['status' => 'paid']);
-                \App\Models\SubscriptionFee::where('invoice_id', $this->id)->whereIn('status', ['invoiced', 'partially_paid'])->update(['status' => 'paid']);
             } elseif ($trueRemaining < $totalDebt) {
                 $this->updateQuietly(['status' => 'partially_paid']);
-                \App\Models\SubscriptionFee::where('invoice_id', $this->id)->where('status', 'invoiced')->update(['status' => 'partially_paid']);
             } elseif (now()->isAfter($this->bill_date->addDays($gracePeriod))) {
                 $this->updateQuietly(['status' => 'overdue']);
             } else {
@@ -246,10 +236,8 @@ class Invoice extends Model
 
             if ($remaining <= 0) {
                 $this->updateQuietly(['status' => 'paid']);
-                \App\Models\SubscriptionFee::where('invoice_id', $this->id)->whereIn('status', ['invoiced', 'partially_paid'])->update(['status' => 'paid']);
             } elseif ((float) $this->amount_paid > 0) {
                 $this->updateQuietly(['status' => 'partially_paid']);
-                \App\Models\SubscriptionFee::where('invoice_id', $this->id)->where('status', 'invoiced')->update(['status' => 'partially_paid']);
             } elseif ($strictOverdue || now()->isAfter($this->bill_date->addDays($gracePeriod))) {
                 $this->updateQuietly(['status' => 'overdue']);
             } else {

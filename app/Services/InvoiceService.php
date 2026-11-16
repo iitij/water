@@ -17,12 +17,11 @@ class InvoiceService
     public function generateInvoice(
         Subscriber $subscriber,
         ?\App\Models\Meter $meter = null,
-        ?float $subscriptionInstallment = null,
         ?string $notes = null,
         bool $includeReadings = true,
         string $invoiceType = 'meter'
     ): Invoice {
-        return DB::transaction(function () use ($subscriber, $meter, $subscriptionInstallment, $notes, $includeReadings, $invoiceType) {
+        return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
             if ($includeReadings) {
                 if ($invoiceType !== 'meter') {
                     throw \Illuminate\Validation\ValidationException::withMessages([
@@ -72,21 +71,10 @@ class InvoiceService
             $previousBalance = $unpaidInvoices->sum(fn($inv) => $inv->getRemainingAmount());
 
             // ملاحظة: سيتم استدعاء تحديث حالة الفواتير السابقة في نهاية الدالة لتعمل حسب المنطق الصحيح
-            // 3. قسط الاشتراك (شرطي)
-            $pendingSubscriptionFees = collect();
-            $subscriptionAmount = 0;
-            if ($subscriptionInstallment !== null && $subscriptionInstallment > 0) {
-                $pendingSubscriptionFees = \App\Models\SubscriptionFee::where('subscriber_id', $subscriber->id)
-                    ->where('status', 'uninvoiced')
-                    ->get();
-                $subscriptionAmount = $subscriptionInstallment;
-            }
-
-
             // 5. خصم الرصيد الدائن
-            $subtotal = $consumptionFee + $subscriptionAmount;
-            if ($uninvoicedReadings->isEmpty() && $subscriptionAmount <= 0) {
-                throw new \Exception('لا توجد قراءات جديدة أو أقساط اشتراك مستحقة لإصدار فاتورة جديدة لهذا المشترك.');
+            $subtotal = $consumptionFee;
+            if ($uninvoicedReadings->isEmpty()) {
+                throw new \Exception('لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.');
             }
 
             $creditApplied = 0;
@@ -123,7 +111,6 @@ class InvoiceService
                 'billing_period_start' => $billingPeriodStart,
                 'billing_period_end' => $billingPeriodEnd,
                 'consumption_fee' => $consumptionFee,
-                'subscription_installment' => $subscriptionAmount,
                 'previous_balance' => $previousBalance,
                 'credit_applied' => $creditApplied,
                 'total_amount' => $totalAmount,
@@ -153,14 +140,6 @@ class InvoiceService
                 ];
             }
 
-            if ($subscriptionAmount > 0) {
-                $items[] = [
-                    'invoice_id' => $invoice->id,
-                    'type' => 'subscription',
-                    'description' => "رسوم اشتراك",
-                    'amount' => $subscriptionAmount,
-                ];
-            }
 // removed creditApplied item
 
             foreach ($items as $item) {
@@ -173,8 +152,6 @@ class InvoiceService
             // 9. تحديث حالة القراءات إلى مفوترة
             $uninvoicedReadings->each(fn ($r) => $r->update(['is_invoiced' => true, 'invoice_id' => $invoice->id]));
 
-            // 11. تحديث رسوم الاشتراك
-            $pendingSubscriptionFees->each(fn ($f) => $f->update(['status' => 'invoiced', 'invoice_id' => $invoice->id]));
 
             // 12. تسجيل العملية في دفتر الأستاذ (الـ Ledger)
             $transactionService = new TransactionService();
@@ -215,69 +192,5 @@ class InvoiceService
         });
     }
 
-    public function generateInvoiceForSubscriptionFee(\App\Models\SubscriptionFee $fee, ?string $notes = null): Invoice
-    {
-        return DB::transaction(function () use ($fee, $notes) {
-            $subscriber = $fee->subscriber;
-            $meter = $fee->meter;
-            
-            $subtotal = (float) $fee->amount;
-            $availableBalance = $meter ? (float) $meter->balance : (float) $subscriber->balance;
-            $creditApplied = 0;
-            
-            if ($availableBalance > 0 && $subtotal > 0) {
-                $creditApplied = min($availableBalance, $subtotal);
-            }
-
-            $invoice = Invoice::create([
-                'subscriber_id' => $subscriber->id,
-                'meter_id' => $meter?->id,
-                'invoice_type' => 'subscription',
-                'bill_number' => Invoice::generateBillNumber(),
-                'bill_date' => now()->toDateString(),
-                'billing_period_start' => now()->startOfMonth()->toDateString(),
-                'billing_period_end' => now()->toDateString(),
-                'consumption_fee' => 0,
-                'subscription_installment' => $subtotal,
-                'previous_balance' => 0,
-                'credit_applied' => $creditApplied,
-                'total_amount' => $subtotal,
-                'amount_paid' => 0,
-                'status' => 'issued',
-                'notes' => $notes,
-            ]);
-
-            InvoiceItem::create([
-                'invoice_id' => $invoice->id,
-                'type' => 'subscription',
-                'description' => 'رسوم اشتراك',
-                'amount' => $subtotal,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $fee->update([
-                'status' => 'invoiced',
-                'invoice_id' => $invoice->id,
-            ]);
-
-            $transactionService = new TransactionService();
-            $transactionService->recordTransaction(
-                subscriber: $subscriber,
-                type: 'invoice',
-                amount: -$subtotal,
-                description: 'إصدار فاتورة رسوم اشتراك: ' . $invoice->bill_number,
-                meter: $meter,
-                reference: $invoice
-            );
-
-            if ($meter) {
-                $transactionService->updateMeterBalance($meter);
-            } else {
-                $transactionService->updateSubscriberBalance($subscriber);
-            }
-            return $invoice;
-        });
-    }
 
 }

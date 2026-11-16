@@ -19,7 +19,6 @@ use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SquareController;
 use App\Http\Controllers\Api\SubscriberController;
-use App\Http\Controllers\Api\SubscriptionFeeController;
 use App\Http\Controllers\Api\SystemLogController;
 use App\Http\Controllers\Api\TariffController;
 use App\Http\Controllers\Api\TransactionController;
@@ -105,7 +104,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invoices/billing-periods', [InvoiceController::class, 'billingPeriods']);
     Route::post('/invoices/pay', [InvoiceController::class, 'payFromPayload']);
     Route::post('/invoices/generate-meter', [InvoiceController::class, 'generateMeterInvoice']);
-    Route::post('/invoices/generate-subscription', [InvoiceController::class, 'generateSubscriptionInvoice']);
     Route::post('/invoices/bulk-recalculate', [InvoiceController::class, 'bulkRecalculate']);
     Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
     Route::post('/invoices/bulk-restore', [InvoiceController::class, 'bulkRestore']);
@@ -133,10 +131,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
-    // Subscription fees.
-    Route::post('/subscription-fees/bulk-delete', [SubscriptionFeeController::class, 'bulkDelete']);
-    Route::post('/subscription-fees/{id}/invoice', [SubscriptionFeeController::class, 'invoice']);
-    Route::apiResource('subscription-fees', SubscriptionFeeController::class)->parameters(['subscription-fees' => 'id']);
 
 
     // Tariffs, including soft-delete recovery.
