@@ -1,0 +1,89 @@
+name: Subscription retirement Laravel acceptance
+on:
+  push:
+    branches:
+      - 'remove-subscription-fees-*'
+    paths:
+      - 'app/**'
+      - 'routes/**'
+      - 'database/**'
+      - 'resources/views/**'
+      - 'tests/**'
+      - '.github/workflows/subscription-fee-laravel-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sqlite-regression:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Prepare Laravel directories
+        run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Full regression suite
+        run: php artisan test
+
+  mysql-migrations:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_only
+          MYSQL_DATABASE: water_test
+          MYSQL_USER: water
+          MYSQL_PASSWORD: ci_water_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_root_only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: mysql
+      DB_URL: ''
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: water_test
+      DB_USERNAME: water
+      DB_PASSWORD: ci_water_only
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql, mysqli, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Prepare Laravel directories
+        run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Exercise fresh migrations
+        run: php artisan migrate:fresh --force --no-interaction
+      - name: Check old billing migration safely upgrades
+        run: |
+          php -l tests/scripts/mysql_retired_billing_upgrade_smoke.php
+          php tests/scripts/mysql_retired_billing_upgrade_smoke.php
