@@ -28,7 +28,6 @@ void main() {
     expect(settings.invoiceMessage, contains('{meter_code}'));
     expect(settings.invoiceMessage, contains('{unit_price}'));
     expect(settings.paymentMessage, contains('{payment_method}'));
-    expect(settings.subscriptionMessage, contains('{collector}'));
   });
 
   test('WhatsApp model reads legacy aliases and writes the supported template contracts', () {
@@ -37,17 +36,14 @@ void main() {
       'whatsapp_method': 'local_api',
       'reading_invoice_message_template': 'invoice',
       'payment_receipt_message_template': 'payment',
-      'subscription_invoice_template': 'subscription',
       'whatsapp_access_token': 'secret',
     });
     final json = settings.toJson();
 
     expect(settings.invoiceMessage, 'invoice');
-    expect(settings.subscriptionMessage, 'subscription');
     expect(json['whatsapp_invoice_message'], 'invoice');
     expect(json['reading_invoice_message_template'], 'invoice');
     expect(json['whatsapp_payment_message'], 'payment');
-    expect(json['subscription_invoice_template'], 'subscription');
     expect(settings.toCacheJson(), isNot(contains('whatsapp_access_token')));
   });
 
