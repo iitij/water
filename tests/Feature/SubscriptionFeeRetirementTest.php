@@ -44,4 +44,29 @@ class SubscriptionFeeRetirementTest extends TestCase
         $this->assertDatabaseMissing('settings', ['key' => 'subscription_invoice_template']);
         $this->assertDatabaseMissing('settings', ['key' => 'whatsapp_subscription_message']);
     }
+
+    public function test_nonzero_legacy_subscription_fee_is_not_silently_discarded(): void
+    {
+        Schema::create('subscription_fees', static function (\Illuminate\Database\Schema\Blueprint $table): void {
+            $table->id();
+            $table->decimal('amount', 12, 2)->default(0);
+        });
+        DB::table('subscription_fees')->insert(['amount' => 175]);
+        try {
+            $migration = require database_path('migrations/2026_11_16_010000_final_subscription_fee_cleanup.php');
+            $threw = false;
+            try {
+                $migration->up();
+            } catch (\RuntimeException $exception) {
+                $threw = true;
+                $this->assertStringContainsString('Reconcile non-zero subscription fee', $exception->getMessage());
+            }
+            $this->assertTrue($threw, 'Financial charges must be reconciled before table removal.');
+            $this->assertTrue(Schema::hasTable('subscription_fees'));
+            $this->assertDatabaseHas('subscription_fees', ['amount' => 175]);
+        } finally {
+            Schema::dropIfExists('subscription_fees');
+        }
+    }
+
 }
