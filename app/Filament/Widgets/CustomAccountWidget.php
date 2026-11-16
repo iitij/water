@@ -171,25 +171,6 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
                 ])->columns(2);
             });
     }
-    public function createSubscriptionFeeAction(): Action
-    {
-        return CreateAction::make('createSubscriptionFee')
-            ->model(\App\Models\SubscriptionFee::class)
-            ->label('إضافة رسوم اشتراك')
-            ->modalHeading('إضافة رسوم اشتراك للعداد الجديد')
-            ->modalWidth('2xl')
-            ->createAnother(false)
-            ->mountUsing(function ($form, array $arguments) {
-                $form->fill([
-                    'subscriber_id' => $arguments['subscriber_id'] ?? null,
-                    'meter_id' => $arguments['meter_id'] ?? null,
-                    'status' => 'uninvoiced',
-                ]);
-            })
-            ->form(function ($form) {
-                return \App\Filament\Resources\SubscriptionFeeResource::form($form);
-            });
-    }
 
     public function createPaymentAction(): Action
     {

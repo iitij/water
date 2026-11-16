@@ -181,7 +181,7 @@ class WebMobileParityTest extends TestCase
         }
     }
 
-    public function test_subscription_invoice_field_settings_are_actually_persisted_and_returned(): void
+    public function test_retired_subscription_invoice_settings_are_not_persisted(): void
     {
         $editor = $this->auditor('update_invoice_settings');
         $editor->givePermissionTo(Permission::firstOrCreate([
@@ -194,14 +194,15 @@ class WebMobileParityTest extends TestCase
             'site_favicon' => 'settings/invoices/icon.png',
             'whatsapp_access_token' => 'must-not-be-written-through-invoice-settings',
         ])->assertOk();
-        $this->assertDatabaseHas('settings', ['key' => 'sub_lbl_meter', 'value' => 'عداد الاشتراك']);
+        $this->assertDatabaseMissing('settings', ['key' => 'sub_lbl_meter']);
+        $this->assertDatabaseMissing('settings', ['key' => 'sub_inv_title_main']);
         $this->assertDatabaseMissing('settings', ['key' => 'whatsapp_access_token']);
         $this->getJson('/api/settings/invoice')->assertOk()
-            ->assertJsonPath('sub_lbl_meter', 'عداد الاشتراك')
-            ->assertJsonPath('sub_inv_title_main', 'فاتورة اشتراك جديدة')
-            ->assertJsonPath('site_favicon', 'settings/invoices/icon.png')
-            ->assertJsonStructure(['sub_show_meter']);
+            ->assertJsonMissingPath('sub_lbl_meter')
+            ->assertJsonMissingPath('sub_inv_title_main')
+            ->assertJsonPath('site_favicon', 'settings/invoices/icon.png');
     }
+
 
     public function test_invoice_image_upload_uses_page_permission_without_granting_general_settings(): void
     {

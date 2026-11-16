@@ -249,7 +249,6 @@ class ReadingController extends ApiController
                 $invoice = $invoiceService->generateInvoice(
                     subscriber: $meter->subscriber,
                     meter: $meter,
-                    subscriptionInstallment: ($request->boolean('has_subscription_fee')) ? (float) ($data['subscription_installment'] ?? 0) : null,
                     notes: $data['notes'] ?? null,
                 );
                 $invoices[] = $invoice->load(['subscriber', 'meter', 'items']);
@@ -282,8 +281,6 @@ class ReadingController extends ApiController
             'readings.*.image' => ['nullable', 'image', 'max:5120'],
             'readings.*.image_base64' => ['nullable', 'string'],
             'readings.*.image_filename' => ['nullable', 'string', 'max:255'],
-            'readings.*.has_subscription_fee' => ['sometimes', 'boolean'],
-            'readings.*.subscription_installment' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $results = [];
@@ -431,7 +428,6 @@ class ReadingController extends ApiController
                 $invoice = app(InvoiceService::class)->generateInvoice(
                     subscriber: $meter->subscriber,
                     meter: $meter,
-                    subscriptionInstallment: ! empty($data['has_subscription_fee']) ? (float) ($data['subscription_installment'] ?? 0) : null,
                     notes: $data['notes'] ?? null,
                 );
                 $invoiceIssued = true;
