@@ -64,3 +64,7 @@ jobs:
           php -l tests/scripts/mysql_single_meter_smoke.php
           php tests/scripts/mysql_single_meter_smoke.php
           php artisan water:audit-single-meter
+      - name: Exercise retired billing schema upgrade and financial guard
+        run: |
+          php -l tests/scripts/mysql_retired_billing_upgrade_smoke.php
+          php tests/scripts/mysql_retired_billing_upgrade_smoke.php
