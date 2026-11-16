@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -27,4 +28,24 @@ class RetiredBillingFeatureSchemaTest extends TestCase
             'The retired invoice endpoint must not be callable.'
         );
     }
+
+    public function test_legacy_configuration_is_removed_without_losing_unrelated_templates(): void
+    {
+        DB::table('settings')->insert([
+            ['key' => 'inv_show_tanker', 'value' => '1'],
+            ['key' => 'reading_invoice_message_template', 'value' => 'رسوم الوايت ستظهر هنا'],
+            ['key' => 'subscription_invoice_template', 'value' => 'فاتورة اشتراك سليمة'],
+        ]);
+
+        $migration = require database_path('migrations/2026_11_16_000001_final_retired_billing_cleanup.php');
+        $migration->up();
+
+        $this->assertDatabaseMissing('settings', ['key' => 'inv_show_tanker']);
+        $this->assertDatabaseMissing('settings', ['key' => 'reading_invoice_message_template']);
+        $this->assertDatabaseHas('settings', [
+            'key' => 'subscription_invoice_template',
+            'value' => 'فاتورة اشتراك سليمة',
+        ]);
+    }
+
 }

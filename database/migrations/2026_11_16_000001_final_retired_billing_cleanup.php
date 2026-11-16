@@ -52,10 +52,24 @@ return new class extends Migration
         }
 
         if (Schema::hasTable('settings')) {
+            // Cover prefix, infix AND suffix keys (e.g. inv_show_tanker).
             DB::table('settings')
-                ->where('key', 'like', 'tanker_%')
-                ->orWhere('key', 'like', '%_tanker_%')
+                ->where('key', 'like', '%tanker%')
+                ->orWhere('key', 'like', '%service_request%')
                 ->orWhere('key', 'like', '%tenant%')
+                ->delete();
+
+            // A custom message might include a non-conditional obsolete charge.
+            // Reset only affected invoice/WhatsApp templates to new code defaults.
+            DB::table('settings')
+                ->where(function ($query): void {
+                    $query->where('key', 'like', '%template%')
+                        ->orWhere('key', 'like', '%message%');
+                })
+                ->where(function ($query): void {
+                    $query->where('value', 'like', '%tanker_fee%')
+                        ->orWhere('value', 'like', '%وايت%');
+                })
                 ->delete();
 
             // Older, user-edited message templates may still have an inactive
@@ -79,7 +93,9 @@ return new class extends Migration
 
         if (Schema::hasTable('permissions')) {
             $ids = DB::table('permissions')
-                ->where('name', 'like', '%:ServiceRequest')
+                ->where('name', 'like', '%ServiceRequest%')
+                ->orWhere('name', 'like', '%service_request%')
+                ->orWhere('name', 'like', '%tanker%')
                 ->pluck('id');
             if ($ids->isNotEmpty()) {
                 foreach (['role_has_permissions', 'model_has_permissions'] as $table) {
