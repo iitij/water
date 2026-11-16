@@ -354,11 +354,6 @@ class AppStrings {
     _ => source ?? auditSystem,
   };
   String get saveAndAddMeter => 'حفظ وإضافة عداد';
-  String get setupAddFee => 'إضافة رسوم اشتراك للعداد';
-  String get setupFeeAmount => 'رسوم الاشتراك (ريال)';
-  String get setupFeeNotes => 'ملاحظات رسوم الاشتراك';
-  String get setupSkipFee => 'إنهاء دون رسوم';
-  String get setupFeeSaved => 'تم حفظ رسوم الاشتراك.';
   String get setupSubscriberSaved => 'تم حفظ المشترك؛ أكمل إضافة العداد.';
   String get setupMeterCancelled =>
       'المشترك محفوظ. يمكنك إضافة عداده لاحقاً من ملفه.';

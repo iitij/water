@@ -170,7 +170,7 @@ void main() {
     final version = await second
         .customSelect('PRAGMA user_version')
         .getSingle();
-    expect(version.data['user_version'], 5);
+    expect(version.data['user_version'], 6);
 
     final columns = await second
         .customSelect('PRAGMA table_info(pending_sync_actions)')
@@ -235,7 +235,7 @@ void main() {
     },
   );
 
-  test('v4 to v5 retains offline periods and queue ownership while removing retired charges', () async {
+  test('v4 to v6 retains offline periods and queue ownership while removing retired charges', () async {
     final file = await createLegacyDatabase(version: 3);
     final old = sqlite3.sqlite3.open(file.path);
     try {
@@ -272,7 +272,7 @@ void main() {
       );
       old.execute(
         'UPDATE pending_sync_actions SET payload_json = ? WHERE id = ?',
-        ['{"meter_id":51,"has_tanker_fee":true,"tanker_installment":900,"current_reading":88}',
+        ['{"meter_id":51,"has_tanker_fee":true,"tanker_installment":900,"has_subscription_fee":true,"subscription_installment":150,"current_reading":88}',
          'legacy-action-1'],
       );
       old.execute('PRAGMA user_version = 4');
@@ -285,7 +285,8 @@ void main() {
     final period = await db.getCachedMeterPeriod(51);
     expect(period, isNotNull);
     expect(period!['last_reading'], 42.0);
-    expect(period['subscription_installment'], 150.0);
+    expect(period.containsKey('subscription_installment'), isFalse);
+    expect(period.containsKey('has_subscription_fee'), isFalse);
     expect(period.containsKey('has_tanker_fee'), isFalse);
     expect(period.containsKey('tanker_installment'), isFalse);
 
@@ -295,6 +296,8 @@ void main() {
     expect(payload, contains('current_reading'));
     expect(payload, isNot(contains('has_tanker_fee')));
     expect(payload, isNot(contains('tanker_installment')));
+    expect(payload, isNot(contains('has_subscription_fee')));
+    expect(payload, isNot(contains('subscription_installment')));
     expect(queue.single['id'], 'legacy-action-1');
     expect((await db.customSelect("SELECT * FROM cached_settings WHERE setting_key = 'tanker_enabled'").get()), isEmpty);
   });

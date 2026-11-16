@@ -55,7 +55,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -117,8 +117,6 @@ class AppDatabase extends GeneratedDatabase {
                 period_start TEXT NOT NULL,
                 period_end TEXT NOT NULL,
                 auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
-                has_subscription_fee INTEGER NOT NULL DEFAULT 0,
-                subscription_installment REAL NOT NULL DEFAULT 0,
                 cached_at TEXT NOT NULL
               )
             ''');
@@ -132,12 +130,10 @@ class AppDatabase extends GeneratedDatabase {
               await customStatement('''
                 INSERT INTO cached_meter_periods_clean (
                   meter_id, last_reading, period_start, period_end,
-                  auto_issue_invoice, has_subscription_fee,
-                  subscription_installment, cached_at
+                  auto_issue_invoice, cached_at
                 )
                 SELECT meter_id, last_reading, period_start, period_end,
-                       auto_issue_invoice, has_subscription_fee,
-                       subscription_installment, cached_at
+                       auto_issue_invoice, cached_at
                 FROM cached_meter_periods
               ''');
               await customStatement('DROP TABLE cached_meter_periods');
@@ -145,6 +141,37 @@ class AppDatabase extends GeneratedDatabase {
             await customStatement(
               'ALTER TABLE cached_meter_periods_clean RENAME TO cached_meter_periods',
             );
+            await purgeRetiredOfflineFields(this);
+          }
+          if (from < 6 && to >= 6) {
+            // v5 installations already contain retired fee columns. Rebuild
+            // their period cache rather than leaving historical money fields.
+            final columns = await _select('PRAGMA table_info(cached_meter_periods)');
+            final names = columns.map((row) => row['name']).toSet();
+            if (names.contains('has_subscription_fee') ||
+                names.contains('subscription_installment')) {
+              await customStatement('''
+                CREATE TABLE cached_meter_periods_v6 (
+                  meter_id INTEGER PRIMARY KEY,
+                  last_reading REAL NOT NULL DEFAULT 0,
+                  period_start TEXT NOT NULL,
+                  period_end TEXT NOT NULL,
+                  auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
+                  cached_at TEXT NOT NULL
+                )
+              ''');
+              await customStatement('''
+                INSERT INTO cached_meter_periods_v6
+                  (meter_id, last_reading, period_start, period_end,
+                   auto_issue_invoice, cached_at)
+                SELECT meter_id, last_reading, period_start, period_end,
+                       auto_issue_invoice, cached_at FROM cached_meter_periods
+              ''');
+              await customStatement('DROP TABLE cached_meter_periods');
+              await customStatement(
+                'ALTER TABLE cached_meter_periods_v6 RENAME TO cached_meter_periods',
+              );
+            }
             await purgeRetiredOfflineFields(this);
           }
         },
@@ -237,8 +264,6 @@ class AppDatabase extends GeneratedDatabase {
       period_start TEXT NOT NULL,
       period_end TEXT NOT NULL,
       auto_issue_invoice INTEGER NOT NULL DEFAULT 0,
-      has_subscription_fee INTEGER NOT NULL DEFAULT 0,
-      subscription_installment REAL NOT NULL DEFAULT 0,
       cached_at TEXT NOT NULL
     )''',
     '''CREATE TABLE IF NOT EXISTS cached_readings (
@@ -541,16 +566,14 @@ class AppDatabase extends GeneratedDatabase {
     await _execute(
       '''INSERT OR REPLACE INTO cached_meter_periods(
         meter_id, last_reading, period_start, period_end, auto_issue_invoice,
-        has_subscription_fee, subscription_installment, cached_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        cached_at
+      ) VALUES (?, ?, ?, ?, ?, ?)''',
       [
         meterId,
         _double(period['last_reading']),
         _date(period['period_start']) ?? DateTime.now().toIso8601String().split('T').first,
         _date(period['period_end']) ?? DateTime.now().toIso8601String().split('T').first,
         _bool(period['auto_issue_invoice']) ? 1 : 0,
-        _bool(period['has_subscription_fee']) ? 1 : 0,
-        _double(period['subscription_installment']),
         _now(),
       ],
     );
@@ -628,8 +651,6 @@ class AppDatabase extends GeneratedDatabase {
         'period_start',
         'period_end',
         'auto_issue_invoice',
-        'has_subscription_fee',
-        'subscription_installment',
         'cached_at',
       ],
       'readings': <String>[
@@ -715,6 +736,7 @@ class AppDatabase extends GeneratedDatabase {
         }
       }
     });
+    await purgeRetiredOfflineFields(this);
     _notifySyncQueueChanged();
   }
 

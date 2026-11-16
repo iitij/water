@@ -43,8 +43,6 @@ class PermissionService {
     'View:Subscriber': <String>{'view_subscriber', 'view_any_subscriber'},
     'ViewAny:Square': <String>{'view_any_square', 'squares.view'},
     'View:Square': <String>{'view_square', 'view_any_square'},
-    'ViewAny:SubscriptionFee': <String>{'view_any_subscription_fee'},
-    'View:SubscriptionFee': <String>{'view_subscription_fee', 'view_any_subscription_fee'},
     'ViewAny:Transaction': <String>{'view_any_transaction'},
     'View:Transaction': <String>{'view_transaction', 'view_any_transaction'},
     'ViewAny:User': <String>{'view_any_user'},
@@ -127,7 +125,6 @@ class PermissionService {
   }
 
   // Match Laravel's authorizeApi/authorizeSystem snake_case compatibility.
-  // ViewAny:SubscriptionFee -> view_any_subscription_fee.
   static String _legacyPermission(String permission) => permission
       .replaceAll(':', '_')
       .replaceAllMapped(RegExp(r'(?<=[a-z0-9])[A-Z]'), (match) => '_${match[0]}')

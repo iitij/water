@@ -19,9 +19,12 @@ Future<void> purgeRetiredOfflineFields(GeneratedDatabase db) async {
     }
     if (value is! Map<String, dynamic>) continue;
     final data = Map<String, dynamic>.of(value);
-    final fee = data.remove('has_tanker_fee');
-    final installment = data.remove('tanker_installment');
-    if (fee != null || installment != null) {
+    final oldLength = data.length;
+    data.remove('has_tanker_fee');
+    data.remove('tanker_installment');
+    data.remove('has_subscription_fee');
+    data.remove('subscription_installment');
+    if (data.length != oldLength) {
       await db.customStatement(
         'UPDATE pending_sync_actions SET payload_json = ? WHERE id = ?',
         [jsonEncode(data), id],
@@ -37,7 +40,12 @@ Future<void> purgeRetiredOfflineFields(GeneratedDatabase db) async {
     await db.customStatement(
       "DELETE FROM cached_settings WHERE "
       "setting_key LIKE '%tanker%' OR setting_key LIKE '%tenant%' "
-      "OR setting_value LIKE '%tanker_fee%'",
+      "OR setting_key LIKE '%subscription_fee%' "
+      "OR setting_key LIKE 'sub_inv_%' OR setting_key LIKE 'sub_show_%' "
+      "OR setting_key LIKE 'sub_lbl_%' "
+      "OR setting_key IN ('subscription_invoice_template', 'whatsapp_subscription_message') "
+      "OR setting_value LIKE '%tanker_fee%' "
+      "OR setting_value LIKE '%subscription_fee%' OR setting_value LIKE '%رسوم الاشتراك%'",
     );
   }
 }
