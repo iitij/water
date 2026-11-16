@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           # Upgrade-only scrubbers and acceptance tests mention old field names.
           matches="$(git grep -In -i -E 'tanker|water_tanker|service.?requests?|ServiceRequest|وايت|tenant_name|tenant_phone|المستأجر' -- app routes database resources config 'mobile app/lib' 'mobile app/test' tests || true)"
-          matches="$(printf '%s\n' "$matches" | grep -vE '^database/migrations/2026_11_16_000001_final_retired_billing_cleanup.php:|^tests/Feature/RetiredBillingFeatureSchemaTest.php:|^tests/scripts/mysql_retired_billing_upgrade_smoke.php:|^mobile app/lib/core/database/retired_cache_cleanup.dart:' || true)"
+          matches="$(printf '%s\n' "$matches" | grep -vE '^database/migrations/2026_11_16_000001_final_retired_billing_cleanup.php:|^tests/Feature/RetiredBillingFeatureSchemaTest.php:|^tests/scripts/mysql_retired_billing_upgrade_smoke.php:|^mobile app/test/features/offline_sync/app_database_migration_test.dart:|^mobile app/lib/core/database/retired_cache_cleanup.dart:' || true)"
           if [[ -n "$matches" ]]; then
             printf 'Removed feature references are still active:\n%s\n' "$matches"
             exit 1
