@@ -164,7 +164,6 @@ class _GenerateSheetBody extends StatelessWidget {
                     const IncludeReadingsToggle(),
                     const SizedBox(height: 4),
                     const SizedBox(height: 12),
-                  ]
                   ],
                   const GenerationNotesField(),
                   const SizedBox(height: 16),

@@ -33,15 +33,69 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
   Future<void> bootstrap({String? preselectedSubscriberId}) async {
     emit(state.copyWith(loadingReferences: true, clearError: true));
     try {
-      final meters = await _references.metersOf(subscriber.id);
+      final results = await Future.wait(<Future<Object>>[
+        _references.squares(),
+        _references.subscribers(status: 'active', limit: 500),
+        _tariffs.activePrice(),
+      ]);
 
-      // منطق Filament: إذا كان للمشترك عداد واحد فقط يُختار تلقائياً.
-      final autoMeter = meters.length == 1 ? meters.single : state.selectedMeter;
+      final subscribers = results[1] as List<SubscriberOption>;
+      final unitPrice = results[2] as double;
+
+      SubscriberOption? preselected;
+      if (preselectedSubscriberId != null) {
+        final id = int.tryParse(preselectedSubscriberId);
+        final matches = subscribers.where((s) => s.id == id).toList();
+        preselected = matches.isEmpty ? null : matches.first;
+      }
 
       emit(state.copyWith(
-        selectedMeter: autoMeter,
+        loadingReferences: false,
+        squares: results[0] as List<SquareOption>,
+        subscribers: subscribers,
+        unitPrice: unitPrice,
+        selectedSubscriber: preselected,
       ));
 
+      if (preselected != null) {
+        await _hydrateSubscriber(preselected);
+      }
+    } catch (error) {
+      emit(state.copyWith(loadingReferences: false, errorMessage: '$error'));
+    }
+  }
+
+  Future<void> searchSubscribers(String query) async {
+    try {
+      final results = await Future.wait(<Future<Object>>[
+        _references.subscribers(search: query, status: 'active', limit: 100),
+        _tariffs.activePrice(),
+      ]);
+      emit(state.copyWith(
+        subscribers: results[0] as List<SubscriberOption>,
+        unitPrice: results[1] as double,
+      ));
+    } catch (error) {
+      emit(state.copyWith(errorMessage: '$error'));
+    }
+  }
+
+  /// اختيار المشترك/العداد — يعيد حساب المفاتيح الأربعة (كما في `afterStateUpdated`).
+  /// يفرّغ الاختيار الحالي (يُستخدم من شارة «المشترك المحدد»).
+  void clearSubscriber() {
+    emit(state.copyWith(clearSubscriber: true, clearMeter: true));
+  }
+
+  Future<void> selectSubscriber(SubscriberOption subscriber) async {
+    emit(state.copyWith(selectedSubscriber: subscriber, clearMeter: true));
+    await _hydrateSubscriber(subscriber);
+  }
+
+  Future<void> _hydrateSubscriber(SubscriberOption subscriber) async {
+    try {
+      final meters = await _references.metersOf(subscriber.id);
+      final autoMeter = meters.length == 1 ? meters.single : state.selectedMeter;
+      emit(state.copyWith(selectedMeter: autoMeter));
       await _recomputeAccountFacts();
     } catch (error) {
       emit(state.copyWith(errorMessage: '$error'));
