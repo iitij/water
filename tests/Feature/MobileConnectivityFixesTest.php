@@ -356,11 +356,11 @@ class MobileConnectivityFixesTest extends TestCase
                 'due_amount',
                 'outstanding_balance',
                 'credit_balance',
-                'uninvoiced_subscription_fee',
                 'open_invoices_count',
             ])
             ->assertJsonPath('invoice_id', $invoice->id)
-            ->assertJsonPath('open_invoices_count', 1);
+            ->assertJsonPath('open_invoices_count', 1)
+            ->assertJsonMissingPath('uninvoiced_subscription_fee');
     }
 
     public function test_payments_index_filters_by_invoice_id(): void
