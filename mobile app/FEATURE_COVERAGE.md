@@ -36,19 +36,12 @@ data replace the native workflows.
   access. Laravel remains the authorization boundary.
 - Legacy snake_case permission compatibility and collector square access,
   matching the API's built-in role rules.
-- Invoice-type landing page leading to the existing meter, subscription, tanker
-  and manual invoice engines. Existing `/invoices/create` retains its manual
-  form behavior.
+- Invoice entry points now support water-meter consumption billing only; former
+  charge-only invoice engines were removed. Existing `/invoices/create` retains
+  its water-invoice form behavior.
 - Settings links open the requested permitted tab (`reading`, `invoice`,
   `receipt`, `whatsapp`, `general`). Invalid/unavailable sections safely fall back
   to the first permitted tab, never to an unauthorized editor.
-- Service-request editing, previously implemented in the repository/API but not
-  exposed in the list UI: subscriber, amount, date, pending/completed status and
-  notes. Arabic amounts are normalized, invalid amounts rejected, saves are
-  single-flight, and server errors stay in the form for correction/retry.
-  Invoiced/paid requests lock financial identity while allowing date/status/notes edits. Request actions now use a compact menu
-  instead of an overflowing row of controls; edit/complete/delete/create actions
-  are individually permission-filtered.
 
 ## Source-backed feature destinations
 
@@ -64,8 +57,6 @@ Action-by-action acceptance against a running Laravel instance remains required.
 | Invoices and generation actions | الفواتير; إصدار فاتورة → type chooser |
 | Payments/receipts, collection, printing and sharing | سندات القبض; تحصيل دفعة |
 | Tariffs | التعرفة |
-| Subscription fees | رسوم الاشتراك |
-| Service/tanker requests | طلبات الخدمة والوايت; edit from request menu |
 | Transactions (read only) | الحركات المالية |
 | Filament global search | البحث الشامل |
 | Dashboard widgets | لوحة المؤشرات |

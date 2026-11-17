@@ -1,8 +1,9 @@
 {
  "meta": {
   "project": "water / مشروع مياه الوشاح — الإصدار 2.0",
-  "source_of_truth": "docs/V2_MOBILE_PLAN_AR.md (الفصلان 6 و12) + تقرير فجوات 2.0",
-  "updated_at": "2026-11-14",
+  "source_of_truth": "AGENTS.md + current main code and CI; old mobile plans are historical only",
+  "updated_at": "2026-11-18",
+  "retired_feature_policy": "Do not execute or reintroduce subscription fee or tanker billing tasks from historical records; only current main source and removal acceptance issues define scope.",
   "preproduction_deferred_audit": {
    "report": "docs/v2/qa/PREPRODUCTION_AUDIT_2026-11-12_AR.md",
    "decision_date": "2026-11-12",
