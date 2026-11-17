@@ -7,11 +7,10 @@ import '../../data/models/invoice_model.dart';
 
 /// يبني رسالة واتساب الفاتورة مطابقةً لـ `WhatsAppService::getInvoiceMessageUrl`
 /// (`app/Services/WhatsAppService.php` سطر 60-186):
-///  - اختيار القالب حسب `invoice_type` (عداد/اشتراك).
+///  - استخدام قالب فاتورة استهلاك المياه فقط.
 ///  - هاتف المشترك فقط (`subscriber.phone`).
 ///  - المتغيرات `total_amount = total_amount + previous_balance - credit_applied`.
-///  - البلوكات الشرطية `{if:subscription_fee}` و`{if:previous_balance}`
-///    و`{if:credit_applied}`.
+///  - البلوكات الشرطية `{if:previous_balance}` و`{if:credit_applied}`.
 class InvoiceWhatsAppBuilder {
   InvoiceWhatsAppBuilder({required FinanceConfigRepository configRepository})
       : _configRepository = configRepository;

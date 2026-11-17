@@ -132,12 +132,11 @@ abstract final class WhatsAppTemplateSamples {
     'unit_price': '150',
     'consumption_fee': '3750',
     'consumption_value': '3750',
-    'subscription_fee': '500',
     'previous_balance': '0',
     'credit_applied': '0',
     'credit_balance': '0',
-    'total_amount': '4250',
-    'amount': '4250',
+    'total_amount': '3750',
+    'amount': '3750',
     'invoice_remaining': '0',
     'outstanding_balance': '0',
     'collector': 'علي الوشاح',
@@ -150,7 +149,7 @@ abstract final class WhatsAppTemplateSamples {
   static const invoiceVariables = [
     'subscriber_name', 'bill_number', 'period_start', 'period_end', 'meter_code',
     'previous_reading', 'current_reading', 'consumption_units', 'unit_price',
-    'consumption_fee', 'subscription_fee', 'previous_balance',
+    'consumption_fee', 'previous_balance',
     'credit_applied', 'total_amount', 'collector', 'pdf_url',
   ];
 
@@ -159,8 +158,4 @@ abstract final class WhatsAppTemplateSamples {
     'invoice_remaining', 'outstanding_balance', 'credit_balance', 'collector', 'pdf_url',
   ];
 
-  static const subscriptionVariables = [
-    'subscriber_name', 'bill_number', 'subscription_fee', 'previous_balance',
-    'total_amount', 'collector', 'pdf_url',
-  ];
 }

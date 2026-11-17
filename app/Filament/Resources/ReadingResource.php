@@ -285,7 +285,6 @@ class ReadingResource extends Resource
                                     $invoiceService->generateInvoice(
                                         subscriber: $meter->subscriber,
                                         meter: $meter,
-                                        subscriptionInstallment: null,
                                         notes: null,
                                     );
                                     $invoicesCreated++;

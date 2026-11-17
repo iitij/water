@@ -398,7 +398,6 @@ class AppStrings {
   String get cashReviewDecisionFailed => 'تعذر حفظ قرار الصندوق. أعد المحاولة.';
   String get cashReviewCollector => 'المحصّل';
   String get cashReviewAllCollectors => 'كل المحصّلين';
-  String get feeChangeSubscriber => 'تغيير مشترك رسوم الاشتراك';
   String get roleGuard => 'نطاق المصادقة';
   String get roleReadOnly => 'المصفوفة للعرض فقط';
   String get roleViewMatrix => 'عرض مصفوفة الصلاحيات';

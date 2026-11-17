@@ -422,7 +422,6 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     if (type == null) return null;
     return switch (type) {
       'meter' => 'عداد',
-      'subscription' => 'اشتراك',
       _ => type,
     };
   }
@@ -612,7 +611,7 @@ class _BulkActionsBar extends StatelessWidget {
       title: 'حذف جماعي للفواتير',
       message: 'سيُحذف ${state.selectedIds.length} فاتورة حذفاً ناعماً.',
       details: const <String>[
-        'تُفكّ ارتباط القراءات ورسوم الاشتراك تلقائياً.',
+        'تُفكّ ارتباط القراءات المرفقة بالفواتير تلقائياً.',
         'تُزال قيود دفتر الأستاذ وتُعاد توزيع الدفعات على الفواتير الباقية.',
       ],
       confirmLabel: 'حذف',
