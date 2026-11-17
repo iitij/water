@@ -1,20 +1,22 @@
-# Encrypted owner database snapshot
+# Private database recovery utilities
 
-The file `water_project_cleaned_2026-11-16.sql.aes256gcm.json` is an encrypted, private customer-data backup, not application source code or a test fixture. Never publish the recovery key. Do not add plaintext database exports to Git.
+The repository includes a generic offline SQL-backup decryption utility, **not customer database snapshots**.
 
-## Local recovery
+Keep production and historical database backups outside Git, protected by an owner-controlled encryption key. Never commit SQL dumps, decryption keys, or backups containing customer information.
 
-Requirements: Python 3 and `pip install cryptography`.
+## Offline recovery from an owner-controlled archive
+
+Use `restore_encrypted_sql.py` only with a verified encrypted archive and the corresponding key stored securely on the operator's computer.
 
 ```bash
 python database/secure-backups/restore_encrypted_sql.py \
-  database/secure-backups/water_project_cleaned_2026-11-16.sql.aes256gcm.json \
-  /secure/path/to/water_project_cleaned_2026-11-16.RECOVERY_KEY.txt \
+  /secure/path/to/owner-backup.aes256gcm.json \
+  /secure/path/to/RECOVERY_KEY.txt \
   /secure/path/to/recovered_database.sql
 ```
 
-The restore tool refuses to overwrite an existing file and checks authenticated decryption plus a stored SHA-256 digest.
+The utility refuses to overwrite an existing output file and authenticates its decrypted contents.
 
-This recovery archive was prepared from a snapshot taken before later application schema updates. Before importing into a live environment, use a disposable MySQL database, verify migration compatibility, reconcile historical financial balances and follow the application's deployment acceptance tests. A successful source cleanup alone does not certify that any deployed database or offline device has been migrated.
+**Important:** Removing an archive from the current Git tree does not erase copies reachable in historical commits, mirrors, caches, or local clones. Git-history/privacy retention requires a separately approved history-cleaning operation. Never perform history rewriting during normal application deployment.
 
-The original snapshot and any live installation were not modified by the repository cleanup.
+Do not import historical SQL into production before an isolated restore, schema migration, financial reconciliation, and device/UI acceptance tests.
