@@ -87,19 +87,11 @@ class InvoiceService
                 $creditApplied = min($availableBalance, $subtotal);
             }
 
-            // 6. تحديد فترة الفاتورة - بناءً على فترات القراءة المستقلة
-            if ($uninvoicedReadings->isNotEmpty()) {
-                $firstReading = $uninvoicedReadings->first();
-                $lastReading = $uninvoicedReadings->last();
-
-                // أخذ الفترة مباشرة من القراءة (استقلالية الفترات)
-                $billingPeriodStart = $firstReading->period_start ?? \Carbon\Carbon::parse($firstReading->reading_date)->startOfMonth()->toDateString();
-                $billingPeriodEnd = $lastReading->period_end ?? \Carbon\Carbon::parse($lastReading->reading_date)->endOfMonth()->toDateString();
-            } else {
-                // في حال عدم وجود قراءات ولكن يوجد استحقاقات أخرى (اشتراك)
-                $billingPeriodStart = now()->startOfMonth()->toDateString();
-                $billingPeriodEnd = now()->toDateString();
-            }
+            // 6. فترة استهلاك المياه؛ وجود قراءة غير مفوترة شرط مؤكد أعلاه
+            $firstReading = $uninvoicedReadings->first();
+            $lastReading = $uninvoicedReadings->last();
+            $billingPeriodStart = $firstReading->period_start ?? \Carbon\Carbon::parse($firstReading->reading_date)->startOfMonth()->toDateString();
+            $billingPeriodEnd = $lastReading->period_end ?? \Carbon\Carbon::parse($lastReading->reading_date)->endOfMonth()->toDateString();
 
             // 7. حساب الإجمالي (لا نضيف المتأخرات السابقة للإجمالي حتى لا تتضاعف عند جمع الفواتير غير المسددة)
             $totalAmount = $subtotal;

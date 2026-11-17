@@ -36,8 +36,23 @@ jobs:
           set -euo pipefail
           # Historical identifiers are deliberately retained only inside
           # the offline upgraders that erase them from installed databases.
-          if git grep -n -i -E 'SubscriptionFee|subscription_fees|subscription_installment|subscriptionFee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم اشتراك|قسط الاشتراك' -- app routes resources 'mobile app/lib' ':(exclude)mobile app/lib/core/database/app_database.dart' ':(exclude)mobile app/lib/core/database/retired_cache_cleanup.dart'; then
+          if git grep -n -I -i -E 'SubscriptionFee|subscription[_-]?fees?|subscriptionInstallment|hasSubscriptionFee|initial_subscription_fee|subscription_fee_paid|is_subscription_fee_fully_paid|subscription_installment|has_subscription_fee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم[[:space:]]*الاشتراك|رسوم[[:space:]]*اشتراك|قسط[[:space:]]*الاشتراك|فاتورة[[:space:]]*الاشتراك|فاتورة[[:space:]]*اشتراك' -- app config routes resources database 'mobile app/lib' ':(exclude)database/migrations/2026_11_16_010000_final_subscription_fee_cleanup.php' ':(exclude)mobile app/lib/core/database/app_database.dart' ':(exclude)mobile app/lib/core/database/retired_cache_cleanup.dart'; then
             echo 'ERROR: retired subscription fee code returned to the active runtime.'
             exit 1
           fi
 
+
+      - name: Inventory broader subscription wording for human review
+        shell: bash
+        run: |
+          set -euo pipefail
+          # "subscription" also legitimately describes when a subscriber joined.
+          # This is an inventory, not a false-positive failure on membership dates.
+          if git grep -n -I -i -E 'subscription|اشتراك' -- app config routes resources database 'mobile app/lib' > /tmp/subscription-reference-inventory.txt; then
+            echo 'Subscription-word references by file:'
+            cut -d: -f1 /tmp/subscription-reference-inventory.txt | sort | uniq -c | sort -rn
+            echo 'Full audit references:'
+            cat /tmp/subscription-reference-inventory.txt
+          else
+            echo 'No subscription-word references found.'
+          fi
