@@ -63,3 +63,18 @@ jobs:
           else
             echo 'No subscription-word references found.'
           fi
+
+      - name: Inventory historical documentation and agent prompts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Find obsolete feature instructions in plans/agent prompts without
+          # treating immutable historical test evidence as runnable features.
+          if git grep -n -I -i -E 'SubscriptionFee|subscription[_-]?fees?|subscriptionInstallment|subscription[[:space:]]*=>|رسوم[[:space:]]*الاشتراك|رسوم[[:space:]]*اشتراك|فاتورة[[:space:]]*الاشتراك|فاتورة[[:space:]]*اشتراك|قسط[[:space:]]*الاشتراك' -- .claude docs AGENTS.md DEVELOPERS_MASTER_PROMPTS.md README.md FLUTTER_FOUNDATION_HANDOFF.md FLUTTER_MOBILE_MASTER_PLAN.md 'mobile app/README.md' 'mobile app/FEATURE_COVERAGE.md' > /tmp/retired-subscription-documentation.txt; then
+            echo 'Obsolete-term documentation references by path:'
+            cut -d: -f1 /tmp/retired-subscription-documentation.txt | sort | uniq -c | sort -rn
+            echo 'Documentation reference details:'
+            cat /tmp/retired-subscription-documentation.txt
+          else
+            echo 'No references to removed fee-domain concepts in the selected documentation.'
+          fi
