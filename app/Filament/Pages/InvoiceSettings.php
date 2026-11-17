@@ -103,7 +103,6 @@ class InvoiceSettings extends Page implements HasForms
             'inv_lbl_thank_you' => Setting::get('inv_lbl_thank_you', 'شكراً لدفعكم في الموعد / Thank you for your timely payment'),
             'inv_lbl_notes' => Setting::get('inv_lbl_notes', 'الملاحظات'),
 
-            // Subscription Invoice
         ]);
     }
 

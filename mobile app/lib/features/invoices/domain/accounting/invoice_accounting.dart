@@ -120,7 +120,7 @@ class InvoiceAccounting {
   }
 
   /// معاينة صافي الفاتورة قبل الإصدار: `subtotal - min(credit, subtotal)`
-  /// حيث `subtotal = consumption + subscription` (`InvoiceService` سطر 96-104).
+  /// حيث `subtotal = consumptionFee` دون أي رسوم إضافية.
   static double previewNetPayable({
     required double consumptionFee,
     required double availableCredit,

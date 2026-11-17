@@ -9,9 +9,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * One source of truth for the meter on NEW water-consumption charges.
  *
- * Historical bills, receipts and subscription services remain tied to
- * the original meter when applicable; this guard is NOT applied to payments
- * or corrections to already-issued historic invoices.
+ * Historical water bills and receipts retain their original accounting links.
+ * This guard does not affect payments or corrections to already-issued invoices.
  */
 final class CurrentMeterBillingGuard
 {

@@ -14,13 +14,8 @@ class FinanceColors {
   /// فاتورة العداد.
   static const Color meter = AppColors.info;
 
-  /// اشتراك/رسوم دورية.
-  static const Color subscription = AppColors.violet;
 
 
-  /// لون المحرك حسب نوع الفاتورة (`meter|subscription`).
-  static Color forEngine(String engine) => switch (engine) {
-        'subscription' => subscription,
-        _ => meter,
-      };
+  /// إصدار فواتير استهلاك المياه هو النوع المالي الوحيد المتاح.
+  static Color forEngine(String engine) => meter;
 }

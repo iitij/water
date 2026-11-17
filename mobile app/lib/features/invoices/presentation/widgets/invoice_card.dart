@@ -338,13 +338,11 @@ class InvoiceCard extends StatelessWidget {
 
   static String _typeLabel(String wire) => switch (wire) {
     'meter' => 'عداد',
-    'subscription' => 'اشتراك',
     _ => wire,
   };
 
   static IconData _typeIcon(String wire) => switch (wire) {
     'meter' => Icons.speed_rounded,
-    'subscription' => Icons.autorenew_rounded,
     _ => Icons.receipt_long_rounded,
   };
 }
