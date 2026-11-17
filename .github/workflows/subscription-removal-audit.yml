@@ -36,11 +36,18 @@ jobs:
           set -euo pipefail
           # Historical identifiers are deliberately retained only inside
           # the offline upgraders that erase them from installed databases.
-          if git grep -n -I -i -E 'SubscriptionFee|subscription[_-]?fees?|subscriptionInstallment|hasSubscriptionFee|initial_subscription_fee|subscription_fee_paid|is_subscription_fee_fully_paid|subscription_installment|has_subscription_fee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم[[:space:]]*الاشتراك|رسوم[[:space:]]*اشتراك|قسط[[:space:]]*الاشتراك|فاتورة[[:space:]]*الاشتراك|فاتورة[[:space:]]*اشتراك' -- app config routes resources database 'mobile app/lib' ':(exclude)database/migrations/2026_11_16_010000_final_subscription_fee_cleanup.php' ':(exclude)mobile app/lib/core/database/app_database.dart' ':(exclude)mobile app/lib/core/database/retired_cache_cleanup.dart'; then
+          if git grep -n -I -i -E 'SubscriptionFee|subscription[_-]?fees?|subscriptionInstallment|hasSubscriptionFee|initial_subscription_fee|subscription_fee_paid|is_subscription_fee_fully_paid|subscription_installment|has_subscription_fee|sub_inv_|sub_show_|sub_lbl_|inv_show_sub_fee|inv_lbl_sub_fee|رسوم[[:space:]]*الاشتراك|رسوم[[:space:]]*اشتراك|قسط[[:space:]]*الاشتراك|فاتورة[[:space:]]*الاشتراك|فاتورة[[:space:]]*اشتراك|InvoiceType[.]subscription|GenerateSubscriptionInvoice|subscriptionVariables|subscription[[:space:]]*=>|فواتير[[:space:]]*الاشتراك' -- app config routes resources database 'mobile app/lib' ':(exclude)database/migrations/2026_11_16_010000_final_subscription_fee_cleanup.php' ':(exclude)mobile app/lib/core/database/app_database.dart' ':(exclude)mobile app/lib/core/database/retired_cache_cleanup.dart'; then
             echo 'ERROR: retired subscription fee code returned to the active runtime.'
             exit 1
           fi
 
+
+          # The feature's source directory must also stay deleted.
+          if git ls-files app config routes resources 'mobile app/lib' |
+            grep -E -i '(^|/)(subscription[-_]?fees?)(/|[.])'; then
+            echo 'ERROR: subscription-fee source files reappeared.'
+            exit 1
+          fi
 
       - name: Inventory broader subscription wording for human review
         shell: bash
