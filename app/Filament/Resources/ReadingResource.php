@@ -206,6 +206,18 @@ class ReadingResource extends Resource
                     ->date('Y-m-d')
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('period_start')
+                    ->label('الفترة من')
+                    ->date('Y-m-d')
+                    ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('period_end')
+                    ->label('الفترة إلى')
+                    ->date('Y-m-d')
+                    ->sortable()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('actual_reading_date')
                     ->label('التاريخ الفعلي')
                     ->date('Y-m-d')

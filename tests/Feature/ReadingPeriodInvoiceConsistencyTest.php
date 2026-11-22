@@ -256,4 +256,32 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertStringContainsString('—', $html);
     }
 
+
+    public function test_editing_an_entered_date_updates_the_matching_actual_date(): void
+    {
+        $meter = $this->meter();
+        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
+
+        $this->putJson('/api/readings/'.$reading->id, [
+            'reading_date' => '2026-03-09',
+        ])->assertOk();
+
+        $this->assertSame('2026-03-09', $reading->fresh()->actual_reading_date->toDateString());
+        $this->assertSame('2026-02-01', $reading->fresh()->period_start);
+        $this->assertSame('2026-02-28', $reading->fresh()->period_end);
+    }
+
+    public function test_editing_entered_date_preserves_a_distinct_actual_date(): void
+    {
+        $meter = $this->meter();
+        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
+        $reading->update(['actual_reading_date' => '2026-03-07']);
+
+        $this->putJson('/api/readings/'.$reading->id, [
+            'reading_date' => '2026-03-09',
+        ])->assertOk();
+
+        $this->assertSame('2026-03-07', $reading->fresh()->actual_reading_date->toDateString());
+    }
+
 }

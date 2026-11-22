@@ -191,6 +191,15 @@ class ReadingController extends ApiController
             ->where('period_end', '>=', $periodStart)->exists()) {
             return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
         }
+        // Reading date is the entered date when no separate actual date was
+        // explicitly stored. Keep both in sync on edits without overwriting
+        // an intentionally distinct actual date from an older record.
+        if (array_key_exists('reading_date', $data)
+            && ! array_key_exists('actual_reading_date', $data)
+            && ($reading->actual_reading_date === null
+                || $reading->actual_reading_date->toDateString() === $reading->reading_date->toDateString())) {
+            $data['actual_reading_date'] = $data['reading_date'];
+        }
         $reading->update($data);
 
         return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
