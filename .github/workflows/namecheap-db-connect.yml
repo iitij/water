@@ -1,0 +1,83 @@
+name: Water | Connect existing MySQL database on Namecheap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-db-connect
+  cancel-in-progress: false
+
+jobs:
+  configure-mysql:
+    name: Verify MySQL login and configure Laravel .env
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout approved configuration helper
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure SSH connection and verify host identity
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+            echo "::error::The existing Namecheap SSH repository secret is missing."
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$RUNNER_TEMP/water-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/water-ssh/key"
+          chmod 600 "$RUNNER_TEMP/water-ssh/key"
+          ssh-keygen -y -f "$RUNNER_TEMP/water-ssh/key" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/water-ssh/known_hosts" 2>/dev/null
+          actual="$(ssh-keygen -lf "$RUNNER_TEMP/water-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          if [[ "$actual" != 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ]]; then
+            echo "::error::Unexpected Namecheap SSH host identity."
+            exit 1
+          fi
+
+      - name: Upload credential-free configuration helper to private hosting directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/water-ssh/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/water-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            'umask 077; mkdir -p "$HOME/.local/share/water"; cat > "$HOME/.local/share/water/configure_mysql.php"; chmod 600 "$HOME/.local/share/water/configure_mysql.php"' \
+            < scripts/hosting/configure_mysql.php
+
+      - name: Validate access to the existing database and configure .env
+        shell: bash
+        env:
+          WATER_DB_PASSWORD: ${{ secrets.WATER_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WATER_DB_PASSWORD" ]]; then
+            echo "::error::Please create the WATER_DB_PASSWORD Actions repository secret first."
+            exit 1
+          fi
+          printf '%s' "$WATER_DB_PASSWORD" |
+            ssh -T -p 21098 \
+              -i "$RUNNER_TEMP/water-ssh/key" \
+              -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/water-ssh/known_hosts" \
+              -o ConnectTimeout=20 \
+              alweufti@66.29.146.205 \
+              '/opt/alt/php84/usr/bin/php "$HOME/.local/share/water/configure_mysql.php"'
+          echo '### MySQL connection setup completed' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A read-only connection test succeeded before updating Laravel .env.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No SQL migrations, imports, or changes to web document root were performed.' >> "$GITHUB_STEP_SUMMARY"
