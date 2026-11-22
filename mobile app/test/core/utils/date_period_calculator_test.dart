@@ -2,91 +2,89 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/utils/date_period_calculator.dart';
 
 void main() {
-  group('DatePeriodCalculator', () {
-    test('uses the last day of month for the monthly last-day cycle', () {
+  group('DatePeriodCalculator: measured observation boundaries', () {
+    test('uses baseline and actual reading day, not calendar month end', () {
       final result = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 2, 8),
+        subscriptionStartDate: DateTime(2026, 1, 5),
+        currentReadingDate: DateTime(2026, 2, 8),
         readingPeriod: 'monthly',
         readingDay: 'last_day',
-        now: DateTime(2026, 2, 23),
       );
-
-      expect(result.periodStart, DateTime(2026, 2, 8));
-      expect(result.periodEnd, DateTime(2026, 2, 28));
+      expect(result.periodStart, DateTime(2026, 1, 5));
+      expect(result.periodEnd, DateTime(2026, 2, 8));
     });
 
-    test('starts the next period one day after a saved period end', () {
+    test('uses previous actual observation instead of old period-end hint', () {
       final result = DatePeriodCalculator.calculate(
+        lastReadingDate: DateTime(2026, 2, 5),
         lastReadingPeriodEnd: DateTime(2026, 1, 31),
-        readingPeriod: 'monthly',
-        readingDay: '20',
+        currentReadingDate: DateTime(2026, 3, 8),
       );
-
-      expect(result.periodStart, DateTime(2026, 2, 1));
-      expect(result.periodEnd, DateTime(2026, 2, 20));
+      expect(result.periodStart, DateTime(2026, 2, 5));
+      expect(result.periodEnd, DateTime(2026, 3, 8));
     });
 
-    test('uses the next month when the monthly target day has passed', () {
+    test('uses installation baseline for the first reading', () {
       final result = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 1, 21),
-        readingPeriod: 'monthly',
-        readingDay: '20',
+        installedAt: DateTime(2026, 1, 12),
+        subscriptionStartDate: DateTime(2025, 12, 1),
+        currentReadingDate: DateTime(2026, 2, 17),
       );
-
-      expect(result.periodEnd, DateTime(2026, 2, 20));
+      expect(result.periodStart, DateTime(2026, 1, 12));
     });
 
-    test('uses the end of the previous month for legacy readings', () {
+    test('requires a known first observation baseline', () {
+      expect(
+        () => DatePeriodCalculator.calculate(
+          currentReadingDate: DateTime(2026, 2, 17),
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('works through year boundaries and leap days', () {
       final result = DatePeriodCalculator.calculate(
-        lastReadingDate: DateTime(2024, 2, 12),
-        readingPeriod: 'weekly',
+        lastReadingDate: DateTime(2023, 12, 30),
+        currentReadingDate: DateTime(2024, 2, 29),
       );
-
-      expect(result.periodStart, DateTime(2024, 3, 1));
-      expect(result.periodEnd, DateTime(2024, 3, 7));
+      expect(result.periodStartIso, '2023-12-30');
+      expect(result.periodEndIso, '2024-02-29');
     });
 
-    test('calculates half-month periods at day 15 and month end', () {
-      final firstHalf = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 5, 2),
-        readingPeriod: 'half_monthly',
-      );
-      final secondHalf = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 5, 16),
-        readingPeriod: 'half_monthly',
-      );
-
-      expect(firstHalf.periodEnd, DateTime(2026, 5, 15));
-      expect(secondHalf.periodEnd, DateTime(2026, 5, 31));
-    });
-
-    test('calculates ten-day periods and weeks', () {
-      final tenDay = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 5, 11),
-        readingPeriod: 'ten_days',
-      );
-      final lastTenDay = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 5, 21),
-        readingPeriod: 'ten_days',
-      );
-      final weekly = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2026, 5, 4),
-        readingPeriod: 'weekly',
-      );
-
-      expect(tenDay.periodEnd, DateTime(2026, 5, 20));
-      expect(lastTenDay.periodEnd, DateTime(2026, 5, 31));
-      expect(weekly.periodEnd, DateTime(2026, 5, 10));
-    });
-
-    test('clamps target days to the actual month length', () {
-      final result = DatePeriodCalculator.calculate(
-        subscriptionStartDate: DateTime(2025, 2, 1),
-        readingPeriod: 'monthly',
+    test('monthly schedule is only a suggested visit day', () {
+      final expected = DatePeriodCalculator.expectedVisitDate(
+        DateTime(2025, 2, 1),
         readingDay: '31',
       );
+      expect(expected, DateTime(2025, 2, 28));
+      final next = DatePeriodCalculator.expectedVisitDate(
+        DateTime(2025, 2, 28),
+        readingDay: '31',
+      );
+      expect(next, DateTime(2025, 3, 31));
+    });
 
-      expect(result.periodEnd, DateTime(2025, 2, 28));
+    test('weekly and half-monthly scheduling never alter actual dates', () {
+      expect(
+        DatePeriodCalculator.expectedVisitDate(
+          DateTime(2026, 5, 4),
+          readingPeriod: 'weekly',
+        ),
+        DateTime(2026, 5, 11),
+      );
+      expect(
+        DatePeriodCalculator.expectedVisitDate(
+          DateTime(2026, 5, 4),
+          readingPeriod: 'half_monthly',
+        ),
+        DateTime(2026, 5, 19),
+      );
+      final interval = DatePeriodCalculator.calculate(
+        lastReadingDate: DateTime(2026, 5, 4),
+        currentReadingDate: DateTime(2026, 5, 22),
+        readingPeriod: 'weekly',
+      );
+      expect(interval.periodEnd, DateTime(2026, 5, 22));
     });
   });
 }
