@@ -270,8 +270,8 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         ])->assertOk();
 
         $this->assertSame('2026-03-09', $reading->fresh()->actual_reading_date->toDateString());
-        $this->assertSame('2026-02-01', $reading->fresh()->period_start);
-        $this->assertSame('2026-02-28', $reading->fresh()->period_end);
+        $this->assertSame('2026-01-01', $reading->fresh()->period_start);
+        $this->assertSame('2026-03-09', $reading->fresh()->period_end);
     }
 
     public function test_editing_entered_date_preserves_a_distinct_actual_date(): void
@@ -393,6 +393,37 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
             'meter_id' => $meter->id, 'reading_date' => '2026-03-05',
             'current_reading' => 20,
         ])->assertUnprocessable()->assertJsonValidationErrors('period_end');
+    }
+
+
+    public function test_api_edit_refuses_to_rewrite_a_reading_with_a_successor(): void
+    {
+        $meter = $this->meter();
+        $this->reading($meter, '2026-01-01', '2026-02-05', '2026-02-05', 10);
+        $first = $meter->readings()->first();
+        $this->reading($meter, '2026-02-05', '2026-03-08', '2026-03-08', 20, 10);
+
+        $this->putJson('/api/readings/'.$first->id, [
+            'current_reading' => 19,
+        ])->assertStatus(409);
+
+        $this->assertEquals(10, (float) $first->fresh()->current_reading);
+    }
+
+    public function test_editing_last_uninvoiced_reading_rebuilds_its_measured_period(): void
+    {
+        $meter = $this->meter();
+        $this->reading($meter, '2026-01-01', '2026-02-05', '2026-02-05', 10);
+        $last = $this->reading($meter, '2026-02-05', '2026-03-08', '2026-03-08', 20, 10);
+
+        $this->putJson('/api/readings/'.$last->id, [
+            'reading_date' => '2026-03-12',
+            'current_reading' => 25,
+        ])->assertOk();
+
+        $this->assertSame('2026-02-05', $last->fresh()->period_start);
+        $this->assertSame('2026-03-12', $last->fresh()->period_end);
+        $this->assertEquals(15, (float) $last->fresh()->consumption_units);
     }
 
 }

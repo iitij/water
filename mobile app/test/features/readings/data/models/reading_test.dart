@@ -44,6 +44,8 @@ void main() {
         'last_reading': '100.25',
         'period_start': '2026-06-01',
         'period_end': '2026-06-30',
+        'expected_reading_date': '2026-07-01',
+        'period_basis': 'actual_reading_dates',
         'auto_issue_invoice': true,
       });
 
@@ -51,6 +53,22 @@ void main() {
       expect(period.periodStart, DateTime(2026, 6, 1));
       expect(period.periodEnd, DateTime(2026, 6, 30));
       expect(period.autoIssueInvoice, isTrue);
+      expect(period.expectedReadingDate, DateTime(2026, 7, 1));
+      expect(period.withReadingDate(DateTime(2026, 7, 4)).periodEnd,
+          DateTime(2026, 7, 4));
+      expect(period.withReadingDate(DateTime(2026, 7, 4)).periodStart,
+          DateTime(2026, 6, 1));
+    });
+
+    test('requires a real meter baseline rather than inventing today', () {
+      expect(
+        () => MeterPeriodResponse.fromJson({
+          'last_reading': 0,
+          'period_start': null,
+          'period_end': '2026-06-20',
+        }),
+        throwsStateError,
+      );
     });
 
     test('offline submission payload carries the sync UUID and consumption', () {
@@ -58,8 +76,8 @@ void main() {
       final submission = ReadingSubmission(
         meterId: 17,
         readingDate: DateTime(2026, 6, 20),
-        periodStart: DateTime(2026, 6, 1),
-        periodEnd: DateTime(2026, 6, 30),
+        periodStart: DateTime(2026, 5, 20),
+        periodEnd: DateTime(2026, 6, 20),
         previousReading: 100,
         currentReading: 145.5,
       );
@@ -70,7 +88,8 @@ void main() {
       expect(payload['client_action_id'], localId);
       expect(payload['consumption_units'], 45.5);
       expect(payload['reading_date'], '2026-06-20');
-      expect(payload['period_start'], '2026-06-01');
+      expect(payload['period_start'], '2026-05-20');
+      expect(payload['period_end'], '2026-06-20');
     });
   });
 }

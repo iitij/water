@@ -299,11 +299,15 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     }
     final effectiveDate = newReadingDate ?? reading.readingDate;
     final effectiveActualDate = newReadingDate ?? reading.actualReadingDate ?? reading.readingDate;
+    final effectivePeriodEnd = newReadingDate ?? reading.periodEnd;
+    if (!effectivePeriodEnd.isAfter(reading.periodStart)) {
+      throw StateError('تاريخ القراءة المصححة يجب أن يكون بعد تاريخ القراءة السابقة.');
+    }
     final payload = {
       'reading_date': _dateOnly(effectiveDate),
       'actual_reading_date': _dateOnly(effectiveActualDate),
       'period_start': _dateOnly(reading.periodStart),
-      'period_end': _dateOnly(reading.periodEnd),
+      'period_end': _dateOnly(effectivePeriodEnd),
       'previous_reading': reading.previousReading,
       'current_reading': newCurrentReading,
       'consumption_units': newCurrentReading - reading.previousReading,
@@ -344,7 +348,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         readingDate: effectiveDate,
         actualReadingDate: effectiveActualDate,
         periodStart: reading.periodStart,
-        periodEnd: reading.periodEnd,
+        periodEnd: effectivePeriodEnd,
         previousReading: reading.previousReading,
         currentReading: newCurrentReading,
         consumptionUnits: newCurrentReading - reading.previousReading,
