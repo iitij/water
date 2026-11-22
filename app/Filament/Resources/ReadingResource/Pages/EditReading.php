@@ -78,7 +78,7 @@ class EditReading extends EditRecord
                 $observed = Carbon::parse(
                     $reading->actual_reading_date ?? $reading->period_end ?? $reading->reading_date
                 )->toDateString();
-                $hasSuccessor = $meter->readings()->whereKeyNot($reading->id)
+                $hasSuccessor = $meter->readings()->where('id', '!=', $reading->id)
                     ->whereRaw('COALESCE(actual_reading_date, period_end, reading_date) > ?', [$observed])
                     ->exists();
                 if ($hasSuccessor) {

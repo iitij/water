@@ -11,7 +11,7 @@ abstract final class LaravelScreenStrings {
   static const transactions = 'سجل الحركات (الدفتر)';
   static const tariffs = 'التعرفة والتسعير';
   static const settings = 'الإعدادات';
-  static const readingSettings = 'إعدادات فترة القراءات';
+  static const readingSettings = 'جدولة زيارات قراءة العدادات';
   static const invoiceSettings = 'إعدادات وتصميم الفاتورة';
   static const receiptSettings = 'إعدادات وتصميم سند القبض';
   static const exports = 'تصدير البيانات';
