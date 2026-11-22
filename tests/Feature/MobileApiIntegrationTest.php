@@ -82,6 +82,7 @@ class MobileApiIntegrationTest extends TestCase
                 'path_number' => 15,
                 'subscriber_id' => $subscriber->id,
                 'initial_reading' => 10,
+                'installed_at' => now()->subDays(15)->toDateString(),
             ])
             ->assertCreated();
 

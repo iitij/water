@@ -51,6 +51,7 @@ class MobileConnectivityFixesTest extends TestCase
                 'status' => 'active',
             ])->id,
             'initial_reading' => 0,
+            'installed_at' => now()->subDays(15)->toDateString(),
             'status' => 'active',
         ]);
         Device::create([

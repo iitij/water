@@ -61,7 +61,7 @@ class SingleMeterFilamentIntegrationTest extends TestCase
             'square_id' => $square->id,
             'status' => 'active',
         ]);
-        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'STALE-FORM-OLD']);
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'STALE-FORM-OLD', 'installed_at' => now()->subDays(10)->toDateString()]);
         $page = (new \ReflectionClass(CreateReading::class))->newInstanceWithoutConstructor();
         $preflight = new \ReflectionMethod(CreateReading::class, 'mutateFormDataBeforeCreate');
         $save = new \ReflectionMethod(CreateReading::class, 'handleRecordCreation');
@@ -96,7 +96,7 @@ class SingleMeterFilamentIntegrationTest extends TestCase
             'square_id' => $square->id,
             'status' => 'active',
         ]);
-        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'LOCKED-READING']);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'LOCKED-READING', 'installed_at' => now()->subDays(10)->toDateString()]);
         $page = (new \ReflectionClass(CreateReading::class))->newInstanceWithoutConstructor();
         $save = new \ReflectionMethod(CreateReading::class, 'handleRecordCreation');
 
