@@ -65,7 +65,7 @@ class Meter extends Model
 
     public function getLatestReading(?int $ignoreReadingId = null): ?Reading
     {
-        $query = $this->readings()->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')->orderByDesc('id');
+        $query = $this->readings()->orderByRaw('COALESCE(actual_reading_date, period_end, reading_date) DESC')->orderByDesc('id');
         if ($ignoreReadingId) {
             $query->where('id', '!=', $ignoreReadingId);
         }

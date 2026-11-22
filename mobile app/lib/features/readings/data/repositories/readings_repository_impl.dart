@@ -51,7 +51,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     final cachedMeter = await _database.getCachedMeter(meter.id);
 
     final latestEnd = _parseDate(latest?['period_end']);
-    final latestDate = _parseDate(latest?['actual_reading_date'] ?? latest?['reading_date']);
+    final latestDate = _parseDate(latest?['actual_reading_date'] ?? latest?['period_end'] ?? latest?['reading_date']);
     final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
         _asDouble(cachedPeriod?['last_reading']) ??

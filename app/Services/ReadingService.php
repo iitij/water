@@ -11,13 +11,15 @@ use Carbon\Carbon;
  * Water consumption is measured between consecutive observations:
  * (previous observation date, current observation date].
  * Scheduled field visits are not financial-period boundaries.
+ * Legacy readings without an actual observation date use their recorded
+ * period_end as the best historical boundary, never their entry date.
  */
 class ReadingService
 {
     public function latestReading(int $meterId): ?Reading
     {
         return Reading::query()->where('meter_id', $meterId)
-            ->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')
+            ->orderByRaw('COALESCE(actual_reading_date, period_end, reading_date) DESC')
             ->orderByDesc('id')->first();
     }
 
@@ -35,7 +37,7 @@ class ReadingService
 
         $previous = $this->latestReading($meterId);
         $previousDate = $previous
-            ? ($previous->actual_reading_date ?? $previous->reading_date)
+            ? ($previous->actual_reading_date ?? $previous->period_end ?? $previous->reading_date)
             : ($meter->installed_at ?? $meter->subscriber?->subscription_start_date);
         $start = $previousDate ? Carbon::parse($previousDate)->startOfDay() : null;
         $current = $currentReadingDate

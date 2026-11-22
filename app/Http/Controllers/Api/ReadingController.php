@@ -183,7 +183,7 @@ class ReadingController extends ApiController
             $reading = Reading::lockForUpdate()->findOrFail($id);
             abort_if($reading->is_invoiced || $reading->invoice_id, 409, 'لا يمكن تعديل قراءة مرتبطة بفاتورة.');
 
-            $oldActual = Carbon::parse($reading->actual_reading_date ?? $reading->reading_date)->toDateString();
+            $oldActual = Carbon::parse($reading->actual_reading_date ?? $reading->period_end ?? $reading->reading_date)->toDateString();
             $actual = array_key_exists('actual_reading_date', $data) && $data['actual_reading_date']
                 ? Carbon::parse($data['actual_reading_date'])->toDateString()
                 : $oldActual;
@@ -206,24 +206,24 @@ class ReadingController extends ApiController
             $changedValue = array_key_exists('current_reading', $data)
                 && abs((float) $data['current_reading'] - (float) $reading->current_reading) > 0.00001;
             $successor = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
-                ->whereRaw('COALESCE(actual_reading_date, reading_date) > ?', [$oldActual])->exists();
+                ->whereRaw('COALESCE(actual_reading_date, period_end, reading_date) > ?', [$oldActual])->exists();
             if ($successor && ($changedDate || $changedValue)) {
                 abort(409, 'توجد قراءة تالية تعتمد على هذه القراءة؛ يلزم إجراء تصحيح متسلسل معتمد.');
             }
 
             if ($changedDate) {
                 $conflict = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
-                    ->whereRaw('COALESCE(actual_reading_date, reading_date) >= ?', [$actual])->exists();
+                    ->whereRaw('COALESCE(actual_reading_date, period_end, reading_date) >= ?', [$actual])->exists();
                 if ($conflict) {
                     throw ValidationException::withMessages([
                         'actual_reading_date' => ['لا يمكن نقل القراءة إلى تاريخ يلي قراءة أخرى أو يطابق تاريخها.'],
                     ]);
                 }
                 $previous = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
-                    ->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')
+                    ->orderByRaw('COALESCE(actual_reading_date, period_end, reading_date) DESC')
                     ->orderByDesc('id')->first();
                 $priorDate = $previous
-                    ? ($previous->actual_reading_date ?? $previous->reading_date)
+                    ? ($previous->actual_reading_date ?? $previous->period_end ?? $previous->reading_date)
                     : ($meter->installed_at ?? $meter->subscriber?->subscription_start_date);
                 if (! $priorDate || Carbon::parse($priorDate)->toDateString() >= $actual) {
                     throw ValidationException::withMessages([
