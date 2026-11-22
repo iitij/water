@@ -52,7 +52,6 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
     final latestEnd = _parseDate(latest?['period_end']);
     final latestDate = _parseDate(latest?['actual_reading_date'] ?? latest?['period_end'] ?? latest?['reading_date']);
-    final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
         _asDouble(cachedPeriod?['last_reading']) ??
         _asDouble(cachedMeter?['last_reading']) ??
@@ -62,8 +61,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       currentReadingDate: DateTime.now(),
       lastReadingDate: latestDate,
       // Old snapshots may carry a period end but no observation date.
-      lastReadingPeriodEnd: latestDate == null
-          ? (latestEnd ?? cachedPeriodStart) : null,
+      lastReadingPeriodEnd: latestDate == null ? latestEnd : null,
       installedAt: meter.installedAt ?? _parseDate(cachedMeter?['installed_at']),
       subscriptionStartDate: meter.subscriptionStartDate ??
           _parseDate(cachedMeter?['subscription_start_date']),
