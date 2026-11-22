@@ -18,7 +18,7 @@ class ReadingSettings extends Page implements HasForms
 
     protected static string | \UnitEnum | null $navigationGroup = 'إدارة النظام';
 
-    protected static ?string $title = 'إعدادات فترة القراءات';
+    protected static ?string $title = 'جدولة زيارات قراءة العدادات';
 
     protected static ?int $navigationSort = 11;
 
@@ -56,7 +56,7 @@ class ReadingSettings extends Page implements HasForms
                     ->required()
                     ->live()
                     ->native(false)
-                    ->helperText('تحدد هذه الدورة كيفية حساب فترة استهلاك الفاتورة عند إصدارها.'),
+                    ->helperText('تنظم توقيت زيارة قارئ العدادات فقط؛ فترة الاستهلاك الفعلية بين تاريخ القراءة السابقة والحالية.'),
 
                 Select::make('reading_day')
                     ->label('يوم إدخال القراءة')
@@ -71,7 +71,7 @@ class ReadingSettings extends Page implements HasForms
                     ->visible(fn ($get) => $get('reading_period') === 'monthly')
                     ->required()
                     ->native(false)
-                    ->helperText('يحدد متى تنتهي فترة القراءة للعداد في الدورة الشهرية.'),
+                    ->helperText('موعد الزيارة المتوقع، وليس تاريخ نهاية فترة الفاتورة.'),
                 \Filament\Forms\Components\TextInput::make('grace_period')
                     ->label('مدة السماح (أيام)')
                     ->numeric()

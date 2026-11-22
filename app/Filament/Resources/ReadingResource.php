@@ -51,7 +51,7 @@ class ReadingResource extends Resource
                         $set('meter_id', $meter->id);
                         $set('previous_reading', $meter->getLastReadingValue());
                         $service = new \App\Services\ReadingService();
-                        $period = $service->calculateReadingPeriod($meter->id);
+                        $period = $service->calculateReadingPeriod($meter->id, $get('reading_date') ?? now());
                         $set('period_start', $period['period_start']);
                         $set('period_end', $period['period_end']);
                     } else {
@@ -107,7 +107,7 @@ class ReadingResource extends Resource
 
                             // Calculate reading period
                             $service = new \App\Services\ReadingService();
-                            $period = $service->calculateReadingPeriod($state);
+                            $period = $service->calculateReadingPeriod($state, $get('reading_date') ?? now());
                             if ($period['period_start']) {
                                 $set('period_start', $period['period_start']);
                                 $set('period_end', $period['period_end']);
@@ -128,13 +128,15 @@ class ReadingResource extends Resource
             \Filament\Schemas\Components\Grid::make(2)
                 ->schema([
                     Forms\Components\DatePicker::make('period_start')
-                        ->label('فترة القراءة (من تاريخ)')
+                        ->label('من تاريخ القراءة السابقة')
+                        ->helperText('نقطة البداية من آخر قراءة فعلية للعداد، لا من بداية الشهر.')
                         ->readOnly()
                         ->dehydrated()
                         ->required(),
 
                     Forms\Components\DatePicker::make('period_end')
-                        ->label('فترة القراءة (إلى تاريخ)')
+                        ->label('إلى تاريخ القراءة الحالية')
+                        ->helperText('نقطة النهاية تتغير تلقائياً عند اختيار تاريخ القراءة الفعلي.')
                         ->readOnly()
                         ->dehydrated()
                         ->required()
@@ -152,7 +154,16 @@ class ReadingResource extends Resource
                 ->label('تاريخ إدخال القراءة الفعلي')
                 ->default(now())
                 ->required()
-                ->helperText('التاريخ الذي تمت فيه قراءة العداد فعلياً من قبل المحصل.'),
+                ->readOnly(fn (?\App\Models\Reading $record) => $record !== null)
+                ->live()
+                ->afterStateUpdated(function ($set, $get, $state, $record) {
+                    if ($record || ! $state || ! $get('meter_id')) return;
+                    $period = app(\App\Services\ReadingService::class)
+                        ->calculateReadingPeriod((int) $get('meter_id'), $state);
+                    $set('period_start', $period['period_start']);
+                    $set('period_end', $period['period_end']);
+                })
+                ->helperText('تاريخ الرصد الفعلي؛ منه تحسب نهاية فترة الاستهلاك. تصحيح التاريخ بعد الحفظ يحتاج إجراء مراجعة مستقل.'),
 
             Forms\Components\TextInput::make('current_reading')
                 ->label('القراءة الحالية')

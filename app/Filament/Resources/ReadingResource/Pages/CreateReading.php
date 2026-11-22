@@ -17,11 +17,14 @@ class CreateReading extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $meter = Meter::findOrFail($data['meter_id']);
+        $observationDate = $data['actual_reading_date'] ?? $data['reading_date'];
+        $period = app(\App\Services\ReadingService::class)
+            ->calculateReadingPeriod($meter->id, $observationDate);
+        $data['period_start'] = $period['period_start'];
+        $data['period_end'] = $period['period_end'];
         app(CurrentMeterReadingGuard::class)->assertCanCreate(
-            $meter,
-            $data['current_reading'] ?? null,
-            $data['period_start'] ?? null,
-            $data['period_end'] ?? null,
+            $meter, $data['current_reading'] ?? null,
+            $data['period_start'], $data['period_end'], $observationDate,
         );
         $data['previous_reading'] = $meter->getLastReadingValue();
         $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
@@ -38,11 +41,14 @@ class CreateReading extends CreateRecord
     {
         return DB::transaction(function () use ($data): Model {
             $meter = Meter::query()->lockForUpdate()->findOrFail((int) $data['meter_id']);
+            $observationDate = $data['actual_reading_date'] ?? $data['reading_date'];
+            $period = app(\App\Services\ReadingService::class)
+                ->calculateReadingPeriod($meter->id, $observationDate);
+            $data['period_start'] = $period['period_start'];
+            $data['period_end'] = $period['period_end'];
             app(CurrentMeterReadingGuard::class)->assertCanCreate(
-                $meter,
-                $data['current_reading'] ?? null,
-                $data['period_start'] ?? null,
-                $data['period_end'] ?? null,
+                $meter, $data['current_reading'] ?? null,
+                $data['period_start'], $data['period_end'], $observationDate,
             );
             $data['previous_reading'] = $meter->getLastReadingValue();
             $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
