@@ -167,47 +167,104 @@ class ReadingController extends ApiController
     public function update(Request $request, int $id)
     {
         $this->authorizeApi(Reading::class, 'update');
-        $reading = Reading::with('meter')->findOrFail($id);
-        if ($reading->is_invoiced) {
-            return response()->json(['message' => 'لا يمكن تعديل قراءة مرتبطة بفاتورة.'], 409);
-        }
         $data = $request->validate([
             'reading_date' => ['sometimes', 'required', 'date'],
             'actual_reading_date' => ['sometimes', 'nullable', 'date'],
             'current_reading' => ['sometimes', 'required', 'numeric', 'min:0'],
             'previous_reading' => ['sometimes', 'required', 'numeric', 'min:0'],
             'period_start' => ['sometimes', 'required', 'date'],
-            'period_end' => ['sometimes', 'required', 'date', 'after_or_equal:period_start'],
+            'period_end' => ['sometimes', 'required', 'date'],
         ]);
-        $previous = (float) ($data['previous_reading'] ?? $reading->previous_reading);
-        $current = (float) ($data['current_reading'] ?? $reading->current_reading);
-        if ($current < $previous) {
-            return response()->json(['errors' => ['current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة.']]], 422);
-        }
-        $periodStart = $data['period_start'] ?? $reading->period_start;
-        $periodEnd = $data['period_end'] ?? $reading->period_end;
-        $periodStart = Carbon::parse($periodStart)->toDateString();
-        $periodEnd = Carbon::parse($periodEnd)->toDateString();
-        if ($periodEnd < $periodStart) {
-            return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
-        }
-        if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_start', '<=', $periodEnd)
-            ->where('period_end', '>=', $periodStart)->exists()) {
-            return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
-        }
-        // Reading date is the entered date when no separate actual date was
-        // explicitly stored. Keep both in sync on edits without overwriting
-        // an intentionally distinct actual date from an older record.
-        if (array_key_exists('reading_date', $data)
-            && ! array_key_exists('actual_reading_date', $data)
-            && ($reading->actual_reading_date === null
-                || $reading->actual_reading_date->toDateString() === $reading->reading_date->toDateString())) {
-            $data['actual_reading_date'] = $data['reading_date'];
-        }
-        $reading->update($data);
 
-        return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
+        $reading = DB::transaction(function () use ($id, $data): Reading {
+            $meterId = Reading::findOrFail($id)->meter_id;
+            // Same lock order as reading creation: meter before reading row.
+            $meter = Meter::with('subscriber')->lockForUpdate()->findOrFail($meterId);
+            $reading = Reading::lockForUpdate()->findOrFail($id);
+            abort_if($reading->is_invoiced || $reading->invoice_id, 409, 'لا يمكن تعديل قراءة مرتبطة بفاتورة.');
+
+            $oldActual = Carbon::parse($reading->actual_reading_date ?? $reading->reading_date)->toDateString();
+            $actual = array_key_exists('actual_reading_date', $data) && $data['actual_reading_date']
+                ? Carbon::parse($data['actual_reading_date'])->toDateString()
+                : $oldActual;
+            if (array_key_exists('reading_date', $data)
+                && ! array_key_exists('actual_reading_date', $data)
+                && ($reading->actual_reading_date === null
+                    || $reading->actual_reading_date->toDateString()
+                        === $reading->reading_date->toDateString())) {
+                $actual = Carbon::parse($data['reading_date'])->toDateString();
+                $data['actual_reading_date'] = $actual;
+            }
+
+            $changedDate = $actual !== $oldActual;
+            $changedValue = array_key_exists('current_reading', $data)
+                && abs((float) $data['current_reading'] - (float) $reading->current_reading) > 0.00001;
+            $successor = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
+                ->whereRaw('COALESCE(actual_reading_date, reading_date) > ?', [$oldActual])->exists();
+            if ($successor && ($changedDate || $changedValue)) {
+                abort(409, 'توجد قراءة تالية تعتمد على هذه القراءة؛ يلزم إجراء تصحيح متسلسل معتمد.');
+            }
+
+            if ($changedDate) {
+                $conflict = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
+                    ->whereRaw('COALESCE(actual_reading_date, reading_date) >= ?', [$actual])->exists();
+                if ($conflict) {
+                    throw ValidationException::withMessages([
+                        'actual_reading_date' => ['لا يمكن نقل القراءة إلى تاريخ يلي قراءة أخرى أو يطابق تاريخها.'],
+                    ]);
+                }
+                $previous = Reading::where('meter_id', $meterId)->where('id', '!=', $id)
+                    ->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')
+                    ->orderByDesc('id')->first();
+                $priorDate = $previous
+                    ? ($previous->actual_reading_date ?? $previous->reading_date)
+                    : ($meter->installed_at ?? $meter->subscriber?->subscription_start_date);
+                if (! $priorDate || Carbon::parse($priorDate)->toDateString() >= $actual) {
+                    throw ValidationException::withMessages([
+                        'actual_reading_date' => ['تاريخ القراءة يجب أن يأتي بعد تاريخ القراءة السابقة أو تركيب العداد.'],
+                    ]);
+                }
+
+                $data['period_start'] = Carbon::parse($priorDate)->toDateString();
+                $data['period_end'] = $actual;
+                $data['previous_reading'] = $previous
+                    ? (float) $previous->current_reading : (float) ($meter->initial_reading ?? 0);
+                if (Reading::where('meter_id', $meterId)->where('id', '!=', $id)
+                    ->where('period_start', '<', $data['period_end'])
+                    ->where('period_end', '>', $data['period_start'])->exists()) {
+                    throw ValidationException::withMessages([
+                        'period_start' => ['تتداخل الفترة المصححة مع فترة أخرى للعداد.'],
+                    ]);
+                }
+            } else {
+                // Billing boundaries cannot be overwritten manually.
+                foreach (['period_start', 'period_end'] as $field) {
+                    if (array_key_exists($field, $data)
+                        && Carbon::parse($data[$field])->toDateString() !== (string) $reading->{$field}) {
+                        throw ValidationException::withMessages([
+                            $field => ['تُستمد فترة الاستهلاك من تواريخ القراءة ولا تُعدّل منفصلة عنها.'],
+                        ]);
+                    }
+                }
+                unset($data['period_start'], $data['period_end']);
+                $data['previous_reading'] = (float) $reading->previous_reading;
+            }
+
+            $current = (float) ($data['current_reading'] ?? $reading->current_reading);
+            if ($current < (float) $data['previous_reading']) {
+                throw ValidationException::withMessages([
+                    'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                ]);
+            }
+            $reading->update($data);
+
+            return $reading->fresh(['meter.subscriber', 'invoice']);
+        });
+
+        return response()->json([
+            'message' => 'تم تحديث القراءة بنجاح.',
+            'reading' => $this->decorateReading($reading),
+        ]);
     }
 
     public function destroy(int $id)
