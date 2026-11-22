@@ -372,53 +372,77 @@ jobs:
               echo 'No secrets printed; no Artisan commands, database access, or web deployment executed.'
               ;;
             database-audit)
-              echo '=== READ-ONLY CPANEL DATABASE INVENTORY ==='
+              echo '=== READ-ONLY CPANEL MYSQL INVENTORY ==='
               if [[ -x /usr/local/cpanel/bin/uapi ]]; then
                 uapi_bin='/usr/local/cpanel/bin/uapi'
               elif command -v uapi >/dev/null 2>&1; then
                 uapi_bin="$(command -v uapi)"
               else
                 echo 'CPANEL_UAPI: NOT AVAILABLE'
-                echo 'No databases accessed or modified.'
                 exit 1
               fi
               php84='/opt/alt/php84/usr/bin/php'
+              scratch="$(mktemp -d)"
+              trap 'rm -rf "$scratch"' EXIT
               echo 'CPANEL_UAPI: AVAILABLE'
-              audit_failed=0
-              if output="$("$uapi_bin" --user=alweufti --output=json Mysql list_databases 2>/dev/null)"; then
-                printf '%s' "$output" | "$php84" -r '
-                  $j = json_decode(stream_get_contents(STDIN), true);
-                  $r = $j["result"] ?? null;
-                  if (!is_array($r) || ($r["status"] ?? 0) != 1 || !is_array($r["data"] ?? null)) {
-                    echo "DATABASE_LIST: UNAVAILABLE", PHP_EOL;
-                    exit(1);
-                  }
-                  echo "DATABASE_COUNT: ", count($r["data"]), PHP_EOL;
-                '
-              else
-                echo 'DATABASE_LIST: API UNAVAILABLE OR DENIED'
-                audit_failed=1
-              fi
-              if output="$("$uapi_bin" --user=alweufti --output=json Mysql list_users 2>/dev/null)"; then
-                printf '%s' "$output" | "$php84" -r '
-                  $j = json_decode(stream_get_contents(STDIN), true);
-                  $r = $j["result"] ?? null;
-                  if (!is_array($r) || ($r["status"] ?? 0) != 1 || !is_array($r["data"] ?? null)) {
-                    echo "DATABASE_USER_LIST: UNAVAILABLE", PHP_EOL;
-                    exit(1);
-                  }
-                  echo "DATABASE_USER_COUNT: ", count($r["data"]), PHP_EOL;
-                '
-              else
-                echo 'DATABASE_USER_LIST: API UNAVAILABLE OR DENIED'
-                audit_failed=1
-              fi
-              if [[ "$audit_failed" -ne 0 ]]; then
-                echo 'Database inventory incomplete; operation marked failed.'
+              query_inventory() {
+                local function_name="$1"
+                local label="$2"
+                local mode code
+                for mode in implicit-user explicit-user; do
+                  if [[ "$mode" == implicit-user ]]; then
+                    if "$uapi_bin" --output=json Mysql "$function_name" > "$scratch/out" 2> "$scratch/err"; then
+                      code=0
+                    else
+                      code=$?
+                    fi
+                  else
+                    if "$uapi_bin" --user=alweufti --output=json Mysql "$function_name" > "$scratch/out" 2> "$scratch/err"; then
+                      code=0
+                    else
+                      code=$?
+                    fi
+                  fi
+                  echo "$label / $mode / process-exit: $code"
+                  if [[ "$code" -eq 0 ]] && "$php84" -r '
+                    $data = json_decode(file_get_contents($argv[1]), true);
+                    $result = is_array($data) ? ($data["result"] ?? null) : null;
+                    if (!is_array($result) || ($result["status"] ?? 0) != 1 ||
+                        !is_array($result["data"] ?? null)) exit(1);
+                    echo $argv[2], "_COUNT: ", count($result["data"]), PHP_EOL;
+                  ' "$scratch/out" "$label"; then
+                    echo "$label: INVENTORY_SUCCEEDED"
+                    return 0
+                  fi
+                  "$php84" -r '
+                    $all = strtolower(file_get_contents($argv[1]) . " " . file_get_contents($argv[2]));
+                    $patterns = [
+                      "permission" => "/permission denied|access denied|not permitted|not authorized|unauthorized/",
+                      "missing_component" => "/not found|no such file|can.t locate|unknown function|unknown module/",
+                      "account" => "/invalid user|unknown user|user does not exist|no such user/",
+                      "execution" => "/cannot execute|exec format|failed to execute|fork:|cannot run/",
+                      "api_error" => "/error|failed|exception|unable to/",
+                    ];
+                    $class = "unclassified";
+                    foreach ($patterns as $name => $pattern) {
+                      if (preg_match($pattern, $all)) { $class = $name; break; }
+                    }
+                    $out = json_decode(file_get_contents($argv[1]), true);
+                    $format = is_array($out) ? "json" : "non_json";
+                    echo $argv[3], ": RESPONSE_", $format, ", ERROR_CLASS_", $class, PHP_EOL;
+                  ' "$scratch/out" "$scratch/err" "$label"
+                done
+                return 1
+              }
+              failed=0
+              query_inventory list_databases DATABASE || failed=1
+              query_inventory list_users DATABASE_USER || failed=1
+              echo 'Only counts and categorized error signals were printed, never identifiers or credentials.'
+              echo 'No database connections, changes, imports, or migrations performed.'
+              if [[ "$failed" -ne 0 ]]; then
+                echo 'Database inventory is incomplete. See sanitized error classifications above.'
                 exit 1
               fi
-              echo 'Names, credentials, and database contents were not displayed.'
-              echo 'No database connection, creation, deletion, privilege changes, migrations, or web deployment.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
