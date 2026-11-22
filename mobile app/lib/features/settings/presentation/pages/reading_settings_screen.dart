@@ -59,7 +59,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
         if (state.errorMessage != null) {
           showAdminSnackBar(context, adminErrorMessage(state.errorMessage!), isError: true);
         } else if (state.saved) {
-          showAdminSnackBar(context, 'تم حفظ دورة القراءات وتحديث كاش الوحدات الميدانية.');
+          showAdminSnackBar(context, 'تم حفظ مواعيد الزيارات المخططة وتحديث كاش الوحدات الميدانية.');
         }
       },
       builder: (context, state) {
@@ -81,7 +81,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 900),
                         child: SettingsSectionCard(
-                          title: 'دورة القراءات والفوترة',
+                          title: 'جدولة زيارات قراءة العدادات',
                           subtitle: 'تنعكس هذه القيم على حساب فترات القراءة وإصدار الفواتير مباشرة.',
                           children: [
                             AppSettingRow(
@@ -104,7 +104,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                               key: ValueKey(settings.readingPeriod),
                               initialValue: settings.readingPeriod,
                               decoration: const InputDecoration(
-                                labelText: 'دورة القراءات',
+                                labelText: 'المدة المتوقعة بين الزيارات',
                               ),
                               items: const [
                                 DropdownMenuItem(value: 'weekly', child: Text('أسبوعية (كل 7 أيام)')),
@@ -124,8 +124,8 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                                 key: ValueKey(settings.readingDay),
                                 initialValue: settings.readingDay,
                                 decoration: const InputDecoration(
-                                  labelText: 'يوم إدخال القراءة',
-                                  helperText: 'يحدد نهاية فترة الاستهلاك في الدورة الشهرية.',
+                                  labelText: 'اليوم المخطط للزيارة',
+                                  helperText: 'موعد للزيارة فقط؛ فترة الاستهلاك الفعلية من القراءة السابقة إلى الحالية.',
                                 ),
                                 items: [
                                   for (var day = 20; day <= 28; day++)
@@ -189,7 +189,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
         }
         return SubPageScaffold(
           title: LaravelScreenStrings.readingSettings,
-          subtitle: 'دورة القراءات والفوترة الآلية',
+          subtitle: 'مواعيد الزيارات وإصدار الفواتير تلقائياً',
           child: Column(
             children: [
               Expanded(child: body),
