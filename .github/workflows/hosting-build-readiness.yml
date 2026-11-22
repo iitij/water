@@ -2,6 +2,12 @@ name: Water | Laravel and frontend build readiness
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_build:
+        description: 'Upload built assets (requires available GitHub Actions artifact storage quota)'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -71,7 +77,13 @@ jobs:
           set -euo pipefail
           test -s public/build/manifest.json
           echo 'Built public/build assets without requiring Node.js on Namecheap.'
+      - name: Explain build-only mode
+        if: ${{ !inputs.upload_build }}
+        run: |
+          echo 'Vite build PASSED. The generated files were not persisted or deployed.'
+          echo 'GitHub artifact upload is disabled by default due to previously observed storage quota exhaustion.'
       - name: Preserve frontend build for later reviewed deployment
+        if: ${{ inputs.upload_build }}
         uses: actions/upload-artifact@v4
         with:
           name: water-vite-build
