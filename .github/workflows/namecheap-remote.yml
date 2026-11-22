@@ -17,6 +17,7 @@ on:
           - composer-install
           - laravel-preflight
           - prepare-storage
+          - init-env
           - sync
 
 permissions:
@@ -71,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -327,6 +328,75 @@ jobs:
                 echo "$dir: READY"
               done
               echo 'Runtime directories prepared. No env creation, Artisan boot, database access, or public deployment.'
+              ;;
+            init-env)
+              echo '=== INITIALIZE PRIVATE LARAVEL ENVIRONMENT ==='
+              if [[ -e .env || -L .env ]]; then
+                echo '.env already exists. Refusing to overwrite it.'
+                exit 1
+              fi
+              php84='/opt/alt/php84/usr/bin/php'
+              app_key="$("$php84" -r 'echo "base64:", base64_encode(random_bytes(32));')"
+              umask 077
+              temp_env="$(mktemp "$project/.env.init.XXXXXXXX")"
+              trap 'rm -f "$temp_env"' EXIT
+              {
+                printf 'APP_NAME=Water\n'
+                printf 'APP_ENV=production\n'
+                printf 'APP_KEY=%s\n' "$app_key"
+                printf 'APP_DEBUG=false\n'
+                printf 'APP_URL=https://alweshah.online\n'
+                printf 'LOG_CHANNEL=single\nLOG_LEVEL=warning\n'
+                printf 'CACHE_STORE=file\nSESSION_DRIVER=file\nQUEUE_CONNECTION=sync\n'
+                printf 'BROADCAST_CONNECTION=log\nFILESYSTEM_DISK=local\n'
+                printf 'DB_CONNECTION=mysql\nDB_HOST=localhost\nDB_PORT=3306\n'
+                printf 'DB_DATABASE=\nDB_USERNAME=\nDB_PASSWORD=\n'
+              } > "$temp_env"
+              chmod 600 "$temp_env"
+              if [[ -e .env || -L .env ]]; then
+                echo '.env appeared before installation. Refusing to overwrite it.'
+                exit 1
+              fi
+              mv --no-clobber "$temp_env" .env
+              if [[ ! -s .env ]]; then
+                echo 'Failed to initialize .env.'
+                exit 1
+              fi
+              if ! grep -q '^APP_KEY=base64:' .env || ! grep -q '^APP_DEBUG=false              if [[ -n "$(git status --porcelain)" ]]; then
+                echo 'Refusing to synchronize: local working tree is not clean.'
+                exit 1
+              fi
+              echo '=== FETCH ==='
+              git fetch --no-tags origin main
+              if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+                echo 'Refusing non-fast-forward update.'
+                exit 1
+              fi
+              git merge --ff-only FETCH_HEAD
+              echo '=== SYNCHRONIZED COMMIT ==='
+              git rev-parse HEAD
+              echo 'No Composer, migrations, or public web deployment performed.'
+              ;;
+            *)
+              echo 'Unsupported operation.'
+              exit 1
+              ;;
+          esac
+          REMOTE_SCRIPT
+
+      - name: Security reminder
+        if: always()
+        shell: bash
+        run: |
+          echo "Remote operations use cPanel user permissions, not root."
+          echo "No database migrations, destructive maintenance, or public deployment are part of this initial workflow."
+ .env; then
+                echo 'Created file failed basic checks.'
+                exit 1
+              fi
+              echo '.env created with production-safe application defaults and a generated encryption key.'
+              echo 'Database credentials are intentionally empty; database is NOT connected.'
+              echo 'No secrets printed; no Artisan commands, database access, or web deployment executed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
