@@ -1,0 +1,150 @@
+name: Water | Namecheap remote operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Select a controlled hosting operation'
+        required: true
+        default: audit
+        type: choice
+        options:
+          - audit
+          - sync
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+
+jobs:
+  remote:
+    name: Run on Namecheap
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure SSH key and verify host identity
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEPLOY_PRIVATE_KEY}" ]]; then
+            echo "::error::Missing NAMECHEAP_SSH_PRIVATE_KEY repository secret."
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap_ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap_ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap_ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap_ssh/id_ed25519" >/dev/null
+
+          # Key observed when the owner first connected to the Namecheap server.
+          # Confirm it out-of-band with Namecheap before relying on it.
+          expected='SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw'
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205             > "$RUNNER_TEMP/namecheap_ssh/known_hosts" 2>/dev/null
+          actual="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap_ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Namecheap SSH host fingerprint mismatch. Aborting."
+            exit 1
+          fi
+
+      - name: Perform requested operation (never as root)
+        shell: bash
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            audit|sync) ;;
+            *) echo "::error::Unsupported operation"; exit 1 ;;
+          esac
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap_ssh/id_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap_ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 "bash -se -- $OPERATION" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          operation="${1:?missing operation}"
+          project="$HOME/repositories/water"
+          if [[ "$(id -un)" != "alweufti" ]]; then
+            echo 'Refusing to run under unexpected account.'
+            exit 1
+          fi
+          if [[ ! -d "$project/.git" ]]; then
+            echo 'Repository not cloned in the expected location.'
+            exit 1
+          fi
+
+          echo "Operation: $operation"
+          echo "Account: $(id -un)"
+          echo "Host: $(hostname)"
+          echo "Project: $project"
+          cd "$project"
+          test "$(git remote get-url origin)" = "git@github.com:iitij/water.git"
+          test "$(git branch --show-current)" = main
+
+          case "$operation" in
+            audit)
+              echo '=== GIT ==='
+              git status --short
+              git rev-parse HEAD
+              echo '=== PHP 8.4 ==='
+              /opt/alt/php84/usr/bin/php -v | head -n 1
+              echo '=== REQUIRED PHP EXTENSIONS ==='
+              /opt/alt/php84/usr/bin/php -r '
+                foreach (["bcmath","ctype","curl","dom","fileinfo","gd","intl","mbstring","openssl","pdo_mysql","tokenizer","xml","zip"] as $name) {
+                  echo $name, ": ", extension_loaded($name) ? "OK" : "MISSING", PHP_EOL;
+                }'
+              echo '=== TOOLS ==='
+              for tool in composer node npm; do
+                if command -v "$tool" >/dev/null 2>&1; then
+                  command -v "$tool"
+                else
+                  echo "$tool: NOT IN PATH"
+                fi
+              done
+              echo '=== DISK SPACE ==='
+              df -h "$HOME"
+              ;;
+            sync)
+              if [[ -n "$(git status --porcelain)" ]]; then
+                echo 'Refusing to synchronize: local working tree is not clean.'
+                exit 1
+              fi
+              echo '=== FETCH ==='
+              git fetch --no-tags origin main
+              if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+                echo 'Refusing non-fast-forward update.'
+                exit 1
+              fi
+              git merge --ff-only FETCH_HEAD
+              echo '=== SYNCHRONIZED COMMIT ==='
+              git rev-parse HEAD
+              echo 'No Composer, migrations, or public web deployment performed.'
+              ;;
+            *)
+              echo 'Unsupported operation.'
+              exit 1
+              ;;
+          esac
+          REMOTE_SCRIPT
+
+      - name: Security reminder
+        if: always()
+        shell: bash
+        run: |
+          echo "Remote operations use cPanel user permissions, not root."
+          echo "No database migrations, destructive maintenance, or public deployment are part of this initial workflow."
