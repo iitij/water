@@ -203,11 +203,11 @@ jobs:
               command -v curl >/dev/null 2>&1 || { echo 'curl binary is required.'; exit 1; }
               tmp_dir="$(mktemp -d)"
               trap 'rm -rf "$tmp_dir"' EXIT
-              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \\
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
                 https://getcomposer.org/installer -o "$tmp_dir/composer-setup.php"
-              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \\
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
                 https://composer.github.io/installer.sig -o "$tmp_dir/installer.sig"
-              expected="$(tr -d '\\r\\n ' < "$tmp_dir/installer.sig")"
+              expected="$(tr -d '[:space:]' < "$tmp_dir/installer.sig")"
               [[ "$expected" =~ ^[a-fA-F0-9]{96}$ ]] || {
                 echo 'Invalid official Composer signature; aborting.'
                 exit 1
