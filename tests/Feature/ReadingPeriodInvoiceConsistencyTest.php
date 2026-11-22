@@ -470,4 +470,53 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertSame('2026-03-08', $response->json('reading.period_end'));
     }
 
+
+    public function test_filament_cannot_change_a_reading_that_has_a_successor(): void
+    {
+        $meter = $this->meter();
+        $first = $this->reading($meter, '2026-01-01', '2026-02-05', '2026-02-05', 120);
+        $this->reading($meter, '2026-02-05', '2026-03-08', '2026-03-08', 155, 120);
+
+        $page = (new \ReflectionClass(
+            \App\Filament\Resources\ReadingResource\Pages\EditReading::class
+        ))->newInstanceWithoutConstructor();
+        $edit = new \ReflectionMethod(
+            \App\Filament\Resources\ReadingResource\Pages\EditReading::class,
+            'handleRecordUpdate'
+        );
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        try {
+            $edit->invoke($page, $first, [
+                'current_reading' => 140,
+                'previous_reading' => 0,
+            ]);
+        } finally {
+            $this->assertEquals(120, (float) $first->fresh()->current_reading);
+        }
+    }
+
+    public function test_filament_can_correct_the_latest_uninvoiced_meter_value(): void
+    {
+        $meter = $this->meter();
+        $reading = $this->reading($meter, '2026-01-01', '2026-02-05', '2026-02-05', 120);
+
+        $page = (new \ReflectionClass(
+            \App\Filament\Resources\ReadingResource\Pages\EditReading::class
+        ))->newInstanceWithoutConstructor();
+        $edit = new \ReflectionMethod(
+            \App\Filament\Resources\ReadingResource\Pages\EditReading::class,
+            'handleRecordUpdate'
+        );
+        $saved = $edit->invoke($page, $reading, [
+            'current_reading' => 125,
+            'previous_reading' => 0,
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-02-05',
+            'reading_date' => '2026-02-05',
+        ]);
+        $this->assertEquals(125, (float) $saved->current_reading);
+        $this->assertSame('2026-02-05', $saved->fresh()->period_end);
+    }
+
 }
