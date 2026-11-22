@@ -10,23 +10,45 @@
 
 **لا تستخدم مفتاح `water_github` الحالي هنا**؛ هذا المفتاح يسمح للاستضافة بقراءة GitHub وهو مختلف عن مفتاح دخول GitHub Actions إلى الاستضافة.
 
-1. على جهاز Ubuntu المحلي، أنشئ مفتاحًا مستقلًا (احتفظ بالمفتاح الخاص على الجهاز؛ اضغط Enter مرتين لإنشاء مفتاح بدون passphrase للاستخدام غير التفاعلي):
+1. **لا حاجة إلى جهاز محلي:** افتح Terminal من cPanel نفسه لإنشاء مفتاح منفصل مخصص لاتصال GitHub Actions إلى الاستضافة، ثم تفويضه لحساب cPanel `alweufti`:
 
    ```bash
-   mkdir -p ~/.ssh && chmod 700 ~/.ssh
-   if [ -e ~/.ssh/water_namecheap_actions ]; then
-     echo "A dedicated Actions key already exists; do not overwrite it."
+   umask 077
+   mkdir -p "$HOME/.ssh"
+   chmod 700 "$HOME/.ssh"
+   key="$HOME/.ssh/water_namecheap_actions"
+   if [ -e "$key" ] || [ -e "$key.pub" ]; then
+     echo "A dedicated Actions key already exists; not overwriting."
    else
-     ssh-keygen -t ed25519 -f ~/.ssh/water_namecheap_actions -C "water-github-actions"
+     ssh-keygen -q -t ed25519 -f "$key" -N "" -C "water-github-actions"
    fi
-   cat ~/.ssh/water_namecheap_actions.pub
+
+   touch "$HOME/.ssh/authorized_keys"
+   chmod 600 "$HOME/.ssh/authorized_keys"
+   pub="$(cat "$key.pub")"
+   grep -Fxq "$pub" "$HOME/.ssh/authorized_keys" ||
+     printf '%s\n' "$pub" >> "$HOME/.ssh/authorized_keys"
+   chmod 600 "$key"
+   chmod 644 "$key.pub"
+   echo "SSH public key authorized for cPanel user $(id -un)."
    ```
 
-2. في cPanel: **Security → SSH Access → Manage SSH Keys → Import Key**. استورد **المفتاح العام فقط** (النص الذي يبدأ بـ `ssh-ed25519`) باسم `water_namecheap_actions`. لا تملأ خانة Private Key. ثم اختر **Manage → Authorize** للمفتاح. يمكن بدلاً من ذلك إضافة المفتاح العام يدويًا إلى `~/.ssh/authorized_keys`، مع ضبط صلاحيات `.ssh` إلى `700` والملف إلى `600`.
+   بديل تفويض المفتاح العام: استخدم واجهة **Security → SSH Access → Manage SSH Keys → Manage → Authorize** في cPanel. لا تغيّر المفتاح القديم `water_github` المخصص لجلب GitHub من الخادم.
+
+2. **داخل cPanel Terminal فقط** افتح المفتاح الخاص لنسخه مباشرة إلى GitHub Actions Secret. لا تشارك محتوياته في أي محادثة:
+
+   ```bash
+   cat "$HOME/.ssh/water_namecheap_actions"
+   ```
+
+   يبدأ النص بـ `-----BEGIN OPENSSH PRIVATE KEY-----` وينتهي بـ `-----END OPENSSH PRIVATE KEY-----`. انسخ النص الكامل، بما فيه السطران وحدود الأسطر.
+
 3. في حساب GitHub افتح **Settings → Secrets and variables → Actions → New repository secret**:
    - Name: `NAMECHEAP_SSH_PRIVATE_KEY`
-   - Secret: محتويات ملف **`~/.ssh/water_namecheap_actions` الخاص** من جهاز Ubuntu، بما في ذلك BEGIN/END، وليس الملف المنتهي بـ `.pub`.
-   - لا تضع السر في Git، أو تعليقات Issues، أو هذه المحادثة أو سجلات GitHub Actions.
+   - Secret: المحتوى الخاص الذي نسخته مباشرة من cPanel Terminal.
+   - لا تضع السر في Git، أو تعليقات Issues، أو هذه المحادثة، أو أي سجل عام. أغلق جلسة Terminal بعد النقل وتجنّب أخذ لقطات شاشة للمفتاح.
+   - إذا لم تعد بحاجة إلى النسخة الخاصة على الاستضافة، يمكن حذف الملف `water_namecheap_actions` **بعد نجاح اختبار تشغيل Actions** مع الاحتفاظ بالمفتاح العام المصرّح به في `authorized_keys`؛ لا تحذف المفتاح `water_github`.
+
 4. تحقّق من بصمة SSH الخاصة بخادم Namecheap بواسطة الدعم من قناة مستقلة. ملف التشغيل يتحقق من بصمة ED25519 التي ظهرت مسبقًا عند اتصال صاحب الاستضافة: `SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw`. إذا اختلفت، **أوقف التنفيذ** حتى يتم التحقق من هوية الخادم، ولا تُضعف التحقق من SSH.
 5. من تبويب **Actions** شغّل `Water | Namecheap remote operations` باستخدام **Run workflow** على الفرع `main`، واختر عملية `audit` أولًا، ثم افحص سجل التشغيل. لا يُفعّل الملف التشغيل مع كل Push.
 
