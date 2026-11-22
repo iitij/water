@@ -19,6 +19,7 @@ on:
           - prepare-storage
           - init-env
           - database-audit
+          - database-schema-audit
           - sync
 
 permissions:
@@ -73,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -443,6 +444,59 @@ jobs:
                 echo 'Database inventory is incomplete. See sanitized error classifications above.'
                 exit 1
               fi
+              ;;
+            database-schema-audit)
+              echo '=== READ-ONLY WATER MYSQL SCHEMA AUDIT ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              test -s .env || { echo 'Laravel .env missing.'; exit 1; }
+              test -s vendor/autoload.php || { echo 'Laravel vendor/autoload.php missing.'; exit 1; }
+              "$php84" -r '
+                require "vendor/autoload.php";
+                try {
+                  $raw = file_get_contents(".env");
+                  if (!is_string($raw)) throw new RuntimeException("env-read");
+                  $env = \Dotenv\Dotenv::parse($raw);
+                  foreach (["DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_DATABASE", "DB_USERNAME", "DB_PASSWORD"] as $key) {
+                    if (!isset($env[$key]) || $env[$key] === "") throw new RuntimeException("env-incomplete");
+                  }
+                  if ($env["DB_CONNECTION"] !== "mysql" ||
+                      $env["DB_DATABASE"] !== "alweufti_water" ||
+                      $env["DB_USERNAME"] !== "alweufti_water") {
+                    throw new RuntimeException("unexpected-database");
+                  }
+                  $pdo = new PDO(
+                    "mysql:host={$env["DB_HOST"]};port={$env["DB_PORT"]};dbname={$env["DB_DATABASE"]};charset=utf8mb4",
+                    $env["DB_USERNAME"],
+                    $env["DB_PASSWORD"],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 8]
+                  );
+                  if ($pdo->query("SELECT DATABASE()")->fetchColumn() !== "alweufti_water") {
+                    throw new RuntimeException("wrong-database");
+                  }
+                  $tables = (int) $pdo->query(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = \"BASE TABLE\""
+                  )->fetchColumn();
+                  $views = (int) $pdo->query(
+                    "SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE()"
+                  )->fetchColumn();
+                  $hasMigrations = (int) $pdo->query(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = \"migrations\""
+                  )->fetchColumn() > 0;
+                  echo "DATABASE_CONNECTION: OK", PHP_EOL;
+                  echo "BASE_TABLE_COUNT: ", $tables, PHP_EOL;
+                  echo "VIEW_COUNT: ", $views, PHP_EOL;
+                  echo "LARAVEL_MIGRATIONS_TABLE: ", $hasMigrations ? "PRESENT" : "ABSENT", PHP_EOL;
+                  if ($hasMigrations) {
+                    echo "APPLIED_MIGRATION_COUNT: ", (int) $pdo->query("SELECT COUNT(*) FROM migrations")->fetchColumn(), PHP_EOL;
+                  }
+                  echo "SCHEMA_EMPTY: ", ($tables === 0 && $views === 0) ? "YES" : "NO", PHP_EOL;
+                  echo "SCHEMA_AUDIT: READ_ONLY", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "SCHEMA_AUDIT: FAILED (database connectivity or metadata unavailable).\n");
+                  exit(1);
+                }
+              '
+              echo 'No database migrations, imports, row changes, or web deployment performed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
