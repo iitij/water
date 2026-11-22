@@ -192,9 +192,17 @@ class ReadingController extends ApiController
             return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
         }
         if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_basis', 'observation')
-            ->where('period_start', '<', $periodEnd)
-            ->where('period_end', '>', $periodStart)->exists()) {
+            ->where(function ($query) use ($reading, $periodStart, $periodEnd) {
+                if ($reading->period_basis === 'observation') {
+                    $query->where('period_basis', 'observation')
+                        ->where('period_start', '<', $periodEnd)
+                        ->where('period_end', '>', $periodStart);
+                } else {
+                    $query->where('period_basis', 'legacy_calendar')
+                        ->where('period_start', '<=', $periodEnd)
+                        ->where('period_end', '>=', $periodStart);
+                }
+            })->exists()) {
             return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
         }
         // Reading date is the entered date when no separate actual date was
@@ -410,6 +418,18 @@ class ReadingController extends ApiController
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
             $current = (float) $data['current_reading'];
 
+            // Report retired meters and invalid physical readings before
+            // trying to derive the interval from an installation anchor.
+            if (! $locked->isCurrent()) {
+                throw ValidationException::withMessages([
+                    'meter_id' => ['لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل.'],
+                ]);
+            }
+            if ($current < $previous) {
+                throw ValidationException::withMessages([
+                    'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                ]);
+            }
             $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
             // The server's observed dates are authoritative. Legacy mobile
             // clients may send a calendar forecast; never bill that forecast.

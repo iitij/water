@@ -18,7 +18,7 @@ class ReadingSettings extends Page implements HasForms
 
     protected static string | \UnitEnum | null $navigationGroup = 'إدارة النظام';
 
-    protected static ?string $title = 'إعدادات فترة القراءات';
+    protected static ?string $title = 'مواعيد زيارات قراءة العدادات';
 
     protected static ?int $navigationSort = 11;
 
@@ -46,7 +46,7 @@ class ReadingSettings extends Page implements HasForms
                     ->helperText('إذا تم تفعيل هذا الخيار، سيتم إصدار فاتورة للعداد تلقائياً بمجرد إدخال قراءة جديدة له.'),
 
                 Select::make('reading_period')
-                    ->label('دورة القراءات')
+                    ->label('المدة المتوقعة بين زيارات القراءة')
                     ->options([
                         'weekly' => 'أسبوعية (كل 7 أيام)',
                         'ten_days' => 'كل 10 أيام',
@@ -56,10 +56,10 @@ class ReadingSettings extends Page implements HasForms
                     ->required()
                     ->live()
                     ->native(false)
-                    ->helperText('تحدد هذه الدورة كيفية حساب فترة استهلاك الفاتورة عند إصدارها.'),
+                    ->helperText('هذا إعداد لتخطيط زيارات قارئ العداد فقط؛ فترة الفاتورة تُحدد من تاريخ القراءة السابقة إلى تاريخ القراءة الحالية.'),
 
                 Select::make('reading_day')
-                    ->label('يوم إدخال القراءة')
+                    ->label('يوم الزيارة المخطط له')
                     ->options(function () {
                         $days = [];
                         for ($i = 20; $i <= 28; $i++) {
@@ -71,7 +71,7 @@ class ReadingSettings extends Page implements HasForms
                     ->visible(fn ($get) => $get('reading_period') === 'monthly')
                     ->required()
                     ->native(false)
-                    ->helperText('يحدد متى تنتهي فترة القراءة للعداد في الدورة الشهرية.'),
+                    ->helperText('موعد زيارة متوقع لا يغيّر تواريخ الاستهلاك الفعلية أو الفواتير الصادرة.'),
                 \Filament\Forms\Components\TextInput::make('grace_period')
                     ->label('مدة السماح (أيام)')
                     ->numeric()

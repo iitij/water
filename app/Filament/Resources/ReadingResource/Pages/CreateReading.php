@@ -17,6 +17,17 @@ class CreateReading extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $meter = Meter::findOrFail($data['meter_id']);
+        if (! $meter->isCurrent()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => ['لا يمكن تسجيل قراءة جديدة على عداد منزوع.'],
+            ]);
+        }
+        if ((float) ($data['current_reading'] ?? 0) < $meter->getLastReadingValue()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+            ]);
+        }
+
         $data['previous_reading'] = $meter->getLastReadingValue();
         $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
         $period = app(\App\Services\ReadingService::class)
@@ -37,7 +48,18 @@ class CreateReading extends CreateRecord
     {
         return DB::transaction(function () use ($data): Model {
             $meter = Meter::query()->lockForUpdate()->findOrFail((int) $data['meter_id']);
-                $data['previous_reading'] = $meter->getLastReadingValue();
+            if (! $meter->isCurrent()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                        'meter_id' => ['لا يمكن تسجيل قراءة جديدة على عداد منزوع.'],
+                ]);
+            }
+            if ((float) ($data['current_reading'] ?? 0) < $meter->getLastReadingValue()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                        'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                ]);
+            }
+
+            $data['previous_reading'] = $meter->getLastReadingValue();
             $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
             $period = app(\App\Services\ReadingService::class)
                 ->calculateReadingPeriod($meter->id, $data['actual_reading_date']);
