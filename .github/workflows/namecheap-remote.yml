@@ -362,35 +362,7 @@ jobs:
                 echo 'Failed to initialize .env.'
                 exit 1
               fi
-              if ! grep -q '^APP_KEY=base64:' .env || ! grep -q '^APP_DEBUG=false              if [[ -n "$(git status --porcelain)" ]]; then
-                echo 'Refusing to synchronize: local working tree is not clean.'
-                exit 1
-              fi
-              echo '=== FETCH ==='
-              git fetch --no-tags origin main
-              if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
-                echo 'Refusing non-fast-forward update.'
-                exit 1
-              fi
-              git merge --ff-only FETCH_HEAD
-              echo '=== SYNCHRONIZED COMMIT ==='
-              git rev-parse HEAD
-              echo 'No Composer, migrations, or public web deployment performed.'
-              ;;
-            *)
-              echo 'Unsupported operation.'
-              exit 1
-              ;;
-          esac
-          REMOTE_SCRIPT
-
-      - name: Security reminder
-        if: always()
-        shell: bash
-        run: |
-          echo "Remote operations use cPanel user permissions, not root."
-          echo "No database migrations, destructive maintenance, or public deployment are part of this initial workflow."
- .env; then
+              if ! grep -q '^APP_KEY=base64:' .env || ! grep -q '^APP_DEBUG=false$' .env; then
                 echo 'Created file failed basic checks.'
                 exit 1
               fi
