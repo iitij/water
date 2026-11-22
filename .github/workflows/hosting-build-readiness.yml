@@ -1,0 +1,80 @@
+name: Water | Laravel and frontend build readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-build-readiness
+  cancel-in-progress: false
+
+jobs:
+  laravel-dependencies:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    name: Validate locked Laravel dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, intl, mbstring, pdo_mysql, openssl, zip
+          tools: composer:v2
+          coverage: none
+      - name: Check Composer files
+        run: |
+          set -euo pipefail
+          test -s composer.json
+          test -s composer.lock
+          composer validate --no-check-publish
+      - name: Install production dependencies without Composer scripts
+        env:
+          COMPOSER_NO_INTERACTION: '1'
+        run: |
+          set -euo pipefail
+          composer install --no-dev --no-scripts --no-progress --prefer-dist --optimize-autoloader
+          composer check-platform-reqs --no-dev
+      - name: Dependency validation summary
+        run: echo 'Composer dependencies validated in isolated GitHub runner. No deployment or migrations.'
+
+  frontend-build:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    name: Build Laravel Vite assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Restore locked NPM dependencies without lifecycle scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          set -euo pipefail
+          test -s package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build frontend assets
+        run: npm run build
+      - name: Verify Vite manifest
+        run: |
+          set -euo pipefail
+          test -s public/build/manifest.json
+          echo 'Built public/build assets without requiring Node.js on Namecheap.'
+      - name: Preserve frontend build for later reviewed deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: water-vite-build
+          path: public/build/
+          if-no-files-found: error
+          retention-days: 7
