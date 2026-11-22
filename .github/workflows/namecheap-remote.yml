@@ -380,22 +380,24 @@ jobs:
               else
                 echo 'CPANEL_UAPI: NOT AVAILABLE'
                 echo 'No databases accessed or modified.'
-                exit 0
+                exit 1
               fi
               php84='/opt/alt/php84/usr/bin/php'
               echo 'CPANEL_UAPI: AVAILABLE'
+              audit_failed=0
               if output="$("$uapi_bin" --user=alweufti --output=json Mysql list_databases 2>/dev/null)"; then
                 printf '%s' "$output" | "$php84" -r '
                   $j = json_decode(stream_get_contents(STDIN), true);
                   $r = $j["result"] ?? null;
                   if (!is_array($r) || ($r["status"] ?? 0) != 1 || !is_array($r["data"] ?? null)) {
                     echo "DATABASE_LIST: UNAVAILABLE", PHP_EOL;
-                    exit(0);
+                    exit(1);
                   }
                   echo "DATABASE_COUNT: ", count($r["data"]), PHP_EOL;
                 '
               else
                 echo 'DATABASE_LIST: API UNAVAILABLE OR DENIED'
+                audit_failed=1
               fi
               if output="$("$uapi_bin" --user=alweufti --output=json Mysql list_users 2>/dev/null)"; then
                 printf '%s' "$output" | "$php84" -r '
@@ -403,12 +405,17 @@ jobs:
                   $r = $j["result"] ?? null;
                   if (!is_array($r) || ($r["status"] ?? 0) != 1 || !is_array($r["data"] ?? null)) {
                     echo "DATABASE_USER_LIST: UNAVAILABLE", PHP_EOL;
-                    exit(0);
+                    exit(1);
                   }
                   echo "DATABASE_USER_COUNT: ", count($r["data"]), PHP_EOL;
                 '
               else
                 echo 'DATABASE_USER_LIST: API UNAVAILABLE OR DENIED'
+                audit_failed=1
+              fi
+              if [[ "$audit_failed" -ne 0 ]]; then
+                echo 'Database inventory incomplete; operation marked failed.'
+                exit 1
               fi
               echo 'Names, credentials, and database contents were not displayed.'
               echo 'No database connection, creation, deletion, privilege changes, migrations, or web deployment.'
