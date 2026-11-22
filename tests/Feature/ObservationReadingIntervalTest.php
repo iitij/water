@@ -166,4 +166,45 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertDatabaseCount('readings', 1);
     }
 
+
+    public function test_updating_latest_observation_recalculates_period_end(): void
+    {
+        $meter = $this->meter();
+        $readingId = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-02-12',
+            'current_reading' => 135,
+        ])->assertCreated()->json('reading.id');
+
+        $this->putJson('/api/readings/'.$readingId, [
+            'reading_date' => '2026-02-15',
+        ])->assertOk();
+
+        $reading = Reading::findOrFail($readingId);
+        $this->assertSame('2026-01-10', $reading->period_start);
+        $this->assertSame('2026-02-15', $reading->period_end);
+        $this->assertSame('2026-02-15', $reading->actual_reading_date->toDateString());
+    }
+
+    public function test_prior_observation_cannot_be_modified_after_a_successor_exists(): void
+    {
+        $meter = $this->meter();
+        $first = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-02-12',
+            'current_reading' => 135,
+        ])->assertCreated()->json('reading.id');
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-14',
+            'current_reading' => 148,
+        ])->assertCreated();
+
+        $this->putJson('/api/readings/'.$first, [
+            'reading_date' => '2026-02-15',
+        ])->assertUnprocessable()->assertJsonValidationErrors('reading_date');
+
+        $this->assertSame('2026-02-12', Reading::findOrFail($first)->period_end);
+    }
+
 }

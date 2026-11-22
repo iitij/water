@@ -184,6 +184,50 @@ class ReadingController extends ApiController
         if ($current < $previous) {
             return response()->json(['errors' => ['current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة.']]], 422);
         }
+        if ($reading->period_basis === 'observation') {
+            $oldObservation = ($reading->actual_reading_date ?? $reading->reading_date)->toDateString();
+            $newObservation = \Carbon\Carbon::parse(
+                $data['actual_reading_date']
+                    ?? $data['reading_date']
+                    ?? $oldObservation
+            )->toDateString();
+
+            // A later observation uses this reading's date and meter value as
+            // its start anchor. A silent edit would corrupt that next interval.
+            $hasSuccessor = Reading::where('meter_id', $reading->meter_id)
+                ->where('id', '!=', $reading->id)
+                ->whereRaw('COALESCE(actual_reading_date, reading_date) > ?', [$oldObservation])
+                ->exists();
+            if ($hasSuccessor && (
+                array_key_exists('reading_date', $data)
+                || array_key_exists('actual_reading_date', $data)
+                || array_key_exists('current_reading', $data)
+                || array_key_exists('previous_reading', $data)
+                || array_key_exists('period_start', $data)
+                || array_key_exists('period_end', $data)
+            )) {
+                throw ValidationException::withMessages([
+                    'reading_date' => ['لا يمكن تغيير قراءة أصبحت نقطة بداية للفترة التالية؛ يلزم إجراء تصحيح متسلسل ومعتمد.'],
+                ]);
+            }
+
+            if (isset($data['period_start'])
+                && Carbon::parse($data['period_start'])->toDateString() !== $reading->period_start) {
+                throw ValidationException::withMessages([
+                    'period_start' => ['بداية الفترة هي تاريخ القراءة السابقة ولا تُعدّل يدوياً.'],
+                ]);
+            }
+            if ($newObservation <= $reading->period_start
+                || $newObservation > today()->toDateString()) {
+                throw ValidationException::withMessages([
+                    'reading_date' => ['تاريخ القراءة يجب أن يلي السابقة وألا يقع في المستقبل.'],
+                ]);
+            }
+
+            // The current observation is the end boundary by definition.
+            $data['period_start'] = $reading->period_start;
+            $data['period_end'] = $newObservation;
+        }
         $periodStart = $data['period_start'] ?? $reading->period_start;
         $periodEnd = $data['period_end'] ?? $reading->period_end;
         $periodStart = Carbon::parse($periodStart)->toDateString();
