@@ -258,7 +258,7 @@ class InvoiceResource extends Resource
                                 $options = [];
                                 foreach ($periods as $period) {
                                     if ($period->billing_period_start && $period->billing_period_end) {
-                                        $key = $period->billing_period_start . '|' . $period->billing_period_end;
+                                        $key = $period->billing_period_start->format('Y-m-d') . '|' . $period->billing_period_end->format('Y-m-d');
                                         // Format as Y-m
                                         $label = 'من: ' . \Carbon\Carbon::parse($period->billing_period_start)->format('Y-m-d') . ' إلى: ' . \Carbon\Carbon::parse($period->billing_period_end)->format('Y-m-d');
                                         $options[$key] = $label;
