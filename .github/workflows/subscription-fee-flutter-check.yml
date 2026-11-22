@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - 'remove-subscription-fees-*'
+      - 'reading-boundaries-*'
     paths:
       - 'mobile app/**'
       - '.github/workflows/subscription-fee-flutter-check.yml'
