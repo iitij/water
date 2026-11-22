@@ -866,11 +866,11 @@ class AppDatabase extends GeneratedDatabase {
   }) async {
     final rows = await _select(
       '''SELECT 1 AS found FROM cached_readings
-         WHERE meter_id = ? AND period_start = ? AND period_end = ? LIMIT 1''',
+         WHERE meter_id = ? AND period_start < ? AND period_end > ? LIMIT 1''',
       [
         Variable.withInt(meterId),
-        Variable.withString(_date(periodStart)!),
         Variable.withString(_date(periodEnd)!),
+        Variable.withString(_date(periodStart)!),
       ],
     );
     return rows.isNotEmpty;
