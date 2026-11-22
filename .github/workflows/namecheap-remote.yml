@@ -15,6 +15,7 @@ on:
           - php-readiness
           - composer-setup
           - composer-install
+          - laravel-preflight
           - sync
 
 permissions:
@@ -69,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -258,6 +259,52 @@ jobs:
               "$php84" "$composer_bin" --version
               echo 'Production vendor directory created for the current server checkout.'
               echo 'No Artisan command, Composer plugin, scripts, database migration, or public deployment executed.'
+              ;;
+            laravel-preflight)
+              echo '=== LARAVEL RUNTIME PRE-FLIGHT: READ-ONLY ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              echo '=== CURRENT REPOSITORY ==='
+              git rev-parse HEAD
+              if [[ -n "$(git status --porcelain)" ]]; then
+                echo 'Working tree has local changes.'
+              else
+                echo 'Working tree is clean.'
+              fi
+              echo '=== FILE AND DIRECTORY STATUS ==='
+              for item in artisan composer.json composer.lock vendor/autoload.php bootstrap/cache storage/framework storage/logs public/index.php public/build/manifest.json; do
+                if [[ -e "$item" ]]; then
+                  echo "$item: FOUND"
+                else
+                  echo "$item: NOT FOUND"
+                fi
+              done
+              for dir in bootstrap/cache storage storage/framework storage/logs; do
+                if [[ -d "$dir" && -w "$dir" ]]; then
+                  echo "$dir: WRITABLE"
+                else
+                  echo "$dir: NOT WRITABLE OR MISSING"
+                fi
+              done
+              echo '=== APPLICATION SETTINGS PRESENCE (NO VALUES) ==='
+              if [[ -f .env ]]; then
+                echo '.env: PRESENT'
+                for key in APP_KEY APP_ENV APP_DEBUG APP_URL DB_CONNECTION; do
+                  if grep -Eq "^${key}=.+" .env; then
+                    echo "$key: SET"
+                  else
+                    echo "$key: MISSING OR EMPTY"
+                  fi
+                done
+              else
+                echo '.env: MISSING'
+              fi
+              if [[ -e public/hot ]]; then
+                echo 'WARNING: public/hot exists (development server marker).'
+              fi
+              echo '=== RUNTIME STATUS ==='
+              "$php84" -r 'echo "PHP: ", PHP_VERSION, PHP_EOL;'
+              "$php84" -l artisan
+              echo 'No Artisan boot, env value disclosure, migrations, database access, or deployment performed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
