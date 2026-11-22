@@ -46,6 +46,12 @@ final class CurrentMeterReadingGuard
             ]);
         }
 
+        if ($end > Carbon::today()->toDateString()) {
+            throw ValidationException::withMessages([
+                'reading_date' => ['لا يمكن تسجيل قراءة ميدانية بتاريخ مستقبلي.'],
+            ]);
+        }
+
         if ($readingDate !== null && Carbon::parse($readingDate)->toDateString() !== $end) {
             throw ValidationException::withMessages([
                 'period_end' => ['نهاية الفترة لا تطابق تاريخ القراءة الفعلية.'],

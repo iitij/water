@@ -313,6 +313,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       return;
     }
     final previousReading = _period!.lastReading;
+    if (DateUtils.dateOnly(_readingDate).isAfter(DateUtils.dateOnly(DateTime.now()))) {
+      _showMessage('لا يمكن إدخال قراءة بتاريخ مستقبلي.');
+      return;
+    }
     if (!_readingDate.isAfter(_period!.periodStart)) {
       _showMessage('تاريخ القراءة الحالية يجب أن يكون بعد تاريخ القراءة السابقة.');
       return;
@@ -368,7 +372,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       context: context,
       initialDate: DateUtils.dateOnly(_readingDate),
       firstDate: DateTime(1900),
-      lastDate: DateTime(2100, 12, 31),
+      lastDate: DateUtils.dateOnly(DateTime.now()),
       helpText: AppStrings.of(context).readingActualDateChange,
     );
     if (selected == null || !mounted || _isSaving) return;

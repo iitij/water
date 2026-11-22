@@ -59,7 +59,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
         if (state.errorMessage != null) {
           showAdminSnackBar(context, adminErrorMessage(state.errorMessage!), isError: true);
         } else if (state.saved) {
-          showAdminSnackBar(context, 'تم حفظ دورة القراءات وتحديث كاش الوحدات الميدانية.');
+          showAdminSnackBar(context, 'تم حفظ جدول زيارات القراءات وتحديث كاش الوحدات الميدانية.');
         }
       },
       builder: (context, state) {
@@ -81,8 +81,8 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 900),
                         child: SettingsSectionCard(
-                          title: 'دورة القراءات والفوترة',
-                          subtitle: 'تنعكس هذه القيم على حساب فترات القراءة وإصدار الفواتير مباشرة.',
+                          title: 'جدول زيارات قارئ العدادات',
+                          subtitle: 'تحدد موعد الزيارة المتوقع فقط؛ تبدأ فترة الاستهلاك بالقراءة السابقة وتنتهي بالحالية.',
                           children: [
                             AppSettingRow(
                               icon: Icons.receipt_long_outlined,
@@ -104,7 +104,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                               key: ValueKey(settings.readingPeriod),
                               initialValue: settings.readingPeriod,
                               decoration: const InputDecoration(
-                                labelText: 'دورة القراءات',
+                                labelText: 'وتيرة زيارات القراءة',
                               ),
                               items: const [
                                 DropdownMenuItem(value: 'weekly', child: Text('أسبوعية (كل 7 أيام)')),
@@ -125,7 +125,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
                                 initialValue: settings.readingDay,
                                 decoration: const InputDecoration(
                                   labelText: 'يوم إدخال القراءة',
-                                  helperText: 'يحدد نهاية فترة الاستهلاك في الدورة الشهرية.',
+                                  helperText: 'موعد الزيارة الشهري المتوقع، وليس نهاية الفترة المحاسبية.',
                                 ),
                                 items: [
                                   for (var day = 20; day <= 28; day++)
@@ -189,7 +189,7 @@ class _ReadingSettingsViewState extends State<_ReadingSettingsView> {
         }
         return SubPageScaffold(
           title: LaravelScreenStrings.readingSettings,
-          subtitle: 'دورة القراءات والفوترة الآلية',
+          subtitle: 'جدولة الزيارات والفوترة الآلية',
           child: Column(
             children: [
               Expanded(child: body),

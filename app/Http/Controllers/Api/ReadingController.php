@@ -196,6 +196,12 @@ class ReadingController extends ApiController
                 $data['actual_reading_date'] = $actual;
             }
 
+            if ($actual > Carbon::today()->toDateString()) {
+                throw ValidationException::withMessages([
+                    'actual_reading_date' => ['تاريخ القراءة الفعلية لا يمكن أن يكون في المستقبل.'],
+                ]);
+            }
+
             $changedDate = $actual !== $oldActual;
             $changedValue = array_key_exists('current_reading', $data)
                 && abs((float) $data['current_reading'] - (float) $reading->current_reading) > 0.00001;
