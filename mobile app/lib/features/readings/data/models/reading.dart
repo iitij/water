@@ -145,19 +145,23 @@ class MeterPeriodResponse {
     required this.periodEnd,
     this.autoIssueInvoice = false,
     this.isOfflineEstimate = false,
+    this.expectedReadingDate,
   });
 
   final double lastReading;
   final DateTime periodStart;
   final DateTime periodEnd;
+  final DateTime? expectedReadingDate;
   final bool autoIssueInvoice;
   final bool isOfflineEstimate;
 
   factory MeterPeriodResponse.fromJson(Map<String, dynamic> json) {
     return MeterPeriodResponse(
       lastReading: _double(json['last_reading']) ?? 0,
-      periodStart: _date(json['period_start']) ?? DateTime.now(),
+      periodStart: _date(json['previous_reading_date'] ?? json['period_start']) ??
+          (throw StateError('لا يوجد تاريخ مرجعي للعداد؛ يلزم تحديد تاريخ التركيب أو بداية الخدمة.')),
       periodEnd: _date(json['period_end']) ?? DateTime.now(),
+      expectedReadingDate: _date(json['expected_reading_date']),
       autoIssueInvoice: _bool(json['auto_issue_invoice']),
     );
   }
@@ -166,14 +170,26 @@ class MeterPeriodResponse {
     lastReading: lastReading,
     periodStart: periodStart,
     periodEnd: periodEnd,
+    expectedReadingDate: expectedReadingDate,
     autoIssueInvoice: autoIssueInvoice,
     isOfflineEstimate: true,
+  );
+
+  MeterPeriodResponse withReadingDate(DateTime date) => MeterPeriodResponse(
+    lastReading: lastReading,
+    periodStart: periodStart,
+    periodEnd: date,
+    expectedReadingDate: expectedReadingDate,
+    autoIssueInvoice: autoIssueInvoice,
+    isOfflineEstimate: isOfflineEstimate,
   );
 
   Map<String, dynamic> toJson() => {
     'last_reading': lastReading,
     'period_start': _dateOnly(periodStart),
     'period_end': _dateOnly(periodEnd),
+    'previous_reading_date': _dateOnly(periodStart),
+    if (expectedReadingDate != null) 'expected_reading_date': _dateOnly(expectedReadingDate!),
     'auto_issue_invoice': autoIssueInvoice,
   };
 }

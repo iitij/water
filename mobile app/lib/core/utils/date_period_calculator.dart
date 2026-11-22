@@ -23,37 +23,37 @@ class ReadingPeriodResult {
 class DatePeriodCalculator {
   const DatePeriodCalculator._();
 
+  /// Consumption period: (previous observation date, current observation date].
+  /// Legacy scheduled dates are a last-resort offline-cache fallback only.
   static ReadingPeriodResult calculate({
+    DateTime? currentReadingDate,
     DateTime? lastReadingPeriodEnd,
     DateTime? lastReadingDate,
+    DateTime? installedAt,
     DateTime? subscriptionStartDate,
     String readingPeriod = 'monthly',
     String readingDay = 'last_day',
     DateTime? now,
   }) {
-    final today = _dateOnlyValue(now ?? DateTime.now());
-    late final DateTime periodStart;
-
-    if (lastReadingPeriodEnd != null) {
-      periodStart = _addCalendarDays(_dateOnlyValue(lastReadingPeriodEnd), 1);
-    } else if (lastReadingDate != null) {
-      final readingDate = _dateOnlyValue(lastReadingDate);
-      periodStart = _addCalendarDays(_endOfMonth(readingDate), 1);
-    } else if (subscriptionStartDate != null) {
-      periodStart = _dateOnlyValue(subscriptionStartDate);
-    } else {
-      periodStart = DateTime(today.year, today.month, 1);
+    final baseline = lastReadingDate ?? lastReadingPeriodEnd ??
+        installedAt ?? subscriptionStartDate;
+    if (baseline == null) {
+      throw StateError('لا يوجد تاريخ مرجعي للعداد. حدّد تاريخ التركيب أو بداية الخدمة قبل إدخال القراءة.');
     }
-
     return ReadingPeriodResult(
-      periodStart: periodStart,
-      periodEnd: _calculateNextPeriodEnd(
-        periodStart,
-        readingPeriod,
-        readingDay,
-      ),
+      periodStart: _dateOnlyValue(baseline),
+      periodEnd: _dateOnlyValue(currentReadingDate ?? now ?? DateTime.now()),
     );
   }
+
+  /// A separate scheduling hint: it never sets the billing period end.
+  static DateTime expectedVisitDate(
+    DateTime previous, {
+    String readingPeriod = 'monthly',
+    String readingDay = 'last_day',
+  }) => _calculateNextPeriodEnd(
+    _dateOnlyValue(previous), readingPeriod, readingDay,
+  );
 
   static DateTime _calculateNextPeriodEnd(
     DateTime start,
@@ -64,12 +64,9 @@ class DatePeriodCalculator {
 
     switch (period) {
       case 'monthly':
-        if (readingDay == 'last_day') return endOfCurrentMonth;
+        if (readingDay == 'last_day') return _endOfMonth(DateTime(start.year, start.month + 1, 1));
         final parsedDay = int.tryParse(readingDay);
         final targetDay = (parsedDay ?? 28).clamp(1, 31).toInt();
-        if (start.day <= targetDay) {
-          return _dateInMonth(start.year, start.month, targetDay);
-        }
         final nextMonth = DateTime(start.year, start.month + 1, 1);
         return _dateInMonth(nextMonth.year, nextMonth.month, targetDay);
 
@@ -82,7 +79,7 @@ class DatePeriodCalculator {
         return endOfCurrentMonth;
 
       case 'weekly':
-        return _addCalendarDays(start, 6);
+        return _addCalendarDays(start, 7);
 
       default:
         return endOfCurrentMonth;
