@@ -60,12 +60,16 @@ class ReadingService
     {
         $date = $start->copy();
         if ($period === 'monthly') {
-            if ($readingDay === 'last_day') {
-                return $date->addMonthNoOverflow()->endOfMonth();
+            $target = $readingDay === 'last_day'
+                ? $date->daysInMonth : max(1, min(31, (int) $readingDay ?: 28));
+            $candidate = $date->copy()->day(min($target, $date->daysInMonth));
+            if ($candidate->greaterThan($date)) {
+                return $candidate;
             }
-            $target = max(1, min(31, (int) $readingDay ?: 28));
-            $next = $date->startOfMonth()->addMonth();
-            return $next->day(min($target, $next->daysInMonth));
+            $next = $date->copy()->startOfMonth()->addMonth();
+            return $readingDay === 'last_day'
+                ? $next->endOfMonth()
+                : $next->day(min($target, $next->daysInMonth));
         }
         return match ($period) {
             'weekly' => $date->addDays(7),

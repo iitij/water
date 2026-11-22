@@ -64,11 +64,16 @@ class DatePeriodCalculator {
 
     switch (period) {
       case 'monthly':
-        if (readingDay == 'last_day') return _endOfMonth(DateTime(start.year, start.month + 1, 1));
         final parsedDay = int.tryParse(readingDay);
-        final targetDay = (parsedDay ?? 28).clamp(1, 31).toInt();
+        final targetDay = readingDay == 'last_day'
+            ? endOfCurrentMonth.day
+            : (parsedDay ?? 28).clamp(1, 31).toInt();
+        final candidate = _dateInMonth(start.year, start.month, targetDay);
+        if (candidate.isAfter(start)) return candidate;
         final nextMonth = DateTime(start.year, start.month + 1, 1);
-        return _dateInMonth(nextMonth.year, nextMonth.month, targetDay);
+        return readingDay == 'last_day'
+            ? _endOfMonth(nextMonth)
+            : _dateInMonth(nextMonth.year, nextMonth.month, targetDay);
 
       case 'half_monthly':
         return start.day <= 15 ? DateTime(start.year, start.month, 15) : endOfCurrentMonth;

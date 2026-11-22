@@ -52,7 +52,6 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
     final latestEnd = _parseDate(latest?['period_end']);
     final latestDate = _parseDate(latest?['actual_reading_date'] ?? latest?['reading_date']);
-    final cachedPeriodEnd = _parseDate(cachedPeriod?['period_end']);
     final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
         _asDouble(cachedPeriod?['last_reading']) ??
