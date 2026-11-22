@@ -426,4 +426,48 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertEquals(15, (float) $last->fresh()->consumption_units);
     }
 
+
+    public function test_legacy_reading_without_observation_date_uses_saved_period_end(): void
+    {
+        $meter = $this->meter();
+        Reading::create([
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-12',
+            'actual_reading_date' => null,
+            'period_start' => '2026-02-01',
+            'period_end' => '2026-02-28',
+            'previous_reading' => 0,
+            'current_reading' => 10,
+        ]);
+        $period = app(ReadingService::class)->calculateReadingPeriod(
+            $meter->id, '2026-03-20'
+        );
+        $this->assertSame('2026-02-28', $period['period_start']);
+        $this->assertSame('2026-03-20', $period['period_end']);
+    }
+
+    public function test_a_future_actual_reading_date_is_rejected(): void
+    {
+        $meter = $this->meter();
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'reading_date' => now()->addDay()->toDateString(),
+            'current_reading' => 40,
+        ])->assertUnprocessable()->assertJsonValidationErrors('reading_date');
+        $this->assertDatabaseCount('readings', 0);
+    }
+
+    public function test_installation_date_takes_precedence_for_the_first_interval(): void
+    {
+        $meter = $this->meter();
+        $meter->update(['installed_at' => '2026-02-05']);
+        $response = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-08',
+            'current_reading' => 155,
+        ])->assertCreated();
+        $this->assertSame('2026-02-05', $response->json('reading.period_start'));
+        $this->assertSame('2026-03-08', $response->json('reading.period_end'));
+    }
+
 }
