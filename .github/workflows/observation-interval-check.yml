@@ -1,0 +1,47 @@
+name: Observation-based reading period acceptance
+on:
+  push:
+    branches: ['reading-intervals-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  laravel:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: find app tests database routes -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
+      - name: Existing period and reading regression
+        run: php artisan test tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/SingleCurrentMeterTest.php
+      - name: Full Laravel regression
+        run: php artisan test
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 'mobile app'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-pub --no-fatal-infos
+      - run: flutter test --no-pub test/core/utils/date_period_calculator_test.dart
