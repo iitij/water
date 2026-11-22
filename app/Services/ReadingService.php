@@ -16,7 +16,7 @@ class ReadingService
             return ['period_start' => null, 'period_end' => null];
         }
 
-        $lastReading = Reading::where('meter_id', $meterId)->orderBy('id', 'desc')->first();
+        $lastReading = Reading::where('meter_id', $meterId)->orderByDesc('period_end')->orderByDesc('id')->first();
 
         $readingPeriod = Setting::get('reading_period', 'monthly');
         $readingDay = Setting::get('reading_day', 'last_day');
@@ -47,12 +47,14 @@ class ReadingService
             if ($readingDay === 'last_day') {
                 return $startCopy->endOfMonth();
             } else {
-                $targetDay = (int) $readingDay;
+                // Clamp a configured day to the actual month length.
+                // setDay(31) in February can otherwise roll into March.
+                $targetDay = max(1, min(31, (int) $readingDay ?: 28));
                 if ($day <= $targetDay) {
-                    return $startCopy->setDay($targetDay);
-                } else {
-                    return $startCopy->addMonth()->setDay($targetDay);
+                    return $startCopy->setDay(min($targetDay, $startCopy->daysInMonth));
                 }
+                $nextMonth = $startCopy->startOfMonth()->addMonth();
+                return $nextMonth->setDay(min($targetDay, $nextMonth->daysInMonth));
             }
         } elseif ($period === 'half_monthly') {
             if ($day <= 15) {

@@ -44,7 +44,8 @@ class InvoiceService
                     if ($meter) {
                         $q->where('id', $meter->id);
                     }
-                })->where('is_invoiced', false)->orderBy('reading_date')->get();
+                })->where('is_invoiced', false)
+                    ->orderBy('period_start')->orderBy('period_end')->orderBy('id')->get();
             }
 
             $currentConsumptionUnits = 0;
@@ -88,10 +89,8 @@ class InvoiceService
             }
 
             // 6. فترة استهلاك المياه؛ وجود قراءة غير مفوترة شرط مؤكد أعلاه
-            $firstReading = $uninvoicedReadings->first();
-            $lastReading = $uninvoicedReadings->last();
-            $billingPeriodStart = $firstReading->period_start ?? \Carbon\Carbon::parse($firstReading->reading_date)->startOfMonth()->toDateString();
-            $billingPeriodEnd = $lastReading->period_end ?? \Carbon\Carbon::parse($lastReading->reading_date)->endOfMonth()->toDateString();
+            $billingPeriodStart = $uninvoicedReadings->min('period_start');
+            $billingPeriodEnd = $uninvoicedReadings->max('period_end');
 
             // 7. حساب الإجمالي (لا نضيف المتأخرات السابقة للإجمالي حتى لا تتضاعف عند جمع الفواتير غير المسددة)
             $totalAmount = $subtotal;

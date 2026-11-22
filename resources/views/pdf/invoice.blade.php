@@ -296,33 +296,20 @@
     @php
     use App\Models\Setting;
 
-    $readings = clone $invoice->readings;
-    if ($readings->isEmpty() && $invoice->meter_id && $invoice->billing_period_start && $invoice->billing_period_end) {
-    $readings = \App\Models\Reading::where('meter_id', $invoice->meter_id)
-    ->where('reading_date', '<=', $invoice->billing_period_end)
-        ->where('reading_date', '>=', $invoice->billing_period_start)
-        ->orderBy('reading_date', 'asc')
-        ->get();
-        }
+    // Use only invoice-owned readings. A late entry date may fall outside
+    // the consumption period, and unrelated meter readings are not evidence.
+    $readings = $invoice->readings;
+    $sortedReadings = $readings->sortBy(
+        fn ($reading) => sprintf('%s|%s|%010d', $reading->period_start, $reading->period_end, $reading->id)
+    );
+    $firstReading = $sortedReadings->first();
+    $lastReading = $sortedReadings->last();
 
-        if ($readings->isEmpty() && $invoice->billing_period_start && $invoice->billing_period_end) {
-        $readings = \App\Models\Reading::whereHas('meter', function($q) use ($invoice) {
-        $q->where('subscriber_id', $invoice->subscriber_id);
-        })->where('reading_date', '<=', $invoice->billing_period_end)
-            ->where('reading_date', '>=', $invoice->billing_period_start)
-            ->orderBy('reading_date', 'asc')->get();
-            }
-
-            // ترتيب القراءات زمنيًا لضمان الحصول على أول وآخر قراءة بشكل صحيح
-            $sortedReadings = $readings->sortBy('reading_date');
-            $firstReading = $sortedReadings->first();
-            $lastReading = $sortedReadings->last();
-
-            $previous_reading = $firstReading ? $firstReading->previous_reading : 0;
-            $current_reading = $lastReading ? $lastReading->current_reading : 0;
+    $previous_reading = $firstReading?->previous_reading;
+    $current_reading = $lastReading?->current_reading;
             $consumption = $readings->sum('consumption_units');
 
-            $price_per_unit = $consumption > 0 ? $invoice->consumption_fee / $consumption : \App\Models\Tariff::getActivePrice();
+            $price_per_unit = $consumption > 0 ? $invoice->consumption_fee / $consumption : null;
 
             // Logo
             $logoPath = Setting::get('invoice_logo', null);
@@ -408,19 +395,19 @@
 
                 if($chk('inv_show_prev_read')) {
                 $consHeaders[] = $lbl('inv_lbl_prev_read', 'القراءة السابقة');
-                $consValues[] = number_format($previous_reading, 2);
+                $consValues[] = $previous_reading !== null ? number_format($previous_reading, 2) : '—';
                 }
                 if($chk('inv_show_curr_read')) {
                 $consHeaders[] = $lbl('inv_lbl_curr_read', 'القراءة الحالية');
-                $consValues[] = number_format($current_reading, 2);
+                $consValues[] = $current_reading !== null ? number_format($current_reading, 2) : '—';
                 }
                 if($chk('inv_show_units')) {
                 $consHeaders[] = $lbl('inv_lbl_units', 'وحدات الاستهلاك');
-                $consValues[] = '<strong style="font-size:12px;">' . $consumption . '</strong>';
+                $consValues[] = $readings->isNotEmpty() ? '<strong style="font-size:12px;">' . $consumption . '</strong>' : '—';
                 }
                 if($chk('inv_show_unit_price')) {
                 $consHeaders[] = $lbl('inv_lbl_unit_price', 'سعر الوحدة');
-                $consValues[] = number_format($price_per_unit, 2);
+                $consValues[] = $price_per_unit !== null ? number_format($price_per_unit, 2) : '—';
                 }
                 if($chk('inv_show_cons_value')) {
                 $consHeaders[] = $lbl('inv_lbl_cons_value', 'قيمة الاستهلاك');

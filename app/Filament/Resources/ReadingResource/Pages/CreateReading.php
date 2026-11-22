@@ -24,6 +24,7 @@ class CreateReading extends CreateRecord
             $data['period_end'] ?? null,
         );
         $data['previous_reading'] = $meter->getLastReadingValue();
+        $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
 
         return $data;
     }
@@ -44,6 +45,7 @@ class CreateReading extends CreateRecord
                 $data['period_end'] ?? null,
             );
             $data['previous_reading'] = $meter->getLastReadingValue();
+            $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
 
             return Reading::create($data);
         });

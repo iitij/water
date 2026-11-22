@@ -425,10 +425,6 @@ class InvoiceController extends ApiController
         $this->authorizeApi(Invoice::class, 'update');
         $invoice = Invoice::with(['subscriber', 'meter', 'readings'])->findOrFail($id);
         $readings = $invoice->readings;
-        if ($readings->isEmpty() && $invoice->meter_id && $invoice->billing_period_start && $invoice->billing_period_end) {
-            $readings = Reading::where('meter_id', $invoice->meter_id)
-                ->whereBetween('reading_date', [$invoice->billing_period_start, $invoice->billing_period_end])->get();
-        }
         if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
             $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
         }

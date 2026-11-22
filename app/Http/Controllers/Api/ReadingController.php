@@ -181,9 +181,15 @@ class ReadingController extends ApiController
         }
         $periodStart = $data['period_start'] ?? $reading->period_start;
         $periodEnd = $data['period_end'] ?? $reading->period_end;
+        $periodStart = Carbon::parse($periodStart)->toDateString();
+        $periodEnd = Carbon::parse($periodEnd)->toDateString();
+        if ($periodEnd < $periodStart) {
+            return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
+        }
         if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_start', $periodStart)->where('period_end', $periodEnd)->exists()) {
-            return response()->json(['errors' => ['period_start' => ['توجد قراءة أخرى مسجلة لنفس الفترة.']]], 422);
+            ->where('period_start', '<=', $periodEnd)
+            ->where('period_end', '>=', $periodStart)->exists()) {
+            return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
         }
         $reading->update($data);
 
@@ -375,7 +381,7 @@ class ReadingController extends ApiController
         // reading cannot slip between the preflight guard and meter deletion.
         $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            $lastReading = $locked->readings()->latest('id')->first();
+            $lastReading = $locked->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
             $current = (float) $data['current_reading'];
@@ -409,7 +415,7 @@ class ReadingController extends ApiController
                 'meter_id' => $locked->id,
                 'created_by' => $request->user()?->id,
                 'reading_date' => $data['reading_date'],
-                'actual_reading_date' => $data['actual_reading_date'] ?? null,
+                'actual_reading_date' => $data['actual_reading_date'] ?? $data['reading_date'],
                 'previous_reading' => $previous,
                 'current_reading' => $current,
                 'consumption_units' => max(0, (int) ($current - $previous)),
@@ -465,7 +471,7 @@ class ReadingController extends ApiController
 
     private function invoicePayload(Invoice $invoice, Request $request): array
     {
-        $readings = $invoice->readings->sortBy('reading_date');
+        $readings = $invoice->readings->sortBy(fn (Reading $r) => sprintf('%s|%s|%010d', $r->period_start, $r->period_end, $r->id));
         $first = $readings->first();
         $last = $readings->last();
         $units = (int) $readings->sum('consumption_units');
