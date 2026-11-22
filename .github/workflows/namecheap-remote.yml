@@ -14,6 +14,7 @@ on:
           - selector-status
           - php-readiness
           - composer-setup
+          - composer-install
           - sync
 
 permissions:
@@ -68,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -227,6 +228,36 @@ jobs:
               echo '=== VERIFIED COMPOSER VERSION ==='
               "$php84" "$install_dir/composer" --version
               echo 'Composer installed for the cPanel user only; no Laravel scripts or migrations executed.'
+              ;;
+            composer-install)
+              echo '=== INSTALL LOCKED LARAVEL PRODUCTION DEPENDENCIES ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              composer_bin="$HOME/.local/bin/composer"
+              test -f "$composer_bin"
+              test -s composer.lock
+              test -s composer.json
+              if [[ -n "$(git status --porcelain)" ]]; then
+                echo 'Project checkout has uncommitted changes; aborting.'
+                exit 1
+              fi
+              if [[ -e vendor ]]; then
+                echo 'Existing vendor directory detected; refusing to overwrite it in this first-install operation.'
+                exit 1
+              fi
+              export COMPOSER_NO_INTERACTION=1
+              export COMPOSER_HOME="$HOME/.cache/water-composer-home"
+              export COMPOSER_CACHE_DIR="$HOME/.cache/water-composer-cache"
+              mkdir -p "$COMPOSER_HOME" "$COMPOSER_CACHE_DIR"
+              "$php84" "$composer_bin" validate --no-check-publish
+              "$php84" "$composer_bin" install \\
+                --no-dev --no-scripts --no-plugins --no-progress \\
+                --prefer-dist --optimize-autoloader --no-interaction
+              "$php84" "$composer_bin" check-platform-reqs --no-dev
+              test -s vendor/autoload.php
+              echo '=== INSTALLED DEPENDENCIES ==='
+              "$php84" "$composer_bin" --version
+              echo 'Production vendor directory created for the current server checkout.'
+              echo 'No Artisan command, Composer plugin, scripts, database migration, or public deployment executed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
