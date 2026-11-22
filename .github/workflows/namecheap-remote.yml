@@ -249,8 +249,8 @@ jobs:
               export COMPOSER_CACHE_DIR="$HOME/.cache/water-composer-cache"
               mkdir -p "$COMPOSER_HOME" "$COMPOSER_CACHE_DIR"
               "$php84" "$composer_bin" validate --no-check-publish
-              "$php84" "$composer_bin" install \\
-                --no-dev --no-scripts --no-plugins --no-progress \\
+              "$php84" "$composer_bin" install \
+                --no-dev --no-scripts --no-plugins --no-progress \
                 --prefer-dist --optimize-autoloader --no-interaction
               "$php84" "$composer_bin" check-platform-reqs --no-dev
               test -s vendor/autoload.php
