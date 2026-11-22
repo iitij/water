@@ -395,9 +395,11 @@ class ReadingController extends ApiController
                     && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
                 $samePeriod = true;
                 foreach (['period_start', 'period_end'] as $field) {
+                    $originalField = 'submitted_'.$field;
+                    $expected = $existing->{$originalField} ?? $existing->{$field};
                     if (isset($data[$field])
                         && Carbon::parse($data[$field])->toDateString()
-                            !== Carbon::parse($existing->{$field})->toDateString()) {
+                            !== Carbon::parse($expected)->toDateString()) {
                         $samePeriod = false;
                         break;
                     }
@@ -469,6 +471,8 @@ class ReadingController extends ApiController
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
                 'period_basis' => 'observation',
+                'submitted_period_start' => $data['period_start'] ?? null,
+                'submitted_period_end' => $data['period_end'] ?? null,
                 'sync_uuid' => $data['sync_uuid'] ?? null,
                 'image_path' => $imagePath,
             ]);

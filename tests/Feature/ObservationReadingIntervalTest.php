@@ -142,4 +142,28 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('2026-02-12', $latest->period_start);
         $this->assertSame('2026-03-14', $latest->period_end);
     }
+
+    public function test_legacy_calendar_hints_do_not_break_exact_idempotent_retries(): void
+    {
+        $meter = $this->meter();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $payload = [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-02-12',
+            'current_reading' => 135,
+            'period_start' => '2026-02-01',
+            'period_end' => '2026-02-28',
+            'sync_uuid' => $uuid,
+        ];
+        $saved = $this->postJson('/api/readings', $payload)->assertCreated();
+        $this->postJson('/api/readings', $payload)
+            ->assertOk()->assertJsonPath('duplicate', true);
+        $reading = Reading::findOrFail($saved->json('reading.id'));
+        $this->assertSame('2026-01-10', $reading->period_start);
+        $this->assertSame('2026-02-12', $reading->period_end);
+        $this->assertSame('2026-02-01', $reading->submitted_period_start);
+        $this->assertSame('2026-02-28', $reading->submitted_period_end);
+        $this->assertDatabaseCount('readings', 1);
+    }
+
 }

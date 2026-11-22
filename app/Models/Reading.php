@@ -23,6 +23,8 @@ class Reading extends Model
         'period_start',
         'period_end',
         'period_basis',
+        'submitted_period_start',
+        'submitted_period_end',
         'sync_uuid',
         'image_path',
     ];
