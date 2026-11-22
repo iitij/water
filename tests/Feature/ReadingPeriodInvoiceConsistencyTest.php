@@ -183,4 +183,77 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->postJson('/api/invoices/'.$invoice->id.'/recalculate')->assertOk();
         $this->assertEqualsWithDelta(1200, (float) $invoice->fresh()->consumption_fee, 0.01);
     }
+
+    public function test_meter_period_endpoint_returns_reading_from_latest_consumption_period(): void
+    {
+        $meter = $this->meter();
+        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 20);
+        $this->reading($meter, '2026-01-01', '2026-01-31', '2026-03-20', 10);
+        Setting::set('reading_period', 'monthly');
+        Setting::set('reading_day', 'last_day');
+
+        $this->getJson('/api/readings/calculate-dates?meter_id='.$meter->id)
+            ->assertOk()
+            ->assertJsonPath('period_start', '2026-03-01')
+            ->assertJsonPath('period_end', '2026-03-31')
+            ->assertJsonPath('last_reading', 20);
+    }
+
+    public function test_invoice_edit_cannot_desynchronize_its_reading_period(): void
+    {
+        $meter = $this->meter();
+        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 10);
+        $invoice = app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+
+        $this->putJson('/api/invoices/'.$invoice->id, [
+            'billing_period_start' => '2026-01-01',
+        ])->assertUnprocessable()->assertJsonValidationErrors('billing_period_start');
+
+        $this->assertSame('2026-02-01', $invoice->fresh()->billing_period_start->toDateString());
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+    }
+
+    public function test_recalculate_restores_period_from_the_invoices_own_readings(): void
+    {
+        $meter = $this->meter();
+        $invoice = Invoice::create([
+            'subscriber_id' => $meter->subscriber_id,
+            'meter_id' => $meter->id,
+            'invoice_type' => 'meter',
+            'bill_number' => 'INV-RECALC-DATES',
+            'bill_date' => '2026-04-03',
+            'billing_period_start' => '2026-01-01',
+            'billing_period_end' => '2026-01-31',
+            'consumption_fee' => 6000,
+            'total_amount' => 6000,
+            'status' => 'issued',
+        ]);
+        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 10, 0, $invoice->id);
+
+        $this->postJson('/api/invoices/'.$invoice->id.'/recalculate')->assertOk();
+
+        $this->assertSame('2026-02-01', $invoice->fresh()->billing_period_start->toDateString());
+        $this->assertSame('2026-02-28', $invoice->fresh()->billing_period_end->toDateString());
+    }
+
+    public function test_pdf_never_invents_period_dates_for_an_invoice_without_stored_period(): void
+    {
+        $meter = $this->meter();
+        $invoice = Invoice::create([
+            'subscriber_id' => $meter->subscriber_id,
+            'meter_id' => $meter->id,
+            'bill_number' => 'INV-EMPTY-PERIOD',
+            'bill_date' => '2026-04-03',
+            'consumption_fee' => 0,
+            'total_amount' => 0,
+            'status' => 'issued',
+        ]);
+
+        $html = view('pdf.invoice', ['invoice' => $invoice->fresh()])->render();
+
+        $this->assertStringNotContainsString('01/03/2026', $html);
+        $this->assertStringNotContainsString('31/03/2026', $html);
+        $this->assertStringContainsString('—', $html);
+    }
+
 }
