@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - audit
+          - diagnose
           - sync
 
 permissions:
@@ -64,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|sync) ;;
+            audit|diagnose|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -118,6 +119,45 @@ jobs:
               done
               echo '=== DISK SPACE ==='
               df -h "$HOME"
+              ;;
+            diagnose)
+              php84="/opt/alt/php84/usr/bin/php"
+              echo '=== PHP CONFIGURATION ==='
+              "$php84" -r '
+                echo "PHP Version: ", PHP_VERSION, PHP_EOL;
+                echo "Loaded php.ini: ", php_ini_loaded_file() ?: "NONE", PHP_EOL;
+                echo "Scanned additional INI: ", php_ini_scanned_files() ?: "NONE", PHP_EOL;
+                echo "Extension directory: ", ini_get("extension_dir"), PHP_EOL;
+              '
+              echo '=== PHP EXTENSION FILE AVAILABILITY ==='
+              ext_dir="$("$php84" -r 'echo ini_get("extension_dir");')"
+              if [[ -d "$ext_dir" ]]; then
+                for mod in bcmath dom fileinfo gd intl mbstring zip; do
+                  if [[ -f "$ext_dir/$mod.so" ]]; then
+                    echo "$mod: module file available, NOT necessarily enabled"
+                  else
+                    echo "$mod: no directly named module file"
+                  fi
+                done
+              else
+                echo 'Extension directory not readable.'
+              fi
+              echo '=== PHP CONFIGURATION TOOLS ==='
+              for tool in selectorctl php-selector cloudlinux-selector composer composer2 node npm; do
+                if command -v "$tool" >/dev/null 2>&1; then
+                  command -v "$tool"
+                else
+                  echo "$tool: NOT IN PATH"
+                fi
+              done
+              echo '=== POSSIBLE COMPOSER EXECUTABLES ==='
+              for bin in /opt/cpanel/composer/bin/composer /usr/local/bin/composer /usr/bin/composer "$HOME/composer.phar"; do
+                if [[ -f "$bin" ]]; then
+                  echo "$bin (file exists)"
+                fi
+              done
+              echo '=== CONCLUSION ==='
+              echo 'Read-only diagnostic only; no runtime settings changed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
