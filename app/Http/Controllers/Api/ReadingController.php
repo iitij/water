@@ -94,7 +94,7 @@ class ReadingController extends ApiController
         return $this->searchMeter($request);
     }
 
-    public function getMeterPeriod(int $meterId)
+    public function getMeterPeriod(int $meterId, ?string $readingDate = null)
     {
         $this->authorizeApi(Meter::class, 'view');
         $meter = Meter::with(['subscriber', 'subscriber.square'])->findOrFail($meterId);
@@ -105,23 +105,26 @@ class ReadingController extends ApiController
             ]);
         }
 
-        $lastReading = $meter->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
-        $period = $this->readingService->calculateReadingPeriod($meterId);
+        $lastReading = $this->readingService->latestReading($meterId);
+        $period = $this->readingService->calculateReadingPeriod($meterId, $readingDate);
 
         return response()->json([
             'meter' => $meter,
             'last_reading' => $lastReading ? (float) $lastReading->current_reading : (float) $meter->initial_reading,
             'period_start' => $period['period_start'],
             'period_end' => $period['period_end'],
+            'previous_reading_date' => $period['previous_reading_date'],
+            'expected_reading_date' => $period['expected_reading_date'],
+            'period_basis' => 'actual_reading_dates',
             'auto_issue_invoice' => filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN),
         ]);
     }
 
     public function calculateDates(Request $request)
     {
-        $data = $request->validate(['meter_id' => ['required', 'integer', 'exists:meters,id']]);
+        $data = $request->validate(['meter_id' => ['required', 'integer', 'exists:meters,id'], 'reading_date' => ['nullable', 'date']]);
 
-        return $this->getMeterPeriod((int) $data['meter_id']);
+        return $this->getMeterPeriod((int) $data['meter_id'], $data['reading_date'] ?? null);
     }
 
     public function meterHistory(int $meterId)
@@ -381,16 +384,13 @@ class ReadingController extends ApiController
                 $sameReading = (int) $existing->meter_id === $meter->id
                     && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
                     && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
-                $samePeriod = true;
-                foreach (['period_start', 'period_end'] as $field) {
-                    if (isset($data[$field])
-                        && Carbon::parse($data[$field])->toDateString()
-                            !== Carbon::parse($existing->{$field})->toDateString()) {
-                        $samePeriod = false;
-                        break;
-                    }
-                }
-                abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+                // The physical observation date is part of idempotency.
+                // Client-estimated billing dates are not: older apps can
+                // retransmit a different scheduled period for the same read.
+                $sameObservationDate = ! isset($data['actual_reading_date'])
+                    || Carbon::parse($existing->actual_reading_date ?? $existing->reading_date)->toDateString()
+                        === Carbon::parse($data['actual_reading_date'])->toDateString();
+                abort_unless($sameOwner && $sameReading && $sameObservationDate, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
 
                 return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
             }
@@ -401,16 +401,21 @@ class ReadingController extends ApiController
         // reading cannot slip between the preflight guard and meter deletion.
         $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            $lastReading = $locked->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
+            $lastReading = $this->readingService->latestReading($locked->id);
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
             $current = (float) $data['current_reading'];
 
-            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
-            $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
-            $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
+            // Server-calculated interval is authoritative: legacy clients
+            // may still submit calendar-based estimates in period_start/end.
+            $observationDate = $data['actual_reading_date'] ?? $data['reading_date'];
+            $calculatedPeriod = $this->readingService->calculateReadingPeriod(
+                $locked->id, $observationDate
+            );
+            $periodStart = $calculatedPeriod['period_start'];
+            $periodEnd = $calculatedPeriod['period_end'];
             app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
-                $locked, $current, $periodStart, $periodEnd,
+                $locked, $current, $periodStart, $periodEnd, $observationDate,
             );
 
             $imagePath = null;
