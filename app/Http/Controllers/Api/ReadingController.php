@@ -448,7 +448,16 @@ class ReadingController extends ApiController
                         break;
                     }
                 }
-                abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+                $savedObservation = ($existing->actual_reading_date ?? $existing->reading_date)->toDateString();
+                $incomingObservation = Carbon::parse(
+                    $data['actual_reading_date'] ?? $data['reading_date']
+                )->toDateString();
+                abort_unless(
+                    $sameOwner && $sameReading && $samePeriod
+                        && $savedObservation === $incomingObservation,
+                    409,
+                    'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.'
+                );
 
                 return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
             }

@@ -363,8 +363,8 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
     final selected = await showDatePicker(
       context: context,
       initialDate: DateUtils.dateOnly(_readingDate),
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100, 12, 31),
+      firstDate: _period!.periodStart.add(const Duration(days: 1)),
+      lastDate: DateTime.now(),
       helpText: AppStrings.of(context).readingActualDateChange,
     );
     if (selected == null || !mounted || _isSaving) return;

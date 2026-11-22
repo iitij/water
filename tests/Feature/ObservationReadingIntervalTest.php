@@ -207,4 +207,24 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('2026-02-12', Reading::findOrFail($first)->period_end);
     }
 
+
+    public function test_idempotent_retry_rejects_a_different_actual_observation_date(): void
+    {
+        $meter = $this->meter();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $data = [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-02-12',
+            'actual_reading_date' => '2026-02-12',
+            'current_reading' => 135,
+            'sync_uuid' => $uuid,
+        ];
+        $this->postJson('/api/readings', $data)->assertCreated();
+        $this->postJson('/api/readings', [
+            ...$data,
+            'actual_reading_date' => '2026-02-13',
+        ])->assertStatus(409);
+        $this->assertDatabaseCount('readings', 1);
+    }
+
 }
