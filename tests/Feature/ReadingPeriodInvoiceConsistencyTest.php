@@ -519,4 +519,20 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertSame('2026-02-05', $saved->fresh()->period_end);
     }
 
+
+    public function test_manual_invoice_never_invents_a_calendar_consumption_period(): void
+    {
+        $meter = $this->meter();
+        $id = $this->postJson('/api/invoices', [
+            'subscriber_id' => $meter->subscriber_id,
+            'meter_id' => $meter->id,
+            'bill_date' => '2026-03-12',
+            'consumption_fee' => 500,
+        ])->assertCreated()->json('invoice.id');
+        $manual = Invoice::findOrFail($id);
+        $this->assertNull($manual->billing_period_start);
+        $this->assertNull($manual->billing_period_end);
+        $this->assertDatabaseCount('readings', 0);
+    }
+
 }

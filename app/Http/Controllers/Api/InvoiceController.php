@@ -163,8 +163,8 @@ class InvoiceController extends ApiController
             'invoice_type' => ['sometimes', 'in:meter'],
             'bill_number' => ['nullable', 'string', 'max:50', 'unique:invoices,bill_number'],
             'bill_date' => ['nullable', 'date'],
-            'billing_period_start' => ['nullable', 'date'],
-            'billing_period_end' => ['nullable', 'date', 'after_or_equal:billing_period_start'],
+            'billing_period_start' => ['nullable', 'required_with:billing_period_end', 'date'],
+            'billing_period_end' => ['nullable', 'required_with:billing_period_start', 'date', 'after_or_equal:billing_period_start'],
             'consumption_fee' => ['sometimes', 'numeric', 'min:0'],
             'previous_balance' => ['sometimes', 'numeric', 'min:0'],
             'credit_applied' => ['sometimes', 'numeric', 'min:0'],
@@ -191,8 +191,10 @@ class InvoiceController extends ApiController
                 'invoice_type' => $invoiceType,
                 'bill_number' => $data['bill_number'] ?? Invoice::generateBillNumber(),
                 'bill_date' => $data['bill_date'] ?? now()->toDateString(),
-                'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
-                'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
+                // Manual invoices have no linked meter observation;
+                // never invent a calendar month as a measured consumption period.
+                'billing_period_start' => $data['billing_period_start'] ?? null,
+                'billing_period_end' => $data['billing_period_end'] ?? null,
                 'consumption_fee' => $data['consumption_fee'] ?? 0,
                 'previous_balance' => $data['previous_balance'] ?? 0,
                 'credit_applied' => $data['credit_applied'] ?? 0,
