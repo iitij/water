@@ -13,6 +13,7 @@ on:
           - diagnose
           - selector-status
           - php-readiness
+          - composer-setup
           - sync
 
 permissions:
@@ -67,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -189,6 +190,43 @@ jobs:
                 }
               '
               echo 'PHP 8.4 module preflight passed.'
+              ;;
+            composer-setup)
+              echo '=== SECURE COMPOSER 2 INSTALL FOR CPANEL USER ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              "$php84" -r '
+                if (version_compare(PHP_VERSION, "8.3", "<")) exit(1);
+                foreach (["phar","openssl","curl","mbstring"] as $ext) {
+                  if (!extension_loaded($ext)) { fwrite(STDERR, "Missing PHP extension: $ext\\n"); exit(1); }
+                }
+              '
+              command -v curl >/dev/null 2>&1 || { echo 'curl binary is required.'; exit 1; }
+              tmp_dir="$(mktemp -d)"
+              trap 'rm -rf "$tmp_dir"' EXIT
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \\
+                https://getcomposer.org/installer -o "$tmp_dir/composer-setup.php"
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \\
+                https://composer.github.io/installer.sig -o "$tmp_dir/installer.sig"
+              expected="$(tr -d '\\r\\n ' < "$tmp_dir/installer.sig")"
+              [[ "$expected" =~ ^[a-fA-F0-9]{96}$ ]] || {
+                echo 'Invalid official Composer signature; aborting.'
+                exit 1
+              }
+              actual="$("$php84" -r 'echo hash_file("sha384", $argv[1]);' "$tmp_dir/composer-setup.php")"
+              [[ "${actual,,}" == "${expected,,}" ]] || {
+                echo 'Composer installer signature mismatch; aborting.'
+                exit 1
+              }
+              install_dir="$HOME/.local/bin"
+              mkdir -p "$install_dir"
+              if [[ -e "$install_dir/composer" ]]; then
+                echo 'Composer already exists in user-local directory. Not replacing.'
+              else
+                "$php84" "$tmp_dir/composer-setup.php" --2 --install-dir="$install_dir" --filename=composer
+              fi
+              echo '=== VERIFIED COMPOSER VERSION ==='
+              "$php84" "$install_dir/composer" --version
+              echo 'Composer installed for the cPanel user only; no Laravel scripts or migrations executed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
