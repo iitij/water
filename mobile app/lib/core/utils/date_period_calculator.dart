@@ -76,12 +76,10 @@ class DatePeriodCalculator {
             : _dateInMonth(nextMonth.year, nextMonth.month, targetDay);
 
       case 'half_monthly':
-        return start.day <= 15 ? DateTime(start.year, start.month, 15) : endOfCurrentMonth;
+        return _addCalendarDays(start, 15);
 
       case 'ten_days':
-        if (start.day <= 10) return DateTime(start.year, start.month, 10);
-        if (start.day <= 20) return DateTime(start.year, start.month, 20);
-        return endOfCurrentMonth;
+        return _addCalendarDays(start, 10);
 
       case 'weekly':
         return _addCalendarDays(start, 7);
