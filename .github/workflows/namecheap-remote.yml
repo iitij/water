@@ -474,13 +474,13 @@ jobs:
                     throw new RuntimeException("wrong-database");
                   }
                   $tables = (int) $pdo->query(
-                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = \"BASE TABLE\""
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = " . $pdo->quote("BASE TABLE")
                   )->fetchColumn();
                   $views = (int) $pdo->query(
                     "SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE()"
                   )->fetchColumn();
                   $hasMigrations = (int) $pdo->query(
-                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = \"migrations\""
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = " . $pdo->quote("migrations")
                   )->fetchColumn() > 0;
                   echo "DATABASE_CONNECTION: OK", PHP_EOL;
                   echo "BASE_TABLE_COUNT: ", $tables, PHP_EOL;
