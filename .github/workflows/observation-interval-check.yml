@@ -27,6 +27,8 @@ jobs:
       - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: find app tests database routes -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
+      - name: New observation interval contract
+        run: php artisan test tests/Feature/ObservationReadingIntervalTest.php
       - name: Existing period and reading regression
         run: php artisan test tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/SingleCurrentMeterTest.php
       - name: Full Laravel regression
