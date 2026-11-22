@@ -66,10 +66,12 @@ class InvoiceResource extends Resource
 
                     Forms\Components\DatePicker::make('billing_period_start')
                         ->label('بداية فترة استهلاك المياه')
+                        ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->helperText('فترة الاستهلاك مستقلة عن تاريخ إصدار الفاتورة.'),
 
                     Forms\Components\DatePicker::make('billing_period_end')
                         ->label('نهاية فترة استهلاك المياه')
+                        ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->rules(['after_or_equal:billing_period_start'])
                         ->helperText('يجب ألا تسبق بداية الفترة.'),
 
