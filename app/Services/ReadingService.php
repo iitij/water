@@ -2,74 +2,76 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
+use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
-use App\Models\Meter;
+use Carbon\Carbon;
 
+/**
+ * Water consumption is measured between consecutive observations:
+ * (previous observation date, current observation date].
+ * Scheduled field visits are not financial-period boundaries.
+ */
 class ReadingService
 {
-    public function calculateReadingPeriod(int $meterId): array
+    public function latestReading(int $meterId): ?Reading
+    {
+        return Reading::query()->where('meter_id', $meterId)
+            ->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')
+            ->orderByDesc('id')->first();
+    }
+
+    public function calculateReadingPeriod(int $meterId, mixed $currentReadingDate = null): array
     {
         $meter = Meter::with('subscriber')->find($meterId);
-        if (!$meter) {
-            return ['period_start' => null, 'period_end' => null];
+        if (! $meter) {
+            return [
+                'period_start' => null,
+                'period_end' => null,
+                'previous_reading_date' => null,
+                'expected_reading_date' => null,
+            ];
         }
 
-        $lastReading = Reading::where('meter_id', $meterId)->orderByDesc('period_end')->orderByDesc('id')->first();
+        $previous = $this->latestReading($meterId);
+        $previousDate = $previous
+            ? ($previous->actual_reading_date ?? $previous->reading_date)
+            : ($meter->installed_at ?? $meter->subscriber?->subscription_start_date);
+        $start = $previousDate ? Carbon::parse($previousDate)->startOfDay() : null;
+        $current = $currentReadingDate
+            ? Carbon::parse($currentReadingDate)->startOfDay() : Carbon::today();
 
-        $readingPeriod = Setting::get('reading_period', 'monthly');
-        $readingDay = Setting::get('reading_day', 'last_day');
-
-        if ($lastReading) {
-            // إذا كانت القراءة القديمة ليس لها period_end (نظام قديم) نعتمد على reading_date
-            $lastPeriodEnd = $lastReading->period_end ? Carbon::parse($lastReading->period_end) : Carbon::parse($lastReading->reading_date)->endOfMonth();
-            $periodStart = $lastPeriodEnd->addDay();
-        } else {
-            $subStart = $meter->subscriber->subscription_start_date ? Carbon::parse($meter->subscriber->subscription_start_date) : now()->startOfMonth();
-            $periodStart = $subStart;
-        }
-
-        $periodEnd = $this->calculateNextPeriodEnd($periodStart, $readingPeriod, $readingDay);
+        $expected = $start
+            ? $this->nextScheduledVisit(
+                $start, (string) Setting::get('reading_period', 'monthly'),
+                (string) Setting::get('reading_day', 'last_day')
+            )
+            : null;
 
         return [
-            'period_start' => $periodStart->toDateString(),
-            'period_end' => $periodEnd->toDateString(),
+            'period_start' => $start?->toDateString(),
+            'period_end' => $current->toDateString(),
+            'previous_reading_date' => $start?->toDateString(),
+            'expected_reading_date' => $expected?->toDateString(),
         ];
     }
 
-    private function calculateNextPeriodEnd(Carbon $start, string $period, string $readingDay): Carbon
+    private function nextScheduledVisit(Carbon $start, string $period, string $readingDay): Carbon
     {
-        $startCopy = $start->copy();
-        $day = $startCopy->day;
-
+        $date = $start->copy();
         if ($period === 'monthly') {
             if ($readingDay === 'last_day') {
-                return $startCopy->endOfMonth();
-            } else {
-                // Clamp a configured day to the actual month length.
-                // setDay(31) in February can otherwise roll into March.
-                $targetDay = max(1, min(31, (int) $readingDay ?: 28));
-                if ($day <= $targetDay) {
-                    return $startCopy->setDay(min($targetDay, $startCopy->daysInMonth));
-                }
-                $nextMonth = $startCopy->startOfMonth()->addMonth();
-                return $nextMonth->setDay(min($targetDay, $nextMonth->daysInMonth));
+                return $date->addMonthNoOverflow()->endOfMonth();
             }
-        } elseif ($period === 'half_monthly') {
-            if ($day <= 15) {
-                return $startCopy->setDay(15);
-            } else {
-                return $startCopy->endOfMonth();
-            }
-        } elseif ($period === 'ten_days') {
-            if ($day <= 10) return $startCopy->setDay(10);
-            if ($day <= 20) return $startCopy->setDay(20);
-            return $startCopy->endOfMonth();
-        } elseif ($period === 'weekly') {
-            return $startCopy->addDays(6);
+            $target = max(1, min(31, (int) $readingDay ?: 28));
+            $next = $date->startOfMonth()->addMonth();
+            return $next->day(min($target, $next->daysInMonth));
         }
-
-        return $startCopy->endOfMonth();
+        return match ($period) {
+            'weekly' => $date->addDays(7),
+            'ten_days' => $date->addDays(10),
+            'half_monthly' => $date->addDays(15),
+            default => $date->addMonthNoOverflow(),
+        };
     }
 }

@@ -16,7 +16,8 @@ final class CurrentMeterReadingGuard
         Meter $meter,
         mixed $currentReading,
         mixed $periodStart,
-        mixed $periodEnd
+        mixed $periodEnd,
+        mixed $readingDate = null,
     ): void {
         if (! $meter->isCurrent()) {
             throw ValidationException::withMessages([
@@ -33,20 +34,27 @@ final class CurrentMeterReadingGuard
 
         if (! $periodStart || ! $periodEnd) {
             throw ValidationException::withMessages([
-                'period_start' => ['يجب تحديد فترة قراءة صحيحة.'],
+                'period_start' => ['لا يمكن إصدار قراءة دون تاريخ مرجعي للعداد: تاريخ التركيب أو بداية الخدمة.'],
             ]);
         }
 
         $start = Carbon::parse($periodStart)->toDateString();
         $end = Carbon::parse($periodEnd)->toDateString();
-        if ($end < $start) {
+        if ($end <= $start) {
             throw ValidationException::withMessages([
-                'period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.'],
+                'period_end' => ['تاريخ القراءة الحالية يجب أن يكون بعد تاريخ القراءة السابقة.'],
             ]);
         }
 
-        if ($meter->readings()->where('period_start', '<=', $end)
-            ->where('period_end', '>=', $start)->exists()) {
+        if ($readingDate !== null && Carbon::parse($readingDate)->toDateString() !== $end) {
+            throw ValidationException::withMessages([
+                'period_end' => ['نهاية الفترة لا تطابق تاريخ القراءة الفعلية.'],
+            ]);
+        }
+
+        // Shared measurement boundaries are allowed; true overlap is not.
+        if ($meter->readings()->where('period_start', '<', $end)
+            ->where('period_end', '>', $start)->exists()) {
             throw ValidationException::withMessages([
                 'period_start' => ['تتداخل فترة القراءة الجديدة مع فترة سابقة للعداد.'],
             ]);
