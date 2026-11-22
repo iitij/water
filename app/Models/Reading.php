@@ -22,6 +22,7 @@ class Reading extends Model
         'created_by',
         'period_start',
         'period_end',
+        'period_basis',
         'sync_uuid',
         'image_path',
     ];

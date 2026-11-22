@@ -105,8 +105,11 @@ class ReadingController extends ApiController
             ]);
         }
 
-        $lastReading = $meter->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
-        $period = $this->readingService->calculateReadingPeriod($meterId);
+        $lastReading = $this->readingService->latestReading($meter->id);
+        $period = $this->readingService->calculateReadingPeriod(
+            $meterId,
+            request()->query('reading_date') ?: today()->toDateString()
+        );
 
         return response()->json([
             'meter' => $meter,
@@ -189,8 +192,9 @@ class ReadingController extends ApiController
             return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
         }
         if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_start', '<=', $periodEnd)
-            ->where('period_end', '>=', $periodStart)->exists()) {
+            ->where('period_basis', 'observation')
+            ->where('period_start', '<', $periodEnd)
+            ->where('period_end', '>', $periodStart)->exists()) {
             return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
         }
         // Reading date is the entered date when no separate actual date was
@@ -401,16 +405,19 @@ class ReadingController extends ApiController
         // reading cannot slip between the preflight guard and meter deletion.
         $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            $lastReading = $locked->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
+            $lastReading = $this->readingService->latestReading($locked->id);
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
             $current = (float) $data['current_reading'];
 
-            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
-            $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
-            $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
+            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
+            // The server's observed dates are authoritative. Legacy mobile
+            // clients may send a calendar forecast; never bill that forecast.
+            $periodStart = $calculatedPeriod['period_start'];
+            $periodEnd = $calculatedPeriod['period_end'];
             app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
                 $locked, $current, $periodStart, $periodEnd,
+                $data['actual_reading_date'] ?? $data['reading_date'],
             );
 
             $imagePath = null;
@@ -441,6 +448,7 @@ class ReadingController extends ApiController
                 'consumption_units' => max(0, (int) ($current - $previous)),
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
+                'period_basis' => 'observation',
                 'sync_uuid' => $data['sync_uuid'] ?? null,
                 'image_path' => $imagePath,
             ]);
