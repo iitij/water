@@ -237,6 +237,33 @@ class InvoiceController extends ApiController
             'total_amount' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        // The billing period is the period of linked water readings, never
+        // their entry dates. An edit must not desynchronize these values.
+        $linkedReadings = $invoice->readings()->get(['period_start', 'period_end']);
+        if ($linkedReadings->isNotEmpty()) {
+            $expectedStart = $linkedReadings->min('period_start');
+            $expectedEnd = $linkedReadings->max('period_end');
+            foreach ([
+                'billing_period_start' => $expectedStart,
+                'billing_period_end' => $expectedEnd,
+            ] as $field => $expected) {
+                if (array_key_exists($field, $data)
+                    && ($data[$field] === null
+                        || \Carbon\Carbon::parse($data[$field])->toDateString() !== $expected)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        $field => ['فترة الفاتورة مرتبطة بفترات القراءات ولا يمكن تغييرها منفصلة عنها.'],
+                    ]);
+                }
+            }
+        }
+        $start = $data['billing_period_start'] ?? $invoice->billing_period_start?->toDateString();
+        $end = $data['billing_period_end'] ?? $invoice->billing_period_end?->toDateString();
+        if ($start !== null && $end !== null
+            && \Carbon\Carbon::parse($start)->toDateString() > \Carbon\Carbon::parse($end)->toDateString()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'billing_period_end' => ['نهاية فترة الفاتورة يجب ألا تسبق بدايتها.'],
+            ]);
+        }
         $newSubscriberId = (int) ($data['subscriber_id'] ?? $invoice->subscriber_id);
         if (! empty($data['meter_id']) && ! Meter::where('id', $data['meter_id'])->where('subscriber_id', $newSubscriberId)->exists()) {
             return response()->json(['message' => 'العداد المحدد لا يتبع المشترك المحدد.'], 422);
@@ -426,6 +453,8 @@ class InvoiceController extends ApiController
         $invoice = Invoice::with(['subscriber', 'meter', 'readings'])->findOrFail($id);
         $readings = $invoice->readings;
         if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
+            $invoice->billing_period_start = $readings->min('period_start');
+            $invoice->billing_period_end = $readings->max('period_end');
             $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)

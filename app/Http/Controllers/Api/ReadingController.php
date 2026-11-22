@@ -105,7 +105,7 @@ class ReadingController extends ApiController
             ]);
         }
 
-        $lastReading = $meter->readings()->latest('id')->first();
+        $lastReading = $meter->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
         $period = $this->readingService->calculateReadingPeriod($meterId);
 
         return response()->json([

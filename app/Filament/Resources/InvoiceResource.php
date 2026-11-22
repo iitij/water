@@ -64,6 +64,15 @@ class InvoiceResource extends Resource
                         ->default(now())
                         ->required(),
 
+                    Forms\Components\DatePicker::make('billing_period_start')
+                        ->label('بداية فترة استهلاك المياه')
+                        ->helperText('فترة الاستهلاك مستقلة عن تاريخ إصدار الفاتورة.'),
+
+                    Forms\Components\DatePicker::make('billing_period_end')
+                        ->label('نهاية فترة استهلاك المياه')
+                        ->rules(['after_or_equal:billing_period_start'])
+                        ->helperText('يجب ألا تسبق بداية الفترة.'),
+
                     Forms\Components\Select::make('status')
                         ->label('الحالة')
                         ->options([
@@ -151,6 +160,18 @@ class InvoiceResource extends Resource
 
                 Tables\Columns\TextColumn::make('bill_date')
                     ->label('التاريخ')
+                    ->date('Y-m-d')
+                    ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('billing_period_start')
+                    ->label('بداية الفترة')
+                    ->date('Y-m-d')
+                    ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('billing_period_end')
+                    ->label('نهاية الفترة')
                     ->date('Y-m-d')
                     ->sortable()
                     ->toggleable(),

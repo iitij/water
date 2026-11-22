@@ -372,8 +372,8 @@
             $infoFields = [];
             if($chk('inv_show_bill_number')) $infoFields[] = ['l' => $lbl('inv_lbl_bill_number', 'رقم الفاتورة'), 'v' => preg_replace('/[^0-9]/', '', $invoice->bill_number), 'is_ltr' => true];
             
-                if($chk('inv_show_date_from')) $infoFields[] = ['l' => $lbl('inv_lbl_date_from', 'من تاريخ'), 'v' => \Carbon\Carbon::parse($invoice->billing_period_start ?? \Carbon\Carbon::parse($invoice->bill_date)->subMonth()->startOfMonth())->format('d/m/Y')];
-                if($chk('inv_show_date_to')) $infoFields[] = ['l' => $lbl('inv_lbl_date_to', 'إلى تاريخ'), 'v' => \Carbon\Carbon::parse($invoice->billing_period_end ?? \Carbon\Carbon::parse($invoice->bill_date)->subMonth()->endOfMonth())->format('d/m/Y')];
+                if($chk('inv_show_date_from')) $infoFields[] = ['l' => $lbl('inv_lbl_date_from', 'من تاريخ'), 'v' => ($invoice->billing_period_start?->format('d/m/Y') ?? '—')];
+                if($chk('inv_show_date_to')) $infoFields[] = ['l' => $lbl('inv_lbl_date_to', 'إلى تاريخ'), 'v' => ($invoice->billing_period_end?->format('d/m/Y') ?? '—')];
             $infoChunks = array_chunk($infoFields, 3);
 
             // 2. Subscriber Info Array
