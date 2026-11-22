@@ -284,4 +284,33 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertSame('2026-03-07', $reading->fresh()->actual_reading_date->toDateString());
     }
 
+
+    public function test_idempotent_retry_cannot_silently_change_its_saved_period(): void
+    {
+        $meter = $this->meter();
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $original = [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-05',
+            'current_reading' => 20,
+            'period_start' => '2026-02-01',
+            'period_end' => '2026-02-28',
+            'sync_uuid' => $uuid,
+        ];
+        $id = $this->postJson('/api/readings', $original)->assertCreated()->json('reading.id');
+
+        $this->postJson('/api/readings', [
+            ...$original,
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-31',
+        ])->assertStatus(409);
+
+        $this->assertDatabaseHas('readings', [
+            'id' => $id,
+            'period_start' => '2026-02-01',
+            'period_end' => '2026-02-28',
+        ]);
+        $this->assertDatabaseCount('readings', 1);
+    }
+
 }

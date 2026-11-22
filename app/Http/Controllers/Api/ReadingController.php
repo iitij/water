@@ -143,6 +143,8 @@ class ReadingController extends ApiController
             $result = $this->createReading($data, $request);
         } catch (ValidationException $exception) {
             throw $exception;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+            throw $exception;
         } catch (\Throwable $exception) {
             Log::error('Mobile reading creation failed', ['exception' => $exception]);
 
@@ -379,7 +381,16 @@ class ReadingController extends ApiController
                 $sameReading = (int) $existing->meter_id === $meter->id
                     && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
                     && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
-                abort_unless($sameOwner && $sameReading, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+                $samePeriod = true;
+                foreach (['period_start', 'period_end'] as $field) {
+                    if (isset($data[$field])
+                        && Carbon::parse($data[$field])->toDateString()
+                            !== Carbon::parse($existing->{$field})->toDateString()) {
+                        $samePeriod = false;
+                        break;
+                    }
+                }
+                abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
 
                 return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
             }
