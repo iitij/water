@@ -12,6 +12,7 @@ on:
           - audit
           - diagnose
           - selector-status
+          - php-readiness
           - sync
 
 permissions:
@@ -66,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|sync) ;;
+            audit|diagnose|selector-status|php-readiness|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -169,6 +170,25 @@ jobs:
               selectorctl --user-current --user=alweufti || true
               echo '=== READ ONLY ==='
               echo 'No settings changed.'
+              ;;
+            php-readiness)
+              echo '=== PHP 8.4 READINESS ==='
+              /opt/alt/php84/usr/bin/php -r '
+                $required = ["bcmath","ctype","curl","dom","fileinfo","gd","intl",
+                             "mbstring","openssl","pdo_mysql","tokenizer","xml","zip"];
+                $missing = [];
+                foreach ($required as $ext) {
+                  $ok = extension_loaded($ext);
+                  echo $ext, ": ", $ok ? "OK" : "MISSING", PHP_EOL;
+                  if (!$ok) $missing[] = $ext;
+                }
+                echo "PHP version: ", PHP_VERSION, PHP_EOL;
+                if (version_compare(PHP_VERSION, "8.3", "<") || $missing) {
+                  fwrite(STDERR, "PHP runtime not ready for Water.\n");
+                  exit(1);
+                }
+              '
+              echo 'PHP 8.4 module preflight passed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
