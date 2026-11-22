@@ -132,6 +132,8 @@ class SingleMeterService
             }
 
             $newMeterData['subscriber_id'] = $subscriber->id;
+            // The replacement's initial meter value is observed on installation.
+            $newMeterData['installed_at'] ??= $removedAt;
             $newMeterData['removed_at'] = null;
             $newMeterData['status'] ??= 'active';
 

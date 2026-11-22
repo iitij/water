@@ -46,6 +46,7 @@ class MobileConnectivityFixesTest extends TestCase
             'unique_code' => 'M-'.Str::random(6),
             'subscriber_id' => Subscriber::create([
                 'name' => 'مشترك اختبار',
+                'subscription_start_date' => '2026-01-01',
                 'phone' => '0770000001',
                 'square_id' => Square::create(['name' => 'مربع س'.Str::random(4)])->id,
                 'status' => 'active',

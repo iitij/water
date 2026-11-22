@@ -27,6 +27,7 @@ class SingleCurrentMeterTest extends TestCase
 
         return Subscriber::create([
             'name' => $name,
+            'subscription_start_date' => '2026-01-01',
             'square_id' => $square->id,
             'status' => 'active',
         ]);
@@ -445,7 +446,7 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseCount('readings', 0);
     }
 
-    public function test_new_reading_rejects_overlapping_meter_period(): void
+    public function test_reading_submission_uses_actual_dates_despite_stale_client_period_hints(): void
     {
         $subscriber = $this->subscriber();
         $meter = Meter::create([
@@ -467,9 +468,10 @@ class SingleCurrentMeterTest extends TestCase
             'reading_date' => '2026-11-15',
             'period_start' => '2026-10-15',
             'period_end' => '2026-11-15',
-        ])->assertUnprocessable()->assertJsonValidationErrors('period_start');
+        ])->assertCreated()->assertJsonPath('reading.period_start', '2026-10-31')
+            ->assertJsonPath('reading.period_end', '2026-11-15');
 
-        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseCount('readings', 2);
     }
 
     public function test_filament_new_reading_uses_the_same_guard_as_api(): void

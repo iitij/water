@@ -30,6 +30,7 @@ class SingleMeterOfflineReplacementRaceTest extends TestCase
         $square = Square::create(['name' => 'مربع اختبار تعارض المزامنة']);
         $subscriber = Subscriber::create([
             'name' => 'مشترك اختبار الاستبدال دون اتصال',
+            'subscription_start_date' => '2026-01-01',
             'square_id' => $square->id,
             'status' => 'active',
         ]);
@@ -40,7 +41,7 @@ class SingleMeterOfflineReplacementRaceTest extends TestCase
 
         // Device B replaces the meter while device A still has an unsent old reading.
         $currentId = $this->postJson('/api/meters/'.$old->id.'/replace', [
-            'removed_at' => now()->toDateString(),
+            'removed_at' => now()->subDay()->toDateString(),
             'reason' => 'استبدال عداد أثناء انقطاع اتصال القارئ',
             'new_meter' => ['unique_code' => 'RACE-NEW', 'initial_reading' => 0],
         ])->assertCreated()->json('current_meter.id');

@@ -70,6 +70,7 @@ class MobileApiIntegrationTest extends TestCase
         $square = Square::create(['name' => 'المربع الأول']);
         $subscriber = Subscriber::create([
             'name' => 'مشترك تجريبي',
+            'subscription_start_date' => '2026-01-01',
             'square_id' => $square->id,
             'status' => 'active',
             'phone' => '777123456',

@@ -31,6 +31,7 @@ class SingleMeterFilamentIntegrationTest extends TestCase
             'name' => 'Historical meter subscriber',
             'square_id' => $square->id,
             'status' => 'active',
+            'subscription_start_date' => '2026-01-01',
         ]);
         $meter = Meter::create([
             'subscriber_id' => $subscriber->id,
@@ -60,6 +61,7 @@ class SingleMeterFilamentIntegrationTest extends TestCase
             'name' => 'Form replacement subscriber',
             'square_id' => $square->id,
             'status' => 'active',
+            'subscription_start_date' => '2026-01-01',
         ]);
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'STALE-FORM-OLD']);
         $page = (new \ReflectionClass(CreateReading::class))->newInstanceWithoutConstructor();
@@ -95,6 +97,7 @@ class SingleMeterFilamentIntegrationTest extends TestCase
             'name' => 'Locked reading subscriber',
             'square_id' => $square->id,
             'status' => 'active',
+            'subscription_start_date' => '2026-01-01',
         ]);
         $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'LOCKED-READING']);
         $page = (new \ReflectionClass(CreateReading::class))->newInstanceWithoutConstructor();
