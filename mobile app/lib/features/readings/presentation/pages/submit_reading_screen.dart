@@ -313,6 +313,10 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       return;
     }
     final previousReading = _period!.lastReading;
+    if (!_readingDate.isAfter(_period!.periodStart)) {
+      _showMessage('تاريخ القراءة الحالية يجب أن يكون بعد تاريخ القراءة السابقة.');
+      return;
+    }
     final currentReading = _currentReading;
     if (currentReading < previousReading) {
       _showMessage(
@@ -368,9 +372,11 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       helpText: AppStrings.of(context).readingActualDateChange,
     );
     if (selected == null || !mounted || _isSaving) return;
-    // The actual observation date is independent of the approved billing
-    // period. Do not recalculate periodStart/periodEnd when it changes.
-    setState(() => _readingDate = selected);
+    // The measurement interval ends on the newly selected actual date.
+    setState(() {
+      _readingDate = selected;
+      _period = _period!.withReadingDate(selected);
+    });
   }
 
   Future<void> _nextPath() async {
@@ -750,7 +756,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('فترة الاستهلاك', style: theme.textTheme.labelSmall),
+                Text('من القراءة السابقة إلى الحالية', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 2),
                 LtrNumberText(
                   '${_formatDate(period.periodStart)}  —  ${_formatDate(period.periodEnd)}',
@@ -759,6 +765,11 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
+                if (period.expectedReadingDate != null)
+                  Text(
+                    'موعد الزيارة المتوقع: ${_formatDate(period.expectedReadingDate!)}',
+                    style: theme.textTheme.labelSmall,
+                  ),
               ],
             ),
           ),

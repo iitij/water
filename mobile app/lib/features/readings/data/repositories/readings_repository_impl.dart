@@ -51,7 +51,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     final cachedMeter = await _database.getCachedMeter(meter.id);
 
     final latestEnd = _parseDate(latest?['period_end']);
-    final latestDate = _parseDate(latest?['reading_date']);
+    final latestDate = _parseDate(latest?['actual_reading_date'] ?? latest?['reading_date']);
     final cachedPeriodEnd = _parseDate(cachedPeriod?['period_end']);
     final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
@@ -59,19 +59,23 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         _asDouble(cachedMeter?['last_reading']) ??
         meter.lastReading;
 
-    final result = latest == null && cachedPeriodStart != null && cachedPeriodEnd != null
-        ? ReadingPeriodResult(
-            periodStart: cachedPeriodStart,
-            periodEnd: cachedPeriodEnd,
-          )
-        : DatePeriodCalculator.calculate(
-            lastReadingPeriodEnd: latestEnd,
-            lastReadingDate: latestEnd == null ? latestDate : null,
-            subscriptionStartDate: meter.subscriptionStartDate ??
-                _parseDate(cachedMeter?['subscription_start_date']),
-            readingPeriod: periodName,
-            readingDay: readingDay,
-          );
+    final result = DatePeriodCalculator.calculate(
+      currentReadingDate: DateTime.now(),
+      lastReadingDate: latestDate,
+      // Old snapshots may carry a period end but no observation date.
+      lastReadingPeriodEnd: latestDate == null
+          ? (latestEnd ?? cachedPeriodStart) : null,
+      installedAt: meter.installedAt ?? _parseDate(cachedMeter?['installed_at']),
+      subscriptionStartDate: meter.subscriptionStartDate ??
+          _parseDate(cachedMeter?['subscription_start_date']),
+      readingPeriod: periodName,
+      readingDay: readingDay,
+    );
+    final expectedVisit = DatePeriodCalculator.expectedVisitDate(
+      result.periodStart,
+      readingPeriod: periodName,
+      readingDay: readingDay,
+    );
 
     final cachedAuto = cachedPeriod?['auto_issue_invoice'];
     final autoIssue = cachedAuto != null
@@ -82,10 +86,14 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       lastReading: lastReading,
       periodStart: result.periodStart,
       periodEnd: result.periodEnd,
+      expectedReadingDate: expectedVisit,
       autoIssueInvoice: autoIssue,
       isOfflineEstimate: true,
     );
   }
+
+  static bool _sameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   @override
   Future<ReadingSaveResult> submitReading(ReadingSubmission submission) async {
@@ -99,6 +107,12 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         'القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة '
         '(${submission.previousReading}).',
       );
+    }
+    if (!submission.readingDate.isAfter(submission.periodStart)) {
+      throw StateError('تاريخ القراءة الحالية يجب أن يكون بعد تاريخ القراءة السابقة.');
+    }
+    if (!_sameDate(submission.readingDate, submission.periodEnd)) {
+      throw StateError('نهاية فترة الاستهلاك يجب أن تطابق تاريخ القراءة الحالية.');
     }
     if (await _database.hasCachedReadingPeriod(
       meterId: submission.meterId,
