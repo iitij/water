@@ -8,11 +8,19 @@ try {
     $input = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
     $email = $input['email'] ?? null;
     $password = $input['password'] ?? null;
-    if (!is_string($email) || strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL) ||
-        !is_string($password) || strlen($password) < 16 || strlen($password) > 72 ||
-        preg_match('/[\x00-\x1f\x7f]/', $password)) {
-        throw new RuntimeException('invalid-input');
+    $stage = 'input-email';
+    if (!is_string($email) || $email === '' || strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('invalid-email');
     }
+    $stage = 'input-password-length';
+    if (!is_string($password) || strlen($password) < 16 || strlen($password) > 72) {
+        throw new RuntimeException('invalid-password-length');
+    }
+    $stage = 'input-password-control-characters';
+    if (preg_match('/[\x00-\x1f\x7f]/', $password)) {
+        throw new RuntimeException('invalid-password-control-characters');
+    }
+    echo "ADMIN_INPUT: PASSED\n";
     unset($input);
     $stage = 'bootstrap';
     $project = rtrim((string) getenv('HOME'), '/') . '/repositories/water';
