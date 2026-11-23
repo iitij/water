@@ -6,6 +6,7 @@ on:
       - 'remove-subscription-fees-*'
     paths:
       - 'app/**'
+      - 'bootstrap/**'
       - 'routes/**'
       - 'database/**'
       - 'resources/views/**'
@@ -37,6 +38,8 @@ jobs:
         run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Financial web authorization regression
+        run: php artisan test tests/Feature/WebFinancialAuthorizationTest.php
       - name: Full regression suite
         run: php artisan test
 
