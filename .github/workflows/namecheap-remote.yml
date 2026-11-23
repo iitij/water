@@ -21,6 +21,7 @@ on:
           - database-audit
           - database-schema-audit
           - database-engine-audit
+          - recover-empty-schema
           - migrate-empty
           - sync
 
@@ -76,7 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -554,6 +555,92 @@ jobs:
                 }
               '
               ;;
+            recover-empty-schema)
+              echo '=== RECOVER VERIFIED EMPTY PARTIAL SCHEMA WITH INNODB ==='
+              test "$(git rev-parse HEAD)" = "c0fc0f7565c76dd50e57a89103e4b1d6389616c6" || {
+                echo 'Server checkout is not the reviewed InnoDB configuration commit.'
+                exit 1
+              }
+              test -z "$(git status --porcelain)" || { echo 'Working tree is not clean.'; exit 1; }
+              php84='/opt/alt/php84/usr/bin/php'
+              test -s .env && test -s vendor/autoload.php
+              "$php84" -d display_errors=0 -r '
+                $stage = "bootstrap";
+                try {
+                  require "vendor/autoload.php";
+                  $app = require "bootstrap/app.php";
+                  $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
+                  $kernel->bootstrap();
+                  $config = $app->make("config");
+                  if ($config->get("app.env") !== "production" ||
+                      $config->get("app.debug") !== false ||
+                      $config->get("database.default") !== "mysql") {
+                    throw new RuntimeException("unexpected-application-config");
+                  }
+                  $db = $app->make("db")->connection("mysql");
+                  if ($db->getConfig("engine") !== "InnoDB" ||
+                      $db->getConfig("host") !== "localhost" ||
+                      $db->getConfig("database") !== "alweufti_water" ||
+                      $db->getConfig("username") !== "alweufti_water") {
+                    throw new RuntimeException("unexpected-database-config");
+                  }
+                  $pdo = $db->getPdo();
+                  if ($pdo->query("SELECT DATABASE()")->fetchColumn() !== "alweufti_water") {
+                    throw new RuntimeException("wrong-database");
+                  }
+                  $stage = "guards";
+                  $engines = $pdo->query("SHOW ENGINES")->fetchAll(PDO::FETCH_ASSOC);
+                  $supported = false;
+                  foreach ($engines as $engine) {
+                    if (strtolower($engine["Engine"]) === "innodb" &&
+                        in_array(strtoupper($engine["Support"]), ["YES","DEFAULT"], true)) {
+                      $supported = true;
+                    }
+                  }
+                  if (!$supported) throw new RuntimeException("innodb-unavailable");
+                  $tables = $pdo->query("SELECT TABLE_NAME, ENGINE, TABLE_TYPE FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_ASSOC);
+                  if (array_column($tables, "TABLE_NAME") !== ["migrations","users"]) {
+                    throw new RuntimeException("unexpected-schema-objects");
+                  }
+                  foreach ($tables as $table) {
+                    if ($table["TABLE_TYPE"] !== "BASE TABLE" || $table["ENGINE"] !== "MyISAM") {
+                      throw new RuntimeException("unexpected-table-type-or-engine");
+                    }
+                  }
+                  if ((int) $pdo->query("SELECT COUNT(*) FROM migrations")->fetchColumn() !== 0 ||
+                      (int) $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn() !== 0 ||
+                      (int) $pdo->query("SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = DATABASE()")->fetchColumn() !== 0) {
+                    throw new RuntimeException("unexpected-data-or-triggers");
+                  }
+                  echo "RECOVERY_GUARDS: PASSED (two known empty MyISAM tables)", PHP_EOL;
+                  $stage = "partial-schema-repair";
+                  $pdo->exec("ALTER TABLE migrations ENGINE=InnoDB");
+                  $pdo->exec("DROP TABLE users");
+                  echo "PARTIAL_SCHEMA_REPAIRED: migration ledger converted; empty incomplete users table removed", PHP_EOL;
+                  $stage = "migrations";
+                  $result = $kernel->call("migrate", ["--database"=>"mysql","--force"=>true,"--no-interaction"=>true]);
+                  echo $kernel->output();
+                  if ($result !== 0) throw new RuntimeException("migration-command-failed");
+                  $stage = "verification";
+                  $actual = $pdo->query("SELECT migration FROM migrations ORDER BY migration")->fetchAll(PDO::FETCH_COLUMN);
+                  $expected = array_map(static fn($file) => basename($file, ".php"), glob("database/migrations/*.php"));
+                  sort($expected);
+                  sort($actual);
+                  if (!$expected || $expected !== $actual) throw new RuntimeException("migration-ledger-mismatch");
+                  $tableCount = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = " . $pdo->quote("BASE TABLE"))->fetchColumn();
+                  $otherEngines = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = " . $pdo->quote("BASE TABLE") . " AND ENGINE <> " . $pdo->quote("InnoDB"))->fetchColumn();
+                  if ($tableCount === 0 || $otherEngines !== 0) throw new RuntimeException("engine-verification-failed");
+                  echo "CREATED_TABLES: ", $tableCount, PHP_EOL;
+                  echo "RECORDED_MIGRATIONS: ", count($actual), PHP_EOL;
+                  echo "NON_INNODB_TABLES: ", $otherEngines, PHP_EOL;
+                  echo "RECOVERY: PASSED", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "RECOVERY: FAILED AT " . $stage . ". Do not retry automatically; inspect the schema first.\n");
+                  exit(1);
+                }
+              '
+              echo 'No seeders, SQL imports, or public deployment performed.'
+              ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
               php84='/opt/alt/php84/usr/bin/php'
@@ -659,5 +746,5 @@ jobs:
         shell: bash
         run: |
           echo "Remote operations use cPanel user permissions, not root."
-          echo "Only the explicitly selected operation is performed; the guarded migrate-empty operation initializes a verified empty schema."
+          echo "Only the explicitly selected operation is performed; schema initialization and recovery operations have explicit empty-schema guards."
           echo "No public web deployment, application seeders, or SQL imports are included."
