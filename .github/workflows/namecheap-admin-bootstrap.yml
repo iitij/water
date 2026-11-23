@@ -1,0 +1,83 @@
+name: Water | Initialize first administrator on Namecheap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-admin:
+    name: Initialize first administrator and permissions
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout approved configuration helper
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure SSH connection and verify host identity
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+            echo "::error::The existing Namecheap SSH repository secret is missing."
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$RUNNER_TEMP/water-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/water-ssh/key"
+          chmod 600 "$RUNNER_TEMP/water-ssh/key"
+          ssh-keygen -y -f "$RUNNER_TEMP/water-ssh/key" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/water-ssh/known_hosts" 2>/dev/null
+          actual="$(ssh-keygen -lf "$RUNNER_TEMP/water-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          if [[ "$actual" != 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ]]; then
+            echo "::error::Unexpected Namecheap SSH host identity."
+            exit 1
+          fi
+
+      - name: Upload credential-free administrator helper to private hosting directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/water-ssh/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/water-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            'umask 077; mkdir -p "$HOME/.local/share/water"; cat > "$HOME/.local/share/water/bootstrap_admin.php"; chmod 600 "$HOME/.local/share/water/bootstrap_admin.php"' \
+            < scripts/hosting/bootstrap_admin.php
+
+      - name: Create and verify first administrator without demo data
+        shell: bash
+        env:
+          WATER_ADMIN_EMAIL: ${{ secrets.WATER_ADMIN_EMAIL }}
+          WATER_ADMIN_PASSWORD: ${{ secrets.WATER_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WATER_ADMIN_EMAIL" || -z "$WATER_ADMIN_PASSWORD" ]]; then
+            echo "::error::Set WATER_ADMIN_EMAIL and WATER_ADMIN_PASSWORD repository secrets first."
+            exit 1
+          fi
+          python3 -c 'import json, os, sys; json.dump({"email":os.environ["WATER_ADMIN_EMAIL"],"password":os.environ["WATER_ADMIN_PASSWORD"]},sys.stdout)' |
+            ssh -T -p 21098 \
+              -i "$RUNNER_TEMP/water-ssh/key" \
+              -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/water-ssh/known_hosts" \
+              -o ConnectTimeout=20 \
+              alweufti@66.29.146.205 \
+              '/opt/alt/php84/usr/bin/php "$HOME/.local/share/water/bootstrap_admin.php"'
+          echo '### First administrator and permissions initialized' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No demo data, SQL imports or public deployment performed.' >> "$GITHUB_STEP_SUMMARY"
