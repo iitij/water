@@ -24,6 +24,7 @@ on:
           - recover-empty-schema
           - prepare-frontend
           - web-publish-audit
+          - sync-web-preflight
           - migrate-empty
           - sync
 
@@ -79,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -793,6 +794,57 @@ jobs:
                 }
               '
               echo 'WEB_PUBLISH_AUDIT: COMPLETE; NO PUBLIC DEPLOYMENT'
+              ;;
+            sync-web-preflight)
+              echo '=== PRIVATE WEB SECURITY UPDATE AND SMOKE TEST ==='
+              test -z "$(git status --porcelain)" || { echo 'Working tree is not clean.'; exit 1; }
+              php84='/opt/alt/php84/usr/bin/php'
+              git fetch --no-tags origin main
+              git merge-base --is-ancestor HEAD FETCH_HEAD
+              git merge-base --is-ancestor 4f96538344802b488fe54476a85bfefa2e06efad FETCH_HEAD
+              if ! git diff --quiet HEAD FETCH_HEAD -- composer.json composer.lock package.json package-lock.json resources public config database/migrations app; then
+                echo 'Dependencies, assets, application, configuration or schema changed; review before updating.'
+                exit 1
+              fi
+              git merge --ff-only FETCH_HEAD
+              echo "SYNCED_COMMIT: $(git rev-parse HEAD)"
+              test -s public/build/manifest.json && test -s vendor/autoload.php
+              test ! -e bootstrap/cache/config.php && test ! -L bootstrap/cache/config.php
+              "$php84" -l routes/web.php
+              "$php84" -d display_errors=0 -r '
+                try {
+                  require "vendor/autoload.php";
+                  $app = require "bootstrap/app.php";
+                  $kernel = $app->make(\Illuminate\Contracts\Http\Kernel::class);
+                  foreach ([
+                    "/up"=>200,
+                    "/admin/login"=>200,
+                    "/invoices/1/print"=>302,
+                    "/payments/1/print"=>302,
+                    "/admin/export/subscribers"=>302,
+                    "/admin/export/invoices"=>302,
+                    "/admin/export/readings"=>302
+                  ] as $path=>$expected) {
+                    $request = \Illuminate\Http\Request::create("https://alweshah.online" . $path, "GET");
+                    $response = $kernel->handle($request);
+                    $status = $response->getStatusCode();
+                    echo "LOCAL_HTTP ", $path, ": ", $status, PHP_EOL;
+                    if ($status !== $expected) throw new RuntimeException("unexpected-http-status");
+                    if ($expected === 302 && parse_url((string) $response->headers->get("Location"), PHP_URL_PATH) !== "/admin/login") {
+                      throw new RuntimeException("unexpected-redirect");
+                    }
+                    $kernel->terminate($request, $response);
+                  }
+                  echo "WEB_SECURITY_SMOKE: PASSED", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "WEB_SECURITY_SMOKE: FAILED; do not publish.\n");
+                  exit(1);
+                }
+              '
+              echo '=== PUBLIC DOCUMENT ROOT INVENTORY (NO FILE CONTENTS) ==='
+              test -d "$HOME/public_html" && test ! -L "$HOME/public_html"
+              find "$HOME/public_html" -mindepth 1 -maxdepth 1 -printf '%y %f\n' | sort
+              echo 'PRIVATE_WEB_PREFLIGHT: COMPLETE; NO PUBLIC DEPLOYMENT'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
