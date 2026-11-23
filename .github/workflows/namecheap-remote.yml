@@ -604,4 +604,4 @@ jobs:
         shell: bash
         run: |
           echo "Remote operations use cPanel user permissions, not root."
-          echo "No database migrations, destructive maintenance, or public deployment are part of this initial workflow."
+          echo "Only the explicitly selected operation is performed; the guarded migrate-empty operation initializes a verified empty schema."\n          echo "No public web deployment, application seeders, or SQL imports are included."
