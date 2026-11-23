@@ -801,7 +801,7 @@ jobs:
               php84='/opt/alt/php84/usr/bin/php'
               git fetch --no-tags origin main
               git merge-base --is-ancestor HEAD FETCH_HEAD
-              git merge-base --is-ancestor 4f96538344802b488fe54476a85bfefa2e06efad FETCH_HEAD
+              git merge-base --is-ancestor cfb1c5a5e90db5cd20b91982dc2f8972651b3522 FETCH_HEAD
               if ! git diff --quiet HEAD FETCH_HEAD -- composer.json composer.lock package.json package-lock.json resources public config database/migrations app; then
                 echo 'Dependencies, assets, application, configuration or schema changed; review before updating.'
                 exit 1
@@ -811,6 +811,7 @@ jobs:
               test -s public/build/manifest.json && test -s vendor/autoload.php
               test ! -e bootstrap/cache/config.php && test ! -L bootstrap/cache/config.php
               "$php84" -l routes/web.php
+              "$php84" -l bootstrap/app.php
               "$php84" -d display_errors=0 -r '
                 try {
                   require "vendor/autoload.php";
@@ -835,6 +836,21 @@ jobs:
                     }
                     $kernel->terminate($request, $response);
                   }
+                  foreach ([
+                    "/invoices/1/print",
+                    "/payments/1/print",
+                    "/admin/export/subscribers",
+                    "/admin/export/invoices",
+                    "/admin/export/readings"
+                  ] as $path) {
+                    $request = \Illuminate\Http\Request::create("https://alweshah.online" . $path, "GET", [], [], [], ["HTTP_ACCEPT"=>"application/json"]);
+                    $response = $kernel->handle($request);
+                    $status = $response->getStatusCode();
+                    echo "LOCAL_JSON ", $path, ": ", $status, PHP_EOL;
+                    if ($status !== 401) throw new RuntimeException("unexpected-json-status");
+                    $kernel->terminate($request, $response);
+                  }
+                  echo "WEB_JSON_AUTH: PASSED", PHP_EOL;
                   echo "WEB_SECURITY_SMOKE: PASSED", PHP_EOL;
                 } catch (Throwable $e) {
                   fwrite(STDERR, "WEB_SECURITY_SMOKE: FAILED; do not publish.\n");
