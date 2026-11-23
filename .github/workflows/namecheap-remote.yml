@@ -20,6 +20,7 @@ on:
           - init-env
           - database-audit
           - database-schema-audit
+          - database-engine-audit
           - migrate-empty
           - sync
 
@@ -75,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -499,6 +500,60 @@ jobs:
               '
               echo 'No database migrations, imports, row changes, or web deployment performed.'
               ;;
+            database-engine-audit)
+              echo '=== MYSQL ENGINE AND PARTIAL SCHEMA AUDIT (READ ONLY) ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              "$php84" -d display_errors=0 -r '
+                try {
+                  require "vendor/autoload.php";
+                  $env = \Dotenv\Dotenv::parse(file_get_contents(".env"));
+                  if (($env["DB_CONNECTION"] ?? "") !== "mysql" ||
+                      ($env["DB_DATABASE"] ?? "") !== "alweufti_water" ||
+                      ($env["DB_USERNAME"] ?? "") !== "alweufti_water" ||
+                      ($env["DB_HOST"] ?? "") !== "localhost") {
+                    throw new RuntimeException("unexpected-config");
+                  }
+                  $pdo = new PDO(
+                    "mysql:host=localhost;port=3306;dbname=alweufti_water;charset=utf8mb4",
+                    $env["DB_USERNAME"], $env["DB_PASSWORD"],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 8]
+                  );
+                  if ($pdo->query("SELECT DATABASE()")->fetchColumn() !== "alweufti_water") {
+                    throw new RuntimeException("wrong-database");
+                  }
+                  echo "MYSQL_VERSION: ", $pdo->query("SELECT VERSION()")->fetchColumn(), PHP_EOL;
+                  echo "DEFAULT_ENGINE: ", $pdo->query("SELECT @@SESSION.default_storage_engine")->fetchColumn(), PHP_EOL;
+                  foreach ($pdo->query("SHOW ENGINES")->fetchAll(PDO::FETCH_ASSOC) as $engine) {
+                    if (in_array(strtolower($engine["Engine"]), ["innodb","myisam","aria"], true)) {
+                      echo "ENGINE: ", $engine["Engine"], " | SUPPORT: ", $engine["Support"], PHP_EOL;
+                    }
+                  }
+                  foreach (["innodb_page_size","innodb_default_row_format","sql_mode"] as $name) {
+                    $q = $pdo->query("SHOW VARIABLES WHERE Variable_name = " . $pdo->quote($name));
+                    $value = $q->fetch(PDO::FETCH_NUM);
+                    if ($value) echo strtoupper($name), ": ", $value[1], PHP_EOL;
+                  }
+                  $tables = $pdo->query(
+                    "SELECT TABLE_NAME, ENGINE, ROW_FORMAT, TABLE_COLLATION, TABLE_TYPE FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY TABLE_NAME"
+                  )->fetchAll(PDO::FETCH_ASSOC);
+                  echo "SCHEMA_OBJECTS: ", count($tables), PHP_EOL;
+                  foreach ($tables as $table) {
+                    echo "TABLE: ", $table["TABLE_NAME"], " | ENGINE: ", $table["ENGINE"],
+                      " | ROW_FORMAT: ", $table["ROW_FORMAT"], " | COLLATION: ", $table["TABLE_COLLATION"],
+                      " | TYPE: ", $table["TABLE_TYPE"], PHP_EOL;
+                    if ($table["TABLE_TYPE"] === "BASE TABLE" &&
+                        in_array($table["TABLE_NAME"], ["migrations","users","password_reset_tokens","sessions"], true)) {
+                      $name = $table["TABLE_NAME"];
+                      echo "ROW_COUNT ", $name, ": ", (int) $pdo->query("SELECT COUNT(*) FROM " . $name)->fetchColumn(), PHP_EOL;
+                    }
+                  }
+                  echo "ENGINE_AUDIT: COMPLETE; READ_ONLY", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "ENGINE_AUDIT: FAILED (configuration, connection, or metadata error).\n");
+                  exit(1);
+                }
+              '
+              ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
               php84='/opt/alt/php84/usr/bin/php'
@@ -604,4 +659,5 @@ jobs:
         shell: bash
         run: |
           echo "Remote operations use cPanel user permissions, not root."
-          echo "Only the explicitly selected operation is performed; the guarded migrate-empty operation initializes a verified empty schema."\n          echo "No public web deployment, application seeders, or SQL imports are included."
+          echo "Only the explicitly selected operation is performed; the guarded migrate-empty operation initializes a verified empty schema."
+          echo "No public web deployment, application seeders, or SQL imports are included."
