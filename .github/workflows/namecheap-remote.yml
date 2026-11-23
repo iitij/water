@@ -22,6 +22,7 @@ on:
           - database-schema-audit
           - database-engine-audit
           - recover-empty-schema
+          - prepare-frontend
           - migrate-empty
           - sync
 
@@ -77,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -640,6 +641,79 @@ jobs:
                 }
               '
               echo 'No seeders, SQL imports, or public deployment performed.'
+              ;;
+            prepare-frontend)
+              echo '=== INSTALL REVIEWED VITE BUILD IN PRIVATE PROJECT ==='
+              test "$(git rev-parse HEAD)" = "c0fc0f7565c76dd50e57a89103e4b1d6389616c6" || {
+                echo 'Server checkout changed; re-review compatibility of staged assets.'
+                exit 1
+              }
+              test -z "$(git status --porcelain)" || { echo 'Working tree is not clean.'; exit 1; }
+              php84='/opt/alt/php84/usr/bin/php'
+              source="$HOME/.water-build-stage/b2e9e7b8bfd6ebfdfbee56bc67f3bd53dfaf7c58/45082542045-1/build"
+              test -d "$source" && test -s "$source/manifest.json"
+              test -d public && test ! -L public
+              test ! -e public/hot && test ! -L public/hot
+              if [[ -e public/build || -L public/build ]]; then
+                echo 'Existing build found; refusing to overwrite.'
+                exit 1
+              fi
+              if [[ -n "$(find "$source" ! -type f ! -type d -print -quit)" ]]; then
+                echo 'Unexpected file type in staged build.'
+                exit 1
+              fi
+              temp="$(mktemp -d "$project/public/.build-stage.XXXXXXXX")"
+              trap 'rm -rf -- "$temp"' EXIT
+              cp -R "$source/." "$temp/"
+              "$php84" -r '
+                try {
+                  $root = $argv[1];
+                  $manifest = json_decode(file_get_contents($root . "/manifest.json"), true, 512, JSON_THROW_ON_ERROR);
+                  foreach (["resources/css/app.css","resources/js/app.js"] as $entry) {
+                    if (!isset($manifest[$entry]["file"])) throw new RuntimeException("missing-entry");
+                  }
+                  foreach ($manifest as $entry) {
+                    $files = array_merge([$entry["file"] ?? ""], $entry["css"] ?? [], $entry["assets"] ?? []);
+                    foreach ($files as $file) {
+                      $resolved = realpath($root . "/" . $file);
+                      if ($resolved === false || !str_starts_with($resolved, $root . "/") || !is_file($resolved) || filesize($resolved) === 0) {
+                        throw new RuntimeException("missing-asset");
+                      }
+                    }
+                  }
+                  echo "VITE_MANIFEST: VERIFIED", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "VITE_MANIFEST: FAILED\n");
+                  exit(1);
+                }
+              ' "$temp"
+              find "$temp" -type d -exec chmod 755 {} +
+              find "$temp" -type f -exec chmod 644 {} +
+              test ! -e public/build && test ! -L public/build
+              mv -T --no-clobber "$temp" public/build
+              test ! -d "$temp" && test -s public/build/manifest.json
+              echo 'VITE_ASSETS: INSTALLED IN PRIVATE PROJECT'
+              echo '=== LOCAL APPLICATION SMOKE TEST ==='
+              "$php84" -d display_errors=0 -r '
+                try {
+                  require "vendor/autoload.php";
+                  $app = require "bootstrap/app.php";
+                  $kernel = $app->make(\Illuminate\Contracts\Http\Kernel::class);
+                  foreach (["/up","/admin/login"] as $path) {
+                    $request = \Illuminate\Http\Request::create("https://alweshah.online" . $path, "GET");
+                    $response = $kernel->handle($request);
+                    $status = $response->getStatusCode();
+                    echo "LOCAL_HTTP ", $path, ": ", $status, PHP_EOL;
+                    $kernel->terminate($request, $response);
+                    if ($status !== 200) throw new RuntimeException("unexpected-http-status");
+                  }
+                  echo "LOCAL_SMOKE_TEST: PASSED", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "LOCAL_SMOKE_TEST: FAILED; inspect before retrying.\n");
+                  exit(1);
+                }
+              '
+              echo 'No public document root changes, seeders, or data import.'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
