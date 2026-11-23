@@ -672,18 +672,47 @@ jobs:
                   foreach (["resources/css/app.css","resources/js/app.js"] as $entry) {
                     if (!isset($manifest[$entry]["file"])) throw new RuntimeException("missing-entry");
                   }
-                  foreach ($manifest as $entry) {
-                    $files = array_merge([$entry["file"] ?? ""], $entry["css"] ?? [], $entry["assets"] ?? []);
+                  $root = realpath($root);
+                  if ($root === false) throw new RuntimeException("missing-build-root");
+                  $allowedEmptyJs = $manifest["resources/js/app.js"]["file"];
+                  if (!is_string($allowedEmptyJs) || !str_ends_with($allowedEmptyJs, ".js")) {
+                    throw new RuntimeException("invalid-js-entry");
+                  }
+                  $emptyJsExpected = trim((string) file_get_contents("resources/js/app.js")) === "//";
+                  $checked = 0;
+                  foreach ($manifest as $key => $entry) {
+                    if (!is_array($entry) || !is_string($entry["file"] ?? null)) {
+                      throw new RuntimeException("invalid-manifest-entry");
+                    }
+                    $files = array_merge([$entry["file"]], $entry["css"] ?? [], $entry["assets"] ?? []);
                     foreach ($files as $file) {
+                      if (!is_string($file) || $file === "") throw new RuntimeException("invalid-asset-path");
                       $resolved = realpath($root . "/" . $file);
-                      if ($resolved === false || !str_starts_with($resolved, $root . "/") || !is_file($resolved) || filesize($resolved) === 0) {
-                        throw new RuntimeException("missing-asset");
+                      if ($resolved === false || !str_starts_with($resolved, $root . "/") || !is_file($resolved)) {
+                        throw new RuntimeException("missing-or-invalid-asset");
+                      }
+                      if (filesize($resolved) === 0) {
+                        if (!$emptyJsExpected || $file !== $allowedEmptyJs) {
+                          throw new RuntimeException("unexpected-empty-asset");
+                        }
+                        echo "EXPECTED_EMPTY_JS: VERIFIED", PHP_EOL;
+                      }
+                      $checked++;
+                    }
+                    foreach (array_merge($entry["imports"] ?? [], $entry["dynamicImports"] ?? []) as $import) {
+                      if (!is_string($import) || !isset($manifest[$import])) {
+                        throw new RuntimeException("unresolved-manifest-import");
                       }
                     }
                   }
+                  echo "MANIFEST_ASSET_REFERENCES_CHECKED: ", $checked, PHP_EOL;
                   echo "VITE_MANIFEST: VERIFIED", PHP_EOL;
                 } catch (Throwable $e) {
-                  fwrite(STDERR, "VITE_MANIFEST: FAILED\n");
+                  $reason = $e instanceof RuntimeException && in_array($e->getMessage(), [
+                    "missing-entry","missing-build-root","invalid-js-entry","invalid-manifest-entry",
+                    "invalid-asset-path","missing-or-invalid-asset","unexpected-empty-asset","unresolved-manifest-import"
+                  ], true) ? $e->getMessage() : "invalid-json-or-unexpected-error";
+                  fwrite(STDERR, "VITE_MANIFEST: FAILED (" . $reason . ")\n");
                   exit(1);
                 }
               ' "$temp"
