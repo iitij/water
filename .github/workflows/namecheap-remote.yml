@@ -23,6 +23,7 @@ on:
           - database-engine-audit
           - recover-empty-schema
           - prepare-frontend
+          - web-publish-audit
           - migrate-empty
           - sync
 
@@ -78,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -743,6 +744,55 @@ jobs:
                 }
               '
               echo 'No public document root changes, seeders, or data import.'
+              ;;
+            web-publish-audit)
+              echo '=== READ-ONLY WEB PUBLISH READINESS ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              echo "PROJECT_COMMIT: $(git rev-parse HEAD)"
+              echo "PRIVATE_PROJECT: $(realpath "$project")"
+              for name in public_html www; do
+                candidate="$HOME/$name"
+                if [[ -d "$candidate" ]]; then
+                  echo "DIRECTORY $name: $(realpath "$candidate")"
+                  stat -c 'MODE: %a' "$candidate"
+                  echo "TOP_LEVEL_ENTRIES $name: $(find -L "$candidate" -mindepth 1 -maxdepth 1 | wc -l)"
+                  for entry in .htaccess index.php index.html .env .git vendor storage repositories; do
+                    if [[ -e "$candidate/$entry" || -L "$candidate/$entry" ]]; then
+                      echo "EXISTING $name/$entry"
+                    fi
+                  done
+                else
+                  echo "DIRECTORY $name: ABSENT"
+                fi
+              done
+              echo '=== PRIVATE PUBLIC DIRECTORY INVENTORY ==='
+              test -s public/index.php && test -s public/.htaccess && test -s public/build/manifest.json
+              echo 'VITE_BUILD: PRESENT'
+              find public -type f \( -iname '*.php' -o -iname '*.phtml' -o -iname '*.phar' -o -iname '*.sql' -o -iname '*.zip' -o -iname '*.pdf' -o -name '.env*' \) -print
+              find public -type l -print
+              echo '=== OPTIONAL PDF RUNTIME ==='
+              for binary in /usr/bin/node /usr/bin/npm /usr/bin/chromium; do
+                if [[ -x "$binary" ]]; then echo "EXECUTABLE $binary: YES"; else echo "EXECUTABLE $binary: NO"; fi
+              done
+              echo '=== ROUTE MIDDLEWARE INVENTORY ==='
+              "$php84" -d display_errors=0 -r '
+                try {
+                  require "vendor/autoload.php";
+                  $app = require "bootstrap/app.php";
+                  $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+                  $routes = $app->make("router")->getRoutes();
+                  foreach (["invoices.print","payments.print","admin.export.subscribers","admin.export.invoices","admin.export.readings","filament.admin.auth.login"] as $name) {
+                    $route = $routes->getByName($name);
+                    if (!$route) throw new RuntimeException("missing-route");
+                    echo "ROUTE ", $name, ": ", implode(", ", $route->gatherMiddleware()), PHP_EOL;
+                  }
+                  echo "ROUTE_INVENTORY: COMPLETE", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "ROUTE_INVENTORY: FAILED\n");
+                  exit(1);
+                }
+              '
+              echo 'WEB_PUBLISH_AUDIT: COMPLETE; NO PUBLIC DEPLOYMENT'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
