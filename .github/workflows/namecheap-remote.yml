@@ -25,6 +25,7 @@ on:
           - prepare-frontend
           - web-publish-audit
           - sync-web-preflight
+          - publish-web-initial
           - migrate-empty
           - sync
 
@@ -73,6 +74,16 @@ jobs:
             exit 1
           fi
 
+      - name: Verify domain HTTPS before initial publication
+        if: ${{ inputs.operation == 'publish-web-initial' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS --connect-timeout 15 --max-time 30 -o /dev/null \
+            --resolve alweshah.online:443:66.29.146.205 https://alweshah.online/
+          curl -sS --connect-timeout 15 --max-time 30 -o /dev/null https://alweshah.online/
+          echo 'DOMAIN_TLS: VERIFIED (certificate validation enabled)'
+
       - name: Perform requested operation (never as root)
         shell: bash
         env:
@@ -80,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -862,6 +873,117 @@ jobs:
               find "$HOME/public_html" -mindepth 1 -maxdepth 1 -printf '%y %f\n' | sort
               echo 'PRIVATE_WEB_PREFLIGHT: COMPLETE; NO PUBLIC DEPLOYMENT'
               ;;
+            publish-web-initial)
+              echo '=== INITIAL WEB PUBLICATION (STATIC ALLOWLIST AND FRONT CONTROLLER) ==='
+              test "$(git rev-parse HEAD)" = "f94005378b2fb729abb3ee773f2654d49bdf4e04" || {
+                echo 'Server is not at the reviewed and tested commit.'
+                exit 1
+              }
+              test -z "$(git status --porcelain)"
+              php84='/opt/alt/php84/usr/bin/php'
+              docroot="$HOME/public_html"
+              test -d "$docroot" && test ! -L "$docroot"
+              test "$(realpath "$docroot")" = "/home/alweufti/public_html"
+              test "$(realpath "$project")" = "/home/alweufti/repositories/water"
+              test -s public/build/manifest.json && test -s vendor/autoload.php && test -s .env
+              test ! -e public/hot && test ! -L public/hot
+              test ! -e bootstrap/cache/config.php
+              if [[ -n "$(find "$docroot" -mindepth 1 -maxdepth 1 ! -name .well-known ! -name cgi-bin ! -name nc_assets ! -name parking-page.shtml -print -quit)" ]]; then
+                echo 'Unexpected existing web-root entries; refusing to overwrite.'
+                exit 1
+              fi
+              if [[ -d "$docroot/cgi-bin" && -n "$(find "$docroot/cgi-bin" -mindepth 1 -print -quit)" ]]; then
+                echo 'Existing CGI content requires review.'
+                exit 1
+              fi
+              dirs=(build css fonts js vendor)
+              files=(favicon.ico icon-192x192.png icon-512x512.png manifest.json robots.txt sw.js)
+              for entry in "${dirs[@]}" "${files[@]}"; do
+                test ! -e "$docroot/$entry" && test ! -L "$docroot/$entry"
+              done
+              test ! -e "$docroot/index.php" && test ! -L "$docroot/index.php"
+              test ! -e "$docroot/.htaccess" && test ! -L "$docroot/.htaccess"
+              stage="$(mktemp -d "$HOME/.water-publish-stage.XXXXXXXX")"
+              chmod 700 "$stage"
+              moved=()
+              committed=0
+              rollback() {
+                code=$?
+                if [[ "$committed" != 1 ]]; then
+                  set +e
+                  for entry in "${moved[@]}"; do
+                    if [[ -e "$docroot/$entry" || -L "$docroot/$entry" ]]; then
+                      mv -T --no-clobber "$docroot/$entry" "$stage/$entry"
+                    fi
+                  done
+                  echo 'INITIAL_PUBLICATION: STOPPED; staged files retained privately.'
+                fi
+                exit "$code"
+              }
+              trap rollback EXIT
+              for entry in "${dirs[@]}"; do
+                test -d "public/$entry" && test ! -L "public/$entry"
+                if [[ -n "$(find "public/$entry" ! -type f ! -type d -print -quit)" ]]; then
+                  echo 'Unexpected special file in public assets.'
+                  exit 1
+                fi
+                if [[ -n "$(find "public/$entry" -mindepth 1 -name '.*' -print -quit)" ]]; then
+                  echo 'Unexpected hidden file in public assets.'
+                  exit 1
+                fi
+                if [[ -n "$(find "public/$entry" -type f ! \( -iname '*.css' -o -iname '*.js' -o -iname '*.json' -o -iname '*.woff' -o -iname '*.woff2' -o -iname '*.ttf' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.ico' -o -iname '*.svg' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.txt' \) -print -quit)" ]]; then
+                  echo 'Non-allowlisted asset extension; refusing publication.'
+                  exit 1
+                fi
+                cp -R "public/$entry" "$stage/$entry"
+              done
+              for entry in "${files[@]}"; do
+                test -f "public/$entry" && test ! -L "public/$entry"
+                cp "public/$entry" "$stage/$entry"
+              done
+              cat > "$stage/index.php" <<'PHP_ENTRY'
+          <?php
+
+          use Illuminate\Http\Request;
+
+          define('LARAVEL_START', microtime(true));
+          $root = '/home/alweufti/repositories/water';
+          if (file_exists($maintenance = $root.'/storage/framework/maintenance.php')) {
+              require $maintenance;
+          }
+          require $root.'/vendor/autoload.php';
+          $app = require_once $root.'/bootstrap/app.php';
+          $app->usePublicPath(__DIR__);
+          $app->handleRequest(Request::capture());
+          PHP_ENTRY
+              cat > "$stage/.htaccess" <<'APACHE_RULES'
+          DirectoryIndex index.php
+          <IfModule mod_rewrite.c>
+              RewriteEngine On
+              RewriteCond %{REQUEST_URI} !^/\.well-known/
+              RewriteCond %{HTTPS} !=on
+              RewriteRule ^ https://alweshah.online%{REQUEST_URI} [R=302,L]
+              RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L]
+          </IfModule>
+          APACHE_RULES
+              cat public/.htaccess >> "$stage/.htaccess"
+              "$php84" -l "$stage/index.php"
+              find "$stage" -mindepth 1 -type d -exec chmod 755 {} +
+              find "$stage" -type f -exec chmod 644 {} +
+              test ! -e "$stage/test_upload.php" && test ! -e "$stage/test.pdf"
+              for entry in "${dirs[@]}" "${files[@]}" .htaccess index.php; do
+                test ! -e "$docroot/$entry" && test ! -L "$docroot/$entry"
+                mv -T --no-clobber "$stage/$entry" "$docroot/$entry"
+                test ! -e "$stage/$entry"
+                moved+=("$entry")
+              done
+              test -s "$docroot/index.php" && test -s "$docroot/build/manifest.json"
+              test ! -e "$docroot/test_upload.php" && test ! -e "$docroot/test.pdf"
+              committed=1
+              rmdir "$stage"
+              echo 'INITIAL_PUBLICATION: INSTALLED'
+              echo 'Existing hosting files preserved; no database modifications or seeders.'
+              ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
               php84='/opt/alt/php84/usr/bin/php'
@@ -962,10 +1084,40 @@ jobs:
           esac
           REMOTE_SCRIPT
 
+      - name: Verify the public website without signing in
+        if: ${{ inputs.operation == 'publish-web-initial' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://alweshah.online'
+          check() {
+            local expected="$1" path="$2"
+            local status
+            status="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' "$base$path")"
+            echo "PUBLIC_HTTP $path: $status"
+            [[ "$status" =~ ^($expected)$ ]]
+          }
+          check 200 /up
+          check 200 /admin/login
+          check 302 /admin
+          check 302 /invoices/1/print
+          check 302 /payments/1/print
+          check 302 /admin/export/subscribers
+          check 200 /build/manifest.json
+          for path in /.env /.git/config /composer.json /vendor/autoload.php /test_upload.php /test.pdf; do
+            check '403|404' "$path"
+          done
+          status="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$base/invoices/1/print")"
+          echo "PUBLIC_JSON /invoices/1/print: $status"
+          test "$status" = 401
+          redirect="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{redirect_url}' http://alweshah.online/admin/login)"
+          test "$redirect" = "$base/admin/login"
+          echo 'PUBLIC_HTTPS_AND_SECURITY_SMOKE: PASSED'
+
       - name: Security reminder
         if: always()
         shell: bash
         run: |
           echo "Remote operations use cPanel user permissions, not root."
           echo "Only the explicitly selected operation is performed; schema initialization and recovery operations have explicit empty-schema guards."
-          echo "No public web deployment, application seeders, or SQL imports are included."
+          echo "Only publish-web-initial publishes allowlisted public assets. No application seeders or SQL imports are included."
