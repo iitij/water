@@ -27,7 +27,7 @@ Route::get('/invoices/{invoice}/print', function (Invoice $invoice) {
         ->landscape()
         ->name('invoice-' . $invoice->bill_number . '.pdf')
         ->inline();
-})->name('invoices.print')->middleware('web');
+})->name('invoices.print')->middleware(['web', \Filament\Http\Middleware\Authenticate::class, 'can:view,invoice']);
 
 Route::get('/payments/{payment}/print', function (\App\Models\Payment $payment) {
     $payment->load(['subscriber.square', 'invoice']);
@@ -46,11 +46,11 @@ Route::get('/payments/{payment}/print', function (\App\Models\Payment $payment) 
         ->landscape()
         ->name('receipt-' . $payment->receipt_number . '.pdf')
         ->inline();
-})->name('payments.print')->middleware('web');
+})->name('payments.print')->middleware(['web', \Filament\Http\Middleware\Authenticate::class, 'can:view,payment']);
 
 // Export Routes (Protected by Filament Web Session)
 Route::middleware(['web', \Filament\Http\Middleware\Authenticate::class])->prefix('admin/export')->group(function () {
-    Route::get('/subscribers', [ExportController::class, 'exportSubscribers'])->name('admin.export.subscribers');
-    Route::get('/invoices', [ExportController::class, 'exportInvoices'])->name('admin.export.invoices');
-    Route::get('/readings', [ExportController::class, 'exportReadings'])->name('admin.export.readings');
+    Route::get('/subscribers', [ExportController::class, 'exportSubscribers'])->name('admin.export.subscribers')->can('viewAny', \App\Models\Subscriber::class);
+    Route::get('/invoices', [ExportController::class, 'exportInvoices'])->name('admin.export.invoices')->can('viewAny', \App\Models\Invoice::class);
+    Route::get('/readings', [ExportController::class, 'exportReadings'])->name('admin.export.readings')->can('viewAny', \App\Models\Reading::class);
 });
