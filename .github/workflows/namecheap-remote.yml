@@ -20,6 +20,7 @@ on:
           - init-env
           - database-audit
           - database-schema-audit
+          - migrate-empty
           - sync
 
 permissions:
@@ -74,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -497,6 +498,83 @@ jobs:
                 }
               '
               echo 'No database migrations, imports, row changes, or web deployment performed.'
+              ;;
+            migrate-empty)
+              echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              test -s .env || { echo 'Missing private Laravel env.'; exit 1; }
+              test -s vendor/autoload.php || { echo 'Missing installed Laravel dependencies.'; exit 1; }
+              if [[ -n "$(git status --porcelain)" ]]; then
+                echo 'Working tree has changes; aborting migrations.'
+                exit 1
+              fi
+              if [[ "$(find database/migrations -maxdepth 1 -type f -name '*.php' | wc -l)" -lt 45 ]]; then
+                echo 'Unexpectedly few migration files; aborting.'
+                exit 1
+              fi
+              "$php84" -r '
+                require "vendor/autoload.php";
+                try {
+                  $text = file_get_contents(".env");
+                  if (!is_string($text)) throw new RuntimeException("missing-env");
+                  $env = \Dotenv\Dotenv::parse($text);
+                  foreach (["DB_CONNECTION","DB_HOST","DB_PORT","DB_DATABASE","DB_USERNAME","DB_PASSWORD","APP_KEY"] as $key) {
+                    if (!isset($env[$key]) || $env[$key] === "") throw new RuntimeException("missing-setting");
+                  }
+                  if ($env["DB_CONNECTION"] !== "mysql" ||
+                      $env["DB_DATABASE"] !== "alweufti_water" ||
+                      $env["DB_USERNAME"] !== "alweufti_water" ||
+                      ($env["APP_ENV"] ?? "") !== "production" ||
+                      ($env["APP_DEBUG"] ?? "") !== "false") {
+                    throw new RuntimeException("unexpected-settings");
+                  }
+                  $db = new PDO(
+                    "mysql:host={$env["DB_HOST"]};port={$env["DB_PORT"]};dbname={$env["DB_DATABASE"]};charset=utf8mb4",
+                    $env["DB_USERNAME"],
+                    $env["DB_PASSWORD"],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 8]
+                  );
+                  if ($db->query("SELECT DATABASE()")->fetchColumn() !== "alweufti_water") {
+                    throw new RuntimeException("wrong-database");
+                  }
+                  $count = (int) $db->query(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()"
+                  )->fetchColumn();
+                  echo "EXISTING_DATABASE_OBJECTS: ", $count, PHP_EOL;
+                  if ($count !== 0) throw new RuntimeException("nonempty-schema");
+                  echo "EMPTY_SCHEMA_GUARD: PASSED", PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "EMPTY_SCHEMA_GUARD: FAILED; NO MIGRATIONS STARTED.\n");
+                  exit(1);
+                }
+              '
+              echo '=== LARAVEL BOOTSTRAP CHECK ==='
+              "$php84" artisan --version
+              echo '=== CREATE SCHEMA USING EXISTING PROJECT MIGRATIONS ==='
+              "$php84" artisan migrate --force --no-interaction
+              echo '=== POST-MIGRATION VERIFICATION ==='
+              "$php84" artisan migrate:status --no-interaction
+              "$php84" -r '
+                require "vendor/autoload.php";
+                try {
+                  $env = \Dotenv\Dotenv::parse(file_get_contents(".env"));
+                  $pdo = new PDO(
+                    "mysql:host={$env["DB_HOST"]};port={$env["DB_PORT"]};dbname={$env["DB_DATABASE"]};charset=utf8mb4",
+                    $env["DB_USERNAME"], $env["DB_PASSWORD"],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 8]
+                  );
+                  echo "CREATED_TABLES: ", (int) $pdo->query(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = " . $pdo->quote("BASE TABLE")
+                  )->fetchColumn(), PHP_EOL;
+                  echo "RECORDED_MIGRATIONS: ", (int) $pdo->query(
+                    "SELECT COUNT(*) FROM migrations"
+                  )->fetchColumn(), PHP_EOL;
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "POST_MIGRATION_VERIFICATION: FAILED.\n");
+                  exit(1);
+                }
+              '
+              echo 'Database schema initialization completed. No seeders, SQL imports, existing data removal, or web deployment performed.'
               ;;
             sync)
               if [[ -n "$(git status --porcelain)" ]]; then
