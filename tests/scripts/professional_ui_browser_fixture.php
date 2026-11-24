@@ -29,7 +29,7 @@ auth()->setUser($admin);
 
 $square = \App\Models\Square::create(['name'=>'مربع اختبار الواجهات']);
 $subscriber = \App\Models\Subscriber::create(['name'=>'مشترك تجريبي', 'status'=>'active', 'square_id'=>$square->id]);
-$meter = \App\Models\Meter::create(['subscriber_id'=>$subscriber->id, 'unique_code'=>'UI-BROWSER-METER']);
+$meter = \App\Models\Meter::create(['subscriber_id'=>$subscriber->id, 'unique_code'=>'UI-BROWSER-METER', 'installed_at'=>'2026-11-01']);
 $reading = \App\Models\Reading::create([
     'meter_id'=>$meter->id, 'reading_date'=>'2026-11-03', 'previous_reading'=>0, 'current_reading'=>12,
     'period_start'=>'2026-11-01', 'period_end'=>'2026-11-03',
