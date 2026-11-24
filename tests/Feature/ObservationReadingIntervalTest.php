@@ -191,6 +191,30 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('2026-02-15', $reading->actual_reading_date->toDateString());
     }
 
+    public function test_model_guard_protects_prior_observation_from_direct_edit_or_delete(): void
+    {
+        $meter = $this->meter();
+        $firstId = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12', 'current_reading' => 135,
+        ])->assertCreated()->json('reading.id');
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-14', 'current_reading' => 148,
+        ])->assertCreated();
+        foreach ([
+            fn () => Reading::findOrFail($firstId)->update(['current_reading' => 136]),
+            fn () => Reading::findOrFail($firstId)->delete(),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Observation anchor was changed.');
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $this->assertArrayHasKey('reading_date', $e->errors());
+            }
+        }
+        $this->assertSame('135.00', Reading::findOrFail($firstId)->current_reading);
+        $this->assertDatabaseCount('readings', 2);
+    }
+
     public function test_prior_observation_cannot_be_modified_after_a_successor_exists(): void
     {
         $meter = $this->meter();
