@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Models\Reading;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -80,32 +79,22 @@ class WhatsAppService
             $defaultMsg = "إشعار فاتورة استهلاك مياه\nمرحباً بك {subscriber_name}،\nتم إصدار فاتورتك رقم (#{bill_number}) للفترة من {period_start} إلى {period_end}.\n\nتفاصيل القراءة والاستهلاك:\n• رقم العداد: {meter_code} | المربع: {square}\n• القراءة السابقة: {previous_reading}\n• القراءة الحالية: {current_reading}\n• كمية الاستهلاك: {consumption_units} وحدة (سعر الوحدة: {unit_price})\n\nتفاصيل الرسوم والحساب:\n• قيمة الاستهلاك: {consumption_fee} ريال\n{if:previous_balance}• رصيد متأخرات سابق: {previous_balance} ريال{/if:previous_balance}\n------------------------\nالإجمالي المستحق: {total_amount} ريال\n------------------------\nالمحصل: {collector}\n\nلمعاينة وتحميل الفاتورة الرسمية (PDF):\n{pdf_url}\n\nشكراً لدفعكم في الموعد المحدد";
             $template = Setting::get('reading_invoice_message_template', $defaultMsg);
 
-        $readings = clone $invoice->readings;
-        if ($readings->isEmpty() && $invoice->meter_id && $invoice->billing_period_start && $invoice->billing_period_end) {
-            $readings = Reading::where('meter_id', $invoice->meter_id)
-                ->where('reading_date', '<=', $invoice->billing_period_end)
-                ->where('reading_date', '>=', $invoice->billing_period_start)
-                ->orderBy('reading_date', 'asc')
-                ->get();
-        }
-        if ($readings->isEmpty() && $invoice->billing_period_start && $invoice->billing_period_end) {
-            $readings = Reading::whereHas('meter', function ($q) use ($invoice) {
-                $q->where('subscriber_id', $invoice->subscriber_id);
-            })->where('reading_date', '<=', $invoice->billing_period_end)
-                ->where('reading_date', '>=', $invoice->billing_period_start)
-                ->orderBy('reading_date', 'asc')->get();
-        }
+        // Only linked readings may supply original meter readings; never infer them from another meter or date range.
+        $readings = $invoice->readings;
         $sortedReadings = $readings->sortBy('reading_date');
         $firstReading = $sortedReadings->first();
         $lastReading = $sortedReadings->last();
 
         $previousReading = $firstReading ? $firstReading->previous_reading : '';
         $currentReading = $lastReading ? $lastReading->current_reading : '';
-        $consumptionUnits = $readings->sum('consumption_units');
+        $tariffLines = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+            ->where('invoice_id', $invoice->id)->get();
+        $consumptionUnits = $tariffLines->isNotEmpty()
+            ? $tariffLines->sum('units')
+            : ($readings->isNotEmpty() ? $readings->sum('consumption_units') : 'غير موثقة');
         $consumptionValue = $invoice->consumption_fee ?? 0;
 
-        $prices = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
-            ->where('invoice_id', $invoice->id)->pluck('unit_price')
+        $prices = $tariffLines->pluck('unit_price')
             ->map(fn ($price) => number_format((float) $price, 2, '.', ''))->unique();
         $unitPrice = match ($prices->count()) {
             0 => 'غير موثقة في الفاتورة',
@@ -138,7 +127,7 @@ class WhatsAppService
                 $pdfLink,
                 $invoice->billing_period_start ? $invoice->billing_period_start->format('Y-m-d') : '',
                 $invoice->billing_period_end ? $invoice->billing_period_end->format('Y-m-d') : '',
-                $invoice->meter->unique_code ?? '',
+                $invoice->meter?->unique_code ?? $invoice->retired_meter_code ?? '',
                 $invoice->subscriber->square->name ?? '',
                 $previousReading,
                 $currentReading,
