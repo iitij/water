@@ -586,6 +586,7 @@ class InvoiceController extends ApiController
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
+        $data['meter_code'] = $invoice->meter?->unique_code ?? $invoice->retired_meter_code;
 
         return $data;
     }

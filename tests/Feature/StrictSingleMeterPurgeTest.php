@@ -51,6 +51,7 @@ class StrictSingleMeterPurgeTest extends TestCase
             'bill_date' => '2026-11-14',
             'invoice_type' => 'meter',
             'total_amount' => 95,
+            'status' => 'draft',
         ]);
         DB::table('invoice_items')->insert([
             'invoice_id' => $invoice,
@@ -219,9 +220,9 @@ class StrictSingleMeterPurgeTest extends TestCase
             'removed_at' => now()->toDateString(),
             'reason' => 'حذف العداد القديم مع سند صندوق',
             'new_meter' => ['unique_code' => 'CASH-NEW'],
-        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        ])->assertCreated();
 
-        $this->assertDatabaseHas('payments', ['id' => $oldReceiptId, 'meter_id' => $oldMeter->id]);
+        $this->assertDatabaseHas('payments', ['id' => $oldReceiptId, 'meter_id' => null, 'retired_meter_id' => $oldMeter->id]);
         $this->assertDatabaseHas('payments', ['id' => $otherReceiptId, 'meter_id' => $otherMeter->id]);
         $this->assertDatabaseHas('cash_sessions', [
             'id' => $session,
@@ -259,7 +260,7 @@ class StrictSingleMeterPurgeTest extends TestCase
             'removed_at' => now()->toDateString(),
             'reason' => 'اختبار صندوق مفتوح',
             'new_meter' => ['unique_code' => 'OPEN-CASH-NEW'],
-        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        ])->assertCreated();
 
         $this->assertDatabaseHas('cash_sessions', [
             'id' => $session,
@@ -268,6 +269,7 @@ class StrictSingleMeterPurgeTest extends TestCase
             'variance_amount' => null,
         ]);
         $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('payments', ['receipt_number' => 'OPEN-CASH-REC', 'meter_id' => null, 'retired_meter_id' => $old->id]);
     }
 
     public function test_plain_meter_deletion_removes_fault_visit_and_meter_audit_rows_permanently(): void

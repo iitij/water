@@ -138,7 +138,7 @@ class Payment extends Model
         foreach ([
             'subscriber_id', 'meter_id', 'invoice_id', 'user_id', 'receipt_number',
             'amount', 'payment_date', 'payment_method', 'reference_number',
-            'reason', 'sync_uuid', 'cash_session_id', 'voided_at', 'void_reason', 'voided_by', 'voided_via',
+            'reason', 'sync_uuid', 'cash_session_id', 'voided_at', 'void_reason', 'voided_by', 'voided_via', 'retired_meter_id', 'retired_meter_code',
         ] as $field) {
             if ($this->isDirty($field)) {
                 $errors[$field] = 'لا يجوز تعديل بيانات سند قبض معتمد؛ استخدم إجراء إلغاء السند المعتمد ثم سجل سنداً صحيحاً.';

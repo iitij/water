@@ -100,6 +100,33 @@ class CashSessionsTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('correct_duplicate')
+                    ->label('تصحيح سند مكرر')
+                    ->color('warning')
+                    ->visible(function (CashSession $record): bool {
+                        $user = Auth::user();
+                        return $record->isApproved() && $user
+                            && (int) $record->user_id !== (int) $user->id
+                            && ($user->hasRole('super_admin') ||
+                                ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
+                    })
+                    ->form([
+                        \Filament\Forms\Components\TextInput::make('payment_id')->label('معرّف السند المكرر')->integer()->required(),
+                        \Filament\Forms\Components\TextInput::make('duplicate_of_id')->label('معرّف السند الأصلي الصحيح')->integer()->required(),
+                        Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
+                        Textarea::make('evidence')->label('دليل عدم استلام مبلغ إضافي')->required()->minLength(10)->maxLength(2000),
+                        \Filament\Forms\Components\Checkbox::make('no_second_cash_receipt')
+                            ->label('أؤكد عدم استلام دفعة ثانية فعلياً')->accepted()->required(),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (CashSession $record, array $data): void {
+                        abort_unless($data['no_second_cash_receipt'] ?? false, 422);
+                        $payment = \App\Models\Payment::where('cash_session_id', $record->id)->findOrFail($data['payment_id']);
+                        app(\App\Services\ClosedCashCorrectionService::class)->correctDuplicate(
+                            $payment, (int) $data['duplicate_of_id'], Auth::user(), $data['reason'], $data['evidence']
+                        );
+                        Notification::make()->title('تم التصحيح دون تغيير التسوية الأصلية')->success()->send();
+                    }),
                 Action::make('approve')
                     ->label('اعتماد')
                     ->icon('heroicon-o-check-badge')

@@ -59,7 +59,7 @@ class Invoice extends Model
             'subscriber_id', 'meter_id', 'invoice_type', 'bill_number', 'bill_date',
             'billing_period_start', 'billing_period_end', 'consumption_fee',
             'previous_balance', 'credit_applied', 'total_amount', 'amount_paid', 'status',
-            'voided_at', 'void_reason', 'voided_by',
+            'voided_at', 'void_reason', 'voided_by', 'retired_meter_id', 'retired_meter_code',
         ] as $field) {
             if ($this->isDirty($field)) {
                 $errors[$field] = 'لا يجوز تعديل بيانات فاتورة معتمدة؛ يجب استخدام إجراء تصحيح محاسبي موثق.';
