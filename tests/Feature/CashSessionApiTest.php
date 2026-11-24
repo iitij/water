@@ -239,8 +239,8 @@ class CashSessionApiTest extends TestCase
 
     public function test_bulk_tariff_restore_and_force_delete(): void
     {
-        $a = Tariff::create(['name' => 'أ', 'unit_price' => 100, 'is_active' => true, 'start_date' => '2026-01-01', 'end_date' => '2026-01-31']);
-        $b = Tariff::create(['name' => 'ب', 'unit_price' => 200, 'is_active' => true, 'start_date' => '2026-02-01']);
+        $a = Tariff::create(['name' => 'أ', 'unit_price' => 100, 'is_active' => true, 'start_date' => '2000-01-01', 'end_date' => '2000-01-31']);
+        $b = Tariff::create(['name' => 'ب', 'unit_price' => 200, 'is_active' => true, 'start_date' => '2000-02-01', 'end_date' => '2000-02-29']);
         $a->delete();
         $b->delete();
 
