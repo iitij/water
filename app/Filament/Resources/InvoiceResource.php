@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\InvoiceResource\Pages;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\InvoiceService;
 use App\Services\PaymentService;
@@ -206,7 +207,7 @@ class InvoiceResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('total_due')
-                    ->label('إجمالي المطلوب')
+                    ->label('إجمالي عند الإصدار (تاريخي)')
                     ->state(fn($record) => $record->total_amount + $record->previous_balance)
                     ->numeric(2)->suffix(' ريال')
                     ->sortable()
@@ -219,8 +220,13 @@ class InvoiceResource extends Resource
                     ->sortable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('own_remaining_amount')
+                    ->label('متبقي الفاتورة نفسها')
+                    ->state(fn (Invoice $record) => $record->getRemainingAmount())
+                    ->numeric(2)->suffix(' ريال')->toggleable(),
+
                 Tables\Columns\TextColumn::make('remaining_amount')
-                    ->label('المتبقي')
+                    ->label('متبقي الحساب (الأحدث فقط)')
                     ->state(function (\App\Models\Invoice $record) {
                         if ($record->isLatestInvoice()) {
                             $trueRemaining = $record->getTrueRemainingAmount();
@@ -234,7 +240,7 @@ class InvoiceResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('الحالة')
+                    ->label('حالة سداد الفاتورة')
                     ->badge()
                     ->formatStateUsing(fn(string $state): string => match ($state) {
                         'draft' => 'مسودة',
@@ -417,13 +423,7 @@ class InvoiceResource extends Resource
                     ->label('تحصيل')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
-                    ->visible(function (Invoice $record) {
-                        if (!in_array($record->status, ['issued', 'partially_paid', 'overdue'])) {
-                            return false;
-                        }
-
-                        return $record->isLatestInvoice() && $record->getCollectibleAmount() > 0;
-                    })
+                    ->visible(fn (Invoice $record) => $record->canCollect() && auth()->user()?->can('create', Payment::class))
                     ->form([
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
@@ -458,6 +458,7 @@ class InvoiceResource extends Resource
                             ->rows(2),
                     ])
                     ->action(function (Invoice $record, array $data): void {
+                        \Illuminate\Support\Facades\Gate::authorize('create', Payment::class);
                         $service = new PaymentService();
                         $payment = $service->collectPayment(
                             subscriber: $record->subscriber,
@@ -467,6 +468,7 @@ class InvoiceResource extends Resource
                             referenceNumber: $data['reference_number'] ?? null,
                             notes: $data['notes'] ?? null,
                             reason: $data['reason'] ?? null,
+                            userId: auth()->id(),
                         );
 
                         Notification::make()

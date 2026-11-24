@@ -41,7 +41,7 @@ class InvoiceController extends ApiController
 
         if ($request->filled('status') && $request->query('status') !== 'all') {
             if ($request->query('status') === 'unpaid') {
-                $query->whereIn('status', ['issued', 'partially_paid', 'overdue']);
+                $query->withOwnDebt();
             } else {
                 $query->where('status', $request->query('status'));
             }
@@ -102,7 +102,7 @@ class InvoiceController extends ApiController
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
         $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter'])
-            ->whereIn('status', ['issued', 'partially_paid', 'overdue'])->latest('bill_date')->latest('id');
+            ->withOwnDebt()->latest('bill_date')->latest('id');
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
         }
@@ -605,6 +605,8 @@ class InvoiceController extends ApiController
         $data = $invoice->toArray();
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();
+        $data['collectible_amount'] = $invoice->getCollectibleAmount();
+        $data['can_collect'] = $invoice->canCollect();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
         $data['meter_code'] = $invoice->meter?->unique_code ?? $invoice->retired_meter_code;
         $data['historical_correction'] = \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $invoice->id)->first();

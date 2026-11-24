@@ -140,6 +140,32 @@ class Invoice extends Model
         return max(0, (float) $this->total_amount - (float) $this->amount_paid);
     }
 
+    public function scopeWithOwnDebt(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNotIn('status', ['draft', 'cancelled'])
+            ->whereNull('deleted_at')->whereColumn('total_amount', '>', 'amount_paid');
+    }
+
+    public function scopeCollectibleForSubscriber(\Illuminate\Database\Eloquent\Builder $query, ?int $subscriberId): \Illuminate\Database\Eloquent\Builder
+    {
+        $query->where('subscriber_id', $subscriberId)->whereNotIn('status', ['draft', 'cancelled']);
+        $latestId = null;
+        if ($subscriberId && self::where('subscriber_id', $subscriberId)->withOwnDebt()->exists()) {
+            $latestId = self::where('subscriber_id', $subscriberId)->whereNotIn('status', ['draft', 'cancelled'])->max('id');
+        }
+        return $query->where(function ($eligible) use ($latestId) {
+            $eligible->whereColumn('total_amount', '>', 'amount_paid');
+            if ($latestId !== null) {
+                $eligible->orWhere('id', $latestId);
+            }
+        });
+    }
+
+    public function canCollect(): bool
+    {
+        return $this->getCollectibleAmount() > 0;
+    }
+
     /**
      * Live collection suggestion, not the historical amount printed at issue.
      * Only the newest invoice represents cumulative outstanding debt.

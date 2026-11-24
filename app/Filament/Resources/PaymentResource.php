@@ -44,8 +44,7 @@ class PaymentResource extends Resource
                             $set('amount', null);
 
                             if ($state) {
-                                $latestUnpaidInvoice = \App\Models\Invoice::where('subscriber_id', $state)
-                                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                                $latestUnpaidInvoice = \App\Models\Invoice::collectibleForSubscriber((int) $state)
                                     ->orderBy('id', 'desc')
                                     ->first();
                                 if ($latestUnpaidInvoice) {
@@ -70,8 +69,7 @@ class PaymentResource extends Resource
                             'invoice', 
                             'bill_number',
                             fn (\Illuminate\Database\Eloquent\Builder $query, $get) => 
-                                $query->where('subscriber_id', $get('subscriber_id'))
-                                      ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                                $query->collectibleForSubscriber($get('subscriber_id') ? (int) $get('subscriber_id') : null)
                         )
                         ->searchable()
                         ->preload()
@@ -81,8 +79,7 @@ class PaymentResource extends Resource
                             $set('amount', null);
 
                             if ($state) {
-                                $inv = \App\Models\Invoice::where('subscriber_id', $get('subscriber_id'))
-                                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                                $inv = \App\Models\Invoice::collectibleForSubscriber($get('subscriber_id') ? (int) $get('subscriber_id') : null)
                                     ->find($state);
                                 if ($inv) {
                                     $due = $inv->getCollectibleAmount();
