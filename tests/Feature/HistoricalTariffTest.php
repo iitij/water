@@ -190,7 +190,8 @@ class HistoricalTariffTest extends TestCase
             'billing_period_start' => '2020-01-01',
             'billing_period_end' => '2020-02-01',
         ];
-        $this->actingAs($admin, 'sanctum')->postJson('/api/invoices', $payload)->assertCreated();
+        $this->actingAs($admin, 'sanctum')->postJson('/api/invoices', $payload)->assertCreated()
+            ->assertJsonPath('invoice.tariff_lines.0.unit_price', '600.25');
         $invoice = Invoice::sole();
         $this->assertSame('6002.50', $invoice->total_amount);
         $this->assertSame('2026-01-01', $invoice->billing_period_start->toDateString());
@@ -200,6 +201,8 @@ class HistoricalTariffTest extends TestCase
         $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
             'reading_id' => $reading->id, 'tariff_id' => $tariff->id, 'amount' => 6002.50]);
         $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+        $this->getJson('/api/invoices')->assertOk()->assertJsonPath('data.0.tariff_lines.0.unit_price', '600.25');
+        $this->getJson('/api/invoices/'.$invoice->id)->assertOk()->assertJsonPath('invoice.tariff_lines.0.amount', '6002.50');
         $this->postJson('/api/invoices', $payload)->assertUnprocessable();
         $this->assertDatabaseCount('invoices', 1);
         $this->assertDatabaseCount('transactions', 1);
