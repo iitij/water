@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
 
-/// Replacements permanently delete the previous meter's data. Online only.
+/// Replaces the physical meter; posted financial documents are protected. Online only.
 class MeterReplacementDialog extends StatefulWidget {
   const MeterReplacementDialog({required this.meter, required this.repository, super.key});
 
@@ -93,8 +93,8 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                 Text('العداد السابق: ${widget.meter.uniqueCode}'),
                 const SizedBox(height: 8),
                 const Text(
-                  'سيُحذف العداد السابق نهائياً مع قراءاته وفواتيره وسنداته وبياناته المرتبطة. '
-                  'لن يُحتفظ بسجل تاريخي للعداد السابق. '
+                  'سيُستبدل العداد السابق نهائياً، وتُحفظ المستندات المالية المعتمدة ورصيد المشترك. '
+                  'لا يمكن استبدال عداد لديه استهلاك غير مفوتر يتطلب المعالجة. '
                   'لا يمكن التراجع عن العملية، وتتطلب اتصالاً بالخادم.',
                 ),
                 const SizedBox(height: 16),
