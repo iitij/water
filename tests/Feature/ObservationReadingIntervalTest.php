@@ -441,6 +441,37 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertDatabaseCount('readings', 1);
     }
 
+    public function test_uuid_case_and_cross_meter_batch_conflicts_are_permanent(): void
+    {
+        $first = $this->meter();
+        $subscriber = Subscriber::create([
+            'name' => 'Second sync account', 'square_id' => $first->subscriber->square_id, 'status' => 'active',
+        ]);
+        $second = Meter::create([
+            'subscriber_id' => $subscriber->id, 'unique_code' => 'PERIOD-OBS-2',
+            'installed_at' => '2026-01-10', 'initial_reading' => 100,
+        ]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $uuid = 'abcdef12-3456-4789-abcd-ef1234567890';
+        $payload = ['meter_id' => $first->id, 'reading_date' => '2026-02-12',
+            'current_reading' => '135.25', 'sync_uuid' => strtoupper($uuid)];
+        $id = $this->postJson('/api/readings', $payload)->assertCreated()->json('reading.id');
+        $this->postJson('/api/readings', array_replace($payload, ['sync_uuid' => $uuid]))
+            ->assertOk()->assertJsonPath('duplicate', true)->assertJsonPath('reading.id', $id);
+        $this->postJson('/api/readings/sync-batch', ['readings' => [
+            array_replace($payload, ['meter_id' => $second->id]),
+            array_replace($payload, ['sync_uuid' => $uuid]),
+        ]])->assertOk()
+            ->assertJsonPath('results.0.success', false)
+            ->assertJsonPath('results.0.retryable', false)
+            ->assertJsonPath('results.1.success', true)
+            ->assertJsonPath('results.1.duplicate', true)
+            ->assertJsonPath('results.1.reading.id', $id);
+        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseHas('readings', ['id' => $id, 'sync_uuid' => $uuid]);
+        $this->assertDatabaseMissing('readings', ['meter_id' => $second->id]);
+    }
+
     public function test_prior_observation_cannot_be_modified_after_a_successor_exists(): void
     {
         $meter = $this->meter();

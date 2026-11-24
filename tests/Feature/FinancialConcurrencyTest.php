@@ -182,6 +182,34 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(0, Invoice::count());
     }
 
+    public function test_parallel_mobile_readings_on_different_meters_cannot_share_uuid(): void
+    {
+        $first = $this->fixture();
+        $second = $this->fixture();
+        $user = User::factory()->create(['role' => 'admin']);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $uuid = (string) Str::uuid();
+        $submit = function (Meter $meter) use ($user, $uuid): int {
+            return $this->actingAs(User::findOrFail($user->id), 'sanctum')
+                ->postJson('/api/readings', [
+                    'meter_id' => $meter->id,
+                    'reading_date' => '2026-03-01',
+                    'current_reading' => '15.25',
+                    'sync_uuid' => $uuid,
+                ])->status();
+        };
+        $results = $this->race(fn () => $submit($first), fn () => $submit($second));
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $statuses = array_column($results, 'value');
+        sort($statuses);
+        $this->assertSame([201, 409], $statuses, json_encode($results));
+        $this->assertSame(1, Reading::where('sync_uuid', $uuid)->count());
+        $this->assertSame(3, Reading::count());
+        $this->assertSame('5.25', Reading::where('sync_uuid', $uuid)->firstOrFail()->consumption_units);
+        $this->assertSame(0, Invoice::count());
+        $this->assertSame(0, Transaction::count());
+    }
+
     public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void
     {
         $meter = $this->fixture();

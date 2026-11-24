@@ -404,6 +404,9 @@ class ReadingController extends ApiController
                 $data['sync_uuid'] = strtolower($fallbackId);
             }
         }
+        if (! empty($data['sync_uuid'])) {
+            $data['sync_uuid'] = strtolower($data['sync_uuid']);
+        }
         $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
         if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
             return $replay;
@@ -412,76 +415,90 @@ class ReadingController extends ApiController
         // Replacement also locks the physical meter row. Keep validation,
         // period calculation and insertion inside that SAME row lock so a
         // reading cannot slip between the preflight guard and meter deletion.
-        $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
-            \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
-            $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
-            // A simultaneous retry may have committed while this request waited for the meter lock.
-            // Check identity again before rejecting a repeated observation date or writing an image.
-            if ($replay = $this->existingReadingReplay($locked, $data, $request)) {
+        try {
+            $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
+                \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
+                $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
+                abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
+                // A simultaneous retry may have committed while this request waited for the meter lock.
+                // Check identity again before rejecting a repeated observation date or writing an image.
+                if ($replay = $this->existingReadingReplay($locked, $data, $request)) {
+                    return $replay;
+                }
+                $lastReading = $this->readingService->latestReading($locked->id);
+                $previous = $lastReading
+                    ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
+                $current = (float) $data['current_reading'];
+
+                // Report retired meters and invalid physical readings before
+                // trying to derive the interval from an installation anchor.
+                if (! $locked->isCurrent()) {
+                    throw ValidationException::withMessages([
+                        'meter_id' => ['لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل.'],
+                    ]);
+                }
+                if ($current < $previous) {
+                    throw ValidationException::withMessages([
+                        'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                    ]);
+                }
+                $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
+                // The server's observed dates are authoritative. Legacy mobile
+                // clients may send a calendar forecast; never bill that forecast.
+                $periodStart = $calculatedPeriod['period_start'];
+                $periodEnd = $calculatedPeriod['period_end'];
+                app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
+                    $locked, $current, $periodStart, $periodEnd,
+                    $data['actual_reading_date'] ?? $data['reading_date'],
+                );
+
+                $created = Reading::create([
+                    'meter_id' => $locked->id,
+                    'created_by' => $request->user()?->id,
+                    'reading_date' => $data['reading_date'],
+                    'actual_reading_date' => $data['actual_reading_date'] ?? $data['reading_date'],
+                    'previous_reading' => $previous,
+                    'current_reading' => $current,
+                    'period_start' => $periodStart,
+                    'period_end' => $periodEnd,
+                    'period_basis' => 'observation',
+                    'submitted_period_start' => $data['period_start'] ?? null,
+                    'submitted_period_end' => $data['period_end'] ?? null,
+                    'sync_uuid' => $data['sync_uuid'] ?? null,
+                ]);
+
+                // Reserve the unique reading identity before creating a file on disk.
+                $imagePath = null;
+                $imageFile = $batchIndex === null
+                    ? $request->file('image') : $request->file("readings.$batchIndex.image");
+                if ($imageFile) {
+                    $imagePath = $imageFile->store('readings', 'public');
+                } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
+                    $decodedImage = base64_decode($data['image_base64'], true);
+                    if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
+                        $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
+                        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                            $ext = 'jpg';
+                        }
+                        $storedName = 'readings/'.Str::uuid().'.'.$ext;
+                        Storage::disk('public')->put($storedName, $decodedImage);
+                        $imagePath = $storedName;
+                    }
+                }
+                if ($imagePath !== null) {
+                    $created->update(['image_path' => $imagePath]);
+                }
+
+                return $created;
+            });
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
+            // Other subscribers use different row locks. The global unique index
+            // arbitrates a UUID collision; resolve the winner only after rollback.
+            if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
                 return $replay;
             }
-            $lastReading = $this->readingService->latestReading($locked->id);
-            $previous = $lastReading
-                ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
-            $current = (float) $data['current_reading'];
-
-            // Report retired meters and invalid physical readings before
-            // trying to derive the interval from an installation anchor.
-            if (! $locked->isCurrent()) {
-                throw ValidationException::withMessages([
-                    'meter_id' => ['لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل.'],
-                ]);
-            }
-            if ($current < $previous) {
-                throw ValidationException::withMessages([
-                    'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
-                ]);
-            }
-            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
-            // The server's observed dates are authoritative. Legacy mobile
-            // clients may send a calendar forecast; never bill that forecast.
-            $periodStart = $calculatedPeriod['period_start'];
-            $periodEnd = $calculatedPeriod['period_end'];
-            app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
-                $locked, $current, $periodStart, $periodEnd,
-                $data['actual_reading_date'] ?? $data['reading_date'],
-            );
-
-            $imagePath = null;
-            $imageFile = $batchIndex === null
-                ? $request->file('image') : $request->file("readings.$batchIndex.image");
-            if ($imageFile) {
-                $imagePath = $imageFile->store('readings', 'public');
-            } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
-                $decodedImage = base64_decode($data['image_base64'], true);
-                if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
-                    $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
-                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-                        $ext = 'jpg';
-                    }
-                    $storedName = 'readings/'.Str::uuid().'.'.$ext;
-                    Storage::disk('public')->put($storedName, $decodedImage);
-                    $imagePath = $storedName;
-                }
-            }
-
-            return Reading::create([
-                'meter_id' => $locked->id,
-                'created_by' => $request->user()?->id,
-                'reading_date' => $data['reading_date'],
-                'actual_reading_date' => $data['actual_reading_date'] ?? $data['reading_date'],
-                'previous_reading' => $previous,
-                'current_reading' => $current,
-                'period_start' => $periodStart,
-                'period_end' => $periodEnd,
-                'period_basis' => 'observation',
-                'submitted_period_start' => $data['period_start'] ?? null,
-                'submitted_period_end' => $data['period_end'] ?? null,
-                'sync_uuid' => $data['sync_uuid'] ?? null,
-                'image_path' => $imagePath,
-            ]);
-        });
+            throw $exception;
+        }
 
         if (is_array($reading)) {
             return $reading;
