@@ -151,7 +151,7 @@ class AdminController extends ApiController
                 'overdue_invoices_count' => (int) $invoiceTotals->overdue_count,
                 'invoices_count' => (int) $invoiceTotals->invoices_count,
                 'readings_count' => (clone $readingQuery)->count(),
-                'consumption_units' => (int) (clone $readingQuery)->sum('consumption_units'),
+                'consumption_units' => round((float) (clone $readingQuery)->sum('consumption_units'), 2),
             ],
             'financial_movements' => app(\App\Services\FinancialReportingService::class)->movements($from, $to, $squareId ? (int) $squareId : null, $collectionTotal),
             'collections_by_method' => (clone $paymentQuery)->select('payment_method', DB::raw('SUM(amount) as total'))
