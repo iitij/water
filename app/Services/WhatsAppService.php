@@ -6,7 +6,6 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Setting;
-use App\Models\Tariff;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -105,7 +104,14 @@ class WhatsAppService
         $consumptionUnits = $readings->sum('consumption_units');
         $consumptionValue = $invoice->consumption_fee ?? 0;
 
-        $unitPrice = ($consumptionUnits > 0 && $consumptionValue > 0) ? round($consumptionValue / $consumptionUnits, 2) : Tariff::getActivePrice();
+        $prices = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+            ->where('invoice_id', $invoice->id)->pluck('unit_price')
+            ->map(fn ($price) => number_format((float) $price, 2, '.', ''))->unique();
+        $unitPrice = match ($prices->count()) {
+            0 => 'غير موثقة في الفاتورة',
+            1 => $prices->first(),
+            default => 'تعرفات متعددة حسب فترات الاستهلاك',
+        };
 
         $message = str_replace(
             [
