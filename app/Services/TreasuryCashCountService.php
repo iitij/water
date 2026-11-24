@@ -44,6 +44,7 @@ final class TreasuryCashCountService
         foreach ($rows as $row) {
             if ($row->treasury_cash_adjustment_id === null) unset($row->treasury_cash_adjustment_id);
             if ($row->treasury_bank_collection_id === null) unset($row->treasury_bank_collection_id);
+            if ($row->treasury_late_cash_receipt_id === null) unset($row->treasury_late_cash_receipt_id);
         }
         $balance = (int) $account->opening_minor;
         foreach ($rows as $row) {
@@ -205,7 +206,7 @@ final class TreasuryCashCountService
             // Existing register is provisional: refuse known source gaps rather than
             // convert missing cash documents into an apparent loss or surplus.
             $register = app(TreasuryRegisterService::class)->inspect($actor, (int) $account->id);
-            abort_if($register['issues'] || $register['channel_unposted_handover_count'] || $register['channel_unposted_refund_count'],
+            abort_if($register['issues'] || $register['channel_unposted_handover_count'] || $register['channel_unposted_refund_count'] || $register['channel_unposted_late_cash_count'],
                 409, 'توجد حركات غير مرحلة أو خلل في دفتر الخزينة؛ يلزم معالجتها أولاً.');
             abort_if(DB::table('treasury_cash_adjustments')->where('reference', $reference)->exists()
                 || DB::table('treasury_cash_counts')->where('reference', $reference)->exists()
@@ -239,7 +240,7 @@ final class TreasuryCashCountService
     {
         if ($posting->kind !== 'cash_count_adjustment' || ! $posting->treasury_cash_adjustment_id
             || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
-            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id || $posting->treasury_bank_collection_id) return false;
+            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id || $posting->treasury_bank_collection_id || $posting->treasury_late_cash_receipt_id) return false;
         $adjustment = DB::table('treasury_cash_adjustments')->find($posting->treasury_cash_adjustment_id);
         $count = $adjustment ? DB::table('treasury_cash_counts')->find($adjustment->treasury_cash_count_id) : null;
         $review = $adjustment ? DB::table('treasury_cash_count_reviews')->find($adjustment->treasury_cash_count_review_id) : null;

@@ -180,6 +180,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'late_cash_receipt') {
+                    if (! app(LateReceiptReviewService::class)->checkCashPosting($row)) {
+                        $issues[] = ['code' => 'late_cash_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->treasury_late_cash_receipt_id) {
+                    $issues[] = ['code' => 'unexpected_late_cash_source', 'posting_id' => $row->id];
+                }
                 if ($row->kind === 'bank_collection') {
                     if (! app(BankReconciliationService::class)->checkCollectionPosting($row)) {
                         $issues[] = ['code' => 'bank_collection_source_mismatch', 'posting_id' => $row->id];
@@ -275,6 +284,12 @@ final class TreasuryRegisterService
             $unconfirmed = $account->channel === 'bank' ? DB::table('payments')->whereNull('deleted_at')->whereNull('voided_at')
                 ->whereIn('payment_method', ['bank_transfer', 'check'])
                 ->whereNotIn('id', DB::table('treasury_bank_collections')->select('payment_id'))->count() : 0;
+            $unpostedLateCash = $account->channel === 'cash' ? DB::table('late_receipt_reviews')->where('status', 'approved')
+                ->where('settlement_method', 'separate_handover')
+                ->whereNotIn('id', DB::table('treasury_late_cash_receipts')->select('late_receipt_review_id'))->count() : 0;
+            $unpostedLateCashDocs = DB::table('treasury_late_cash_receipts')->where('treasury_account_id', $accountId)
+                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_late_cash_receipt_id')->select('treasury_late_cash_receipt_id'))->count();
+            if ($unpostedLateCashDocs) $issues[] = ['code' => 'unposted_late_cash_document', 'count' => $unpostedLateCashDocs];
             $transfers = app(TreasuryTransferService::class)->inspectAccount($accountId);
             $issues = array_merge($issues, $transfers['issues']);
             return [
@@ -282,7 +297,9 @@ final class TreasuryRegisterService
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees_cash_adjustments_bank_collections',
+                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees_cash_adjustments_bank_collections_late_cash',
+                'channel_unposted_late_cash_count' => $unpostedLateCash,
+                'unposted_late_cash_document_count' => $unpostedLateCashDocs,
                 'channel_unconfirmed_non_cash_count' => $unconfirmed,
                 'unposted_bank_collection_count' => $unpostedCollections,
                 'unposted_cash_adjustment_count' => $unpostedAdjustments,

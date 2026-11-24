@@ -271,9 +271,28 @@ class CashSessionApiTest extends TestCase
         $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)->assertForbidden();
         $this->assertDatabaseCount('payments', 0);
         $this->actingAs($supervisor, 'sanctum');
-        $id = $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)
-            ->assertOk()->assertJsonPath('review.status', 'approved')->json('review.payment_id');
-        $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)->assertOk()->assertJsonPath('review.payment_id', $id);
+        $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)->assertUnprocessable();
+        $account = app(\App\Services\TreasuryRegisterService::class)->open($supervisor, [
+            'code' => 'LATE-CASH', 'name' => 'Synthetic late cash treasury', 'channel' => 'cash',
+            'opening_on' => today()->toDateString(), 'opening_amount' => '0', 'opening_reference' => 'LATE-CASH-OPEN',
+            'opening_evidence' => 'Independent physical opening count',
+        ]);
+        $clear = ['treasury_account_id' => $account['id'], 'received_on' => today()->toDateString(),
+            'evidence_reference' => $decision['evidence_reference'], 'evidence' => $decision['evidence']];
+        $clearUrl = "/api/late-receipt-reviews/{$case}/clear-cash";
+        $this->postJson($clearUrl, $clear + ['amount' => '1.00'])->assertUnprocessable();
+        $this->postJson($clearUrl, array_replace($clear, ['received_on' => today()->subDay()->toDateString()]))->assertUnprocessable();
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $id = $this->postJson($clearUrl, $clear)->assertOk()->assertJsonPath('review.status', 'approved')
+            ->assertJsonPath('posting.amount_minor', 12525)->json('review.payment_id');
+        $this->postJson($clearUrl, $clear)->assertOk()->assertJsonPath('review.payment_id', $id);
+        $this->postJson($clearUrl, array_replace($clear, ['evidence_reference' => 'OTHER-LATE-CASH']))->assertConflict();
+        $this->assertDatabaseCount('treasury_late_cash_receipts', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->getJson('/api/treasury/accounts/'.$account['id'])->assertOk()
+            ->assertJsonPath('channel_unposted_late_cash_count', 0)
+            ->assertJsonPath('provisional_recorded_balance_minor', 12525)->assertJsonPath('issues', []);
         $this->actingAs($this->admin, 'sanctum')->postJson('/api/invoices/'.$this->invoice->id.'/pay',
             $payload + ['deferred_sync' => true])->assertSuccessful()->assertJsonPath('payment.id', $id);
         $this->assertDatabaseCount('payments', 1);
@@ -388,6 +407,8 @@ class CashSessionApiTest extends TestCase
         $this->assertDatabaseMissing('payments', ['cash_session_id' => $old]);
         $this->assertDatabaseHas('cash_sessions', ['id' => $old, 'expected_amount' => '100.25', 'counted_amount' => '350.75', 'variance_amount' => '250.50']);
         $this->assertSame('250.50', $this->invoice->fresh()->amount_paid);
+        $this->assertDatabaseCount('treasury_late_cash_receipts', 0);
+        $this->assertDatabaseCount('treasury_postings', 1); // Opening funding only, not a second cash inflow.
         $this->postJson("/api/payments/{$paymentId}/void", ['reason' => 'Cannot void independently reviewed receipt'])
             ->assertUnprocessable()->assertJsonValidationErrors('payment');
     }

@@ -154,7 +154,7 @@ final class TreasuryTransferService
 
     public function validPosting(object $row): bool
     {
-        if ($row->cash_handover_id || $row->payment_refund_id || $row->cash_session_funding_id || $row->treasury_bank_fee_id || $row->treasury_cash_adjustment_id || $row->treasury_bank_collection_id) return false;
+        if ($row->cash_handover_id || $row->payment_refund_id || $row->cash_session_funding_id || $row->treasury_bank_fee_id || $row->treasury_cash_adjustment_id || $row->treasury_bank_collection_id || $row->treasury_late_cash_receipt_id) return false;
         if ($row->kind === 'internal_transfer_out' && $row->treasury_transfer_id && ! $row->treasury_transfer_receipt_id) {
             $transfer = DB::table('treasury_transfers')->find($row->treasury_transfer_id);
             return $transfer && (int) $row->treasury_account_id === (int) $transfer->from_account_id

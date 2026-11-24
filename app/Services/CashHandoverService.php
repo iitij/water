@@ -93,6 +93,10 @@ final class CashHandoverService
                     && $existing->evidence === $evidence, 409, 'مرجع التسليم مستخدم لعملية أخرى.');
                 return $existing;
             }
+            abort_if(DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                || DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists(), 409, 'مرجع التسليم مستخدم في مستند مالي آخر.');
             if (! $this->eligible($session) || $date < $session->closed_at->toDateString()) {
                 throw ValidationException::withMessages(['handover' => 'يلزم صندوق نقدي معتمد وتاريخ تسليم لا يسبق الإغلاق.']);
             }

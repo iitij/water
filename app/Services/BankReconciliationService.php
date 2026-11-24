@@ -224,7 +224,7 @@ final class BankReconciliationService
     {
         return $posting->kind === 'bank_fee'
             && ! $posting->cash_handover_id && ! $posting->payment_refund_id && ! $posting->cash_session_funding_id
-            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id && ! $posting->treasury_cash_adjustment_id && ! $posting->treasury_bank_collection_id
+            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id && ! $posting->treasury_cash_adjustment_id && ! $posting->treasury_bank_collection_id && ! $posting->treasury_late_cash_receipt_id
             && (int) $posting->treasury_bank_fee_id === (int) $fee->id
             && (int) $fee->bank_statement_line_id === (int) $line->id
             && (int) $line->bank_statement_id === (int) $statement->id
@@ -383,7 +383,7 @@ final class BankReconciliationService
         if ($posting->kind !== 'bank_collection' || ! $posting->treasury_bank_collection_id
             || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
             || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id
-            || $posting->treasury_bank_fee_id || $posting->treasury_cash_adjustment_id) return false;
+            || $posting->treasury_bank_fee_id || $posting->treasury_cash_adjustment_id || $posting->treasury_late_cash_receipt_id) return false;
         $doc = DB::table('treasury_bank_collections')->find($posting->treasury_bank_collection_id);
         $payment = $doc ? Payment::find($doc->payment_id) : null;
         $line = $doc ? DB::table('bank_statement_lines')->find($doc->bank_statement_line_id) : null;
