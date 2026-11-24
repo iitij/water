@@ -138,18 +138,11 @@ class ReadingResource extends Resource
                         ->readOnly()
                         ->dehydrated()
                         ->required()
-                        ->unique(
-                            table: \App\Models\Reading::class,
-                            column: 'period_end',
-                            modifyRuleUsing: function (\Illuminate\Validation\Rules\Unique $rule, $get) {
-                                return $rule->where('meter_id', $get('meter_id'));
-                            },
-                            ignoreRecord: true
-                        ),
+                        ->helperText('يُحسب تلقائياً من تاريخ أخذ القراءة.'),
                 ]),
 
             Forms\Components\DatePicker::make('reading_date')
-                ->label('تاريخ إدخال القراءة الفعلي')
+                ->label('تاريخ أخذ القراءة الفعلي')
                 ->default(now())
                 ->live()
                 ->afterStateUpdated(function ($set, $get, $state, ?Reading $record) {
@@ -265,7 +258,7 @@ class ReadingResource extends Resource
             ])
             ->actions([
                 \Filament\Actions\EditAction::make()
-                    ->hidden(fn (Reading $record): bool => $record->is_invoiced),
+                    ->hidden(fn (Reading $record): bool => $record->is_invoiced || $record->period_basis !== 'observation'),
                 \Filament\Actions\DeleteAction::make()
                     ->hidden(fn (Reading $record): bool => $record->is_invoiced),
             ])
