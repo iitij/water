@@ -427,6 +427,16 @@ class FinancialReversalTest extends TestCase
         $url = '/api/invoices/'.$invoice->id.'/correct-historical';
         $this->actingAs($collector, 'sanctum')->postJson($url, $payload)->assertForbidden();
         $this->actingAs($admin, 'sanctum');
+        $this->postJson($url, array_replace($payload, ['historical_unit_price' => '800.00']))
+            ->assertUnprocessable()->assertJsonValidationErrors('historical_unit_price');
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertSame(3999.75, $subscriber->getAccountDebt());
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'units' => 10, 'unit_price' => 600, 'amount' => 6000]);
+
         $response = $this->postJson($url, $payload)->assertOk();
         $id = $response->json('correction.id');
         $replacementId = $response->json('correction.replacement_invoice_id');
@@ -439,6 +449,10 @@ class FinancialReversalTest extends TestCase
         $this->assertSame('cancelled', $invoice->fresh()->status);
         $this->assertSame('6000.00', $invoice->fresh()->total_amount);
         $this->assertSame('4500.00', $replacement->total_amount);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $reading->id, 'units' => 7.50, 'unit_price' => 600, 'amount' => 4500]);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'units' => 10, 'unit_price' => 600, 'amount' => 6000]);
         $this->assertSame('2000.25', $replacement->amount_paid);
         $this->assertSame(2499.75, $subscriber->getAccountDebt());
         $this->assertSame($invoice->id, $payment->fresh()->invoice_id);
