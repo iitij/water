@@ -104,8 +104,11 @@ class ReadingController extends ApiController
             ]);
         }
 
-        $lastReading = $meter->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
-        $period = $this->readingService->calculateReadingPeriod($meterId);
+        $lastReading = $this->readingService->latestReading($meter->id);
+        $period = $this->readingService->calculateReadingPeriod(
+            $meterId,
+            request()->query('reading_date') ?: today()->toDateString()
+        );
 
         return response()->json([
             'meter' => $meter,
@@ -180,6 +183,50 @@ class ReadingController extends ApiController
         if ($current < $previous) {
             return response()->json(['errors' => ['current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة.']]], 422);
         }
+        if ($reading->period_basis === 'observation') {
+            $oldObservation = ($reading->actual_reading_date ?? $reading->reading_date)->toDateString();
+            $newObservation = \Carbon\Carbon::parse(
+                $data['actual_reading_date']
+                    ?? $data['reading_date']
+                    ?? $oldObservation
+            )->toDateString();
+
+            // A later observation uses this reading's date and meter value as
+            // its start anchor. A silent edit would corrupt that next interval.
+            $hasSuccessor = Reading::where('meter_id', $reading->meter_id)
+                ->where('id', '!=', $reading->id)
+                ->whereRaw('COALESCE(actual_reading_date, reading_date) > ?', [$oldObservation])
+                ->exists();
+            if ($hasSuccessor && (
+                array_key_exists('reading_date', $data)
+                || array_key_exists('actual_reading_date', $data)
+                || array_key_exists('current_reading', $data)
+                || array_key_exists('previous_reading', $data)
+                || array_key_exists('period_start', $data)
+                || array_key_exists('period_end', $data)
+            )) {
+                throw ValidationException::withMessages([
+                    'reading_date' => ['لا يمكن تغيير قراءة أصبحت نقطة بداية للفترة التالية؛ يلزم إجراء تصحيح متسلسل ومعتمد.'],
+                ]);
+            }
+
+            if (isset($data['period_start'])
+                && Carbon::parse($data['period_start'])->toDateString() !== $reading->period_start) {
+                throw ValidationException::withMessages([
+                    'period_start' => ['بداية الفترة هي تاريخ القراءة السابقة ولا تُعدّل يدوياً.'],
+                ]);
+            }
+            if ($newObservation <= $reading->period_start
+                || $newObservation > today()->toDateString()) {
+                throw ValidationException::withMessages([
+                    'reading_date' => ['تاريخ القراءة يجب أن يلي السابقة وألا يقع في المستقبل.'],
+                ]);
+            }
+
+            // The current observation is the end boundary by definition.
+            $data['period_start'] = $reading->period_start;
+            $data['period_end'] = $newObservation;
+        }
         $periodStart = $data['period_start'] ?? $reading->period_start;
         $periodEnd = $data['period_end'] ?? $reading->period_end;
         $periodStart = Carbon::parse($periodStart)->toDateString();
@@ -188,8 +235,17 @@ class ReadingController extends ApiController
             return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
         }
         if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_start', '<=', $periodEnd)
-            ->where('period_end', '>=', $periodStart)->exists()) {
+            ->where(function ($query) use ($reading, $periodStart, $periodEnd) {
+                if ($reading->period_basis === 'observation') {
+                    $query->where('period_basis', 'observation')
+                        ->where('period_start', '<', $periodEnd)
+                        ->where('period_end', '>', $periodStart);
+                } else {
+                    $query->where('period_basis', 'legacy_calendar')
+                        ->where('period_start', '<=', $periodEnd)
+                        ->where('period_end', '>=', $periodStart);
+                }
+            })->exists()) {
             return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
         }
         // Reading date is the entered date when no separate actual date was
@@ -382,9 +438,11 @@ class ReadingController extends ApiController
                     && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
                 $samePeriod = true;
                 foreach (['period_start', 'period_end'] as $field) {
+                    $originalField = 'submitted_'.$field;
+                    $expected = $existing->{$originalField} ?? $existing->{$field};
                     if (isset($data[$field])
                         && Carbon::parse($data[$field])->toDateString()
-                            !== Carbon::parse($existing->{$field})->toDateString()) {
+                            !== Carbon::parse($expected)->toDateString()) {
                         $samePeriod = false;
                         break;
                     }
@@ -400,16 +458,31 @@ class ReadingController extends ApiController
         // reading cannot slip between the preflight guard and meter deletion.
         $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            $lastReading = $locked->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
+            $lastReading = $this->readingService->latestReading($locked->id);
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
             $current = (float) $data['current_reading'];
 
-            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
-            $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
-            $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
+            // Report retired meters and invalid physical readings before
+            // trying to derive the interval from an installation anchor.
+            if (! $locked->isCurrent()) {
+                throw ValidationException::withMessages([
+                    'meter_id' => ['لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل.'],
+                ]);
+            }
+            if ($current < $previous) {
+                throw ValidationException::withMessages([
+                    'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                ]);
+            }
+            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
+            // The server's observed dates are authoritative. Legacy mobile
+            // clients may send a calendar forecast; never bill that forecast.
+            $periodStart = $calculatedPeriod['period_start'];
+            $periodEnd = $calculatedPeriod['period_end'];
             app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
                 $locked, $current, $periodStart, $periodEnd,
+                $data['actual_reading_date'] ?? $data['reading_date'],
             );
 
             $imagePath = null;
@@ -440,6 +513,9 @@ class ReadingController extends ApiController
                 'consumption_units' => max(0, (int) ($current - $previous)),
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
+                'period_basis' => 'observation',
+                'submitted_period_start' => $data['period_start'] ?? null,
+                'submitted_period_end' => $data['period_end'] ?? null,
                 'sync_uuid' => $data['sync_uuid'] ?? null,
                 'image_path' => $imagePath,
             ]);
