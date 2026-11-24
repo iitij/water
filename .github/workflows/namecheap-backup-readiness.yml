@@ -1,0 +1,90 @@
+name: Water | Hosting backup readiness
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-readiness.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Inspect backup and isolated restore capabilities (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = alweufti
+          cd "$HOME/repositories/water"
+          echo "SOURCE_COMMIT: $(git rev-parse HEAD)"
+          test -z "$(git status --porcelain)"
+          for tool in mariadb-dump mysqldump mariadb mysql gpg openssl tar gzip sha256sum flock crontab uapi timeout; do
+            if bin="$(command -v "$tool")"; then printf 'TOOL %s: %s\n' "$tool" "$bin"; else printf 'TOOL %s: MISSING\n' "$tool"; fi
+          done
+          df -Pk "$HOME"
+          for path in .env storage/app public/build "$HOME/public_html"; do
+            test -e "$path"
+            printf 'PATH_BYTES %s: ' "$path"
+            du -sb "$path" | cut -f1
+          done
+          for path in "$HOME/.water-backups" "$HOME/.water-backup-keys"; do
+            if [[ -e "$path" || -L "$path" ]]; then stat -c 'EXISTING_PRIVATE_PATH: %a %F' "$path"; else echo "PRIVATE_PATH_ABSENT: $(basename "$path")"; fi
+          done
+          if command -v crontab >/dev/null; then
+            if current="$(crontab -l 2>/dev/null)"; then
+              printf 'CRON_ENTRIES: '; printf '%s\n' "$current" | awk 'NF && $1 !~ /^#/ {n++} END{print n+0}'
+              if grep -q 'water-backup' <<< "$current"; then echo 'WATER_BACKUP_CRON: PRESENT'; else echo 'WATER_BACKUP_CRON: ABSENT'; fi
+            else echo 'CRON_ENTRIES: unavailable or empty'; fi
+          fi
+          /opt/alt/php84/usr/bin/php -d display_errors=0 -r '
+            require "vendor/autoload.php";
+            $app=require "bootstrap/app.php";
+            $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+            $c=\Illuminate\Support\Facades\DB::connection();
+            if ($c->getDatabaseName()!=="alweufti_water") throw new RuntimeException("Unexpected database");
+            $pdo=$c->getPdo();
+            $rows=$pdo->query("SELECT TABLE_TYPE, COALESCE(ENGINE, \"NONE\") AS engine, COUNT(*) AS n, COALESCE(SUM(DATA_LENGTH+INDEX_LENGTH),0) AS bytes FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() GROUP BY TABLE_TYPE,ENGINE")->fetchAll(PDO::FETCH_ASSOC);
+            foreach($rows as $row) echo "DB_OBJECT_GROUP: ".json_encode($row).PHP_EOL;
+            foreach (["TRIGGERS","ROUTINES","EVENTS"] as $type) {
+              $column=$type==="TRIGGERS"?"TRIGGER_SCHEMA":($type==="ROUTINES"?"ROUTINE_SCHEMA":"EVENT_SCHEMA");
+              echo "DB_".$type.": ".$pdo->query("SELECT COUNT(*) FROM information_schema.".$type." WHERE ".$column."=DATABASE()")->fetchColumn().PHP_EOL;
+            }
+            echo "DB_VERSION: ".$pdo->query("SELECT VERSION()")->fetchColumn().PHP_EOL;
+            echo "APP_KEY_PRESENT: ".(filled(config("app.key"))?"YES":"NO").PHP_EOL;
+            echo "DB_AUDIT: PASSED".PHP_EOL;
+          '
+          if command -v uapi >/dev/null; then
+            uapi --output=json Mysql list_databases | /opt/alt/php84/usr/bin/php -r '
+              $v=json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR);
+              $r=$v["result"]??$v;
+              if (($r["status"]??0)!==1) {echo "CPANEL_DATABASE_LIST: UNAVAILABLE\n";exit;}
+              echo "CPANEL_DATABASE_COUNT: ".count($r["data"]??[]).PHP_EOL;
+            '
+          fi
+          echo 'BACKUP_READINESS_AUDIT: COMPLETE; no changes made'
+          REMOTE
