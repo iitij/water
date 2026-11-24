@@ -70,7 +70,7 @@ ThermalTicket buildPaymentThermalTicket(
       ThermalSyntax.field('المحصّل', payment.collectorName!),
     ThermalSyntax.gap(heightPx: 12),
     const ThermalLine(
-      'شكراً لتعاملكم معنا 🌹',
+      'شكراً لتعاملكم معنا',
       align: ThermalAlign.center,
       fontSizePx: 14,
     ),

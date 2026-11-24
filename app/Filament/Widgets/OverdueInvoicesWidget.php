@@ -13,7 +13,7 @@ class OverdueInvoicesWidget extends BaseWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $heading = '⚠️ فواتير متأخرة';
+    protected static ?string $heading = 'فواتير متأخرة';
 
     public function table(Table $table): Table
     {
@@ -44,7 +44,8 @@ class OverdueInvoicesWidget extends BaseWidget
                     ->numeric(2)->suffix(' ريال'),
             ])
             ->paginated(false)
-            ->emptyStateHeading('لا توجد فواتير متأخرة 🎉')
+            ->emptyStateHeading('لا توجد فواتير متأخرة')
+            ->emptyStateIcon('heroicon-o-check-circle')
             ->emptyStateDescription('جميع الفواتير مسددة أو في حالة جيدة');
     }
 }

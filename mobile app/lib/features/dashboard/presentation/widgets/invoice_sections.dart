@@ -112,9 +112,9 @@ class OverdueInvoicesSection extends StatelessWidget {
                 border: Border.all(color: AppColors.success.withValues(alpha: .16)),
               ),
               child: const AdminEmptyView(
-                title: 'لا توجد فواتير متأخرة 🎉',
+                title: 'لا توجد فواتير متأخرة',
                 message: 'جميع الفواتير مسددة أو في حالة جيدة',
-                icon: Icons.celebration_rounded,
+                icon: Icons.check_circle_outline_rounded,
                 color: AdminPalette.success,
               ),
             )

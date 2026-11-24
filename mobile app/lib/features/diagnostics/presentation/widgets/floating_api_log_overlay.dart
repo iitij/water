@@ -145,7 +145,7 @@ class _FloatingApiLogOverlayState extends State<FloatingApiLogOverlay> {
                           borderRadius: BorderRadius.circular(AppRadius.xs),
                         ),
                         child: Text(
-                          '$errors ❌',
+                          '$errors خطأ',
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,

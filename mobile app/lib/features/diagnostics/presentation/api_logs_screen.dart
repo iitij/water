@@ -395,19 +395,19 @@ class _ApiLogsScreenState extends State<ApiLogsScreen> {
                 ),
                 const SizedBox(width: 6),
                 _FilterChipItem(
-                  label: 'الأخطاء فقط ❌',
+                  label: 'الأخطاء فقط',
                   selected: _selectedFilter == 'errors',
                   onSelected: () => setState(() => _selectedFilter = 'errors'),
                 ),
                 const SizedBox(width: 6),
                 _FilterChipItem(
-                  label: 'البطيء / لاق ⚠️',
+                  label: 'الطلبات البطيئة',
                   selected: _selectedFilter == 'slow',
                   onSelected: () => setState(() => _selectedFilter = 'slow'),
                 ),
                 const SizedBox(width: 6),
                 _FilterChipItem(
-                  label: 'الناجحة ✅',
+                  label: 'الناجحة',
                   selected: _selectedFilter == 'success',
                   onSelected: () => setState(() => _selectedFilter = 'success'),
                 ),
@@ -630,7 +630,7 @@ class _ApiLogCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       if (entry.isSlow) ...<Widget>[
-                        const Text('⚠️ ', style: TextStyle(fontSize: 10)),
+                        const Icon(Icons.warning_amber_rounded, size: 12),
                       ],
                       Text(
                         entry.durationLabel,
@@ -770,7 +770,7 @@ class _ApiLogDetailSheet extends StatelessWidget {
                         _buildRow('رمز الحالة', entry.displayStatus),
                         _buildRow(
                           'زمن المعالجة الكلي',
-                          '${entry.durationMs}ms ${entry.isSlow ? '(⚠️ لاق وبطء شديد)' : ''}',
+                          '${entry.durationMs}ms ${entry.isSlow ? '(بطء شديد)' : ''}',
                         ),
                         if (entry.serverDurationMs != null)
                           _buildRow('زمن استجابة الخادم الداخلي', '${entry.serverDurationMs}ms'),

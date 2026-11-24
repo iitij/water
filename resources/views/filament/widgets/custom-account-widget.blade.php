@@ -3,20 +3,6 @@ $user = filament()->auth()->user();
 @endphp
 
 <x-filament-widgets::widget class="fi-account-widget">
-    <style>
-        .fi-account-widget .fi-section-content {
-            flex-wrap: wrap !important;
-        }
-
-        @media (max-width: 640px) {
-            .custom-actions-container {
-                width: 100% !important;
-                justify-content: flex-end !important;
-                order: 10 !important;
-                margin-top: 20px;
-            }
-        }
-    </style>
     <x-filament::section>
         <x-filament-panels::avatar.user
             size="lg"
@@ -34,7 +20,7 @@ $user = filament()->auth()->user();
         </div>
 
         @if(in_array($user->role ?? '', ['admin', 'meter_reader', 'collector']))
-        <div class="custom-actions-container flex flex-wrap items-center gap-3 my-auto">
+        <div class="flex flex-wrap items-center gap-3">
             @if(in_array($user->role ?? '', ['admin', 'meter_reader']))
                 {{ $this->createReadingAction }}
                 {{ $this->createSubscriberAction }}

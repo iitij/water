@@ -208,7 +208,7 @@ class _LocalServerControlPanelState extends State<LocalServerControlPanel> {
     final formKey = GlobalKey<FormState>();
     final phoneCtrl = TextEditingController();
     final msgCtrl = TextEditingController(
-      text: 'رسالة تجريبية من نظام إدارة المياه للتأكد من جاهزية الربط عبر الواتساب ✅',
+      text: 'رسالة تجريبية من نظام إدارة المياه للتأكد من جاهزية الربط عبر الواتساب',
     );
     var sending = false;
 

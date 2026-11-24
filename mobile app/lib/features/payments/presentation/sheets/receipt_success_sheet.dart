@@ -185,7 +185,7 @@ class _ReceiptSuccessSheetState extends State<ReceiptSuccessSheet> {
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
                       child: Text(
-                        'تم سداد الفاتورة بالكامل ✅',
+                        'تم سداد الفاتورة بالكامل',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
