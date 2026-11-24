@@ -106,7 +106,8 @@ jobs:
           openssl pkeyutl -encrypt -pubin -inkey "$temp/recipient.pem" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 -in "$key" -out "$temp/recovery.oaep"
           test "$(stat -c %s "$temp/recovery.oaep")" = 384
           chmod 600 "$temp/recovery.oaep"
-          SSH_ORIGINAL_COMMAND=list bash "$temp/reader.sh" | grep -Fxq water-20261124T021342Z-412d1e
+          SSH_ORIGINAL_COMMAND=list bash "$temp/reader.sh" > "$temp/inventory"
+          grep -Fxq water-20261124T021342Z-412d1e "$temp/inventory"
           if SSH_ORIGINAL_COMMAND=id bash "$temp/reader.sh" >/dev/null 2>&1; then exit 1; fi
           mv "$temp/reader.sh" "$ops/water-backup-export.sh"
           mv "$temp/recovery.oaep" "$ops/recovery-v1.msi.oaep"
