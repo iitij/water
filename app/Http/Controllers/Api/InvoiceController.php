@@ -571,6 +571,11 @@ class InvoiceController extends ApiController
                 'invoice_status' => $invoice->status,
                 'receipt_data' => $this->receiptData($payment, $invoice, $request),
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            throw $exception;
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $exception) {
+            return response()->json(['message' => 'تعذر تخصيص الدفعة: الفاتورة ملغاة أو لم تعد صالحة للتحصيل. يلزم مراجعة العملية.',
+                'errors' => ['invoice_id' => ['الفاتورة غير صالحة للتحصيل.']]], 422);
         } catch (HttpExceptionInterface $exception) {
             return response()->json(['message' => $exception->getMessage()], $exception->getStatusCode());
         } catch (\Throwable $exception) {

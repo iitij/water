@@ -458,4 +458,27 @@ class FinancialReversalTest extends TestCase
             ->assertOk()->assertJsonPath('subscribers.0.account_balance', -4749.75);
     }
 
+
+    public function test_queued_invoice_payment_retry_after_cancellation_is_idempotent_and_new_target_is_rejected(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        $collector = User::factory()->create(['role' => 'collector']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        $payload = ['amount' => 1000.25, 'payment_method' => 'cash', 'sync_uuid' => $uuid];
+        $url = '/api/invoices/'.$invoice->id.'/pay';
+        $this->actingAs($collector, 'sanctum');
+        $receiptId = $this->postJson($url, $payload)->assertCreated()->json('payment.id');
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/invoices/'.$invoice->id.'/cancel', ['reason' => 'Synthetic cancellation between field retries'])->assertOk();
+        $this->actingAs($collector, 'sanctum');
+        $this->postJson($url, $payload)->assertCreated()->assertJsonPath('payment.id', $receiptId);
+        $this->postJson($url, array_replace($payload, ['sync_uuid' => (string) \Illuminate\Support\Str::uuid()]))
+            ->assertUnprocessable()->assertJsonValidationErrors('invoice_id');
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('transactions', 3);
+        $this->assertSame(1000.25, $subscriber->getAccountCredit());
+    }
+
 }

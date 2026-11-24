@@ -25,7 +25,7 @@ final class FinancialReportingService
      */
     public function movements(string $from, string $to, ?int $squareId, float $grossCollection): array
     {
-        $refunds = PaymentRefund::query()->whereBetween('disbursed_on', [$from, $to]);
+        $refunds = PaymentRefund::query()->whereDate('disbursed_on', '>=', $from)->whereDate('disbursed_on', '<=', $to);
         $ledger = Transaction::query()->whereBetween('created_at', [$from.' 00:00:00', $to.' 23:59:59']);
         if ($squareId !== null) {
             $refunds->whereIn('subscriber_id', DB::table('subscribers')->where('square_id', $squareId)->select('id'));
