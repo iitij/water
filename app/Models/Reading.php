@@ -56,6 +56,46 @@ class Reading extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** Serialize edits/deletes with insertion, replacement and invoice posting. */
+    private function withLockedObservation(callable $callback)
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($callback) {
+            $meterId = $this->getOriginal('meter_id');
+            if ($meterId) {
+                Meter::query()->lockForUpdate()->findOrFail($meterId);
+            }
+            $fresh = self::withTrashed()->lockForUpdate()->findOrFail($this->getKey());
+            foreach (['meter_id', 'reading_date', 'actual_reading_date', 'period_start', 'period_end',
+                'period_basis', 'previous_reading', 'current_reading', 'is_invoiced', 'invoice_id',
+                'retired_meter_id', 'deleted_at'] as $field) {
+                if ($fresh->getRawOriginal($field) != $this->getRawOriginal($field)) {
+                    throw ValidationException::withMessages(['reading_date' => 'تغيرت القراءة؛ حدّث البيانات وأعد المحاولة.']);
+                }
+            }
+
+            return $callback();
+        }, 3);
+    }
+
+    public function save(array $options = [])
+    {
+        if ($this->exists && $this->isDirty(['meter_id', 'reading_date', 'actual_reading_date',
+            'previous_reading', 'current_reading', 'period_start', 'period_end', 'period_basis'])) {
+            return $this->withLockedObservation(fn () => parent::save($options));
+        }
+
+        return parent::save($options);
+    }
+
+    public function delete()
+    {
+        if (! $this->exists) {
+            return parent::delete();
+        }
+
+        return $this->withLockedObservation(fn () => parent::delete());
+    }
+
     /** Observation anchors must not be silently changed by another client. */
     private function hasObservationSuccessor(): bool
     {
@@ -76,7 +116,8 @@ class Reading extends Model
         if (! $this->isDirty($fields)) {
             return;
         }
-        if ($this->getOriginal('is_invoiced') || $this->hasObservationSuccessor()) {
+        if ($this->getOriginal('is_invoiced') || $this->hasObservationSuccessor()
+            || \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->where('reading_id', $this->id)->exists()) {
             throw ValidationException::withMessages(['reading_date' => 'لا يمكن تغيير قراءة مفوترة أو أصبحت أساساً لقراءة لاحقة.']);
         }
         if ($this->isDirty('period_basis')) {
@@ -109,7 +150,8 @@ class Reading extends Model
             if ($reading->hasObservationSuccessor()) {
                 throw ValidationException::withMessages(['reading_date' => 'لا يمكن حذف قراءة أصبحت أساساً لقراءة لاحقة.']);
             }
-            if ($reading->is_invoiced || $reading->retired_meter_id) {
+            if ($reading->is_invoiced || $reading->retired_meter_id
+                || \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->where('reading_id', $reading->id)->exists()) {
                 throw new \Exception('لا يمكن حذف قراءة مفوترة. الرجاء حذف الفاتورة المرتبطة بها أولاً.');
             }
         });
