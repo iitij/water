@@ -43,16 +43,13 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'create');
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'unit_price' => ['required', 'numeric', 'min:0'],
+            'unit_price' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'is_active' => ['sometimes', 'boolean'],
             'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['nullable', 'date'],
         ]);
         $tariff = DB::transaction(function () use ($data) {
-            if (! empty($data['is_active'])) {
-                Tariff::where('is_active', true)->update(['is_active' => false]);
-            }
-
+            // Active means approved for its dated interval, not today's sole tariff.
             return Tariff::create($data + ['is_active' => false]);
         });
 
@@ -72,15 +69,12 @@ class TariffController extends ApiController
         $tariff = Tariff::findOrFail($id);
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'unit_price' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'unit_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'is_active' => ['sometimes', 'boolean'],
             'start_date' => ['sometimes', 'nullable', 'date'],
             'end_date' => ['sometimes', 'nullable', 'date'],
         ]);
         DB::transaction(function () use ($tariff, $data) {
-            if (! empty($data['is_active'])) {
-                Tariff::where('is_active', true)->where('id', '!=', $tariff->id)->update(['is_active' => false]);
-            }
             $tariff->update($data);
         });
 
@@ -118,13 +112,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'restoreAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
-        $restored = 0;
-        DB::transaction(function () use ($data, &$restored) {
-            foreach (Tariff::onlyTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
-                $tariff->restore();
-                $restored++;
-            }
-        });
+        $restored = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'restore');
 
         return response()->json(['restored_count' => $restored]);
     }
@@ -134,13 +122,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'forceDeleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
-        $deleted = 0;
-        DB::transaction(function () use ($data, &$deleted) {
-            foreach (Tariff::withTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
-                $tariff->forceDelete();
-                $deleted++;
-            }
-        });
+        $deleted = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'forceDelete');
 
         return response()->json(['force_deleted_count' => $deleted]);
     }
@@ -149,7 +131,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:tariffs,id']]);
-        $count = Tariff::whereIn('id', $data['ids'])->delete();
+        $count = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'delete');
 
         return response()->json(['deleted_count' => $count]);
     }

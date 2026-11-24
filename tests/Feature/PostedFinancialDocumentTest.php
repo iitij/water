@@ -30,6 +30,10 @@ class PostedFinancialDocumentTest extends TestCase
 
     private function postInvoice(Meter $meter): Invoice
     {
+        \App\Models\Tariff::create(['name' => 'Synthetic posted invoice tariff', 'unit_price' => 600, 'is_active' => true]);
+        \App\Models\Reading::create(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
+            'previous_reading' => 0, 'current_reading' => 1]);
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum');
         $response = $this->postJson('/api/invoices', [
             'subscriber_id' => $meter->subscriber_id, 'meter_id' => $meter->id,

@@ -37,6 +37,7 @@ class InvoiceController extends ApiController
             'subscriber:id,name,phone,square_id',
             'subscriber.square:id,name,code',
             'meter:id,unique_code,path_number',
+            'tariffLines',
         ])->latest('bill_date')->latest('id');
 
         if ($request->filled('status') && $request->query('status') !== 'all') {
@@ -101,7 +102,7 @@ class InvoiceController extends ApiController
     public function unpaid(Request $request)
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
-        $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter'])
+        $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter', 'tariffLines'])
             ->withOwnDebt()->latest('bill_date')->latest('id');
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
@@ -163,64 +164,21 @@ class InvoiceController extends ApiController
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
             'invoice_type' => ['sometimes', 'in:meter'],
-            'bill_number' => ['nullable', 'string', 'max:50', 'unique:invoices,bill_number'],
-            'bill_date' => ['nullable', 'date'],
-            'billing_period_start' => ['nullable', 'date'],
-            'billing_period_end' => ['nullable', 'date', 'after_or_equal:billing_period_start'],
-            'consumption_fee' => ['sometimes', 'numeric', 'min:0'],
-            'previous_balance' => ['sometimes', 'numeric', 'min:0'],
-            'credit_applied' => ['sometimes', 'numeric', 'min:0'],
-            'total_amount' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
-        $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
-        $isConsumption = (float) ($data['consumption_fee'] ?? 0) > 0;
-        $invoiceType = 'meter';
-        if ($isConsumption && $invoiceType !== 'meter') {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'invoice_type' => ['لا يمكن إضافة رسوم استهلاك إلى فاتورة خدمات غير مخصصة للاستهلاك.'],
-            ]);
-        }
-        if ($invoiceType === 'meter') {
-            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-        }
-        $components = (float) ($data['consumption_fee'] ?? 0);
-        $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
-            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
-            $meter = Meter::query()->where('subscriber_id', $subscriber->id)->lockForUpdate()->findOrFail($meter->id);
-            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-            $arrears = $subscriber->invoices()->whereNotIn('status', ['draft', 'cancelled'])->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
-            $invoice = Invoice::create([
-                'subscriber_id' => $subscriber->id,
-                'meter_id' => $meter?->id,
-                'invoice_type' => $invoiceType,
-                'bill_number' => $data['bill_number'] ?? Invoice::generateBillNumber(),
-                'bill_date' => $data['bill_date'] ?? now()->toDateString(),
-                'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
-                'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
-                'consumption_fee' => $data['consumption_fee'] ?? 0,
-                'previous_balance' => $arrears,
-                'credit_applied' => min($subscriber->getAccountCredit(), $components),
-                'total_amount' => $components,
-                'amount_paid' => 0,
-                'status' => 'issued',
-                'notes' => $data['notes'] ?? null,
-            ]);
-            $this->syncItems($invoice);
-            app(TransactionService::class)->recordTransaction(
-                subscriber: $subscriber,
-                type: 'invoice',
-                amount: -(float) $invoice->total_amount,
-                description: 'إصدار فاتورة رقم '.$invoice->bill_number,
-                reference: $invoice,
-                meter: $meter,
-            );
+        $meter = ! empty($data['meter_id'])
+            ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id'])
+            : null;
+        $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
 
-            return $invoice->refresh();
-        });
-
-        return response()->json(['message' => 'تم إنشاء الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->load(['subscriber.square', 'meter', 'items']))], 201);
+        // Legacy payloads may include financial fields; these are never used.
+        // The server issues from locked, unbilled readings and approved tariffs.
+        return $this->generateResponse(fn () => app(\App\Services\InvoiceService::class)->generateInvoice(
+            subscriber: $subscriber,
+            meter: $meter,
+            notes: $data['notes'] ?? null,
+        ));
     }
 
     public function update(Request $request, int $id)
@@ -307,16 +265,25 @@ class InvoiceController extends ApiController
     public function correctHistorical(Request $request, int $id)
     {
         $data = $request->validate([
-            'corrected_units' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
-            'historical_unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'readings' => ['sometimes', 'required', 'array', 'min:1', 'max:1000'],
+            'readings.*' => ['required', 'array:reading_id,corrected_units'],
+            'readings.*.reading_id' => ['required', 'integer', 'min:1', 'distinct'],
+            'readings.*.corrected_units' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
+            'corrected_units' => ['required_without:readings', 'prohibits:readings', 'numeric', 'min:0', 'decimal:0,2'],
+            'historical_unit_price' => ['required_without:readings', 'prohibits:readings', 'numeric', 'min:0', 'decimal:0,2'],
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        $correction = app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
-            Invoice::findOrFail($id), $request->user(), (string) $data['corrected_units'],
-            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
-        );
-        return response()->json(['correction' => $correction, 'invoice' => $this->decorate(Invoice::findOrFail($correction->replacement_invoice_id))]);
+        $invoice = Invoice::findOrFail($id);
+        $service = app(\App\Services\HistoricalInvoiceCorrectionService::class);
+        $correction = isset($data['readings'])
+            ? $service->correctReadings($invoice, $request->user(), $data['readings'], $data['reason'], $data['evidence'])
+            : $service->correct($invoice, $request->user(), (string) $data['corrected_units'],
+                (string) $data['historical_unit_price'], $data['reason'], $data['evidence']);
+        $replacement = Invoice::findOrFail($correction->replacement_invoice_id);
+        $data = $this->decorate($replacement);
+
+        return response()->json(['correction' => $correction, 'invoice' => $data]);
     }
 
     public function cancel(Request $request, int $id)
@@ -451,28 +418,32 @@ class InvoiceController extends ApiController
     public function recalculate(int $id, PaymentService $paymentService)
     {
         $this->authorizeApi(Invoice::class, 'update');
-        $invoice = Invoice::with(['subscriber', 'meter', 'readings'])->findOrFail($id);
-        if ($invoice->isFinanciallyLocked()) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'invoice' => 'لا يمكن إعادة احتساب فاتورة معتمدة بالتعرفة الحالية. التصحيح يتطلب مستنداً مالياً موثقاً.',
-            ]);
-        }
-        $readings = $invoice->readings;
-        if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
-            $invoice->billing_period_start = $readings->min('period_start');
-            $invoice->billing_period_end = $readings->max('period_end');
-            $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
-        }
-        $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
-            ->where('id', '<', $invoice->id)
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->get();
-        $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
-        $invoice->total_amount = (float) $invoice->consumption_fee;
-        DB::transaction(function () use ($invoice) {
+        $subscriberId = Invoice::findOrFail($id)->subscriber_id;
+        $invoice = DB::transaction(function () use ($id, $subscriberId) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
+            $invoice = Invoice::query()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($id);
+            if ($invoice->isFinanciallyLocked()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'invoice' => 'لا يمكن إعادة احتساب فاتورة معتمدة بالتعرفة الحالية. التصحيح يتطلب مستنداً مالياً موثقاً.',
+                ]);
+            }
+            $readings = $invoice->readings()->orderBy('id')->lockForUpdate()->get();
+            if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
+                $invoice->billing_period_start = $readings->min('period_start');
+                $invoice->billing_period_end = $readings->max('period_end');
+                $invoice->consumption_fee = app(\App\Services\HistoricalTariffService::class)->quote($readings)['total'];
+            }
+            $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
+                ->where('id', '<', $invoice->id)
+                ->whereNotIn('status', ['draft', 'cancelled'])
+                ->get();
+            $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
+            $invoice->total_amount = $invoice->consumption_fee;
             $invoice->save();
             $this->syncItems($invoice);
-        });
+
+            return $invoice;
+        }, 3);
 
         return response()->json(['message' => 'تمت إعادة احتساب الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter', 'items', 'readings']))]);
     }
@@ -604,6 +575,7 @@ class InvoiceController extends ApiController
 
     private function decorate(Invoice $invoice): array
     {
+        $invoice->loadMissing('tariffLines');
         $data = $invoice->toArray();
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();

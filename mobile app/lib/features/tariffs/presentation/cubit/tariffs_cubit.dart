@@ -82,6 +82,7 @@ class TariffsState {
   TariffsState copyWith({
     List<TariffModel>? tariffs,
     double? activePrice,
+    bool clearActivePrice = false,
     TariffsTrashFilter? trashFilter,
     String? search,
     TariffsLoadStatus? status,
@@ -102,7 +103,7 @@ class TariffsState {
     bool clearAddedDates = false,
   }) => TariffsState(
     tariffs: tariffs ?? this.tariffs,
-    activePrice: activePrice ?? this.activePrice,
+    activePrice: clearActivePrice ? null : (activePrice ?? this.activePrice),
     trashFilter: trashFilter ?? this.trashFilter,
     search: search ?? this.search,
     status: status ?? this.status,
@@ -160,6 +161,7 @@ class TariffsCubit extends Cubit<TariffsState> {
           state.copyWith(
             tariffs: result.tariffs,
             activePrice: result.activePrice,
+            clearActivePrice: result.activePrice == null,
             page: result.currentPage,
             lastPage: result.lastPage,
             totalCount: result.total,

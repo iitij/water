@@ -278,6 +278,11 @@ void main() {
         'original_invoice_id': 1, 'corrected_units': '7.50',
         'historical_unit_price': '600.00',
       },
+      'tariff_lines': [
+        {'reading_id': 10, 'tariff_id': 11, 'tariff_name': 'Historical',
+         'period_start': '2026-01-01', 'period_end': '2026-02-01',
+         'units': '7.50', 'unit_price': '600.00', 'amount': '4500.00'},
+      ],
     });
     final restored = InvoiceModel.fromJson(replacement.toJson());
     expect(restored.originalInvoiceId, 1);

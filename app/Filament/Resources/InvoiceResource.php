@@ -39,6 +39,7 @@ class InvoiceResource extends Resource
                     Forms\Components\Select::make('subscriber_id')
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('المشترك')
+                        ->helperText(fn (?Invoice $record) => $record === null ? 'تُصدر الفاتورة من القراءات غير المفوترة للعداد الحالي، وتحسب الفترة والمبالغ آلياً بالتعرفات المعتمدة.' : null)
                         ->relationship('subscriber', 'name')
                         ->required()
                         ->searchable()
@@ -56,24 +57,28 @@ class InvoiceResource extends Resource
                         }),
 
                     Forms\Components\TextInput::make('bill_number')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('رقم الفاتورة')
                         ->default(fn() => Invoice::generateBillNumber())
                         ->disabled()
-                        ->dehydrated(fn (?Invoice $record) => $record === null),
+                        ->dehydrated(false),
 
                     Forms\Components\DatePicker::make('bill_date')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('تاريخ الفاتورة')
                         ->default(now())
                         ->required(),
 
                     Forms\Components\DatePicker::make('billing_period_start')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('بداية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->helperText('فترة الاستهلاك مستقلة عن تاريخ إصدار الفاتورة.'),
 
                     Forms\Components\DatePicker::make('billing_period_end')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('نهاية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
@@ -81,6 +86,7 @@ class InvoiceResource extends Resource
                         ->helperText('يجب ألا تسبق بداية الفترة.'),
 
                     Forms\Components\Select::make('status')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('الحالة')
                         ->options([
                             'draft' => 'مسودة',
@@ -96,6 +102,7 @@ class InvoiceResource extends Resource
                 ]),
 
             \Filament\Schemas\Components\Section::make('تفاصيل المبالغ')
+                ->visible(fn (?Invoice $record) => $record !== null)
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('consumption_fee')
@@ -388,6 +395,19 @@ class InvoiceResource extends Resource
                     ->url(fn(Invoice $record) => route('invoices.print', $record))
                     ->openUrlInNewTab(),
 
+                \Filament\Actions\Action::make('view_tariff_lines')
+                    ->label('تفاصيل التسعير')
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn (Invoice $record) => auth()->user()?->can('view', $record))
+                    ->modalHeading('تفاصيل التعرفات التاريخية للفاتورة')
+                    ->modalContent(function (Invoice $record) {
+                        \Illuminate\Support\Facades\Gate::authorize('view', $record);
+
+                        return view('filament.accounting.tariff-lines', [
+                            'lines' => \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+                                ->where('invoice_id', $record->id)->orderBy('period_start')->orderBy('id')->get(),
+                        ]);
+                    })->modalSubmitAction(false)->modalCancelActionLabel('إغلاق'),
                 \Filament\Actions\Action::make('view_allocations')
                     ->label('تخصيصات الفاتورة')
                     ->icon('heroicon-o-list-bullet')
@@ -405,17 +425,41 @@ class InvoiceResource extends Resource
                     ->visible(fn (Invoice $record) => $record->retired_meter_id && ! in_array($record->status, ['draft', 'cancelled'], true)
                         && ! \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $record->id)->exists()
                         && auth()->user()?->can('delete', $record) && auth()->user()?->can('create', Invoice::class))
+                    ->fillForm(function (Invoice $record): array {
+                        $lines = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+                            ->where('invoice_id', $record->id)->get()->keyBy('reading_id');
+
+                        return ['readings' => $record->readings()->orderBy('period_start')->orderBy('id')->get()
+                            ->map(function ($reading) use ($lines): array {
+                                $line = $lines->get($reading->id);
+
+                                return [
+                                    'reading_id' => $reading->id,
+                                    'period' => $reading->period_start.' — '.$reading->period_end,
+                                    'original_units' => $line?->units ?? $reading->consumption_units,
+                                    'price_display' => $line?->unit_price ?? 'يُتحقق من التعرفة المعتمدة للفترة على الخادم',
+                                    'corrected_units' => $line?->units ?? $reading->consumption_units,
+                                ];
+                            })->all()];
+                    })
                     ->form([
-                        Forms\Components\TextInput::make('corrected_units')->label('الوحدات التاريخية المصححة')->numeric()->minValue(0)->required(),
-                        Forms\Components\TextInput::make('historical_unit_price')->label('تعرفة الفترة الأصلية المثبتة')->numeric()->minValue(0)->required(),
+                        Forms\Components\Repeater::make('readings')->label('تفاصيل القراءات التاريخية')
+                            ->schema([
+                                Forms\Components\Hidden::make('reading_id')->required(),
+                                Forms\Components\TextInput::make('period')->label('الفترة')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('original_units')->label('الوحدات الأصلية')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('price_display')->label('التعرفة التاريخية')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('corrected_units')->label('الوحدات المصححة')->numeric()
+                                    ->minValue(0)->maxValue(99999999.99)->step(0.01)->required(),
+                            ])->columns(2)->addable(false)->deletable(false)->reorderable(false)->minItems(1)
+                            ->helperText('صحح كل قراءة بصورة مستقلة. يحدد الخادم السعر من الدليل التاريخي، ولا يسمح بتعديل التعرفة هنا.'),
                         Forms\Components\Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
                         Forms\Components\Textarea::make('evidence')->label('دليل القراءة والتعرفة التاريخية')->required()->minLength(10)->maxLength(2000),
                     ])
                     ->requiresConfirmation()
                     ->action(function (Invoice $record, array $data): void {
-                        app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
-                            $record, auth()->user(), (string) $data['corrected_units'],
-                            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
+                        app(\App\Services\HistoricalInvoiceCorrectionService::class)->correctReadings(
+                            $record, auth()->user(), $data['readings'], $data['reason'], $data['evidence']
                         );
                         \Filament\Notifications\Notification::make()->title('تم إصدار فاتورة تاريخية مصححة')->success()->send();
                     }),

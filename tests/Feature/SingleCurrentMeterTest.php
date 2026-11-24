@@ -32,6 +32,14 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
+    private function measuredConsumption(Meter $meter, int $units): void
+    {
+        \App\Models\Tariff::create(['name' => 'Synthetic measured tariff', 'unit_price' => 1, 'is_active' => true]);
+        \App\Models\Reading::create(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
+            'previous_reading' => 0, 'current_reading' => $units]);
+    }
+
     public function test_meter_schema_has_no_obsolete_identity_columns(): void
     {
         $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('meters', 'ten'.'ant_name'));
@@ -170,6 +178,7 @@ class SingleCurrentMeterTest extends TestCase
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'CURRENT-CONSUMPTION',
         ]);
+        $this->measuredConsumption($current, 120);
 
         $this->postJson('/api/invoices', [
             'subscriber_id' => $subscriber->id,
@@ -215,17 +224,20 @@ class SingleCurrentMeterTest extends TestCase
             'subscriber_id' => $subscriber->id,
             'unique_code' => 'FILAMENT-CURRENT',
         ]);
+        $this->measuredConsumption($current, 34);
 
         $reflection = new \ReflectionClass(\App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class);
         $page = $reflection->newInstanceWithoutConstructor();
-        $method = $reflection->getMethod('mutateFormDataBeforeCreate');
+        $method = $reflection->getMethod('handleRecordCreation');
         $data = $method->invoke($page, [
             'subscriber_id' => $subscriber->id,
             'consumption_fee' => 34,
         ]);
-        $this->assertSame($current->id, $data['meter_id']);
-        $this->assertSame('meter', $data['invoice_type']);
-        $this->assertSame('issued', $data['status']);
+        $this->assertSame($current->id, $data->meter_id);
+        $this->assertSame('meter', $data->invoice_type);
+        $this->assertSame('issued', $data->status);
+        $this->assertSame('34.00', $data->total_amount);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $data->id, 'amount' => 34]);
     }
 
     public function test_filament_manual_consumption_without_current_meter_fails(): void
@@ -233,7 +245,7 @@ class SingleCurrentMeterTest extends TestCase
         $subscriber = $this->subscriber();
         $reflection = new \ReflectionClass(\App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class);
         $page = $reflection->newInstanceWithoutConstructor();
-        $method = $reflection->getMethod('mutateFormDataBeforeCreate');
+        $method = $reflection->getMethod('handleRecordCreation');
 
         $this->expectException(\Illuminate\Validation\ValidationException::class);
         $method->invoke($page, [
@@ -314,6 +326,7 @@ class SingleCurrentMeterTest extends TestCase
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'OLD-DEBT']);
+        $this->measuredConsumption($old, 100);
 
         $invoice = $this->postJson('/api/invoices', [
             'subscriber_id' => $subscriber->id,
@@ -483,7 +496,7 @@ class SingleCurrentMeterTest extends TestCase
         ]);
         $class = new \ReflectionClass(\App\Filament\Resources\ReadingResource\Pages\CreateReading::class);
         $page = $class->newInstanceWithoutConstructor();
-        $method = $class->getMethod('mutateFormDataBeforeCreate');
+        $method = $class->getMethod('handleRecordCreation');
 
         $this->expectException(\Illuminate\Validation\ValidationException::class);
         $method->invoke($page, [

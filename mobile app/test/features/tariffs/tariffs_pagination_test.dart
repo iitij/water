@@ -39,6 +39,26 @@ void main() {
     verifyNever(() => repository.activePrice());
   });
 
+  test('explicit null current price clears the last known price', () async {
+    final repository = _Repository();
+    double? price = 700;
+    when(() => repository.listPage(trash: any(named: 'trash'), search: any(named: 'search'),
+      page: any(named: 'page'), pageSize: any(named: 'pageSize'), sortBy: any(named: 'sortBy'),
+      sortDirection: any(named: 'sortDirection'))).thenAnswer((_) async =>
+        TariffsPage.fromJson({'data': <Object?>[], 'current_page': 1,
+          'last_page': 1, 'total': 0, 'active_price': price}));
+    final cubit = TariffsCubit(repository: repository);
+    addTearDown(cubit.close);
+    await cubit.load();
+    expect(cubit.state.activePrice, 700);
+    price = null;
+    await cubit.load();
+    expect(cubit.state.activePrice, isNull);
+    price = 0;
+    await cubit.load();
+    expect(cubit.state.activePrice, 0);
+  });
+
   test('missing server active price is an error rather than a derived partial-page price', () {
     expect(() => TariffsPage.fromJson({'data': <Object?>[], 'current_page': 1, 'last_page': 1, 'total': 0}),
       throwsA(isA<ServerFailure>()));

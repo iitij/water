@@ -46,6 +46,7 @@ class InvoiceModel extends Equatable {
     this.payments = const <InvoicePaymentRecord>[],
     this.serverTrueRemaining,
     this.allocationSnapshot,
+    this.tariffLines,
     this.isLatestInvoice,
     this.isPathMatch = false,
   });
@@ -87,6 +88,8 @@ class InvoiceModel extends Equatable {
   /// `true_remaining_amount` كما حسبه الخادم (الأدق). `null` = غير مُرسل.
   final double? serverTrueRemaining;
   final AllocationSnapshot? allocationSnapshot;
+  // null: not loaded; empty: the server confirms no saved pricing evidence.
+  final List<InvoiceTariffLine>? tariffLines;
 
   /// `is_latest_invoice` للحساب المعزول. `null` = غير مُرسل (يُحسب محلياً).
   final bool? isLatestInvoice;
@@ -140,17 +143,14 @@ class InvoiceModel extends Equatable {
   /// `Invoice::updateStatus()` مع `grace_period`) — العرض فقط، لا إعادة احتساب.
   bool get isOverdue => status == InvoiceStatus.overdue;
 
-  double get consumptionUnits =>
-      correctedUnits ?? readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
+  double get consumptionUnits => tariffLines?.isNotEmpty == true
+      ? tariffLines!.fold<double>(0, (sum, line) => sum + line.units)
+      : correctedUnits ?? readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
 
-  /// سعر الوحدة الضمني (مطابق لمنطق `WhatsAppService#L120`).
+  /// Only one uniquely evidenced price may be displayed as a unit price.
   double? get impliedUnitPrice {
-    if (historicalUnitPrice != null) return historicalUnitPrice;
-    final units = consumptionUnits;
-    if (units > 0 && consumptionFee > 0) {
-      return double.parse((consumptionFee / units).toStringAsFixed(2));
-    }
-    return null;
+    final prices = tariffLines?.map((line) => line.unitPrice).toSet();
+    return prices?.length == 1 ? prices!.single : null;
   }
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -203,6 +203,9 @@ class InvoiceModel extends Equatable {
       items: items,
       readings: readings,
       payments: payments,
+      tariffLines: json['tariff_lines'] is List
+          ? JsonUtils.asMapList(json['tariff_lines']).map(InvoiceTariffLine.fromJson).toList(growable: false)
+          : null,
       allocationSnapshot: JsonUtils.asMap(json['allocation_snapshot']) == null ? null : AllocationSnapshot.fromJson(JsonUtils.asMap(json['allocation_snapshot'])!),
       serverTrueRemaining: JsonUtils.asDoubleOrNull(
         json['true_remaining_amount'],
@@ -240,6 +243,7 @@ class InvoiceModel extends Equatable {
     'notes': notes,
     'true_remaining_amount': serverTrueRemaining,
     if (allocationSnapshot != null) 'allocation_snapshot': allocationSnapshot!.toJson(),
+    if (tariffLines != null) 'tariff_lines': tariffLines!.map((line) => line.toJson()).toList(),
     'is_latest_invoice': isLatestInvoice,
   };
 
@@ -303,6 +307,7 @@ class InvoiceModel extends Equatable {
     payments: payments ?? this.payments,
     serverTrueRemaining: serverTrueRemaining ?? this.serverTrueRemaining,
     allocationSnapshot: amountPaid == null && status == null ? allocationSnapshot : null,
+    tariffLines: tariffLines,
     isLatestInvoice: isLatestInvoice ?? this.isLatestInvoice,
     isPathMatch: isPathMatch,
   );
@@ -319,6 +324,7 @@ class InvoiceModel extends Equatable {
     creditApplied,
     serverTrueRemaining,
     allocationSnapshot,
+    tariffLines,
     isLatestInvoice,
     retiredMeterId,
     retiredMeterCode,
@@ -327,6 +333,54 @@ class InvoiceModel extends Equatable {
     originalInvoiceId,
     correctedByInvoiceId,
   ];
+}
+
+/// Immutable pricing evidence from the server, never recomputed locally.
+class InvoiceTariffLine extends Equatable {
+  const InvoiceTariffLine({
+    required this.readingId,
+    required this.tariffId,
+    required this.tariffName,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.units,
+    required this.unitPrice,
+    required this.amount,
+  });
+
+  final int readingId;
+  final int tariffId;
+  final String tariffName;
+  final String periodStart;
+  final String periodEnd;
+  final double units;
+  final double unitPrice;
+  final double amount;
+
+  factory InvoiceTariffLine.fromJson(Map<String, dynamic> json) => InvoiceTariffLine(
+    readingId: JsonUtils.asInt(json['reading_id']),
+    tariffId: JsonUtils.asInt(json['tariff_id']),
+    tariffName: JsonUtils.asString(json['tariff_name']),
+    periodStart: JsonUtils.asString(json['period_start']),
+    periodEnd: JsonUtils.asString(json['period_end']),
+    units: JsonUtils.asDouble(json['units']),
+    unitPrice: JsonUtils.asDouble(json['unit_price']),
+    amount: JsonUtils.asDouble(json['amount']),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'reading_id': readingId,
+    'tariff_id': tariffId,
+    'tariff_name': tariffName,
+    'period_start': periodStart,
+    'period_end': periodEnd,
+    'units': units,
+    'unit_price': unitPrice,
+    'amount': amount,
+  };
+
+  @override
+  List<Object?> get props => [readingId, tariffId, tariffName, periodStart, periodEnd, units, unitPrice, amount];
 }
 
 /// بنود الفاتورة (`invoice_items`) — تُنشأ في `InvoiceService::generateInvoice` سطر 165-205.

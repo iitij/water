@@ -66,6 +66,9 @@ class MobileConnectivityFixesTest extends TestCase
     // / إصدار فاتورة استهلاك عبر الـ API نفسه (كما يفعل التطبيق) ثم تحديثها.
     private function createMeterInvoiceViaApi(Meter $meter, Subscriber $subscriber)
     {
+        if (! Tariff::where('is_active', true)->exists()) {
+            \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
+        }
         // قراءة حالية قبل إصدار الفاتورة حتى يوجد استهلاك.
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings', [

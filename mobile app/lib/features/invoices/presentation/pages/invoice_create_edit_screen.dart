@@ -20,9 +20,8 @@ import '../../data/models/invoice_model.dart';
 import '../../domain/accounting/finance_enums.dart';
 import '../../domain/repositories/invoices_repository.dart';
 
-/// إنشاء/تعديل يدوي لفاتورة — يطابق مخطط `InvoiceResource::form` حقلاً حقلاً:
-/// بيانات الفاتورة (مشترك/رقم مولَّد/تاريخ/حالة)، تفاصيل المبالغ السبعة مع حساب
-/// تلقائي للإجمالي، ثم الملاحظات. `amount_paid` معطل (يُدار عبر السندات).
+/// إصدار فاتورة من القراءات غير المفوترة والتعرفة التاريخية على الخادم.
+/// حقول المبالغ والتاريخ تظهر فقط عند تعديل مسودة موجودة.
 class InvoiceCreateEditScreen extends StatefulWidget {
   const InvoiceCreateEditScreen({super.key, this.invoice});
 
@@ -52,7 +51,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
 
   int? _subscriberId;
   DateTime? _billDate;
-  InvoiceStatus _status = InvoiceStatus.issued;
   bool _saving = false;
   String? _error;
 
@@ -63,7 +61,6 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     super.initState();
     _subscriberId = widget.invoice?.subscriberId;
     _billDate = widget.invoice?.billDate ?? DateTime.now();
-    _status = widget.invoice?.status ?? InvoiceStatus.issued;
   }
 
   @override
@@ -108,12 +105,13 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     final repository = sl<InvoicesRepository>();
     final payload = <String, dynamic>{
       'subscriber_id': _subscriberId,
-      'bill_date': DateFormat.day(_billDate),
-      'status': isEditing ? _status.wire : InvoiceStatus.issued.wire,
-      'consumption_fee': _parse(_consumption),
-      'previous_balance': _parse(_previousBalance),
-      'credit_applied': _parse(_credit),
-      'total_amount': _parse(_total) > 0 ? _parse(_total) : _liveTotal,
+      if (isEditing) ...<String, dynamic>{
+        'bill_date': DateFormat.day(_billDate),
+        'consumption_fee': _parse(_consumption),
+        'previous_balance': _parse(_previousBalance),
+        'credit_applied': _parse(_credit),
+        'total_amount': _parse(_total) > 0 ? _parse(_total) : _liveTotal,
+      },
       if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
     };
 
@@ -145,8 +143,8 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
     }
 
     return SubPageScaffold(
-      title: isEditing ? 'تعديل فاتورة' : 'فاتورة يدوية',
-      subtitle: isEditing ? 'تحديث بيانات الفاتورة والمبالغ' : 'إصدار فاتورة بمبالغ مدخلة يدوياً',
+      title: isEditing ? 'تعديل فاتورة' : 'إصدار فاتورة',
+      subtitle: isEditing ? 'تحديث بيانات الفاتورة والمبالغ' : 'إصدار من القراءات غير المفوترة والتعرفات المعتمدة',
       child: SafeArea(
         top: false,
         child: Form(
@@ -176,7 +174,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
                     ),
                     const SizedBox(height: 10),
                   ],
-                  AppSettingRow(
+                  if (isEditing) AppSettingRow(
                     icon: Icons.calendar_today_outlined,
                     color: Theme.of(context).colorScheme.primary,
                     title: 'تاريخ الفاتورة',
@@ -204,6 +202,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            if (isEditing) ...<Widget>[
             const SectionHeading(
               title: 'تفاصيل المبالغ',
               subtitle: 'الإجمالي يُحسب من الاستهلاك',
@@ -242,36 +241,15 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               helperText: 'فارغ = محسوب تلقائياً من الاستهلاك',
             ),
             const SizedBox(height: 10),
-            AppTextField(
-              controller: _notes,
-              label: 'ملاحظات',
-              maxLines: 3,
-            ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            if (isEditing) ...<Widget>[
-              const SectionHeading(title: 'الحالة', icon: Icons.flag_outlined),
-              const SizedBox(height: 8),
-              AppCard(
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: InvoiceStatus.values
-                      .where((s) => s != InvoiceStatus.cancelled)
-                      .map(
-                        (s) => AppFilterChip(
-                          label: s.label,
-                          selected: _status == s,
-                          onTap: () => setState(() => _status = s),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
+            ] else ...<Widget>[
+              AppCard(child: const Text('يحسب النظام فترة الاستهلاك وقيمة الفاتورة من القراءات غير المفوترة للعداد الحالي، وفق التعرفات المعتمدة لكل فترة.')),
             ],
+            const SizedBox(height: 16),
+            AppCard(child: AppTextField(controller: _notes, label: 'ملاحظات', maxLines: 3)),
+            const SizedBox(height: 16),
             if (_error != null) ...<Widget>[
               Text(
                 _error!,
@@ -279,7 +257,7 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
               ),
               const SizedBox(height: 10),
             ],
-            Container(
+            if (isEditing) Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.06),

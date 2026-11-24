@@ -22,6 +22,12 @@ class FinancialReversalTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
+    }
+
     private function fixture(): array
     {
         $subscriber = Subscriber::create([
@@ -421,6 +427,16 @@ class FinancialReversalTest extends TestCase
         $url = '/api/invoices/'.$invoice->id.'/correct-historical';
         $this->actingAs($collector, 'sanctum')->postJson($url, $payload)->assertForbidden();
         $this->actingAs($admin, 'sanctum');
+        $this->postJson($url, array_replace($payload, ['historical_unit_price' => '800.00']))
+            ->assertUnprocessable()->assertJsonValidationErrors('historical_unit_price');
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertSame(3999.75, $subscriber->getAccountDebt());
+        $this->assertSame('partially_paid', $invoice->fresh()->status);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'units' => 10, 'unit_price' => 600, 'amount' => 6000]);
+
         $response = $this->postJson($url, $payload)->assertOk();
         $id = $response->json('correction.id');
         $replacementId = $response->json('correction.replacement_invoice_id');
@@ -433,6 +449,10 @@ class FinancialReversalTest extends TestCase
         $this->assertSame('cancelled', $invoice->fresh()->status);
         $this->assertSame('6000.00', $invoice->fresh()->total_amount);
         $this->assertSame('4500.00', $replacement->total_amount);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $reading->id, 'units' => 7.50, 'unit_price' => 600, 'amount' => 4500]);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'units' => 10, 'unit_price' => 600, 'amount' => 6000]);
         $this->assertSame('2000.25', $replacement->amount_paid);
         $this->assertSame(2499.75, $subscriber->getAccountDebt());
         $this->assertSame($invoice->id, $payment->fresh()->invoice_id);
@@ -460,6 +480,103 @@ class FinancialReversalTest extends TestCase
         $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
     }
 
+
+    public function test_legacy_correction_requires_approved_historical_coverage(): void
+    {
+        [$subscriber, $old, $reading, $invoice] = $this->fixture();
+        // Simulate a pre-ACC-08 invoice with no persisted pricing snapshot.
+        \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->delete();
+        $tariff = \App\Models\Tariff::sole();
+        $tariff->update(['is_active' => false]);
+        app(\App\Services\SingleMeterService::class)->replace($old, [
+            'unique_code' => 'LEGACY-CORRECTION-NEW',
+        ], '2026-02-02', 'Synthetic historical meter replacement');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $this->actingAs($admin, 'sanctum');
+        $payload = ['corrected_units' => '8.00', 'historical_unit_price' => '600.00',
+            'reason' => 'Synthetic historical correction reason', 'evidence' => 'Synthetic archived reading evidence'];
+        $url = '/api/invoices/'.$invoice->id.'/correct-historical';
+        $this->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('tariff');
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertSame(6000.0, $subscriber->getAccountDebt());
+
+        $tariff->fresh()->update(['is_active' => true]);
+        $replacementId = $this->postJson($url, $payload)->assertOk()->json('correction.replacement_invoice_id');
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $reading->id, 'tariff_id' => $tariff->id, 'units' => 8,
+            'unit_price' => 600, 'amount' => 4800]);
+        $this->assertSame(4800.0, $subscriber->getAccountDebt());
+        $this->assertDatabaseMissing('invoice_tariff_lines', ['invoice_id' => $invoice->id]);
+    }
+
+    public function test_aggregate_correction_cannot_allocate_units_across_multiple_readings(): void
+    {
+        $subscriber = Subscriber::create(['name' => 'Synthetic multi-period correction',
+            'square_id' => Square::create(['name' => 'Multi-period test'])->id, 'status' => 'active']);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'MULTI-CORRECT']);
+        $tariff = \App\Models\Tariff::sole();
+        $tariff->update(['end_date' => '2026-01-31']);
+        \App\Models\Tariff::create(['name' => 'February tariff', 'unit_price' => 800,
+            'start_date' => '2026-02-01', 'is_active' => true]);
+        foreach ([['2026-01-01', '2026-02-01', 0, 10], ['2026-02-01', '2026-03-01', 10, 15]] as [$start, $end, $previous, $current]) {
+            Reading::create(['meter_id' => $meter->id, 'reading_date' => $end, 'period_start' => $start,
+                'period_end' => $end, 'previous_reading' => $previous, 'current_reading' => $current]);
+        }
+        $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        app(\App\Services\SingleMeterService::class)->replace($meter, [
+            'unique_code' => 'MULTI-CORRECT-NEW',
+        ], '2026-03-02', 'Synthetic historical meter replacement');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $this->actingAs($admin, 'sanctum')->postJson('/api/invoices/'.$invoice->id.'/correct-historical', [
+            'corrected_units' => '12.00', 'historical_unit_price' => '600.00',
+            'reason' => 'Synthetic historical correction reason', 'evidence' => 'Synthetic archived reading evidence',
+        ])->assertUnprocessable()->assertJsonValidationErrors('corrected_units');
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('invoice_tariff_lines', 2);
+        $this->assertSame(10000.0, $subscriber->getAccountDebt());
+
+        [$first, $second] = $invoice->readings()->orderBy('id')->get()->all();
+        $url = '/api/invoices/'.$invoice->id.'/correct-historical';
+        $payload = ['readings' => [
+            ['reading_id' => $first->id, 'corrected_units' => '8.00'],
+            ['reading_id' => $second->id, 'corrected_units' => '4.50'],
+        ], 'reason' => 'Synthetic historical correction reason', 'evidence' => 'Synthetic archived reading evidence'];
+        $this->postJson($url, array_replace($payload, ['readings' => [$payload['readings'][0]]]))
+            ->assertUnprocessable()->assertJsonValidationErrors('readings');
+        $this->postJson($url, array_replace($payload, ['readings' => [$payload['readings'][0], $payload['readings'][0]]]))
+            ->assertUnprocessable();
+        $this->postJson($url, array_replace($payload, ['readings' => [
+            $payload['readings'][0], ['reading_id' => 999999, 'corrected_units' => 4],
+        ]]))->assertUnprocessable()->assertJsonValidationErrors('readings');
+        $this->postJson($url, $payload + ['historical_unit_price' => 600])->assertUnprocessable();
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+
+        $response = $this->postJson($url, $payload)->assertOk()
+            ->assertJsonPath('correction.historical_unit_price', null)
+            ->assertJsonPath('correction.corrected_units', '12.50')
+            ->assertJsonPath('correction.corrected_amount', '8400.00');
+        $replacementId = $response->json('correction.replacement_invoice_id');
+        $correctionId = $response->json('correction.id');
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $first->id, 'units' => 8, 'unit_price' => 600, 'amount' => 4800]);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $second->id, 'units' => 4.5, 'unit_price' => 800, 'amount' => 3600]);
+        $this->assertDatabaseCount('invoice_tariff_lines', 4);
+        $this->assertDatabaseCount('transactions', 3);
+        $this->assertSame(8400.0, $subscriber->getAccountDebt());
+        $this->assertSame($invoice->id, $first->fresh()->invoice_id);
+        $this->assertSame($invoice->id, $second->fresh()->invoice_id);
+        $this->postJson($url, array_replace($payload, ['readings' => array_reverse($payload['readings'])]))
+            ->assertOk()->assertJsonPath('correction.id', $correctionId);
+        $payload['readings'][0]['corrected_units'] = '8.01';
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('transactions', 3);
+    }
 
     public function test_field_pack_contains_unified_balance_after_meter_billing_and_payment(): void
     {

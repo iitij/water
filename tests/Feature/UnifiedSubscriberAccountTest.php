@@ -16,6 +16,12 @@ class UnifiedSubscriberAccountTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
+    }
+
     private function meter(): Meter
     {
         $subscriber = Subscriber::create([

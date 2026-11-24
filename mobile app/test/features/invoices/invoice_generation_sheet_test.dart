@@ -38,7 +38,7 @@ void main() {
           limit: any(named: 'limit'),
         ),
       ).thenAnswer((_) async => []);
-      when(() => tariffs.activePrice()).thenAnswer((_) async => 100.0);
+      when(() => tariffs.activePrice()).thenThrow(StateError('No currently approved tariff'));
 
       GetIt.I.registerSingleton<InvoicesRepository>(invRepo);
       GetIt.I.registerSingleton<InvoicesRemoteDataSource>(invSrc);
@@ -61,6 +61,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
+      verifyNever(() => tariffs.activePrice());
       expect(find.byType(SwitchListTile), findsOneWidget);
       await tester.tap(find.byType(SwitchListTile).first);
       await tester.pump();

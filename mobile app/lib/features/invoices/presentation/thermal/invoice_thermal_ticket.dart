@@ -22,20 +22,26 @@ ThermalTicket buildInvoiceThermalTicket(
     ThermalSyntax.field('الفترة', '${DateFormat.day(invoice.periodStart)} ← ${DateFormat.day(invoice.periodEnd)}'),
     ThermalSyntax.field('المستفيد', invoice.beneficiaryName),
     if (invoice.meter != null)
-      ThermalSyntax.field('العداد', invoice.meter!.label),
+      ThermalSyntax.field('العداد', invoice.meter!.label)
+    else if (invoice.retiredMeterCode != null)
+      ThermalSyntax.field('العداد', invoice.retiredMeterCode!),
     if (invoice.subscriber?.squareName != null)
       ThermalSyntax.field('المربع', invoice.subscriber!.squareName!),
     if (invoice.messageRecipientPhone != null)
       ThermalSyntax.field('الهاتف', PhoneFormatter.forReceipt(invoice.messageRecipientPhone)),
     const ThermalLine.divider(),
-    if (invoice.consumptionUnits > 0) ...<ThermalLine>[
-      ThermalSyntax.field(
-        'الاستهلاك',
-        '${CurrencyFormatter.amount(invoice.consumptionUnits)} وحدة × '
-        '${CurrencyFormatter.amount(invoice.impliedUnitPrice ?? 0)}',
-      ),
-      ThermalSyntax.field('قيمة الاستهلاك', CurrencyFormatter.amount(invoice.consumptionFee)),
+    if (invoice.tariffLines?.isNotEmpty == true) ...<ThermalLine>[
+      for (final line in invoice.tariffLines!) ...<ThermalLine>[
+        ThermalSyntax.field('الفترة', '${line.periodStart} — ${line.periodEnd}'),
+        ThermalSyntax.field('الاستهلاك', '${CurrencyFormatter.amount(line.units)} وحدة × ${CurrencyFormatter.amount(line.unitPrice)}'),
+        ThermalSyntax.field('المبلغ', CurrencyFormatter.amount(line.amount)),
+      ],
+    ] else ...<ThermalLine>[
+      if (invoice.readings.isNotEmpty || invoice.correctedUnits != null)
+        ThermalSyntax.field('الاستهلاك', '${CurrencyFormatter.amount(invoice.consumptionUnits)} وحدة'),
+      ThermalSyntax.field('سعر الوحدة', 'غير موثقة'),
     ],
+    ThermalSyntax.field('قيمة الاستهلاك', CurrencyFormatter.amount(invoice.consumptionFee)),
     if (invoice.previousBalance > 0)
       ThermalSyntax.field('متأخرات سابقة', CurrencyFormatter.amount(invoice.previousBalance)),
     if (invoice.creditApplied > 0)

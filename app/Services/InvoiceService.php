@@ -37,7 +37,6 @@ class InvoiceService
                     ->lockForUpdate()->findOrFail($meter->id);
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             }
-            $unitPrice = \App\Models\Tariff::getActivePrice();
 
             // 1. حساب الاستهلاك - نأخذ آخر قراءة فقط للاستهلاك الحالي، وما قبلها يُحتسب متأخرات
             $uninvoicedReadings = collect();
@@ -52,18 +51,14 @@ class InvoiceService
                     ->orderBy('period_start')->orderBy('period_end')->orderBy('id')->lockForUpdate()->get();
             }
 
-            $currentConsumptionUnits = 0;
-            $previousUnitsAsArrears = 0;
-            $consumptionFee = 0;
-
-            if ($uninvoicedReadings->isNotEmpty()) {
-                $firstReading = $uninvoicedReadings->first();
-                $lastReading = $uninvoicedReadings->last();
-                
-                // إجمالي وحدات الاستهلاك لجميع القراءات غير المفوترة
-                $currentConsumptionUnits = $uninvoicedReadings->sum('consumption_units');
-                $consumptionFee = $currentConsumptionUnits * $unitPrice;
+            if ($uninvoicedReadings->isEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'readings' => 'لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.',
+                ]);
             }
+
+            $pricing = app(HistoricalTariffService::class)->quote($uninvoicedReadings);
+            $consumptionFee = $pricing['total'];
 
             // 2. المتأخرات السابقة (فقط فواتير سابقة غير مسددة من نفس النوع)
             $previousBalance = 0;
@@ -77,15 +72,12 @@ class InvoiceService
             // ملاحظة: سيتم استدعاء تحديث حالة الفواتير السابقة في نهاية الدالة لتعمل حسب المنطق الصحيح
             // 5. خصم الرصيد الدائن
             $subtotal = $consumptionFee;
-            if ($uninvoicedReadings->isEmpty()) {
-                throw new \Exception('لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.');
-            }
 
             $creditApplied = 0;
             $availableBalance = $subscriber->getAccountCredit();
             
             if ($availableBalance > 0 && $subtotal > 0) {
-                $creditApplied = min($availableBalance, $subtotal);
+                $creditApplied = min($availableBalance, (float) $subtotal);
             }
 
             // 6. فترة استهلاك المياه؛ وجود قراءة غير مفوترة شرط مؤكد أعلاه
@@ -120,7 +112,7 @@ class InvoiceService
                 $items[] = [
                     'invoice_id' => $invoice->id,
                     'type' => 'consumption',
-                    'description' => "استهلاك مياه: {$currentConsumptionUnits} وحدة × {$unitPrice} ريال",
+                    'description' => 'استهلاك مياه وفق تفاصيل التعرفة التاريخية',
                     'amount' => $consumptionFee,
                 ];
             }
@@ -141,6 +133,10 @@ class InvoiceService
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]));
+            }
+
+            foreach ($pricing['lines'] as $line) {
+                DB::table('invoice_tariff_lines')->insert($line + ['invoice_id' => $invoice->id]);
             }
 
             // 9. تحديث حالة القراءات إلى مفوترة

@@ -125,16 +125,6 @@ class LiveSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<InvoiceGenerationCubit, InvoiceGenerationState>(
       builder: (context, state) {
-        final rows = <(String, String, Color?)>[
-          ('استهلاك متوقع', CurrencyFormatter.withLabel(state.consumptionFee), null),
-          (
-            'رصيد دائن يُخصم',
-            '- ${CurrencyFormatter.amount(state.creditApplied)}',
-            AppColors.success,
-          ),
-          ('متأخرات محمولة', CurrencyFormatter.withLabel(state.previousBalance), AppColors.warning),
-        ];
-
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -144,58 +134,9 @@ class LiveSummaryCard extends StatelessWidget {
           ),
           child: Column(
             children: <Widget>[
-              ...rows.map(
-                (row) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(child: Text(row.$1, style: const TextStyle(fontSize: 12))),
-                      Text(
-                        row.$2,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: row.$3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              const Text(
+                'يحدد الخادم قيمة الاستهلاك والفترة والرصيد عند الإصدار بناءً على القراءات والتعرفات التاريخية المعتمدة.',
               ),
-              const Divider(height: 18),
-              Row(
-                children: <Widget>[
-                  const Expanded(
-                    child: Text(
-                      'صافي الفاتورة',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Text(
-                    CurrencyFormatter.withLabel(state.netTotal),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.danger,
-                    ),
-                  ),
-                ],
-              ),
-              if (state.totalDue > state.netTotal)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: <Widget>[
-                      const Expanded(
-                        child: Text('إجمالي المستحق مع المتأخرات', style: TextStyle(fontSize: 11)),
-                      ),
-                      Text(
-                        CurrencyFormatter.withLabel(state.totalDue),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
         );
@@ -469,10 +410,7 @@ class IncludeReadingsToggle extends StatelessWidget {
         onChanged: context.read<InvoiceGenerationCubit>().setIncludeReadings,
         title: const Text('تضمين القراءات غير المفوترة', style: TextStyle(fontSize: 13)),
         subtitle: Text(
-          state.uninvoicedUnits > 0
-              ? '${CurrencyFormatter.amount(state.uninvoicedUnits)} وحدة × '
-                  '${CurrencyFormatter.amount(state.unitPrice)}'
-              : 'يُحسب الاستهلاك من قراءات وحدة القراءات (Dev 2)',
+          'يُحسب الاستهلاك على الخادم وفق التعرفات التاريخية',
           style: const TextStyle(fontSize: 11),
         ),
       ),
