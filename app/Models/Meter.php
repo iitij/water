@@ -110,6 +110,9 @@ class Meter extends Model
         if ($ignoreReadingId) {
             $query->where('id', '!=', $ignoreReadingId);
         }
+        if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) {
+            $query->lockForUpdate();
+        }
         return $query->first();
     }
 
