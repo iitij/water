@@ -56,26 +56,24 @@ class TariffsRemoteDataSource {
     final items = JsonUtils.unwrapList(response);
     final tariffs = items.map(TariffModel.fromJson).toList(growable: false);
 
-    double? activePrice;
-    if (response is Map) {
-      activePrice = JsonUtils.asDoubleOrNull(response['active_price']);
+    if (response is! Map || !response.containsKey('active_price')) {
+      throw const UnexpectedFailure('لم يرسل الخادم حالة التعرفة الحالية.');
     }
-    activePrice ??= deriveActivePrice(tariffs);
+    final rawPrice = response['active_price'];
+    final activePrice = JsonUtils.asDoubleOrNull(rawPrice);
+    if (rawPrice != null &&
+        (activePrice == null || !activePrice.isFinite || activePrice < 0)) {
+      throw const UnexpectedFailure('قيمة التعرفة الحالية غير صالحة.');
+    }
 
     return (tariffs: tariffs, activePrice: activePrice);
   }
 
-  /// إعادة إنتاج `Tariff::getActivePrice()`: نشط + داخل النافذة الزمنية + `orderByDesc('id')`،
-  /// ومع غياب أي شريحة يرجع `600` (نفس القيمة الافتراضية في Laravel).
-  static double deriveActivePrice(List<TariffModel> tariffs, {DateTime? now}) {
+  /// For complete catalogs only; never infer a price from a paginated list.
+  static double? deriveActivePrice(List<TariffModel> tariffs, {DateTime? now}) {
     final reference = now ?? DateTime.now();
-    final candidates =
-        tariffs
-            .where((t) => !t.isTrashed && t.isEffectiveOn(reference))
-            .toList()
-          ..sort((a, b) => b.id.compareTo(a.id));
-    if (candidates.isEmpty) return 600;
-    return candidates.first.unitPrice;
+    final candidates = tariffs.where((t) => !t.isTrashed && t.isEffectiveOn(reference)).toList();
+    return candidates.length == 1 ? candidates.single.unitPrice : null;
   }
 
   Future<TariffModel> create(Map<String, dynamic> payload) async {
