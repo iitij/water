@@ -107,6 +107,48 @@ class FinancialReportsTest extends TestCase
             ->assertJsonPath('collections_by_method', []);
     }
 
+    public function test_month_end_dashboard_and_report_share_valid_receipts_without_future_dates(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 31)->setTime(12, 0));
+        [$first] = $this->seedReport();
+        $finance = app(\App\Services\FinancialReportingService::class);
+        $months = $finance->monthlyCollections();
+        $this->assertSame(['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'], array_column($months, 'month'));
+        $this->assertSame(205.0, $months[5]['value']);
+        $this->assertSame(175.0, $finance->grossReceipts('2026-10-01', '2026-10-31', $first->square_id));
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.monthly_collection', 205)
+            ->assertJsonPath('monthly_revenue_chart.data.5', 205);
+        $this->getJson('/api/admin/reports')->assertOk()->assertJsonPath('summary.total_collected', 205);
+        $this->travelTo(now()->setDate(2026, 10, 15)->setTime(12, 0));
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.monthly_collection', 80)
+            ->assertJsonPath('monthly_revenue_chart.data.5', 80);
+    }
+
+    public function test_current_account_debt_and_credit_are_not_netted_or_filtered_by_invoice_dates(): void
+    {
+        $square = Square::create(['name' => 'Ledger report test']);
+        $debtor = $square->subscribers()->create(['name' => 'Debtor', 'status' => 'active']);
+        $creditor = $square->subscribers()->create(['name' => 'Creditor', 'status' => 'active']);
+        $other = Square::create(['name' => 'Other'])->subscribers()->create(['name' => 'Other creditor', 'status' => 'active']);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $debtor->id, 'unique_code' => 'REPORT-LEDGER']);
+        \App\Models\Tariff::create(['name' => 'Synthetic report tariff', 'unit_price' => 600, 'is_active' => true]);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\InvoiceService::class)->generateInvoice($debtor, $meter);
+        app(\App\Services\PaymentService::class)->collectPayment($creditor, 250.25);
+        app(\App\Services\PaymentService::class)->collectPayment($other, 100);
+        $this->getJson('/api/admin/reports?from_date=2025-01-01&to_date=2025-01-31&square_id='.$square->id)
+            ->assertOk()->assertJsonPath('summary.total_outstanding', 0)
+            ->assertJsonPath('account_balances.debt', 600)
+            ->assertJsonPath('account_balances.credit', 250.25)
+            ->assertJsonPath('account_balances.basis', 'current_subscriber_ledger');
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.outstanding_amount', 600)
+            ->assertJsonPath('stats_overview.account_credit', 350.25);
+    }
+
     public function test_invalid_filters_are_rejected_and_existing_authorization_is_retained(): void
     {
         $this->getJson('/api/admin/reports?from_date=2026-10-31&to_date=2026-10-01')

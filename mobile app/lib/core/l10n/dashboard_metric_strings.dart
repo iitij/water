@@ -2,7 +2,7 @@ abstract final class DashboardMetricStrings {
   static const currencyShort = 'ر.ي';
   static const activeSubscribers = 'المشتركون النشطون';
   static const outstanding = 'الديون المستحقة';
-  static const monthlyRevenue = 'إيرادات هذا الشهر';
+  static const monthlyRevenue = 'تحصيل هذا الشهر';
   static const overdueInvoices = 'الفواتير المتأخرة';
   static const needsFollowUp = 'تحتاج متابعة';
   static const noOverdue = 'لا توجد متأخرات';

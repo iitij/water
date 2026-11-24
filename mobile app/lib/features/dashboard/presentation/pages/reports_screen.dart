@@ -242,7 +242,11 @@ class _ReportMetrics extends StatelessWidget {
       ),
       if (report.refundsDisbursed != null && report.netReceiptsAfterRefunds != null) ...[
         _Metric(title: 'الاستردادات', value: report.refundsDisbursed!, caption: 'مبالغ الصرف المثبتة خلال الفترة'),
-        _Metric(title: 'صافي التحصيل', value: report.netReceiptsAfterRefunds!, caption: 'القبض الساري ناقص الاستردادات'),
+        _Metric(title: 'صافي السندات بعد الاسترداد', value: report.netReceiptsAfterRefunds!, caption: 'القبض الساري ناقص الاستردادات'),
+      ],
+      if (report.currentAccountDebt != null && report.currentAccountCredit != null) ...[
+        _Metric(title: 'مديونية الحسابات الحالية', value: report.currentAccountDebt!, caption: 'من دفتر الأستاذ، دون تقييد بتاريخ الفاتورة'),
+        _Metric(title: 'الأرصدة الدائنة الحالية', value: report.currentAccountCredit!, caption: 'من دفتر الأستاذ، دون مقاصة بين المشتركين'),
       ],
       if (report.hasDetailedData) ...[
         _Metric(

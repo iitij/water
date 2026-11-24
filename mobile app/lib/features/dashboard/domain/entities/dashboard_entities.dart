@@ -209,6 +209,8 @@ class FinancialReport extends Equatable {
     this.hasDetailedData = true,
     this.refundsDisbursed,
     this.netReceiptsAfterRefunds,
+    this.currentAccountDebt,
+    this.currentAccountCredit,
   });
 
   final double totalInvoiced;
@@ -226,6 +228,8 @@ class FinancialReport extends Equatable {
   final bool hasDetailedData;
   final double? refundsDisbursed;
   final double? netReceiptsAfterRefunds;
+  final double? currentAccountDebt;
+  final double? currentAccountCredit;
 
   double get collectionRate => totalInvoiced <= 0
       ? 0
@@ -246,6 +250,8 @@ class FinancialReport extends Equatable {
     hasDetailedData,
     refundsDisbursed,
     netReceiptsAfterRefunds,
+    currentAccountDebt,
+    currentAccountCredit,
   ];
 }
 
