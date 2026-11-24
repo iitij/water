@@ -11,13 +11,15 @@ class RbacRepositoryImpl implements RbacRepository {
   final RbacRemoteDataSource _remote;
 
   @override
-  Future<List<SystemUser>> getUsers({String? role}) => _remote.getUsers(role: role);
+  Future<List<SystemUser>> getUsers({String? role}) =>
+      _remote.getUsers(role: role);
 
   @override
   Future<List<Role>> getRoles() => _remote.getRoles();
 
   @override
-  Future<ShieldPermissionCatalog> getPermissionCatalog() => _remote.getPermissionCatalog();
+  Future<ShieldPermissionCatalog> getPermissionCatalog() =>
+      _remote.getPermissionCatalog();
 
   @override
   Future<SystemUser> createUser(
@@ -25,13 +27,12 @@ class RbacRepositoryImpl implements RbacRepository {
     String password, {
     Uint8List? avatarBytes,
     String? avatarFileName,
-  }) =>
-      _remote.createUser(
-        _userModel(user),
-        password,
-        avatarBytes: avatarBytes,
-        avatarFileName: avatarFileName,
-      );
+  }) => _remote.createUser(
+    _userModel(user),
+    password,
+    avatarBytes: avatarBytes,
+    avatarFileName: avatarFileName,
+  );
 
   @override
   Future<SystemUser> updateUser(
@@ -40,14 +41,13 @@ class RbacRepositoryImpl implements RbacRepository {
     Uint8List? avatarBytes,
     String? avatarFileName,
     bool removeAvatar = false,
-  }) =>
-      _remote.updateUser(
-        _userModel(user),
-        password: password,
-        avatarBytes: avatarBytes,
-        avatarFileName: avatarFileName,
-        removeAvatar: removeAvatar,
-      );
+  }) => _remote.updateUser(
+    _userModel(user),
+    password: password,
+    avatarBytes: avatarBytes,
+    avatarFileName: avatarFileName,
+    removeAvatar: removeAvatar,
+  );
 
   @override
   Future<void> deleteUser(int id) => _remote.deleteUser(id);
@@ -77,6 +77,7 @@ class RbacRepositoryImpl implements RbacRepository {
           roles: user.roles,
           permissions: user.permissions,
           createdAt: user.createdAt,
+          disabledAt: user.disabledAt,
         );
 
   RoleModel _roleModel(Role role) => role is RoleModel

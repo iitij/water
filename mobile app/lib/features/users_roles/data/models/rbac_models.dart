@@ -11,6 +11,7 @@ class SystemUserModel extends SystemUser {
     super.avatarUrl,
     super.permissions,
     super.createdAt,
+    super.disabledAt,
   });
 
   factory SystemUserModel.fromJson(dynamic value) {
@@ -25,6 +26,7 @@ class SystemUserModel extends SystemUser {
       roles: roles.isNotEmpty ? roles : [if (legacyRole != null) legacyRole],
       permissions: _names(json['permissions']),
       createdAt: adminDate(json['created_at']),
+      disabledAt: adminDate(json['disabled_at']),
     );
   }
 

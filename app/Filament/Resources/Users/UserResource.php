@@ -58,6 +58,35 @@ class UserResource extends Resource
             ]);
     }
 
+    public static function deactivateAction(): \Filament\Actions\DeleteAction
+    {
+        return \Filament\Actions\DeleteAction::make()
+            ->label('تعطيل الحساب')
+            ->modalHeading('تعطيل الحساب مع حفظ سجلاته')
+            ->modalSubmitActionLabel('تعطيل')
+            ->successNotificationTitle('تم تعطيل الحساب')
+            ->visible(fn (User $record): bool => $record->canBeDeactivatedBy(auth()->user()))
+            ->using(fn (User $record): bool => $record->deactivate(auth()->user()));
+    }
+
+    public static function deactivateBulkAction(): \Filament\Actions\DeleteBulkAction
+    {
+        return \Filament\Actions\DeleteBulkAction::make()
+            ->label('تعطيل الحسابات المحددة')
+            ->modalHeading('تعطيل الحسابات مع حفظ سجلاتها')
+            ->modalSubmitActionLabel('تعطيل')
+            ->successNotificationTitle('تم تعطيل الحسابات')
+            ->using(function (\Filament\Actions\DeleteBulkAction $action, $records): void {
+                \Illuminate\Support\Facades\DB::transaction(function () use ($action, $records): void {
+                    foreach ($records->sortBy('id') as $record) {
+                        if (! $record->deactivate(auth()->user())) {
+                            $action->reportBulkProcessingFailure();
+                        }
+                    }
+                });
+            });
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -84,6 +113,7 @@ class UserResource extends Resource
                         default        => 'gray',
                     })
                     ->searchable(),
+                Tables\Columns\TextColumn::make('account_status')->label('حالة الحساب')->state(fn (User $record): string => $record->isDisabled() ? 'معطل' : 'نشط')->badge(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('تاريخ الإضافة')
                     ->dateTime()
@@ -100,12 +130,12 @@ class UserResource extends Resource
                     ]),
             ])
             ->actions([
-                \Filament\Actions\EditAction::make(),
-                \Filament\Actions\DeleteAction::make(),
+                \Filament\Actions\EditAction::make()->visible(fn (User $record) => ! $record->isDisabled()),
+                static::deactivateAction(),
             ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([
-                    \Filament\Actions\DeleteBulkAction::make(),
+                    static::deactivateBulkAction(),
                 ]),
             ]);
     }
