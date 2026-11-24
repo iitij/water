@@ -64,7 +64,7 @@ class MeterController extends ApiController
             $meter->setAttribute('is_path_match', $exactPath !== null
                 ? ((string) $meter->path_number === $exactPath[1] && (string) $meter->subscriber?->square_id === $exactPath[0])
                 : ($search !== '' && (string) $meter->path_number === $search));
-            $meter->setAttribute('last_reading', $meter->readings()->latest('id')->value('current_reading') ?? $meter->initial_reading ?? 0);
+            $meter->setAttribute('last_reading', $meter->getLastReadingValue());
 
             return $meter;
         });
@@ -78,7 +78,7 @@ class MeterController extends ApiController
         $this->authorizeApi(Meter::class, 'view');
         $meter = Meter::with(['subscriber.square', 'readings' => fn ($q) => $q->latest('reading_date')->latest('id')->limit(20)])
             ->withCount('readings')->findOrFail($id);
-        $meter->setAttribute('last_reading', $meter->readings->first()?->current_reading ?? $meter->initial_reading ?? 0);
+        $meter->setAttribute('last_reading', $meter->getLastReadingValue());
         $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
         $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
 
@@ -95,7 +95,7 @@ class MeterController extends ApiController
             'status' => ['sometimes', 'in:active,inactive'],
             'installed_at' => ['nullable', 'date'],
             'removed_at' => ['prohibited'],
-            'initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'initial_reading' => ['sometimes', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
         ]);
         $meter = $singleMeterService->create($data)->load(['subscriber.square']);
 
@@ -113,7 +113,7 @@ class MeterController extends ApiController
             'status' => ['sometimes', 'required', 'in:active,inactive'],
             'installed_at' => ['sometimes', 'nullable', 'date'],
             'removed_at' => ['prohibited'],
-            'initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'initial_reading' => ['sometimes', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
         ]);
         $meter = $singleMeterService->update($meter, $data);
 
@@ -135,7 +135,7 @@ class MeterController extends ApiController
             'new_meter' => ['required', 'array'],
             'new_meter.unique_code' => ['required', 'string', 'max:50', 'unique:meters,unique_code'],
             'new_meter.path_number' => ['nullable', 'integer', 'min:0'],
-            'new_meter.initial_reading' => ['sometimes', 'integer', 'min:0'],
+            'new_meter.initial_reading' => ['sometimes', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'new_meter.installed_at' => ['nullable', 'date'],
             'new_meter.status' => ['sometimes', 'in:active,inactive'],
         ]);
