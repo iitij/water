@@ -50,9 +50,12 @@ class PaymentService
                 $caps[$invoice->id] = max(0, (int) round((float) $invoice->total_amount * 100));
             }
 
+            $replacements = \App\Models\HistoricalInvoiceCorrection::whereIn('replacement_invoice_id', $invoices->modelKeys())
+                ->pluck('replacement_invoice_id', 'original_invoice_id');
             foreach ($credits as $credit) {
                 $remaining = max(0, (int) round((float) $credit['amount'] * 100));
                 $target = $credit['target'];
+                $target = $target === null ? null : ($replacements[$target] ?? $target);
                 if ($target !== null && isset($caps[$target])) {
                     $applied = min($remaining, $caps[$target] - $paid[$target]);
                     $paid[$target] += $applied;

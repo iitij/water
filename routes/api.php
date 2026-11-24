@@ -108,6 +108,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
     Route::post('/invoices/bulk-restore', [InvoiceController::class, 'bulkRestore']);
     Route::post('/invoices/bulk-force-delete', [InvoiceController::class, 'bulkForceDelete']);
+    Route::post('/invoices/{id}/correct-historical', [InvoiceController::class, 'correctHistorical'])->whereNumber('id');
     Route::post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel']);
     Route::post('/invoices/{id}/restore', [InvoiceController::class, 'restore']);
     Route::delete('/invoices/{id}/force', [InvoiceController::class, 'forceDestroy']);

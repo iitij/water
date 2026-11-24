@@ -302,6 +302,21 @@ class InvoiceController extends ApiController
         return response()->json(['message' => 'تم تحديث الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->fresh(['subscriber.square', 'meter', 'items', 'readings', 'payments']))]);
     }
 
+    public function correctHistorical(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'corrected_units' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'historical_unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        $correction = app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
+            Invoice::findOrFail($id), $request->user(), (string) $data['corrected_units'],
+            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
+        );
+        return response()->json(['correction' => $correction, 'invoice' => $this->decorate(Invoice::findOrFail($correction->replacement_invoice_id))]);
+    }
+
     public function cancel(Request $request, int $id)
     {
         $this->authorizeApi(Invoice::class, 'delete');
