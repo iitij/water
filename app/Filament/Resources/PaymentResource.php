@@ -37,15 +37,19 @@ class PaymentResource extends Resource
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(function (string $state, $set, $get) {
+                        ->afterStateUpdated(function (?string $state, $set, $get) {
+                            $set('invoice_id', null);
+                            $set('invoice_amount', null);
+                            $set('amount', null);
+
                             if ($state) {
                                 $latestUnpaidInvoice = \App\Models\Invoice::where('subscriber_id', $state)
-                                    ->where('status', '!=', 'paid')
+                                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
                                     ->orderBy('id', 'desc')
                                     ->first();
                                 if ($latestUnpaidInvoice) {
                                     $set('invoice_id', $latestUnpaidInvoice->id);
-                                    $due = $latestUnpaidInvoice->total_amount + $latestUnpaidInvoice->previous_balance - $latestUnpaidInvoice->amount_paid;
+                                    $due = $latestUnpaidInvoice->getCollectibleAmount();
                                     $set('invoice_amount', $due);
                                     $set('amount', $due);
                                 } else {
@@ -65,16 +69,21 @@ class PaymentResource extends Resource
                             'bill_number',
                             fn (\Illuminate\Database\Eloquent\Builder $query, $get) => 
                                 $query->where('subscriber_id', $get('subscriber_id'))
-                                      ->where('status', '!=', 'paid')
+                                      ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
                         )
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(function ($state, $set) {
+                        ->afterStateUpdated(function ($state, $set, $get) {
+                            $set('invoice_amount', null);
+                            $set('amount', null);
+
                             if ($state) {
-                                $inv = \App\Models\Invoice::find($state);
+                                $inv = \App\Models\Invoice::where('subscriber_id', $get('subscriber_id'))
+                                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                                    ->find($state);
                                 if ($inv) {
-                                    $due = $inv->total_amount + $inv->previous_balance - $inv->amount_paid;
+                                    $due = $inv->getCollectibleAmount();
                                     $set('invoice_amount', $due);
                                     $set('amount', $due);
                                 }
@@ -100,6 +109,7 @@ class PaymentResource extends Resource
                         ->label('المبلغ')
                         ->numeric()
                         ->required()
+                        ->minValue(0.01)
                         ->prefix('ريال'),
 
                     Forms\Components\DatePicker::make('payment_date')

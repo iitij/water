@@ -172,6 +172,21 @@ class Invoice extends Model
     }
 
     /**
+     * Live collection suggestion, not the historical amount printed at issue.
+     * Only the newest invoice represents cumulative outstanding debt.
+     */
+    public function getCollectibleAmount(): float
+    {
+        if ($this->trashed() || $this->status === 'draft') {
+            return 0.0;
+        }
+
+        return round($this->isLatestInvoice()
+            ? $this->getTrueRemainingAmount()
+            : $this->getRemainingAmount(), 2);
+    }
+
+    /**
      * المبلغ المتبقي التراكمي (يضم هذه الفاتورة والفواتير السابقة لنفس الحساب)
      */
     public function getTrueRemainingAmount(): float
@@ -181,9 +196,8 @@ class Invoice extends Model
         $olderInvoicesRemaining = self::where('subscriber_id', $this->subscriber_id)
             ->where('invoice_type', $this->invoice_type)
             ->where('id', '<', $this->id)
-            ->when($this->invoice_type === 'meter' && $this->meter_id, function ($q) {
-                $q->where('meter_id', $this->meter_id);
-            })
+            ->where('meter_id', $this->meter_id)
+            ->where('status', '!=', 'draft')
             ->get()
             ->sum(function ($inv) {
                 return $inv->getRemainingAmount();
@@ -199,9 +213,8 @@ class Invoice extends Model
         $query = self::where('subscriber_id', $this->subscriber_id)
             ->where('invoice_type', $this->invoice_type);
             
-        if ($this->invoice_type === 'meter' && $this->meter_id) {
-            $query->where('meter_id', $this->meter_id);
-        }
+        $query->where('meter_id', $this->meter_id)
+            ->where('status', '!=', 'draft');
         
         $latest = $query->orderBy('id', 'desc')->first();
 

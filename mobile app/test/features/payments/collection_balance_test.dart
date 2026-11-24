@@ -129,4 +129,51 @@ void main() {
       await cubit.close();
     },
   );
+
+  test('switching subscribers clears the old collection amount even on failure', () async {
+    final payments = _Payments();
+    final references = _References();
+    when(() => references.dueSummary(2)).thenAnswer(
+      (_) async => const SubscriberDueSummary(subscriberId: 2),
+    );
+    when(() => payments.latestUnpaidInvoice(2)).thenAnswer((_) async => _partial);
+    when(() => references.dueSummary(9)).thenThrow(StateError('offline'));
+    final cubit = CollectPaymentCubit(
+      paymentsRepository: payments,
+      references: references,
+      meterId: null,
+    );
+    await cubit.openForInvoice(_partial);
+    expect(cubit.state.amount, 5000);
+    await cubit.openForSubscriber(9);
+    expect(cubit.state.invoiceId, isNull);
+    expect(cubit.state.amount, 0);
+    expect(cubit.state.dueAmount, 0);
+    expect(cubit.state.openInvoices, isEmpty);
+    await cubit.close();
+  });
+
+  test('clearing invoice selection clears the prefilled collection amount', () async {
+    final payments = _Payments();
+    final references = _References();
+    when(() => references.dueSummary(2)).thenAnswer(
+      (_) async => const SubscriberDueSummary(subscriberId: 2),
+    );
+    when(() => payments.latestUnpaidInvoice(2)).thenAnswer((_) async => _partial);
+    final cubit = CollectPaymentCubit(
+      paymentsRepository: payments,
+      references: references,
+      meterId: 3,
+    );
+    await cubit.openForInvoice(_partial);
+    cubit.selectInvoice(null);
+    expect(cubit.state.invoiceId, isNull);
+    expect(cubit.state.amount, 0);
+    expect(cubit.state.dueAmount, 0);
+    cubit.selectInvoice(_partial.id);
+    expect(cubit.state.amount, 5000);
+    expect(cubit.state.dueAmount, 5000);
+    await cubit.close();
+  });
+
 }

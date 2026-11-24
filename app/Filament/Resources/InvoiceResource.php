@@ -379,11 +379,12 @@ class InvoiceResource extends Resource
                             return false;
                         }
 
-                        return $record->isLatestInvoice();
+                        return $record->isLatestInvoice() && $record->getCollectibleAmount() > 0;
                     })
                     ->form([
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
+                            ->default(fn (Invoice $record) => $record->getCollectibleAmount())
                             ->numeric()
                             ->required()
                             ->minValue(0.01)
