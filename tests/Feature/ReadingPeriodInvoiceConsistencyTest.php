@@ -258,33 +258,39 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
     }
 
 
-    public function test_editing_an_entered_date_updates_the_matching_actual_date(): void
+    public function test_editing_an_observation_date_updates_its_interval_end(): void
     {
         $meter = $this->meter();
-        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-05', 'current_reading' => 10,
+        ])->assertCreated()->json('reading.id');
 
-        $this->putJson('/api/readings/'.$reading->id, [
+        $this->putJson('/api/readings/'.$id, [
             'reading_date' => '2026-03-09',
         ])->assertOk();
 
-        $this->assertSame('2026-03-09', $reading->fresh()->actual_reading_date->toDateString());
-        $this->assertSame('2026-02-01', $reading->fresh()->period_start);
-        $this->assertSame('2026-02-28', $reading->fresh()->period_end);
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('2026-03-09', $reading->actual_reading_date->toDateString());
+        $this->assertSame('2026-01-01', $reading->period_start);
+        $this->assertSame('2026-03-09', $reading->period_end);
     }
 
-    public function test_editing_entered_date_preserves_a_distinct_actual_date(): void
+    public function test_editing_entry_date_preserves_explicit_observation_date(): void
     {
         $meter = $this->meter();
-        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
-        $reading->update(['actual_reading_date' => '2026-03-07']);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-08',
+            'actual_reading_date' => '2026-03-07', 'current_reading' => 10,
+        ])->assertCreated()->json('reading.id');
 
-        $this->putJson('/api/readings/'.$reading->id, [
+        $this->putJson('/api/readings/'.$id, [
             'reading_date' => '2026-03-09',
         ])->assertOk();
 
-        $this->assertSame('2026-03-07', $reading->fresh()->actual_reading_date->toDateString());
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('2026-03-07', $reading->actual_reading_date->toDateString());
+        $this->assertSame('2026-03-07', $reading->period_end);
     }
-
 
     public function test_idempotent_retry_cannot_silently_change_its_saved_period(): void
     {
