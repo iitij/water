@@ -28,7 +28,7 @@ void main() {
       uniqueCode: 'NEW-15',
       reason: 'عداد تالف',
       removedAt: any(named: 'removedAt'),
-      initialReading: 0,
+      initialReading: 100.25,
       pathNumber: 7,
     )).thenAnswer((_) async => replacement);
 
@@ -70,6 +70,10 @@ void main() {
       'NEW-15',
     );
     await tester.enterText(
+      find.widgetWithText(TextFormField, 'القراءة الابتدائية للعداد الجديد'),
+      '100.25',
+    );
+    await tester.enterText(
       find.widgetWithText(TextFormField, 'سبب الاستبدال'),
       'عداد تالف',
     );
@@ -82,7 +86,7 @@ void main() {
       uniqueCode: 'NEW-15',
       reason: 'عداد تالف',
       removedAt: any(named: 'removedAt'),
-      initialReading: 0,
+      initialReading: 100.25,
       pathNumber: 7,
     )).called(1);
   });
