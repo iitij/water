@@ -1,0 +1,180 @@
+name: Water | Stage EL8 PDF libraries and retest browser
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+
+jobs:
+  stage-pdf:
+    name: Verify and stage EL8 libraries; test existing browser
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify official EL8 RPM signatures and extract only required libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends rpm rpm2cpio cpio
+          work="$RUNNER_TEMP/water-el8"
+          mkdir -p "$work/rpmdb" "$work/extracted" "$work/bundle/lib" "$work/bundle/provenance"
+          cd "$work"
+          curl -fsSL --retry 3 --max-time 60 https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux -o almalinux-key.asc
+          gpg --batch --show-keys --with-colons almalinux-key.asc | awk -F: '$1=="pub"{p=1;next} $1=="fpr"&&p{print $10;p=0}' > fingerprints
+          test -s fingerprints
+          while IFS= read -r fpr; do
+            case "$fpr" in
+              5E9B8F5617B5066CE92057C3488FCF7C3ABB34F8|BC5EDDCADF502C077F1582882AE81E8ACED7258B) ;;
+              *) echo 'Unrecognized package signing key'; exit 1 ;;
+            esac
+          done < fingerprints
+          rpm --dbpath "$work/rpmdb" --initdb
+          rpm --dbpath "$work/rpmdb" --import almalinux-key.asc
+          base='https://mirrors.cat.pdx.edu/alma/8/AppStream/x86_64/os/Packages'
+          for pkg in at-spi2-atk-2.26.2-1.el8.x86_64.rpm at-spi2-core-2.28.0-1.el8.x86_64.rpm; do
+            curl -fsSL --retry 3 --max-time 90 "$base/$pkg" -o "$pkg"
+            rpmkeys --dbpath "$work/rpmdb" --checksig --verbose "$pkg" | tee "$work/$pkg.signature"
+            grep -Ei 'signature.*: OK' "$work/$pkg.signature"
+            rpm -qp --qf '%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n' "$pkg"
+            (cd extracted; rpm2cpio "../$pkg" | cpio -idm --quiet --no-absolute-filenames)
+            sha256sum "$pkg" >> bundle/provenance/rpm-sha256.txt
+          done
+          for lib in libatk-bridge-2.0.so.0 libatspi.so.0; do
+            test -f "extracted/usr/lib64/$lib"
+            cp -L "extracted/usr/lib64/$lib" "bundle/lib/$lib"
+            readelf -h "bundle/lib/$lib" | grep -E 'Class:|Machine:'
+            readelf -d "bundle/lib/$lib" | grep -F "[$lib]"
+          done
+          cp fingerprints bundle/provenance/signing-fingerprints.txt
+          if [[ -d extracted/usr/share/licenses ]]; then
+            cp -R extracted/usr/share/licenses bundle/provenance/
+          fi
+          cp ./*.signature bundle/provenance/
+          tar -czf "$RUNNER_TEMP/water-el8-libs.tar.gz" -C bundle lib provenance
+          sha256sum "$RUNNER_TEMP/water-el8-libs.tar.gz" | awk '{print $1}' > "$RUNNER_TEMP/water-el8-libs.sha256"
+          echo 'EL8_LIBRARY_BUNDLE: VERIFIED'
+
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Transfer verified private library bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(cat "$RUNNER_TEMP/water-el8-libs.sha256")"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            "set -eu; umask 077; test \"\$(id -un)\" = alweufti; test \"\$(uname -m)\" = x86_64; test \"\$(getconf GNU_LIBC_VERSION)\" = 'glibc 2.28'; cd \"\$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1\"; mkdir 'el8-libs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; cd 'el8-libs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; cat > bundle.tar.gz; printf '%s  bundle.tar.gz\n' '$digest' | sha256sum -c -; tar -xzf bundle.tar.gz; test -s lib/libatk-bridge-2.0.so.0; test -s lib/libatspi.so.0; rm bundle.tar.gz; echo 'EL8_LIBRARY_TRANSFER: VERIFIED'" \
+            < "$RUNNER_TEMP/water-el8-libs.tar.gz"
+
+      - name: Run isolated synthetic PDF trial on Namecheap
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 "bash -se -- $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT" <<'REMOTE_TRIAL'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = alweufti
+          export PATH="/opt/alt/alt-nodejs24/root/usr/bin:$PATH"
+          stage="$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1"
+          test -d "$stage" && test ! -L "$stage"
+          cmp "$stage/package-lock.json" "$HOME/repositories/water/package-lock.json"
+          cd "$stage"
+          browser="$stage/browser-transfer-45300277484-1/chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell"
+          test -x "$browser" && test -f "$browser"
+          private_lib="$stage/el8-libs-$1-$2/lib"
+          test -s "$private_lib/libatk-bridge-2.0.so.0" && test -s "$private_lib/libatspi.so.0"
+          export WATER_TRIAL_LIB="$private_lib"
+          echo "PRIVATE_LIBRARY_DIR: $private_lib"
+          echo "BROWSER_BINARY: $browser"
+          if command -v ldd >/dev/null 2>&1; then
+            libs="$(env LD_LIBRARY_PATH="$private_lib" ldd "$browser" 2>&1)" || { echo 'BROWSER_LIBRARY_CHECK: FAILED'; exit 1; }
+            if grep -F 'not found' <<< "$libs"; then
+              echo 'BROWSER_LIBRARY_CHECK: MISSING DEPENDENCIES'
+              exit 1
+            fi
+            echo 'BROWSER_LIBRARY_CHECK: PASSED'
+          fi
+          timeout --kill-after=2s 5s env LD_LIBRARY_PATH="$private_lib" "$browser" --version
+          echo '=== ONE SYNTHETIC A5 PDF; NETWORK REQUESTS BLOCKED ==='
+          trial="$(mktemp -d "$stage/trial.XXXXXXXX")"
+          trap 'rm -rf -- "$trial"' EXIT
+          export WATER_TRIAL_BROWSER="$browser"
+          export WATER_TRIAL_DIR="$trial"
+          cat > "$trial/smoke.mjs" <<'PDF_JS'
+          import puppeteer from 'puppeteer';
+          import { readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const start = Date.now();
+          let browser;
+          try {
+            browser = await puppeteer.launch({
+          executablePath: process.env.WATER_TRIAL_BROWSER,
+            env: {...process.env, LD_LIBRARY_PATH: process.env.WATER_TRIAL_LIB},
+          headless: 'shell',
+          pipe: true,
+          timeout: 10000,
+          userDataDir: join(process.env.WATER_TRIAL_DIR, 'profile'),
+          args: ['--disable-gpu', '--disable-dev-shm-usage', '--renderer-process-limit=1'],
+            });
+            const page = await browser.newPage();
+            page.setDefaultTimeout(5000);
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+          const url = request.url();
+          void (url.startsWith('data:') || url === 'about:blank' ? request.continue() : request.abort()).catch(() => {});
+            });
+            await page.setContent('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><body><h1>اختبار الطباعة</h1><p>Water PDF smoke test — 100.00</p></body></html>', {waitUntil:'domcontentloaded', timeout:5000});
+            const output = join(process.env.WATER_TRIAL_DIR, 'sample.pdf');
+            await page.pdf({path:output, format:'A5', landscape:true, printBackground:true, timeout:8000});
+            const bytes = await readFile(output);
+            if (bytes.length < 1000 || bytes.subarray(0,5).toString() !== '%PDF-') throw new Error('Invalid PDF');
+            console.log('SYNTHETIC_PDF_BYTES:', bytes.length);
+            console.log('PDF_RENDER_MS:', Date.now() - start);
+          } finally {
+            if (browser) await browser.close();
+          }
+          PDF_JS
+          timeout --signal=TERM --kill-after=5s 30s node "$trial/smoke.mjs"
+          echo 'PDF_BROWSER_TRIAL: PASSED'
+          echo 'No persistent browser process, no Laravel changes, no public deployment, no real data.'
+          REMOTE_TRIAL
