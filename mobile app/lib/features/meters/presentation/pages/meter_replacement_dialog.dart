@@ -126,40 +126,7 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                   decoration: const InputDecoration(labelText: 'القراءة الابتدائية للعداد الجديد'),
                   validator: (text) {
                     final raw = text?.trim() ?? '';
-                    return RegExp(r'^\d{1,10}(\.\d{1,2})?
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _reason,
-                  maxLines: 2,
-                  decoration: const InputDecoration(labelText: 'سبب الاستبدال'),
-                  validator: (text) =>
-                      text == null || text.trim().length < 3 ? 'اكتب سبب الاستبدال' : null,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('إلغاء'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _replace,
-          child: Text(_saving ? 'جارٍ الاستبدال…' : 'استبدال العداد'),
-        ),
-      ],
-    );
-  }
-}
-).hasMatch(raw)
+                    return RegExp(r'^\d{1,10}(\.\d{1,2})?$').hasMatch(raw)
                         ? null : 'أدخل قراءة غير سالبة بمنزلتين عشريتين كحد أقصى';
                   },
                 ),
