@@ -135,7 +135,9 @@ class _InvoiceDetailView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (invoice.allocationSnapshot?.available != true)
+                if (invoice.allocationSnapshot?.integrityValid == false)
+                  const Text('تعذر التحقق من سلامة سجل التخصيص. يلزم مراجعة المسؤول المالي.')
+                else if (invoice.allocationSnapshot?.available != true)
                   const Text('لا يوجد إصدار تخصيص محفوظ متاح. لا يعني ذلك أن الفاتورة غير مسددة.')
                 else ...[
                   Text('الإصدار ${invoice.allocationSnapshot!.revision} — ${invoice.allocationSnapshot!.recordedAt ?? "-"}'),

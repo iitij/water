@@ -4,11 +4,13 @@ import '../../../../core/utils/json_utils.dart';
 class AllocationSnapshot extends Equatable {
   const AllocationSnapshot({
     required this.available, required this.subscriberId,
+    this.integrityValid,
     this.revision, this.recordedAt, this.allocatedMinor,
     this.unallocatedMinor, this.rows = const [],
   });
 
   final bool available;
+  final bool? integrityValid;
   final int subscriberId;
   final int? revision;
   final String? recordedAt;
@@ -18,6 +20,7 @@ class AllocationSnapshot extends Equatable {
 
   factory AllocationSnapshot.fromJson(Map<String, dynamic> json) => AllocationSnapshot(
     available: json['available'] == true,
+    integrityValid: json['integrity_valid'] is bool ? json['integrity_valid'] as bool : null,
     subscriberId: JsonUtils.asInt(json['subscriber_id']),
     revision: JsonUtils.asIntOrNull(json['revision']),
     recordedAt: JsonUtils.asStringOrNull(json['recorded_at']),
@@ -28,13 +31,13 @@ class AllocationSnapshot extends Equatable {
   );
 
   Map<String, dynamic> toJson() => {
-    'available': available, 'subscriber_id': subscriberId, 'revision': revision,
+    'available': available, 'integrity_valid': integrityValid, 'subscriber_id': subscriberId, 'revision': revision,
     'recorded_at': recordedAt, 'allocated_minor': allocatedMinor,
     'unallocated_minor': unallocatedMinor, 'rows': rows.map((r) => r.toJson()).toList(),
   };
 
   @override
-  List<Object?> get props => [available, subscriberId, revision, recordedAt, allocatedMinor, unallocatedMinor, rows];
+  List<Object?> get props => [available, integrityValid, subscriberId, revision, recordedAt, allocatedMinor, unallocatedMinor, rows];
 }
 
 class AllocationRow extends Equatable {

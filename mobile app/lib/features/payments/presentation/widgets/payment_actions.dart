@@ -430,7 +430,9 @@ Future<void> showPaymentAllocations(BuildContext context, PaymentModel payment) 
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (snapshot == null || !snapshot.available)
+              if (snapshot?.integrityValid == false)
+                const Text('تعذر التحقق من سلامة سجل التخصيص. يلزم مراجعة المسؤول المالي.')
+              else if (snapshot == null || !snapshot.available)
                 const Text('لا يوجد إصدار تخصيص محفوظ لهذا الحساب بعد.')
               else ...[
                 Text('الحساب #${snapshot.subscriberId} — الإصدار ${snapshot.revision}'),
