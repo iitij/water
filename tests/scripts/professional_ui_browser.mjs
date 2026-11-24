@@ -14,6 +14,8 @@ try {
   const page = await browser.newPage();
   await page.setViewport({width:1440,height:1000});
   page.setDefaultTimeout(12000);
+  await page.setBypassServiceWorker(true);
+  await page.setCacheEnabled(false);
   let pageErrors=[];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.setRequestInterception(true);
@@ -27,13 +29,14 @@ try {
   await page.type('input[type=password]',fixture.password);
   await page.click('button[type=submit]');
   await page.waitForFunction(()=>!location.pathname.endsWith('/login'));
+  await page.waitForSelector('.fi-page',{visible:true});
   console.log('BROWSER_LOGIN: PASSED');
   const backgrounds={};
   for (const theme of ['light','dark']) {
     await page.evaluate(value=>localStorage.setItem('theme',value),theme);
     for (const path of fixture.routes) {
       pageErrors=[];
-      const response=await page.goto(origin+path,{waitUntil:'load'});
+      const response=await page.goto(origin+path+'?ui-check='+theme,{waitUntil:'load'});
       assert.equal(response?.status(),200,path);
       assert.equal(new URL(page.url()).pathname,path,'Unexpected route redirect '+path);
       await page.waitForSelector('.fi-page',{visible:true});
