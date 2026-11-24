@@ -19,7 +19,7 @@ import 'widgets/cash_session_report.dart';
 ///
 /// قواعد العمل الظاهرة للمستخدم:
 /// * صندوق واحد مفتوح لكل محصّل.
-/// * المبلغ المتوقع يحسبه الخادم من السندات الفعلية (بعد استثناء الملغاة).
+/// * النقد المتوقع يحسبه الخادم من الافتتاح والسندات النقدية السارية فقط.
 /// * الفرق = المعدود − المتوقع؛ العجز سالب ويستلزم تفسيراً مكتوباً.
 ///
 /// مرجع: خطة الإصدار 2.0 — الفصل 5.2.
@@ -290,7 +290,7 @@ class _HeroFigures extends StatelessWidget {
               CurrencyFormatter.amount(session.openingAmount),
             ),
             _HeroCell(
-              'المتوقع من السندات',
+              'النقد المتوقع (شامل الافتتاح)',
               CurrencyFormatter.amount(session.expectedAmount),
               hero: true,
             ),
@@ -406,7 +406,7 @@ class _OpenSessionCard extends StatelessWidget {
               const Gap(AppSpacing.md),
               _AmountRow(label: 'الافتتاحي', value: session.openingAmount),
               _AmountRow(
-                label: 'المتوقع من السندات',
+                label: 'النقد المتوقع (شامل الافتتاح)',
                 value: session.expectedAmount,
               ),
               _AmountRow(

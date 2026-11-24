@@ -52,7 +52,8 @@ class CashSessionsTable
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('expected_amount')
-                    ->label('المتوقع')
+                    ->label('المتوقع للتسوية')
+                    ->getStateUsing(fn (CashSession $record): float => app(CashSessionService::class)->expectedAmount($record))
                     ->numeric(2)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('counted_amount')

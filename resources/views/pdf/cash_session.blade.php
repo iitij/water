@@ -223,7 +223,7 @@
             <div class="value">{{ $summary['opening_amount'] ?? '0.00' }}</div>
         </div>
         <div class="total-box">
-            <div class="label">المتوقع من السندات</div>
+            <div class="label">{{ ($summary['settlement_basis'] ?? null) === 'physical_cash' ? 'النقد المتوقع (شامل الافتتاح)' : 'المتوقع المسجل سابقاً' }}</div>
             <div class="value">{{ $summary['expected_amount'] ?? '0.00' }}</div>
         </div>
         <div class="total-box">

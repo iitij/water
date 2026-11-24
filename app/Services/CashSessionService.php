@@ -14,8 +14,9 @@ use Illuminate\Validation\ValidationException;
  * القواعد المالية:
  * - كل سند يُربط بالصندوق المفتوح للمستخدم نفسه (وإلا يبقى بلا صندوق، كما في
  *   السندات القديمة).
- * - السندات الملغاة (`voided_at`) لا تُحسب في المتوقع أبداً.
- * - الفرق = المسلَّم فعلاً − المتوقع، ويُحفظ نصاً في قاعدة البيانات بلا تقريب.
+ * - النقد المتوقع = رصيد الافتتاح + السندات النقدية السارية فقط.
+ * - التحويلات والشيكات تُعرض مستقلة ولا تُعد نقداً في الصندوق.
+ * - الفرق = النقد المعدود − النقد المتوقع.
  *
  * مرجع: خطة الإصدار 2.0 — الفصل 5.2.
  */
@@ -45,6 +46,7 @@ class CashSessionService
         ?int $squareId = null,
         ?string $notes = null,
     ): CashSession {
+        $this->assertMoney($openingAmount, 'opening_amount');
         $session = DB::transaction(function () use ($user, $openingAmount, $squareId, $notes) {
             User::query()->lockForUpdate()->findOrFail($user->id);
             if ($this->openSessionFor($user)) {
@@ -56,7 +58,8 @@ class CashSessionService
                 'user_id' => $user->id,
                 'square_id' => $squareId,
                 'session_date' => now()->toDateString(),
-                'opening_amount' => round($openingAmount, 2),
+                'opening_amount' => $openingAmount,
+                'settlement_basis' => 'physical_cash',
                 'state' => CashSession::STATE_OPEN,
                 'opened_at' => now(),
                 'opening_notes' => $notes,
@@ -74,20 +77,37 @@ class CashSessionService
         return $session->fresh();
     }
 
-    /** إجمالي السندات الصالحة (غير الملغاة) في الصندوق. */
+    private function assertMoney(float $amount, string $field): void
+    {
+        if (! is_finite($amount) || $amount < 0 || $amount > 999999999999.99 || round($amount, 2) != $amount) {
+            throw ValidationException::withMessages([$field => 'المبلغ غير سالب وبحد أقصى منزلتين عشريتين وضمن النطاق المسموح.']);
+        }
+    }
+
+    /** Physical cash only; finalized sessions retain their recorded snapshot. */
     public function expectedAmount(CashSession $session): float
     {
-        $total = Payment::query()
+        if (! $session->isOpen() && $session->expected_amount !== null) {
+            return (float) $session->expected_amount;
+        }
+        $cash = Payment::query()
             ->where('cash_session_id', $session->id)
+            ->where('payment_method', 'cash')
             ->whereNull('voided_at')
             ->sum('amount');
 
-        return round((float) $total, 2);
+        $expectedMinor = (int) round((float) $session->opening_amount * 100)
+            + (int) round((float) $cash * 100);
+        $expected = $expectedMinor / 100;
+        $this->assertMoney($expected, 'expected_amount');
+
+        return $expected;
     }
 
     /** إغلاق الصندوق وتسجيل النقد المسلَّم والفرق. */
     public function close(CashSession $session, float $countedAmount, ?string $notes = null): CashSession
     {
+        $this->assertMoney($countedAmount, 'counted_amount');
         if (! $session->isOpen()) {
             throw ValidationException::withMessages([
                 'state' => ['لا يمكن إغلاق صندوق غير مفتوح.'],
@@ -101,13 +121,14 @@ class CashSessionService
                 throw ValidationException::withMessages(['state' => ['لا يمكن إغلاق صندوق غير مفتوح.']]);
             }
             $expected = $this->expectedAmount($session);
-            $counted = round($countedAmount, 2);
+            $counted = $countedAmount;
 
             $before = $this->summary($session);
             $session->fill([
+                'settlement_basis' => 'physical_cash',
                 'expected_amount' => $expected,
                 'counted_amount' => $counted,
-                'variance_amount' => round($counted - $expected, 2),
+                'variance_amount' => ((int) round($counted * 100) - (int) round($expected * 100)) / 100,
                 'state' => CashSession::STATE_CLOSED,
                 'closed_at' => now(),
                 'closing_notes' => $notes,
@@ -201,6 +222,9 @@ class CashSessionService
                 'total' => number_format((float) $row->total, 2, '.', ''),
             ])->values()->all();
 
+        $cashMinor = (int) round((float) ($byMethod->firstWhere('payment_method', 'cash')['total'] ?? 0) * 100);
+        $totalMinor = $byMethod->sum(fn ($row) => (int) round((float) $row['total'] * 100));
+
         $voided = Payment::query()
             ->where('cash_session_id', $session->id)
             ->whereNotNull('voided_at')
@@ -215,7 +239,11 @@ class CashSessionService
             'collector' => $session->user?->name,
             'square' => $session->square?->name,
             'opening_amount' => number_format((float) $session->opening_amount, 2, '.', ''),
-            'expected_amount' => number_format((float) ($session->expected_amount ?? $this->expectedAmount($session)), 2, '.', ''),
+            'settlement_basis' => $session->isOpen() ? 'physical_cash' : ($session->settlement_basis ?? 'legacy_recorded'),
+            'expected_amount' => number_format($this->expectedAmount($session), 2, '.', ''),
+            'cash_collections' => number_format($cashMinor / 100, 2, '.', ''),
+            'non_cash_collections' => number_format(($totalMinor - $cashMinor) / 100, 2, '.', ''),
+            'total_collections' => number_format($totalMinor / 100, 2, '.', ''),
             'counted_amount' => $session->counted_amount === null
                 ? null
                 : number_format((float) $session->counted_amount, 2, '.', ''),

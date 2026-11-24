@@ -37,3 +37,7 @@ Their actual_reading_date values are NULL. There is insufficient evidence to inf
 6. Exercise Android/Windows offline delayed sync, latest reading edit, duplicate retry and rejection of a stale/retired meter. Record evidence before production rollout.
 
 A successful fresh-schema CI run is not a substitute for the actual-data migration rehearsal or field-device acceptance.
+
+## Physical cash settlement
+
+New and currently open sessions use opening cash plus active cash receipts, excluding bank transfers and checks. All payment methods still contribute to subscriber balances; treasury refunds are separate from collector cash. Closed historical snapshots are not recalculated and carry `legacy_recorded` in the API if their settlement basis was not recorded. A new closure uses `physical_cash` and preserves the original snapshot even after a documented correction. API exposes cash, non-cash and total receipt collections separately. A new offline payment arriving after close still requires explicit session-identity and exception workflow; do not interpret the concurrent close test as complete offline reconciliation.

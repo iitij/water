@@ -164,6 +164,42 @@ class CashSessionApiTest extends TestCase
         $this->assertSame('600.25', $this->invoice->fresh()->amount_paid);
     }
 
+    public function test_physical_cash_settlement_includes_opening_and_excludes_non_cash_methods(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $sessionId = $this->postJson('/api/cash-sessions', ['opening_amount' => '250.25'])
+            ->assertCreated()->assertJsonPath('cash_session.expected_amount', '250.25')->json('cash_session.id');
+        $endpoint = "/api/invoices/{$this->invoice->id}/pay";
+        foreach (['cash' => '600.50', 'bank_transfer' => '300.00', 'check' => '99.50'] as $method => $amount) {
+            $this->postJson($endpoint, ['amount' => $amount, 'payment_method' => $method,
+                'sync_uuid' => (string) Str::uuid()])->assertCreated();
+        }
+        $this->getJson('/api/cash-sessions/current')->assertOk()
+            ->assertJsonPath('cash_session.settlement_basis', 'physical_cash')
+            ->assertJsonPath('cash_session.cash_collections', '600.50')
+            ->assertJsonPath('cash_session.non_cash_collections', '399.50')
+            ->assertJsonPath('cash_session.total_collections', '1000.00')
+            ->assertJsonPath('cash_session.expected_amount', '850.75');
+        $this->postJson("/api/cash-sessions/{$sessionId}/close", ['counted_amount' => '850.751'])
+            ->assertUnprocessable()->assertJsonValidationErrors('counted_amount');
+        $this->postJson("/api/cash-sessions/{$sessionId}/close", ['counted_amount' => '850.75'])
+            ->assertOk()->assertJsonPath('cash_session.variance_amount', '0.00')
+            ->assertJsonPath('cash_session.expected_amount', '850.75');
+        $this->assertDatabaseCount('payments', 3);
+        $this->assertSame('1000.00', $this->invoice->fresh()->amount_paid);
+        $this->getJson("/api/cash-sessions/{$sessionId}/report")->assertOk()
+            ->assertJsonPath('cash_session.total_collections', '1000.00')
+            ->assertJsonPath('cash_session.expected_amount', '850.75');
+    }
+
+    public function test_opening_cash_and_counted_cash_reject_excess_precision(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $this->postJson('/api/cash-sessions', ['opening_amount' => '1.001'])
+            ->assertUnprocessable()->assertJsonValidationErrors('opening_amount');
+        $this->assertDatabaseCount('cash_sessions', 0);
+    }
+
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')

@@ -129,7 +129,7 @@ class CashSession extends Equatable {
   /// ملخّص عربي جاهز للعرض في شاشة الصندوق.
   String get arabicSummary {
     if (isOpen) {
-      return 'الصندوق مفتوح — $receipts سنداً بقيمة ${expectedAmount.toStringAsFixed(2)}';
+      return 'الصندوق مفتوح — $receipts سنداً، النقد المتوقع ${expectedAmount.toStringAsFixed(2)}';
     }
     final variance = varianceAmount ?? 0;
     final verdict = variance.abs() < 0.01
@@ -201,6 +201,7 @@ class CashSessionMethodTotal extends Equatable {
   String get arabicLabel => switch (method) {
     'cash' => 'نقداً',
     'bank_transfer' => 'حوالة بنكية',
+    'check' => 'شيك',
     'mobile_wallet' => 'محفظة إلكترونية',
     'card' => 'بطاقة',
     _ => method.isEmpty ? 'غير محدد' : method,

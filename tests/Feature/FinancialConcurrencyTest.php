@@ -374,6 +374,32 @@ class FinancialConcurrencyTest extends TestCase
             \App\Models\Tariff::findOrFail($tariffId)->unit_price);
     }
 
+    public function test_parallel_cash_collection_and_close_preserve_finalized_cash_snapshot(): void
+    {
+        $meter = $this->fixture();
+        $user = User::factory()->create();
+        $session = app(CashSessionService::class)->open($user, 100.25);
+        $results = $this->race(
+            fn () => app(PaymentService::class)->collectPayment(
+                Subscriber::findOrFail($meter->subscriber_id), 500.25, userId: $user->id)->id,
+            fn () => app(CashSessionService::class)->close($session, 100.25)->id,
+        );
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $payment = Payment::findOrFail($results[0]['value']);
+        $session = $session->fresh();
+        if ($payment->cash_session_id === $session->id) {
+            $this->assertSame('600.50', $session->expected_amount);
+            $this->assertSame('-500.25', $session->variance_amount);
+        } else {
+            $this->assertNull($payment->cash_session_id);
+            $this->assertSame('100.25', $session->expected_amount);
+            $this->assertSame('0.00', $session->variance_amount);
+        }
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Transaction::count());
+        $this->assertSame(500.25, $meter->subscriber->getAccountCredit());
+    }
+
     public function test_parallel_cash_open_and_stale_close_are_rejected(): void
     {
         $user = User::factory()->create();
