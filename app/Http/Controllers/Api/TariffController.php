@@ -143,7 +143,14 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:tariffs,id']]);
-        $count = Tariff::whereIn('id', $data['ids'])->delete();
+        $count = DB::transaction(function () use ($data) {
+            $tariffs = Tariff::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get();
+            foreach ($tariffs as $tariff) {
+                $tariff->delete();
+            }
+
+            return $tariffs->count();
+        });
 
         return response()->json(['deleted_count' => $count]);
     }
