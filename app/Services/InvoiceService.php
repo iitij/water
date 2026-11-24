@@ -51,6 +51,12 @@ class InvoiceService
                     ->orderBy('period_start')->orderBy('period_end')->orderBy('id')->lockForUpdate()->get();
             }
 
+            if ($uninvoicedReadings->isEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'readings' => 'لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.',
+                ]);
+            }
+
             $pricing = app(HistoricalTariffService::class)->quote($uninvoicedReadings);
             $consumptionFee = $pricing['total'];
 
@@ -66,9 +72,6 @@ class InvoiceService
             // ملاحظة: سيتم استدعاء تحديث حالة الفواتير السابقة في نهاية الدالة لتعمل حسب المنطق الصحيح
             // 5. خصم الرصيد الدائن
             $subtotal = $consumptionFee;
-            if ($uninvoicedReadings->isEmpty()) {
-                throw new \Exception('لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.');
-            }
 
             $creditApplied = 0;
             $availableBalance = $subscriber->getAccountCredit();
