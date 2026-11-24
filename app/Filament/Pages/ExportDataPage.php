@@ -7,7 +7,14 @@ use App\Models\Reading;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Services\DataExportService;
+use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Pages\Page;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -42,6 +49,105 @@ class ExportDataPage extends Page
     public ?string $readings_from_date = '';
     public ?string $readings_to_date = '';
     public ?string $readings_is_invoiced = '';
+
+    public function mount(): void
+    {
+        $this->form->fill();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Grid::make(['default' => 1, 'xl' => 3])->schema([
+                Section::make('قائمة المشتركين')
+                    ->icon('heroicon-o-users')
+                    ->description('بيانات المشتركين، العدادات والأرصدة.')
+                    ->schema([
+                        $this->squareFilter('subscribers_square_id'),
+                        Select::make('subscribers_status')
+                            ->label('حالة المشترك')
+                            ->options(['active' => 'نشط فقط', 'inactive' => 'غير نشط', 'suspended' => 'موقوف'])
+                            ->placeholder('جميع الحالات')
+                            ->live(),
+                        Actions::make([
+                            Action::make('downloadSubscribers')
+                                ->label('تنزيل ملف المشتركين (Excel)')
+                                ->icon('heroicon-o-arrow-down-tray')
+                                ->action(fn () => $this->exportSubscribers()),
+                            Action::make('directSubscribers')
+                                ->label('تحميل مباشر')
+                                ->color('gray')
+                                ->url(fn () => route('admin.export.subscribers', ['square_id' => $this->subscribers_square_id, 'status' => $this->subscribers_status]))
+                                ->openUrlInNewTab(),
+                        ]),
+                    ]),
+                Section::make('فواتير المشتركين')
+                    ->icon('heroicon-o-document-currency-dollar')
+                    ->description('الاستهلاك والرسوم والمبالغ المسددة.')
+                    ->schema([
+                        $this->squareFilter('invoices_square_id'),
+                        $this->dateFilters('invoices'),
+                        Select::make('invoices_status')
+                            ->label('حالة الفاتورة')
+                            ->options(['paid' => 'مسددة بالكامل', 'partially_paid' => 'مسددة جزئياً', 'issued' => 'صادرة (مستحقة)', 'overdue' => 'متأخرة'])
+                            ->placeholder('جميع الحالات')
+                            ->live(),
+                        Actions::make([
+                            Action::make('downloadInvoices')
+                                ->label('تنزيل الفواتير (Excel)')
+                                ->icon('heroicon-o-arrow-down-tray')
+                                ->action(fn () => $this->exportInvoices()),
+                            Action::make('directInvoices')
+                                ->label('تحميل مباشر')
+                                ->color('gray')
+                                ->url(fn () => route('admin.export.invoices', ['square_id' => $this->invoices_square_id, 'from_date' => $this->invoices_from_date, 'to_date' => $this->invoices_to_date, 'status' => $this->invoices_status]))
+                                ->openUrlInNewTab(),
+                        ]),
+                    ]),
+                Section::make('قراءات العدادات')
+                    ->icon('heroicon-o-chart-bar')
+                    ->description('سجل القراءات والاستهلاك المعتمد.')
+                    ->schema([
+                        $this->squareFilter('readings_square_id'),
+                        $this->dateFilters('readings'),
+                        Select::make('readings_is_invoiced')
+                            ->label('حالة الفوترة')
+                            ->options(['1' => 'مفوترة فقط', '0' => 'غير مفوترة (جديدة)'])
+                            ->placeholder('جميع القراءات')
+                            ->live(),
+                        Actions::make([
+                            Action::make('downloadReadings')
+                                ->label('تنزيل القراءات (Excel)')
+                                ->icon('heroicon-o-arrow-down-tray')
+                                ->action(fn () => $this->exportReadings()),
+                            Action::make('directReadings')
+                                ->label('تحميل مباشر')
+                                ->color('gray')
+                                ->url(fn () => route('admin.export.readings', ['square_id' => $this->readings_square_id, 'from_date' => $this->readings_from_date, 'to_date' => $this->readings_to_date, 'is_invoiced' => $this->readings_is_invoiced]))
+                                ->openUrlInNewTab(),
+                        ]),
+                    ]),
+            ]),
+        ]);
+    }
+
+    private function squareFilter(string $name): Select
+    {
+        return Select::make($name)
+            ->label('تصفية بحسب المربع السكني')
+            ->options(fn () => Square::orderBy('name')->pluck('name', 'id')->all())
+            ->placeholder('جميع المربعات')
+            ->searchable()
+            ->live();
+    }
+
+    private function dateFilters(string $prefix): Grid
+    {
+        return Grid::make(2)->schema([
+            DatePicker::make($prefix.'_from_date')->label('من تاريخ')->native(false)->live(),
+            DatePicker::make($prefix.'_to_date')->label('إلى تاريخ')->native(false)->live(),
+        ]);
+    }
 
     public static function canAccess(): bool
     {
