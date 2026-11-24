@@ -266,13 +266,13 @@ Future<void> showPaymentActionSheet(
         label: 'إرسال واتساب',
         run: () => sendPaymentWhatsapp(context, payment, receiptData: receiptData),
       ),
-    if (!payment.isVoided)
+    if (!payment.isVoided && !payment.isAccountTransferred)
       _PaymentSheetAction(
         icon: Icons.edit_outlined,
         label: 'تعديل الملاحظات',
         run: () => context.push('/payments/${payment.id}/edit', extra: payment),
       ),
-    if (!payment.isVoided)
+    if (!payment.isVoided && !payment.isAccountTransferred)
       _PaymentSheetAction(
         icon: Icons.block_outlined,
         label: 'إلغاء السند بسبب مكتوب',
@@ -315,7 +315,9 @@ Future<void> showPaymentActionSheet(
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        payment.displayName,
+                        payment.isAccountTransferred
+                            ? 'تم تصحيح تخصيص السند إلى حساب #${payment.transferredToSubscriberId}'
+                            : payment.displayName,
                         style: theme.textTheme.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

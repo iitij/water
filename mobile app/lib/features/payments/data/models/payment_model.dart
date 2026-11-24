@@ -34,6 +34,7 @@ class PaymentModel extends Equatable {
     this.voidedBy,
     this.voidedVia,
     this.cashSessionId,
+    this.transferredToSubscriberId,
     this.whatsappSentAt,
     this.whatsappSentVia,
   });
@@ -73,6 +74,8 @@ class PaymentModel extends Equatable {
 
   /// الصندوق الذي سُجّل فيه السند — أساس مطابقة نقد المحصّل.
   final int? cashSessionId;
+  final int? transferredToSubscriberId;
+  bool get isAccountTransferred => transferredToSubscriberId != null;
 
   /// آخر إرسال ناجح للسند عبر واتساب (خطة 2.0 — الفصل 6.2).
   final DateTime? whatsappSentAt;
@@ -142,6 +145,7 @@ class PaymentModel extends Equatable {
       voidedBy: JsonUtils.asStringOrNull(json['voided_by']),
       voidedVia: JsonUtils.asStringOrNull(json['voided_via']),
       cashSessionId: JsonUtils.asIntOrNull(json['cash_session_id']),
+      transferredToSubscriberId: JsonUtils.asIntOrNull(JsonUtils.asMap(json['account_transfer'])?['to_subscriber_id'] ?? json['transferred_to_subscriber_id']),
       whatsappSentAt: JsonUtils.asDate(json['whatsapp_sent_at']),
       whatsappSentVia: JsonUtils.asStringOrNull(json['whatsapp_sent_via']),
     );
@@ -162,6 +166,7 @@ class PaymentModel extends Equatable {
     'voided_at': DateFormat.dateTime(voidedAt),
     'void_reason': voidReason,
     'cash_session_id': cashSessionId,
+    'transferred_to_subscriber_id': transferredToSubscriberId,
     'whatsapp_sent_at': DateFormat.dateTime(whatsappSentAt),
     'whatsapp_sent_via': whatsappSentVia,
   };
@@ -216,6 +221,7 @@ class PaymentModel extends Equatable {
     invoiceId,
     voidedAt,
     cashSessionId,
+    transferredToSubscriberId,
     whatsappSentAt,
     whatsappSentVia,
   ];

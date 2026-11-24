@@ -304,7 +304,7 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(6000.0, $from->getAccountDebt());
         $this->assertSame(1499.75, $to->getAccountDebt());
         $this->assertSame(7499.75, $from->getAccountDebt() + $to->getAccountDebt());
-        $this->assertSame($before, $cash->summary($session->fresh()));
+        $this->assertSame(json_encode($before, JSON_THROW_ON_ERROR), json_encode($cash->summary($session->fresh()), JSON_THROW_ON_ERROR));
         $this->assertDatabaseHas('audit_events', ['event' => 'payment.account_transferred', 'entity_id' => (string) $id]);
         try {
             app(PaymentService::class)->voidPayment($payment, 'Synthetic disallowed double reversal');

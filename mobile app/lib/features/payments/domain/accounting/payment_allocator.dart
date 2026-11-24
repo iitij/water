@@ -92,7 +92,7 @@ class PaymentAllocator {
 
     final orderedPayments = _oldestFirstPayment(payments)
         .where((p) =>
-            p.subscriberId == subscriberId && !p.isDeleted && !p.isVoided)
+            p.subscriberId == subscriberId && !p.isDeleted && !p.isVoided && !p.isAccountTransferred)
         .toList();
 
     var current = scoped;

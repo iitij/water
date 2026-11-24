@@ -38,12 +38,15 @@ class TransactionsTable
                         'payment' => 'سند قبض (دائن)',
                         'invoice' => 'فاتورة (مدين)',
                         'adjustment' => 'تسوية',
+                        'payment_reversal' => 'عكس سند قبض',
+                        'invoice_reversal' => 'عكس فاتورة',
+                        'payment_transfer_in' => 'تصحيح تخصيص وارد',
                         default => $state,
                     })
                     ->searchable(),
                 TextColumn::make('amount')
                     ->label('المبلغ')
-                    ->money('SAR')
+                    ->numeric(2)->suffix(' ريال')
                     ->color(fn ($record) => $record->amount > 0 ? 'success' : 'danger')
                     ->sortable(),
                 TextColumn::make('description')
