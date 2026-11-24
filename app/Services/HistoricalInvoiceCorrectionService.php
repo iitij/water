@@ -56,6 +56,45 @@ final class HistoricalInvoiceCorrectionService
                 || $r->meter_id !== null || (int) $r->retired_meter_id !== (int) $invoice->retired_meter_id)) {
                 throw ValidationException::withMessages(['invoice' => 'لا توجد قراءات تاريخية مطابقة ومفوترة.']);
             }
+            // The existing correction contract supplies a single aggregate
+            // quantity. Never distribute it across multiple measured periods.
+            if ($readings->count() !== 1) {
+                throw ValidationException::withMessages(['corrected_units' => 'تصحيح عدة قراءات يتطلب تحديد الوحدات المصححة لكل قراءة على حدة.']);
+            }
+
+            \App\Models\Tariff::lockCatalog();
+            $reading = $readings->sole();
+            $originalLines = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            if ($originalLines->isEmpty()) {
+                // Legacy documents have no stored price evidence. Require a
+                // uniquely approved tariff covering the actual reading period.
+                $line = app(HistoricalTariffService::class)->quote($readings)['lines'][0];
+                $source = 'approved_historical_catalog';
+            } else {
+                if ($originalLines->count() !== 1
+                    || (int) $originalLines->first()->reading_id !== (int) $reading->id) {
+                    throw ValidationException::withMessages(['invoice' => 'أدلة تسعير الفاتورة لا تطابق القراءة التاريخية.']);
+                }
+                $original = $originalLines->first();
+                if ($original->period_start !== $reading->period_start?->toDateString()
+                    || $original->period_end !== $reading->period_end?->toDateString()
+                    || $minor($original->amount) !== $minor($invoice->consumption_fee)) {
+                    throw ValidationException::withMessages(['invoice' => 'توجد أدلة تاريخية غير متطابقة؛ يلزم مراجعة محاسبية.']);
+                }
+                $line = array_intersect_key((array) $original, array_flip([
+                    'reading_id', 'tariff_id', 'tariff_name', 'period_start', 'period_end',
+                    'units', 'unit_price', 'amount',
+                ]));
+                $source = 'original_invoice_snapshot';
+            }
+            if ($minor($line['unit_price']) !== $p) {
+                throw ValidationException::withMessages(['historical_unit_price' => 'السعر المدخل لا يطابق التعرفة التاريخية الموثقة.']);
+            }
+            $line['units'] = $decimal($u);
+            $line['unit_price'] = $decimal($p);
+            $line['amount'] = $decimal($amount);
+
             $before = $minor($subscriber->getAccountBalance());
             $oldAmount = $minor($invoice->total_amount);
             $ledger = app(TransactionService::class);
@@ -78,6 +117,7 @@ final class HistoricalInvoiceCorrectionService
                 'amount_paid' => 0, 'status' => 'issued', 'notes' => 'تصحيح تاريخي للفاتورة '.$invoice->bill_number,
             ]);
             $replacement->forceFill(['retired_meter_id' => $invoice->retired_meter_id, 'retired_meter_code' => $invoice->retired_meter_code])->saveQuietly();
+            DB::table('invoice_tariff_lines')->insert($line + ['invoice_id' => $replacement->id]);
             InvoiceItem::create(['invoice_id' => $replacement->id, 'type' => 'consumption',
                 'description' => 'استهلاك مصحح: '.$decimal($u).' × '.$decimal($p), 'amount' => $decimal($amount)]);
             if ($previous > 0) {
@@ -100,7 +140,7 @@ final class HistoricalInvoiceCorrectionService
                 'entity_type' => HistoricalInvoiceCorrection::class, 'entity_id' => $correction->id,
                 'before' => ['balance_minor' => $before, 'invoice_id' => $invoice->id, 'amount_minor' => $oldAmount],
                 'after' => ['balance_minor' => $after, 'replacement_invoice_id' => $replacement->id,
-                    'reading_ids' => $readings->modelKeys(), 'reversal_id' => $out->id, 'posting_id' => $in->id,
+                    'reading_ids' => $readings->modelKeys(), 'pricing_source' => $source, 'tariff_id' => $line['tariff_id'], 'reversal_id' => $out->id, 'posting_id' => $in->id,
                     'reason' => $reason, 'evidence' => $evidence, 'corrected_units' => $decimal($u), 'historical_unit_price' => $decimal($p)],
                 'actor_user_id' => $actor->id,
             ]);
