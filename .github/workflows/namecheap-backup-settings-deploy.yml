@@ -1,0 +1,147 @@
+name: Water | Deploy website-managed backup settings
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-settings-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cdc978291050a10d5dff6a236033e1e4d8a22db9
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require tested application code and successful recovery gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = cdc978291050a10d5dff6a236033e1e4d8a22db9
+          for run in 45314140690 45314140591 45314140582 45314140456; do
+            test "$(gh api "repos/iitij/water/actions/runs/$run" --jq '.head_sha')" = 01262ab033b94b5284f4373131ff7b9cec7f8046
+            test "$(gh api "repos/iitij/water/actions/runs/$run" --jq '.conclusion')" = success
+          done
+          git diff --quiet 01262ab033b94b5284f4373131ff7b9cec7f8046 cdc978291050a10d5dff6a236033e1e4d8a22db9 -- app config resources routes database composer.json composer.lock tests
+          for run in 45310784495 45311049432 45313120506; do
+            test "$(gh api "repos/iitij/water/actions/runs/$run" --jq '.conclusion')" = success
+          done
+          bash -n scripts/hosting/water-backup-export.sh
+          bash -n scripts/hosting/water-backup-daily.sh
+          bash -n scripts/hosting/pull-offsite-backups.sh
+          echo 'BACKUP_SETTINGS_ACCEPTANCE_GATE: PASSED'
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Install validated settings, migrate only the managed cron entry, and verify the reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export LC_ALL=C
+          test "$(id -un)" = alweufti
+          cd "$HOME/repositories/water"
+          test "$(git branch --show-current)" = main
+          test -z "$(git status --porcelain)"
+          before="$(git rev-parse HEAD)"
+          target='cdc978291050a10d5dff6a236033e1e4d8a22db9'
+          test "$before" = '9a36e82d6035b5a83c90a668e42e7e19b2129f6f' || test "$before" = "$target"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$target" FETCH_HEAD
+          git merge-base --is-ancestor "$before" "$target"
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              .github/workflows/*|.gitignore|docs/hosting-backup-recovery.md|scripts/hosting/*|tests/Feature/BackupControlTest.php|app/Console/Commands/BackupDevice.php|app/Console/Commands/BackupTick.php|app/Filament/Pages/BackupSettings.php|app/Support/BackupControl.php|config/water-backup.php|resources/views/filament/pages/backup-settings.blade.php) ;;
+              *) echo "Unexpected changed path: $file"; exit 1 ;;
+            esac
+          done < <(git diff --name-only -z "$before" "$target")
+          ops="$HOME/.water-backup-ops"
+          test -d "$ops" && test ! -L "$ops" && test -O "$ops"
+          test ! -e "$ops/enable-retention-after-offsite-verification"
+          temp="$(mktemp -d "$ops/.deploy-settings-XXXXXXXX")"
+          old='30 2 * * * /bin/bash /home/alweufti/.water-backup-ops/water-backup-daily.sh # water-backup-daily-v1'
+          new='*/5 * * * * /opt/alt/php84/usr/bin/php /home/alweufti/repositories/water/artisan water:backup-tick > /home/alweufti/.water-backup-ops/latest-tick.log 2>&1 # water-backup-policy-v2'
+          crontab -l > "$temp/original"
+          if grep -Fxq "$old" "$temp/original"; then
+            test "$(grep -Fxc "$old" "$temp/original")" = 1
+            test "$(grep -c 'water-backup-' "$temp/original")" = 1
+          else
+            test "$(grep -Fxc "$new" "$temp/original")" = 1
+            test "$(grep -c 'water-backup-' "$temp/original")" = 1
+          fi
+          cp -p "$ops/water-backup-daily.sh" "$temp/daily.old"
+          cp -p "$ops/water-backup-export.sh" "$temp/export.old"
+          php=/opt/alt/php84/usr/bin/php
+          rollback(){
+            code=$?
+            if [[ "$code" != 0 ]]; then
+              echo 'BACKUP_SETTINGS_DEPLOY: FAILED, restoring previous schedule and scripts'
+              crontab "$temp/original" || true
+              install -m 700 "$temp/daily.old" "$ops/water-backup-daily.sh" || true
+              install -m 700 "$temp/export.old" "$ops/water-backup-export.sh" || true
+              if [[ "$(git rev-parse HEAD)" == "$target" && "$before" != "$target" ]]; then git reset --hard "$before"; fi
+              "$php" artisan view:clear || true
+            fi
+            rm -rf -- "$temp"
+            exit "$code"
+          }
+          trap rollback EXIT
+          git merge --ff-only "$target"
+          for file in app/Console/Commands/BackupDevice.php app/Console/Commands/BackupTick.php app/Filament/Pages/BackupSettings.php app/Support/BackupControl.php config/water-backup.php; do "$php" -l "$file"; done
+          "$php" artisan view:clear
+          "$php" artisan view:cache
+          "$php" artisan water:backup-tick --initialize
+          "$php" artisan water:backup-tick --inspect
+          "$php" artisan water:backup-device allowed
+          bash -n scripts/hosting/water-backup-daily.sh
+          bash -n scripts/hosting/water-backup-export.sh
+          install -m 700 scripts/hosting/water-backup-daily.sh "$temp/daily.new"
+          install -m 700 scripts/hosting/water-backup-export.sh "$temp/export.new"
+          mv -f "$temp/daily.new" "$ops/water-backup-daily.sh"
+          mv -f "$temp/export.new" "$ops/water-backup-export.sh"
+          SSH_ORIGINAL_COMMAND=list bash "$ops/water-backup-export.sh" > "$temp/list"
+          grep -Fxq water-20261124T021342Z-412d1e "$temp/list"
+          if SSH_ORIGINAL_COMMAND=id bash "$ops/water-backup-export.sh" >/dev/null 2>&1; then exit 1; fi
+          awk -v old="$old" -v new="$new" '$0 == old {$0=new} {print}' "$temp/original" > "$temp/new"
+          crontab "$temp/new"
+          test "$(crontab -l | grep -Fxc "$new")" = 1
+          test -z "$(git status --porcelain)"
+          test "$(git rev-parse HEAD)" = "$target"
+          echo 'WEBSITE_SCHEDULER_CRON: VERIFIED'
+          echo 'DEVICE_READER_POLICY: VERIFIED'
+          echo 'BACKUP_SETTINGS_DEPLOY: PASSED'
+          REMOTE
+      - name: Verify protected settings URL and live website
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://alweshah.online
+          test "$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' "$base/up")" = 200
+          test "$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' "$base/admin/backup-settings")" = "302 $base/admin/login"
+          echo 'PUBLIC_BACKUP_SETTINGS_AUTH: PASSED'
