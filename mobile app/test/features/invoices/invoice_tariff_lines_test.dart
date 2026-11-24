@@ -4,6 +4,7 @@ import 'package:water_project/core/settings/finance_config.dart';
 import 'package:water_project/features/invoices/data/models/invoice_model.dart';
 import 'package:water_project/features/invoices/presentation/pages/invoice_detail_screen.dart';
 import 'package:water_project/features/invoices/presentation/whatsapp/invoice_whatsapp_builder.dart';
+import 'package:water_project/features/invoices/presentation/thermal/invoice_thermal_ticket.dart';
 
 Map<String, dynamic> payload() => {
   'id': 42,
@@ -49,6 +50,19 @@ void main() {
         'units': 8, 'unit_price': 0, 'amount': 0},
     ];
     expect(InvoiceModel.fromJson(raw).impliedUnitPrice, 0);
+  });
+
+  test('thermal receipt prints actual historical prices and no synthetic average', () {
+    final invoice = InvoiceModel.fromJson(payload());
+    final text = buildInvoiceThermalTicket(invoice).lines.map((line) => line.text).join('\n');
+    expect(text, contains('2026-01-01'));
+    expect(text, contains('2026-03-01'));
+    expect(text, contains('600'));
+    expect(text, contains('800'));
+    expect(text, isNot(contains('672')));
+    final legacy = payload()..remove('tariff_lines');
+    final legacyText = buildInvoiceThermalTicket(InvoiceModel.fromJson(legacy)).lines.map((line) => line.text).join('\n');
+    expect(legacyText, contains('غير موثقة'));
   });
 
   testWidgets('pricing card shows both periods in a narrow RTL view', (tester) async {
