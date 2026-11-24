@@ -178,4 +178,45 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(2, Transaction::count());
     }
 
+
+    public function test_approved_till_duplicate_correction_preserves_close_and_is_idempotent(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        $collector = User::factory()->create(['role' => 'collector']);
+        $supervisor = User::factory()->create(['role' => 'admin']);
+        $supervisor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $cash = app(CashSessionService::class);
+        $session = $cash->open($collector);
+        $service = app(PaymentService::class);
+        $original = $service->collectPayment($subscriber, 1000, $invoice->id, userId: $collector->id);
+        $duplicate = $service->collectPayment($subscriber, 1000, $invoice->id, userId: $collector->id);
+        $session = $cash->close($session, 1000);
+        $session = $cash->decide($session, true, $supervisor);
+        $before = $cash->summary($session);
+        $this->actingAs($supervisor, 'sanctum');
+        $payload = [
+            'payment_id' => $duplicate->id,
+            'duplicate_of_id' => $original->id,
+            'reason' => 'Synthetic duplicate recording correction',
+            'evidence' => 'Synthetic proof only one physical receipt occurred',
+            'no_second_cash_receipt' => true,
+        ];
+        $url = '/api/cash-sessions/'.$session->id.'/correct-duplicate';
+        $this->postJson($url, array_replace($payload, ['no_second_cash_receipt' => false]))->assertUnprocessable();
+        $id = $this->postJson($url, $payload)->assertOk()->json('correction.id');
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('correction.id', $id);
+        $this->assertDatabaseCount('closed_cash_corrections', 1);
+        $this->assertDatabaseCount('transactions', 4);
+        $this->assertNull($original->fresh()->voided_at);
+        $this->assertNotNull($duplicate->fresh()->voided_at);
+        $this->assertSame('1000.00', $invoice->fresh()->amount_paid);
+        $this->assertSame(5000.0, $subscriber->getAccountDebt());
+        $after = $cash->summary($session->fresh());
+        foreach (['expected_amount', 'counted_amount', 'variance_amount', 'receipts', 'voided_receipts', 'by_method', 'state'] as $key) {
+            $this->assertSame($before[$key], $after[$key], $key);
+        }
+        $this->assertSame('1000.00', $after['post_close_correction_total']);
+        $this->assertDatabaseHas('audit_events', ['event' => 'cash_session.duplicate_corrected', 'entity_id' => (string) $session->id]);
+    }
+
 }
