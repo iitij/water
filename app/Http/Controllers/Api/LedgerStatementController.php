@@ -16,8 +16,11 @@ final class LedgerStatementController extends ApiController
         $period = $request->validate([
             'from_date' => ['required', 'date_format:Y-m-d'],
             'to_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:from_date', 'before_or_equal:today'],
+            'statement_hash' => ['nullable', 'regex:/^[a-f0-9]{64}$/'],
         ]);
-        return $service->statement(Subscriber::findOrFail($id), $period['from_date'], $period['to_date']);
+        $statement = $service->statement(Subscriber::findOrFail($id), $period['from_date'], $period['to_date']);
+        $service->requireMatchingSnapshot($statement, $period['statement_hash'] ?? null);
+        return $statement;
     }
 
     public function show(Request $request, int $id, LedgerStatementService $service)

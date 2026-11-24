@@ -4,7 +4,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/fouad/api_client.dart';
 import '../../../../core/fouad/currency_formatter.dart';
-import '../../../../core/navigation/sub_page.dart';
 import '../../../admin_shared/data/admin_api_client.dart';
 import '../../data/models/ledger_statement_model.dart';
 
@@ -83,7 +82,9 @@ class _LedgerStatementScreenState extends State<LedgerStatementScreen> {
     if (_busy || _statement == null) return;
     setState(() { _busy = true; });
     try {
-      final file = await _api.download('$_path/$format', query: _query);
+      final file = await _api.download('$_path/$format', query: {
+        ..._query, 'statement_hash': _statement!.hash,
+      });
       final bytes = file.bytes;
       final isPdf = format == 'pdf';
       if (isPdf ? (bytes.length < 5 ||
@@ -103,9 +104,14 @@ class _LedgerStatementScreenState extends State<LedgerStatementScreen> {
         ], fileNameOverrides: [name]);
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is AdminApiException ? error.message : 'تعذر تصدير كشف الحساب.'),
-      ));
+      if (mounted) {
+        if (error is AdminApiException && error.statusCode == 409) {
+          setState(() { _statement = null; _error = 'تغير كشف الحساب. حدّث الكشف قبل التصدير.'; });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error is AdminApiException ? error.message : 'تعذر تصدير كشف الحساب.'),
+        ));
+      }
     } finally {
       if (mounted) setState(() { _busy = false; });
     }
@@ -119,10 +125,9 @@ class _LedgerStatementScreenState extends State<LedgerStatementScreen> {
   @override
   Widget build(BuildContext context) {
     final statement = _statement;
-    return SubPageScaffold(
-      title: 'كشف الحساب المالي',
-      subtitle: widget.subscriberName,
-      child: ListView.builder(
+    return Scaffold(
+      appBar: AppBar(title: Text('كشف الحساب المالي — ${widget.subscriberName}')),
+      body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: 1 + (statement?.entries.length ?? 0),
         itemBuilder: (context, index) {
@@ -168,7 +173,7 @@ class _LedgerStatementScreenState extends State<LedgerStatementScreen> {
                     icon: const Icon(Icons.table_chart_outlined), label: const Text('Excel')),
                 TextButton(onPressed: _busy ? null : _load, child: const Text('تحديث')),
               ]),
-              const Text('يُنشأ الملف من أحدث القيود للفترة عند التنزيل.'),
+              const Text('إذا تغيرت القيود، يلزم تحديث الكشف قبل التصدير.'),
               if (statement.entries.isEmpty) const Text('لا توجد حركات خلال الفترة.'),
             ],
           ]);

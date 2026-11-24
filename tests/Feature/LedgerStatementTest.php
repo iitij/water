@@ -70,6 +70,30 @@ final class LedgerStatementTest extends TestCase
         $this->assertSame($before, Transaction::orderBy('id')->get()->toArray());
     }
 
+    public function test_export_rejects_a_stale_statement_hash_and_web_requires_permissions(): void
+    {
+        $subscriber = Subscriber::create(['name' => 'Versioned statement', 'square_id' => Square::create(['name' => 'Versioned'])->id, 'status' => 'active']);
+        $today = now()->toDateString();
+        $period = ['from_date' => $today, 'to_date' => $today];
+        $service = app(LedgerStatementService::class);
+        $before = $service->statement($subscriber, $today, $today);
+        $this->assertSame($before['statement_hash'], $service->statement($subscriber, $today, $today)['statement_hash']);
+        app(PaymentService::class)->collectPayment($subscriber, 25.50);
+        $this->assertNotSame($before['statement_hash'], $service->statement($subscriber, $today, $today)['statement_hash']);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin, 'sanctum')->getJson('/api/subscribers/'.$subscriber->id.'/ledger-statement/xlsx?'.http_build_query($period + ['statement_hash' => $before['statement_hash']]))
+            ->assertStatus(409);
+        $viewer = User::factory()->create(['role' => 'reader']);
+        $viewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('View:Subscriber', 'web'));
+        $this->actingAs($viewer, 'web')->get(route('subscribers.ledger-statement.download', $period + ['subscriber' => $subscriber->id, 'format' => 'xlsx']))
+            ->assertForbidden();
+        $admin->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('View:Subscriber', 'web'));
+        $admin->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('View:ExportDataPage', 'web'));
+        $this->actingAs($admin, 'web')->get(route('subscribers.ledger-statement.download', $period + ['subscriber' => $subscriber->id, 'format' => 'xlsx', 'statement_hash' => $before['statement_hash']]))
+            ->assertStatus(409);
+    }
+
     public function test_undated_legacy_row_blocks_historical_statement_without_guessing(): void
     {
         $subscriber = Subscriber::create(['name' => 'Undated', 'square_id' => Square::create(['name' => 'Undated'])->id, 'status' => 'active']);

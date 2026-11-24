@@ -16,6 +16,13 @@ final class LedgerStatementService
         return (int) round((float) $value * 100);
     }
 
+    public function requireMatchingSnapshot(array $statement, ?string $expectedHash): void
+    {
+        if ($expectedHash !== null && ! hash_equals($statement['statement_hash'], $expectedHash)) {
+            abort(409, 'تغير كشف الحساب بعد عرضه؛ حدّث الكشف قبل التصدير.');
+        }
+    }
+
     public function statement(Subscriber $subscriber, string $from, string $to): array
     {
         if ($from > $to) {
@@ -65,7 +72,7 @@ final class LedgerStatementService
             if ($running !== $closing || $opening + $credit - $debit !== $closing) {
                 throw new \RuntimeException('Ledger statement does not conserve the recorded balance.');
             }
-            return [
+            $statement = [
                 'subscriber' => ['id' => $account->id, 'name' => $account->name],
                 'from_date' => $from, 'to_date' => $to,
                 'basis' => 'ledger_posting_date',
@@ -79,6 +86,7 @@ final class LedgerStatementService
                 'entry_count' => count($rows),
                 'entries' => $rows,
             ];
+            return $statement + ['statement_hash' => hash('sha256', json_encode($statement, JSON_THROW_ON_ERROR))];
         }, 3);
     }
 }

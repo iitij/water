@@ -5,6 +5,7 @@ Map<String, dynamic> fixture() => {
   'subscriber': {'id': 7},
   'from_date': '2026-03-01', 'to_date': '2026-03-31',
   'basis': 'ledger_posting_date',
+  'statement_hash': List.filled(64, 'a').join(),
   'sign_convention': 'positive_credit_negative_debt',
   'opening_balance_minor': -10025, 'debit_minor': 0, 'credit_minor': 5075,
   'closing_balance_minor': -4950, 'entry_count': 1,
@@ -32,6 +33,7 @@ void main() {
       fixture()..['closing_balance_minor'] = 0,
       fixture()..['subscriber'] = {'id': 8},
       fixture()..['basis'] = 'payment_date',
+      fixture()..remove('statement_hash'),
     ]) {
       expect(() => parse(data), throwsFormatException);
     }

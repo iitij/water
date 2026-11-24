@@ -27,7 +27,7 @@
     @if ($statement !== null)
         @php
             $money = fn ($minor) => number_format($minor / 100, 2, '.', ',');
-            $period = ['subscriber' => $statement['subscriber']['id'], 'from_date' => $statement['from_date'], 'to_date' => $statement['to_date']];
+            $period = ['subscriber' => $statement['subscriber']['id'], 'from_date' => $statement['from_date'], 'to_date' => $statement['to_date'], 'statement_hash' => $statement['statement_hash']];
         @endphp
         <x-filament::section>
             <x-slot name="heading">الأرصدة خلال الفترة</x-slot>
@@ -46,7 +46,7 @@
                     <x-filament::button tag="a" color="gray" :href="route('subscribers.ledger-statement.download', $period + ['format' => 'xlsx'])" icon="heroicon-o-arrow-down-tray">Excel</x-filament::button>
                 @endcan
             </div>
-            <p class="mt-2 text-sm">يُنشأ الملف من أحدث القيود المسجلة للفترة عند التنزيل.</p>
+            <p class="mt-2 text-sm">إذا تغيّرت القيود بعد العرض، يلزم تحديث الكشف قبل التنزيل.</p>
         </x-filament::section>
         <x-filament::section>
             <x-slot name="heading">الحركات المرحّلة ({{ $statement['entry_count'] }})</x-slot>

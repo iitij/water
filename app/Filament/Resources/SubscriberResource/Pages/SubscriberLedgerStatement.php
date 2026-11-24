@@ -28,7 +28,13 @@ final class SubscriberLedgerStatement extends Page
         Gate::authorize('view', $this->record);
         $this->fromDate = now()->startOfMonth()->toDateString();
         $this->toDate = now()->toDateString();
-        $this->loadStatement();
+        try {
+            $this->loadStatement();
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            foreach ($exception->errors() as $field => $messages) {
+                foreach ($messages as $message) $this->addError($field, $message);
+            }
+        }
     }
 
     public function hydrate(): void

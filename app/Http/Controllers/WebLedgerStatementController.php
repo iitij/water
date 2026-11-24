@@ -20,8 +20,10 @@ final class WebLedgerStatementController extends Controller
         $period = $request->validate([
             'from_date' => ['required', 'date_format:Y-m-d'],
             'to_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:from_date', 'before_or_equal:today'],
+            'statement_hash' => ['nullable', 'regex:/^[a-f0-9]{64}$/'],
         ]);
         $statement = $service->statement($subscriber, $period['from_date'], $period['to_date']);
+        $service->requireMatchingSnapshot($statement, $period['statement_hash'] ?? null);
         if ($format === 'xlsx') {
             return response()->download($export->xlsx($statement), 'ledger-statement-'.$subscriber->id.'.xlsx',
                 ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);

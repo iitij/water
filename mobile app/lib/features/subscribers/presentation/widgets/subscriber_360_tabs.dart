@@ -1063,7 +1063,7 @@ class _StatementTab extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: 4, end: 16),
                   child: AppIconButton(
-                    icon: Icons.picture_as_pdf_outlined,
+                    icon: Icons.receipt_long_outlined,
                     tooltip: 'كشف الحساب المالي حسب الفترة',
                     size: 38,
                     onPressed: () => Navigator.of(context).push(
