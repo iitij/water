@@ -77,8 +77,9 @@ final class HistoricalInvoiceCorrectionService
                     throw ValidationException::withMessages(['invoice' => 'أدلة تسعير الفاتورة لا تطابق القراءة التاريخية.']);
                 }
                 $original = $originalLines->first();
-                if ($original->period_start !== $reading->period_start?->toDateString()
-                    || $original->period_end !== $reading->period_end?->toDateString()
+                if (! $reading->period_start || ! $reading->period_end
+                    || $original->period_start !== \Carbon\CarbonImmutable::parse($reading->period_start)->toDateString()
+                    || $original->period_end !== \Carbon\CarbonImmutable::parse($reading->period_end)->toDateString()
                     || $minor($original->amount) !== $minor($invoice->consumption_fee)) {
                     throw ValidationException::withMessages(['invoice' => 'توجد أدلة تاريخية غير متطابقة؛ يلزم مراجعة محاسبية.']);
                 }
