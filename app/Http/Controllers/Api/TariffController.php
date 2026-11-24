@@ -112,14 +112,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'restoreAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
-        $restored = 0;
-        DB::transaction(function () use ($data, &$restored) {
-            Tariff::lockCatalog();
-            foreach (Tariff::onlyTrashed()->whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $tariff) {
-                $tariff->restore();
-                $restored++;
-            }
-        });
+        $restored = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'restore');
 
         return response()->json(['restored_count' => $restored]);
     }
@@ -129,14 +122,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'forceDeleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
-        $deleted = 0;
-        DB::transaction(function () use ($data, &$deleted) {
-            Tariff::lockCatalog();
-            foreach (Tariff::withTrashed()->whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $tariff) {
-                $tariff->forceDelete();
-                $deleted++;
-            }
-        });
+        $deleted = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'forceDelete');
 
         return response()->json(['force_deleted_count' => $deleted]);
     }
@@ -145,15 +131,7 @@ class TariffController extends ApiController
     {
         $this->authorizeApi(Tariff::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:tariffs,id']]);
-        $count = DB::transaction(function () use ($data) {
-            Tariff::lockCatalog();
-            $tariffs = Tariff::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get();
-            foreach ($tariffs as $tariff) {
-                $tariff->delete();
-            }
-
-            return $tariffs->count();
-        });
+        $count = app(\App\Services\TariffBulkService::class)->apply($data['ids'], 'delete');
 
         return response()->json(['deleted_count' => $count]);
     }
