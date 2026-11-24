@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\Meter;
-use App\Models\Reading;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Services\InvoiceService;
@@ -34,7 +33,7 @@ class PaymentAllocationHistoryTest extends TestCase
 
     private function bill(Meter $meter, string $start, string $end, int $previous, int $current): Invoice
     {
-        Reading::create(['meter_id' => $meter->id, 'reading_date' => $end,
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => $end,
             'period_start' => $start, 'period_end' => $end,
             'previous_reading' => $previous, 'current_reading' => $current]);
         return app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
