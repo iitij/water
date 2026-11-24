@@ -395,6 +395,19 @@ class InvoiceResource extends Resource
                     ->url(fn(Invoice $record) => route('invoices.print', $record))
                     ->openUrlInNewTab(),
 
+                \Filament\Actions\Action::make('view_tariff_lines')
+                    ->label('تفاصيل التسعير')
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn (Invoice $record) => auth()->user()?->can('view', $record))
+                    ->modalHeading('تفاصيل التعرفات التاريخية للفاتورة')
+                    ->modalContent(function (Invoice $record) {
+                        \Illuminate\Support\Facades\Gate::authorize('view', $record);
+
+                        return view('filament.accounting.tariff-lines', [
+                            'lines' => \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+                                ->where('invoice_id', $record->id)->orderBy('period_start')->orderBy('id')->get(),
+                        ]);
+                    })->modalSubmitAction(false)->modalCancelActionLabel('إغلاق'),
                 \Filament\Actions\Action::make('view_allocations')
                     ->label('تخصيصات الفاتورة')
                     ->icon('heroicon-o-list-bullet')
