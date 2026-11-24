@@ -157,6 +157,11 @@ final class BankReconciliationService
 
     private function valid(object $statement, object $line, ?object $posting, object $match): bool
     {
+        if ($posting && ($posting->kind === 'bank_fee' || $posting->treasury_bank_fee_id)) {
+            $fee = $posting->treasury_bank_fee_id ? DB::table('treasury_bank_fees')->find($posting->treasury_bank_fee_id) : null;
+            if (! $fee || (int) $fee->bank_statement_line_id !== (int) $line->id
+                || ! $this->validFeePosting($posting, $statement, $line, $match, $fee)) return false;
+        }
         return $posting && (int) $line->bank_statement_id === (int) $statement->id
             && (int) $line->treasury_account_id === (int) $statement->treasury_account_id
             && (int) $posting->treasury_account_id === (int) $statement->treasury_account_id
@@ -203,6 +208,124 @@ final class BankReconciliationService
                 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return $this->report($statement, $account);
+        }, 3);
+    }
+
+    /** Verify the independent fee document, its original bank line and exact posting/match. */
+    private function validFeePosting(object $posting, object $statement, object $line, object $match, object $fee): bool
+    {
+        return $posting->kind === 'bank_fee'
+            && ! $posting->cash_handover_id && ! $posting->payment_refund_id && ! $posting->cash_session_funding_id
+            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id
+            && (int) $posting->treasury_bank_fee_id === (int) $fee->id
+            && (int) $fee->bank_statement_line_id === (int) $line->id
+            && (int) $line->bank_statement_id === (int) $statement->id
+            && (int) $line->treasury_account_id === (int) $statement->treasury_account_id
+            && (int) $fee->treasury_account_id === (int) $statement->treasury_account_id
+            && (int) $posting->treasury_account_id === (int) $fee->treasury_account_id
+            && (int) $fee->amount_minor > 0 && (int) $line->amount_minor === -(int) $fee->amount_minor
+            && (int) $posting->amount_minor === (int) $line->amount_minor
+            && $posting->effective_on === $line->booked_on && $fee->charged_on === $line->booked_on
+            && $line->booked_on >= $statement->from_date && $line->booked_on <= $statement->to_date
+            && $posting->evidence_reference === $fee->reference
+            && (int) $posting->posted_by === (int) $fee->approved_by
+            && (int) $match->matched_by === (int) $fee->approved_by
+            && (int) $match->treasury_posting_id === (int) $posting->id
+            && (int) $match->bank_statement_line_id === (int) $line->id
+            && (int) $fee->approved_by !== (int) $statement->imported_by
+            && $match->evidence === $fee->evidence && mb_strlen(trim($fee->evidence)) >= 10
+            && mb_strlen(trim($fee->reason)) >= 10;
+    }
+
+    public function checkFeePosting(object $posting): bool
+    {
+        $fee = $posting->treasury_bank_fee_id ? DB::table('treasury_bank_fees')->find($posting->treasury_bank_fee_id) : null;
+        if (! $fee) return false;
+        $line = DB::table('bank_statement_lines')->find($fee->bank_statement_line_id);
+        $statement = $line ? DB::table('bank_statements')->find($line->bank_statement_id) : null;
+        $account = DB::table('treasury_accounts')->find($fee->treasury_account_id);
+        $match = DB::table('bank_statement_matches')->where('bank_statement_line_id', $fee->bank_statement_line_id)->first();
+        return $line && $statement && $account && $match && $account->channel === 'bank'
+            && $line->booked_on >= $account->opening_on && $line->booked_on <= now()->toDateString()
+            && $this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $statement->id)->get())
+            && $this->validFeePosting($posting, $statement, $line, $match, $fee);
+    }
+
+    /** A bank charge is an already executed outflow, never a balancing plug. */
+    public function recordFee(User $actor, int $id, int $lineId, string $reference, string $reason, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $reference = mb_strtoupper(trim($reference));
+        $reason = trim($reason);
+        $evidence = trim($evidence);
+        if (mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+            || mb_strlen($reason) < 10 || mb_strlen($reason) > 500
+            || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
+            $this->reject('fee', 'يلزم مرجع فريد وسبب مستقل ودليل على رسوم البنك الفعلية.');
+        }
+
+        return DB::transaction(function () use ($actor, $id, $lineId, $reference, $reason, $evidence): array {
+            $this->lock();
+            $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($statement, 404);
+            $account = $this->account((int) $statement->treasury_account_id);
+            abort_if((int) $statement->imported_by === (int) $actor->id, 403, 'يلزم مراجع مستقل عن مدخل الكشف.');
+            abort_unless($this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $id)->get()),
+                409, 'بيانات الكشف لا تطابق بصمتها الأصلية.');
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $id)->where('id', $lineId)->lockForUpdate()->first();
+            abort_unless($line, 404);
+            if ((int) $line->amount_minor >= 0 || $line->booked_on < $account->opening_on) {
+                $this->reject('line_id', 'الرسوم تتطلب حركة خصم بنكية فعلية بعد الافتتاح.');
+            }
+            $this->date($line->booked_on);
+            $record = [
+                'treasury_account_id' => (int) $account->id, 'bank_statement_line_id' => $lineId,
+                'amount_minor' => -(int) $line->amount_minor, 'charged_on' => $line->booked_on,
+                'reference' => $reference, 'reason' => $reason, 'evidence' => $evidence, 'approved_by' => $actor->id,
+            ];
+            $existing = DB::table('treasury_bank_fees')->where('bank_statement_line_id', $lineId)->lockForUpdate()->first();
+            if ($existing) {
+                foreach ($record as $field => $value) {
+                    abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل رسوم مختلفة لهذه الحركة.');
+                }
+                $posting = DB::table('treasury_postings')->where('treasury_bank_fee_id', $existing->id)->first();
+                abort_unless($posting && $this->checkFeePosting($posting), 409, 'قيد الرسوم السابق غير متطابق.');
+                return ['fee' => (array) $existing, 'posting' => (array) $posting, 'reconciliation' => $this->report($statement, $account)];
+            }
+            abort_if(DB::table('bank_statement_matches')->where('bank_statement_line_id', $lineId)->exists(),
+                409, 'الحركة البنكية مطابقة بالفعل.');
+            abort_if(DB::table('treasury_bank_fees')->where('reference', $reference)->exists()
+                || DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                || DB::table('cash_handovers')->where('reference', $reference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists()
+                || DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists(),
+                409, 'مرجع الإثبات مستخدم مسبقاً.');
+            // Be conservative across statement boundaries: a matching unallocated debit
+            // could be the same transfer/refund with different bank booking date.
+            abort_if(DB::table('treasury_postings')->where('treasury_account_id', $account->id)
+                ->where('amount_minor', $line->amount_minor)
+                ->whereNotIn('id', DB::table('bank_statement_matches')->select('treasury_posting_id'))->exists(),
+                409, 'توجد حركة خصم غير مطابقة بالمبلغ نفسه؛ يجب مراجعتها قبل تسجيل رسوم جديدة.');
+
+            $feeId = DB::table('treasury_bank_fees')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
+            $postingId = DB::table('treasury_postings')->insertGetId([
+                'treasury_account_id' => $account->id, 'treasury_bank_fee_id' => $feeId,
+                'kind' => 'bank_fee', 'amount_minor' => (int) $line->amount_minor, 'effective_on' => $line->booked_on,
+                'evidence_reference' => $reference, 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $matchId = DB::table('bank_statement_matches')->insertGetId([
+                'bank_statement_line_id' => $lineId, 'treasury_posting_id' => $postingId,
+                'matched_by' => $actor->id, 'evidence' => $evidence, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $posting = DB::table('treasury_postings')->find($postingId);
+            if (! $this->checkFeePosting($posting)) throw new \LogicException('Bank fee posting is inconsistent.');
+            app(AuditLogger::class)->recordRequired('treasury.bank_fee_recorded', [
+                'entity_type' => 'treasury_bank_fee', 'entity_id' => $feeId, 'actor_user_id' => $actor->id,
+                'after' => $record + ['posting_id' => $postingId, 'match_id' => $matchId, 'subscriber_posting_created' => false],
+            ]);
+            return ['fee' => (array) DB::table('treasury_bank_fees')->find($feeId), 'posting' => (array) $posting,
+                'reconciliation' => $this->report($statement, $account)];
         }, 3);
     }
 

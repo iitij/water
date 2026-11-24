@@ -37,6 +37,20 @@ final class BankReconciliationController extends ApiController
         return response()->json($service->inspect($request->user(), $id));
     }
 
+    public function recordFee(Request $request, int $id, BankReconciliationService $service)
+    {
+        app(TreasuryRegisterService::class)->authorize($request->user());
+        $data = $request->validate([
+            'line_id' => ['required', 'integer', 'min:1'],
+            'reference' => ['required', 'string', 'max:150'],
+            'reason' => ['required', 'string', 'min:10', 'max:500'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
+        ]);
+        return response()->json($service->recordFee($request->user(), $id, (int) $data['line_id'],
+            $data['reference'], $data['reason'], $data['evidence']));
+    }
+
     public function matchLine(Request $request, int $id, BankReconciliationService $service)
     {
         app(TreasuryRegisterService::class)->authorize($request->user());

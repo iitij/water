@@ -180,6 +180,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'bank_fee') {
+                    if (! app(BankReconciliationService::class)->checkFeePosting($row)) {
+                        $issues[] = ['code' => 'bank_fee_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->treasury_bank_fee_id) {
+                    $issues[] = ['code' => 'unexpected_bank_fee_source', 'posting_id' => $row->id];
+                }
                 if (in_array($row->kind, ['internal_transfer_out', 'internal_transfer_in'], true)) {
                     if (! app(TreasuryTransferService::class)->validPosting($row)) {
                         $issues[] = ['code' => 'transfer_source_mismatch', 'posting_id' => $row->id];
@@ -233,6 +242,9 @@ final class TreasuryRegisterService
             $unpostedFunding = DB::table('cash_session_fundings')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('cash_session_funding_id')->select('cash_session_funding_id'))->count();
             if ($unpostedFunding) $issues[] = ['code' => 'unposted_funding', 'count' => $unpostedFunding];
+            $unpostedFees = DB::table('treasury_bank_fees')->where('treasury_account_id', $accountId)
+                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_fee_id')->select('treasury_bank_fee_id'))->count();
+            if ($unpostedFees) $issues[] = ['code' => 'unposted_bank_fee', 'count' => $unpostedFees];
             $transfers = app(TreasuryTransferService::class)->inspectAccount($accountId);
             $issues = array_merge($issues, $transfers['issues']);
             return [
@@ -240,7 +252,8 @@ final class TreasuryRegisterService
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_funding_internal_transfers',
+                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees',
+                'unposted_bank_fee_count' => $unpostedFees,
                 'internal_transfers' => $transfers,
                 'unposted_funding_count' => $unpostedFunding,
                 'channel_unposted_handover_count' => $unpostedHandover,

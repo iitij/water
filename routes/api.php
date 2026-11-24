@@ -214,6 +214,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'index'])->whereNumber('id');
     Route::post('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'store'])->whereNumber('id');
     Route::get('/treasury/bank-statements/{id}', [\App\Http\Controllers\Api\BankReconciliationController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/bank-statements/{id}/fees', [\App\Http\Controllers\Api\BankReconciliationController::class, 'recordFee'])->whereNumber('id');
     Route::post('/treasury/bank-statements/{id}/matches', [\App\Http\Controllers\Api\BankReconciliationController::class, 'matchLine'])->whereNumber('id');
     Route::get('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'index'])->whereNumber('id');
     Route::post('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'store'])->whereNumber('id');
