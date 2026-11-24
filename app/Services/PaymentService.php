@@ -380,12 +380,14 @@ class PaymentService
         ?string $paymentDate = null,
         ?int $requestedMeterId = null,
         ?string $syncUuid = null,
+        ?int $requestedCashSessionId = null,
+        bool $deferred = false,
     ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
             throw ValidationException::withMessages(['sync_uuid' => 'معرّف المزامنة غير صالح.']);
         }
-        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid) {
+        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount) {
                 throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
@@ -409,6 +411,7 @@ class PaymentService
                         || (int) ($existing->invoice_id ?? 0) !== (int) ($invoiceId ?? 0)
                         || round((float) $existing->amount, 2) !== round($amount, 2)
                         || (! $invoiceId && (int) ($existing->meter_id ?? 0) !== (int) ($requestedMeterId ?? 0))
+                        || ($requestedCashSessionId !== null && (int) $existing->cash_session_id !== $requestedCashSessionId)
                         || $existing->payment_method !== $paymentMethod
                         || ($paymentDate !== null && $existing->payment_date->toDateString() !== \Carbon\CarbonImmutable::parse($paymentDate)->toDateString())
                         || ($existing->reference_number ?? '') !== ($referenceNumber ?? '')
@@ -419,6 +422,14 @@ class PaymentService
                 }
             }
 
+            // A delayed operation must never be silently assigned to today's till.
+            if ($deferred && ($requestedCashSessionId === null || ! $syncUuid || $paymentDate === null)) {
+                abort(409, 'سند مؤجل بلا هوية صندوق أو تاريخ قبض ثابت؛ يلزم مراجعة مالية.');
+            }
+            if ($requestedCashSessionId !== null && ! $userId) {
+                abort(409, 'يلزم تحديد المحصّل صاحب الصندوق.');
+            }
+
             // Acquire collector/till locks before financial reads and number generation.
             $cashSessionId = null;
             if ($userId) {
@@ -427,6 +438,13 @@ class PaymentService
                     ->where('user_id', $userId)
                     ->where('state', \App\Models\CashSession::STATE_OPEN)
                     ->latest('id')->lockForUpdate()->first();
+                if ($requestedCashSessionId !== null && (int) ($cashSession?->id ?? 0) !== $requestedCashSessionId) {
+                    abort(409, 'الصندوق الأصلي غير مفتوح أو لا يتبع المحصّل؛ احتفظ بالسند للمراجعة المالية ولا تنقله إلى صندوق آخر.');
+                }
+                if ($requestedCashSessionId !== null && $paymentDate !== null
+                    && \Carbon\CarbonImmutable::parse($paymentDate)->toDateString() < $cashSession->session_date->toDateString()) {
+                    abort(409, 'تاريخ القبض يسبق تاريخ فتح الصندوق الأصلي.');
+                }
                 $cashSessionId = $cashSession?->id;
             }
 

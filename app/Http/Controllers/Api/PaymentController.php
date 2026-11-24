@@ -98,6 +98,8 @@ class PaymentController extends ApiController
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'cash_session_id' => ['nullable', 'integer', 'min:1'],
+            'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
@@ -125,6 +127,8 @@ class PaymentController extends ApiController
             $data['payment_date'] ?? null,
             $data['meter_id'] ?? null,
             $data['sync_uuid'] ?? null,
+            $data['cash_session_id'] ?? null,
+            (bool) ($data['deferred_sync'] ?? false),
         );
         $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
 

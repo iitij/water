@@ -518,6 +518,8 @@ class InvoiceController extends ApiController
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'cash_session_id' => ['nullable', 'integer', 'min:1'],
+            'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         try {
             $payment = $paymentService->collectPayment(
@@ -532,6 +534,8 @@ class InvoiceController extends ApiController
                 $data['payment_date'] ?? null,
                 null,
                 $data['sync_uuid'] ?? null,
+                $data['cash_session_id'] ?? null,
+                (bool) ($data['deferred_sync'] ?? false),
             );
             $invoice->refresh();
 

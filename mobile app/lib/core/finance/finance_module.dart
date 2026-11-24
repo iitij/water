@@ -21,6 +21,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/audit/services/audit_log_service.dart';
+import '../../features/cash_sessions/services/cash_session_service.dart';
 import '../../features/invoices/data/datasources/invoices_remote_datasource.dart';
 import '../../features/invoices/data/datasources/references_remote_datasource.dart';
 import '../../features/invoices/data/repositories/invoices_repository_impl.dart';
@@ -104,6 +105,7 @@ class FinanceModule {
           invoices: getIt<InvoicesRemoteDataSource>(),
           networkInfo: getIt<NetworkInfo>(),
           syncQueue: getIt<FinanceSyncQueueRepository>(),
+          cashSessions: getIt.isRegistered<CashSessionService>() ? getIt<CashSessionService>() : null,
           audit: getIt.isRegistered<AuditLogService>() ? getIt<AuditLogService>() : null,
         ),
       )

@@ -200,6 +200,30 @@ class CashSessionApiTest extends TestCase
         $this->assertDatabaseCount('cash_sessions', 0);
     }
 
+    public function test_deferred_receipt_never_moves_to_a_new_cash_session(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $old = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $endpoint = "/api/invoices/{$this->invoice->id}/pay";
+        $payload = ['amount' => '100.25', 'payment_method' => 'cash',
+            'payment_date' => today()->toDateString(), 'cash_session_id' => $old,
+            'sync_uuid' => (string) Str::uuid(), 'deferred_sync' => true];
+        $id = $this->postJson($endpoint, $payload)->assertCreated()->json('payment.id');
+        $this->postJson("/api/cash-sessions/{$old}/close", ['counted_amount' => '100.25'])
+            ->assertOk()->assertJsonPath('cash_session.expected_amount', '100.25');
+        $new = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $this->postJson($endpoint, $payload)->assertSuccessful()->assertJsonPath('payment.id', $id);
+        $late = array_replace($payload, ['sync_uuid' => (string) Str::uuid()]);
+        $this->postJson($endpoint, $late)->assertConflict();
+        $this->postJson('/api/payments', $late + ['subscriber_id' => $this->subscriber->id,
+            'invoice_id' => $this->invoice->id])->assertConflict();
+        $this->postJson($endpoint, array_replace($late, ['cash_session_id' => null]))->assertConflict();
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $new]);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $old, 'expected_amount' => '100.25']);
+        $this->assertSame('100.25', $this->invoice->fresh()->amount_paid);
+    }
+
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')

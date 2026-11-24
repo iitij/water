@@ -51,12 +51,12 @@ CashSession _session({required int id, required CashSessionState state}) => Cash
 
 void main() {
   group('CashSessionService', () {
-    test('before any load it allows collection but reports not loaded', () {
+    test('before any load it blocks collection and reports not loaded', () {
       final service = CashSessionService(api: _FakeApi());
 
       expect(service.hasLoaded, isFalse);
       expect(service.isOpen, isFalse);
-      expect(service.canCollect, isTrue, reason: 'لا نعطّل الميدان قبل أول جلب');
+      expect(service.canCollect, isFalse);
     });
 
     test('refresh stores the open session and allows collection', () async {
@@ -80,6 +80,7 @@ void main() {
 
       expect(closed.state, CashSessionState.closed);
       expect(service.current, isNull);
+      expect(service.canCollect, isFalse);
       expect(service.hasLoaded, isTrue);
     });
 

@@ -41,3 +41,7 @@ A successful fresh-schema CI run is not a substitute for the actual-data migrati
 ## Physical cash settlement
 
 New and currently open sessions use opening cash plus active cash receipts, excluding bank transfers and checks. All payment methods still contribute to subscriber balances; treasury refunds are separate from collector cash. Closed historical snapshots are not recalculated and carry `legacy_recorded` in the API if their settlement basis was not recorded. A new closure uses `physical_cash` and preserves the original snapshot even after a documented correction. API exposes cash, non-cash and total receipt collections separately. A new offline payment arriving after close still requires explicit session-identity and exception workflow; do not interpret the concurrent close test as complete offline reconciliation.
+
+## Deferred payment session identity
+
+Flutter freezes the known cash-session ID and payment date before the first send, then retains both in its persistent queue. New deferred payments require a known original open session owned by the authenticated collector and a stable UUID/date. Exact existing receipts may be replayed after closure. Unposted late or legacy unidentified operations receive HTTP 409 for human reconciliation; no automatic transfer to a newer till or mutation of closed totals. An independently reviewed late-receipt posting workflow and cross-device close reconciliation remain required before field acceptance.

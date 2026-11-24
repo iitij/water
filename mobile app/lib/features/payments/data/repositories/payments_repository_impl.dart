@@ -8,6 +8,7 @@ import '../../../../core/finance/finance_sync_queue.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../audit/services/audit_log_service.dart';
+import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/datasources/invoices_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/data/models/invoice_query.dart';
@@ -37,6 +38,7 @@ class PaymentsRepositoryImpl
     required NetworkInfo networkInfo,
     FinanceSyncQueueRepository? syncQueue,
     AuditLogService? audit,
+    CashSessionService? cashSessions,
     Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
   }) : _remote = remote,
@@ -44,6 +46,7 @@ class PaymentsRepositoryImpl
        _network = networkInfo,
        _syncQueue = syncQueue,
        _audit = audit,
+       _cashSessions = cashSessions,
        _uuid = uuid;
 
   final PaymentsRemoteDataSource _remote;
@@ -53,6 +56,7 @@ class PaymentsRepositoryImpl
 
   /// سجل التدقيق المحلي (S4-05): يسجّل التحصيل والإلغاء حتى بلا شبكة.
   final AuditLogService? _audit;
+  final CashSessionService? _cashSessions;
   final Uuid _uuid;
 
   /// تعطيل الطابور المحلي عند الحاجة في الاختبارات.
@@ -77,19 +81,26 @@ class PaymentsRepositoryImpl
     // يُنشأ UUID v4 واحد قبل المحاولة الشبكية ويُعاد استخدامه عند السقوط أوفلاين
     // لمنع ازدواجية السند إذا وصلت الحزمة للخادم وانقطع الرد.
     final syncUuid = _uuid.v4();
+    // Freeze date and till before the first network attempt, including lost replies.
+    request = request.copyWith(paymentDate: request.paymentDate ?? DateTime.now());
+    final session = _cashSessions?.current;
+    if (_cashSessions != null && (session == null || !session.isOpen)) {
+      throw const ValidationFailure('افتح صندوقاً معروفاً قبل تسجيل التحصيل.', <String, List<String>>{});
+    }
+    final cashSessionId = session?.id;
 
     final online = await _network.isConnected;
     if (!online && offlineEnabled) {
-      return _enqueueOffline(request, syncUuid: syncUuid);
+      return _enqueueOffline(request, syncUuid: syncUuid, cashSessionId: cashSessionId);
     }
 
     try {
       final outcome = request.invoiceId != null
           ? await _remote.payInvoice(
               request.invoiceId!,
-              request.toPayPayload(syncUuid: syncUuid),
+              <String, dynamic>{...request.toPayPayload(syncUuid: syncUuid), if (cashSessionId != null) 'cash_session_id': cashSessionId},
             )
-          : await _remote.create(request.toCreatePayload(syncUuid: syncUuid));
+          : await _remote.create(<String, dynamic>{...request.toCreatePayload(syncUuid: syncUuid), if (cashSessionId != null) 'cash_session_id': cashSessionId});
 
       _record(
         'payment.collected',
@@ -106,7 +117,7 @@ class PaymentsRepositoryImpl
     } on AppFailure catch (failure) {
       // انقطاع أثناء الطلب → ندرجه في الطابور بنفس sync_uuid بدل إخبار المحصل بالفشل.
       if (_isNetworkLike(failure) && offlineEnabled) {
-        return _enqueueOffline(request, syncUuid: syncUuid);
+        return _enqueueOffline(request, syncUuid: syncUuid, cashSessionId: cashSessionId);
       }
       rethrow;
     }
@@ -115,6 +126,7 @@ class PaymentsRepositoryImpl
   Future<CollectPaymentOutcome> _enqueueOffline(
     CollectPaymentRequest request, {
     required String syncUuid,
+    required int? cashSessionId,
   }) async {
     final localReceipt = 'REC-LOCAL-${DateTime.now().millisecondsSinceEpoch}';
     final queue = _syncQueue;
@@ -130,6 +142,8 @@ class PaymentsRepositoryImpl
         payload: <String, dynamic>{
           if (request.invoiceId != null) 'invoice_id': request.invoiceId,
           ...request.toCreatePayload(syncUuid: syncUuid),
+          if (cashSessionId != null) 'cash_session_id': cashSessionId,
+          'deferred_sync': true,
         },
         createdAt: DateTime.now(),
         idempotencyKey: syncUuid,
@@ -155,6 +169,7 @@ class PaymentsRepositoryImpl
         meterId: request.meterId,
         invoiceId: request.invoiceId,
         receiptNumber: localReceipt,
+        cashSessionId: cashSessionId,
         amount: request.amount,
         method: request.method,
         referenceNumber: request.referenceNumber,

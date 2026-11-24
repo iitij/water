@@ -600,6 +600,8 @@ class SyncQueueManager extends ChangeNotifier {
 
     final syncUuid = _ensureUuid(payload['sync_uuid']?.toString() ?? item.id);
     payload['sync_uuid'] = syncUuid;
+    // Legacy queued rows also need review if their original till is unknown.
+    payload['deferred_sync'] = true;
 
     final hasInvoice = payload['invoice_id'] != null;
     final endpoint = hasInvoice
