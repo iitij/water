@@ -21,6 +21,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum');
     }
 

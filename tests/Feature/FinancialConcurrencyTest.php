@@ -35,6 +35,7 @@ class FinancialConcurrencyTest extends TestCase
         }
         $this->assertTrue(function_exists('pcntl_fork'), 'MySQL concurrency CI requires pcntl.');
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
     }
 
     private function fixture(): Meter
