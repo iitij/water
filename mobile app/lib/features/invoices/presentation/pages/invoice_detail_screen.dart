@@ -633,7 +633,7 @@ class _ActionGrid extends StatelessWidget {
                         },
                   icon: Icons.restore_rounded,
                 )
-              else ...<Widget>[
+              else if (invoice.status.wire == 'draft') ...<Widget>[
                 AppIconButton(
                   tooltip: 'إعادة احتساب',
                   size: 38,

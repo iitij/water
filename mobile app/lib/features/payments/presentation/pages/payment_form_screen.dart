@@ -309,28 +309,14 @@ class _PaymentEditScreen extends StatefulWidget {
 class _PaymentEditScreenState extends State<_PaymentEditScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _amount = TextEditingController(
-    text: widget.payment.amount.toString(),
-  );
-  late final TextEditingController _reference = TextEditingController(
-    text: widget.payment.referenceNumber ?? '',
-  );
-  late final TextEditingController _reason = TextEditingController(
-    text: widget.payment.reason ?? '',
-  );
   late final TextEditingController _notes = TextEditingController(
     text: widget.payment.notes ?? '',
   );
 
-  late PaymentMethod _method = widget.payment.method;
-  late DateTime _date = widget.payment.paymentDate ?? DateTime.now();
   bool _saving = false;
 
   @override
   void dispose() {
-    _amount.dispose();
-    _reference.dispose();
-    _reason.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -339,31 +325,14 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
     if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final parsed = double.tryParse(_amount.text.trim());
-    if (parsed == null || parsed <= 0) {
-      AppFeedback.error(context, 'أدخل مبلغاً صحيحاً أكبر من صفر.');
-      return;
-    }
-    if (_method.requiresReference && _reference.text.trim().isEmpty) {
-      AppFeedback.error(context, 'رقم الحوالة/الشيك مطلوب لهذه الطريقة.');
-      return;
-    }
-
     setState(() => _saving = true);
     try {
       await sl<PaymentsRepository>()
           .update(widget.payment.id, <String, dynamic>{
-            'amount': parsed,
-            'payment_date': DateFormat.dateTime(_date),
-            'payment_method': _method.wire,
-            'reference_number': _method.requiresReference
-                ? _reference.text.trim()
-                : null,
-            'reason': _reason.text.trim().isEmpty ? null : _reason.text.trim(),
             'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
           });
       if (!mounted) return;
-      AppFeedback.success(context, 'تم تحديث السند.');
+      AppFeedback.success(context, 'تم تحديث الملاحظات.');
       Navigator.of(context).pop(true);
     } on AppFailure catch (failure) {
       if (!mounted) return;
@@ -379,7 +348,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return SubPageScaffold(
-      title: 'تعديل سند ${widget.payment.receiptNumber}',
+      title: 'ملاحظات سند ${widget.payment.receiptNumber}',
       actions: <Widget>[
         AppIconButton(
           tooltip: 'حذف',
@@ -417,8 +386,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
               const InfoNotice(
                 icon: Icons.science_outlined,
                 text:
-                    'تعديل المبلغ يُعيد الخادم على أثره توزيع الدفعات واحتساب حالة '
-                    'الفاتورة (PaymentService::recalculateInvoices).',
+                    'السند المعتمد غير قابل للتعديل المالي. لتصحيح دفعة، استخدم إجراء الإلغاء الموثق ثم سجل سنداً صحيحاً.',
               ),
               const SizedBox(height: 14),
               AppCard(
@@ -441,9 +409,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                         ),
                         AppField(
                           label: 'الحساب المتأثر',
-                          value: widget.payment.affectsMeterAccount
-                              ? 'رصيد العداد (${widget.payment.meterId})'
-                              : 'رصيد المشترك (${widget.payment.subscriberId})',
+                          value: 'حساب المشترك (${widget.payment.subscriberId})',
                           icon: Icons.account_balance_wallet_outlined,
                         ),
                         if (widget.payment.invoiceBillNumber != null)
@@ -476,88 +442,9 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                       icon: Icons.payments_rounded,
                     ),
                     const SizedBox(height: 10),
-                    AppNumericField(
-                      controller: _amount,
-                      label: 'مبلغ الدفعة',
-                      prefixText: 'ريال',
-                      required: true,
-                    ),
+                    AppField(label: 'طريقة الدفع', value: widget.payment.method.label),
                     const SizedBox(height: 12),
-                    const Text(
-                      'طريقة الدفع',
-                      style: TextStyle(fontSize: 12, color: AppColors.neutral),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: PaymentMethod.values
-                          .map(
-                            (method) => AppFilterChip(
-                              label: method.label,
-                              selected: _method == method,
-                              onTap: () => setState(() => _method = method),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    if (_method.requiresReference) ...<Widget>[
-                      const SizedBox(height: 12),
-                      AppTextField(
-                        controller: _reference,
-                        label: 'رقم الحوالة / رقم الشيك',
-                        required: true,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    AppTextField(
-                      controller: _reason,
-                      label: 'البيان (وذلك مقابل)',
-                    ),
-                    const SizedBox(height: 12),
-                    AppTextField(
-                      controller: _notes,
-                      label: 'ملاحظات',
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 12),
-                    AppSettingRow(
-                      icon: Icons.schedule_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                      title: 'تاريخ ووقت الدفعة',
-                      showChevron: false,
-                      trailing: Directionality(
-                        textDirection: TextDirection.ltr,
-                        child: Text(
-                          DateFormat.dateTime(_date),
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      onTap: () async {
-                        final pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: _date,
-                          firstDate: DateTime(_date.year - 2),
-                          lastDate: DateTime.now().add(const Duration(days: 1)),
-                        );
-                        if (pickedDate == null || !context.mounted) return;
-                        final pickedTime = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(_date),
-                        );
-                        if (!mounted) return;
-                        setState(() {
-                          _date = DateTime(
-                            pickedDate.year,
-                            pickedDate.month,
-                            pickedDate.day,
-                            pickedTime?.hour ?? _date.hour,
-                            pickedTime?.minute ?? _date.minute,
-                          );
-                        });
-                      },
-                    ),
+                    AppTextField(controller: _notes, label: 'ملاحظات إدارية', maxLines: 2),
                   ],
                 ),
               ),

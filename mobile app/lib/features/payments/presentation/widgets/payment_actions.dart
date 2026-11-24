@@ -269,7 +269,7 @@ Future<void> showPaymentActionSheet(
     if (!payment.isVoided)
       _PaymentSheetAction(
         icon: Icons.edit_outlined,
-        label: 'تعديل السند',
+        label: 'تعديل الملاحظات',
         run: () => context.push('/payments/${payment.id}/edit', extra: payment),
       ),
     if (!payment.isVoided)
