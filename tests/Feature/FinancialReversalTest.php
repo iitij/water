@@ -319,4 +319,64 @@ class FinancialReversalTest extends TestCase
         $this->assertSame('1500.25', $toInvoice->fresh()->amount_paid);
     }
 
+
+    public function test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing(): void
+    {
+        [$subscriber, $meter, , $invoice] = $this->fixture();
+        $collector = User::factory()->create(['role' => 'collector']);
+        $supervisor = User::factory()->create(['role' => 'admin']);
+        $supervisor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $cash = app(CashSessionService::class);
+        $session = $cash->open($collector);
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 8000, $invoice->id, userId: $collector->id);
+        $session = $cash->decide($cash->close($session, 8000), true, $supervisor);
+        $snapshot = json_encode($cash->summary($session), JSON_THROW_ON_ERROR);
+        $this->assertSame(2000.0, $subscriber->getAccountCredit());
+        $payload = [
+            'amount' => '1250.25', 'disbursement_reference' => 'TREASURY-ACC05-01',
+            'method' => 'treasury_cash', 'disbursed_on' => now()->toDateString(),
+            'reason' => 'Synthetic return of excess credit',
+            'evidence' => 'Synthetic signed proof of disbursement',
+            'disbursement_confirmed' => true,
+        ];
+        $url = '/api/payments/'.$payment->id.'/refund';
+        $this->actingAs($collector, 'sanctum')->postJson($url, $payload)->assertForbidden();
+        $this->actingAs($supervisor, 'sanctum');
+        $this->postJson($url, array_replace($payload, ['disbursement_confirmed' => false]))->assertUnprocessable();
+        $this->postJson($url, array_replace($payload, ['amount' => '2000.01']))->assertUnprocessable();
+        $id = $this->postJson($url, $payload)->assertOk()->json('refund.id');
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('refund.id', $id);
+        $this->postJson($url, array_replace($payload, ['amount' => '100.00']))->assertConflict();
+        $this->postJson($url, array_replace($payload, ['amount' => '750.00', 'disbursement_reference' => 'TREASURY-ACC05-02']))->assertUnprocessable();
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('transactions', 3);
+        $this->assertSame('8000.00', $payment->fresh()->amount);
+        $this->assertNull($payment->fresh()->voided_at);
+        $this->assertSame('6000.00', $invoice->fresh()->amount_paid);
+        $this->assertSame(749.75, $subscriber->getAccountCredit());
+        $this->assertSame($snapshot, json_encode($cash->summary($session->fresh()), JSON_THROW_ON_ERROR));
+        $this->assertDatabaseHas('transactions', [
+            'type' => 'payment_refund', 'reference_type' => \App\Models\PaymentRefund::class,
+            'reference_id' => $id, 'amount' => -1250.25,
+        ]);
+        $this->assertDatabaseHas('audit_events', ['event' => 'payment.refunded', 'entity_id' => (string) $id]);
+
+        Reading::create([
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-01',
+            'period_start' => '2026-02-02', 'period_end' => '2026-03-01',
+            'previous_reading' => 10, 'current_reading' => 12,
+        ]);
+        $next = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assertSame('749.75', $next->fresh()->amount_paid);
+        $this->assertSame(450.25, $subscriber->getAccountDebt());
+        $this->assertSame('6000.00', $invoice->fresh()->amount_paid);
+        try {
+            app(PaymentService::class)->voidPayment($payment, 'Synthetic prohibited cancellation after refund');
+            $this->fail('Refunded receipt was voided.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('payment', $exception->errors());
+        }
+    }
+
 }

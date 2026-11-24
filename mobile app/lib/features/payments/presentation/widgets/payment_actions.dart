@@ -266,13 +266,13 @@ Future<void> showPaymentActionSheet(
         label: 'إرسال واتساب',
         run: () => sendPaymentWhatsapp(context, payment, receiptData: receiptData),
       ),
-    if (!payment.isVoided && !payment.isAccountTransferred)
+    if (!payment.isVoided && !payment.isAccountTransferred && payment.refundedAmount == 0)
       _PaymentSheetAction(
         icon: Icons.edit_outlined,
         label: 'تعديل الملاحظات',
         run: () => context.push('/payments/${payment.id}/edit', extra: payment),
       ),
-    if (!payment.isVoided && !payment.isAccountTransferred)
+    if (!payment.isVoided && !payment.isAccountTransferred && payment.refundedAmount == 0)
       _PaymentSheetAction(
         icon: Icons.block_outlined,
         label: 'إلغاء السند بسبب مكتوب',

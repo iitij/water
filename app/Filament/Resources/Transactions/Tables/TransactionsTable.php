@@ -41,6 +41,7 @@ class TransactionsTable
                         'payment_reversal' => 'عكس سند قبض',
                         'invoice_reversal' => 'عكس فاتورة',
                         'payment_transfer_in' => 'تصحيح تخصيص وارد',
+                        'payment_refund' => 'استرداد رصيد دائن',
                         default => $state,
                     })
                     ->searchable(),

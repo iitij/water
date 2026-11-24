@@ -101,7 +101,7 @@ class PaymentAllocator {
     for (final payment in orderedPayments) {
       final result = allocate(
         invoices: current,
-        amount: payment.amount,
+        amount: payment.effectiveAmount,
         targetInvoiceId: payment.invoiceId,
       );
       current = result.invoices;

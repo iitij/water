@@ -26,7 +26,7 @@ class PaymentController extends ApiController
             'meter:id,unique_code,path_number',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
             'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
-        ])->latest('payment_date')->latest('id');
+        ])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id');
 
         if ($request->filled('cash_session_id')) {
             $query->where('cash_session_id', $request->integer('cash_session_id'));
@@ -78,7 +78,7 @@ class PaymentController extends ApiController
         $payment = Payment::with([
             'subscriber.square', 'meter', 'invoice', 'user',
             'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
-        ])->findOrFail($id);
+        ])->withSum('refunds as refunded_amount', 'amount')->findOrFail($id);
 
         return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }

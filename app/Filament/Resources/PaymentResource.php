@@ -180,6 +180,8 @@ class PaymentResource extends Resource
                     })
                     ->badge(),
 
+                Tables\Columns\TextColumn::make('refunds_sum_amount')
+                    ->sum('refunds', 'amount')->label('مبلغ مسترد')->numeric(2)->placeholder('—'),
                 Tables\Columns\TextColumn::make('accountTransfer.to_subscriber_id')
                     ->label('محول إلى حساب')
                     ->placeholder('—'),
@@ -198,6 +200,32 @@ class PaymentResource extends Resource
                     ]),
             ])
             ->actions([
+                \Filament\Actions\Action::make('record_refund')
+                    ->label('تسجيل صرف رصيد دائن')
+                    ->color('warning')
+                    ->visible(function (Payment $record): bool {
+                        $user = auth()->user();
+                        return $user && ! $record->isVoided() && ! $record->accountTransfer()->exists()
+                            && ($user->hasRole('super_admin') || ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
+                    })
+                    ->form([
+                        Forms\Components\TextInput::make('amount')->label('المبلغ المصروف فعلياً')->numeric()->required()->minValue(0.01),
+                        Forms\Components\TextInput::make('disbursement_reference')->label('مرجع مستند الصرف الخارجي')->required()->minLength(3)->maxLength(150),
+                        Forms\Components\Select::make('method')->label('مصدر الصرف')->options(['treasury_cash' => 'الخزينة الرئيسية', 'bank_transfer' => 'تحويل بنكي'])->required(),
+                        Forms\Components\DatePicker::make('disbursed_on')->label('تاريخ الصرف الفعلي')->default(now())->maxDate(now())->required(),
+                        Forms\Components\Textarea::make('reason')->label('سبب الاسترداد')->required()->minLength(10)->maxLength(1000),
+                        Forms\Components\Textarea::make('evidence')->label('دليل الصرف والاستلام')->required()->minLength(10)->maxLength(2000),
+                        Forms\Components\Checkbox::make('disbursement_confirmed')->label('تم الصرف فعلياً خارج صندوق المحصل')->accepted()->required(),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (Payment $record, array $data): void {
+                        abort_unless($data['disbursement_confirmed'] ?? false, 422);
+                        app(\App\Services\PaymentRefundService::class)->record(
+                            $record, auth()->user(), (string) $data['amount'], $data['disbursement_reference'],
+                            $data['method'], $data['disbursed_on'], $data['reason'], $data['evidence']
+                        );
+                        \Filament\Notifications\Notification::make()->title('تم تسجيل الاسترداد المثبت')->success()->send();
+                    }),
                 \Filament\Actions\Action::make('transfer_account')
                     ->label('تصحيح حساب المشترك')
                     ->color('warning')
