@@ -39,6 +39,7 @@ class InvoiceResource extends Resource
                     Forms\Components\Select::make('subscriber_id')
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('المشترك')
+                        ->helperText(fn (?Invoice $record) => $record === null ? 'تُصدر الفاتورة من القراءات غير المفوترة للعداد الحالي، وتحسب الفترة والمبالغ آلياً بالتعرفات المعتمدة.' : null)
                         ->relationship('subscriber', 'name')
                         ->required()
                         ->searchable()
@@ -56,24 +57,28 @@ class InvoiceResource extends Resource
                         }),
 
                     Forms\Components\TextInput::make('bill_number')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('رقم الفاتورة')
                         ->default(fn() => Invoice::generateBillNumber())
                         ->disabled()
-                        ->dehydrated(fn (?Invoice $record) => $record === null),
+                        ->dehydrated(false),
 
                     Forms\Components\DatePicker::make('bill_date')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('تاريخ الفاتورة')
                         ->default(now())
                         ->required(),
 
                     Forms\Components\DatePicker::make('billing_period_start')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('بداية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->helperText('فترة الاستهلاك مستقلة عن تاريخ إصدار الفاتورة.'),
 
                     Forms\Components\DatePicker::make('billing_period_end')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('نهاية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
@@ -81,6 +86,7 @@ class InvoiceResource extends Resource
                         ->helperText('يجب ألا تسبق بداية الفترة.'),
 
                     Forms\Components\Select::make('status')
+                        ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('الحالة')
                         ->options([
                             'draft' => 'مسودة',
@@ -96,6 +102,7 @@ class InvoiceResource extends Resource
                 ]),
 
             \Filament\Schemas\Components\Section::make('تفاصيل المبالغ')
+                ->visible(fn (?Invoice $record) => $record !== null)
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('consumption_fee')
