@@ -11,6 +11,10 @@ Correct business and accounting invariants take precedence over compatibility wi
 - There is one writable interval algorithm: actual observations. Calendar-era records cannot be edited through the normal reading workflow; their existing marker is retained solely to distinguish old records from validated observations. Client-submitted period hints are retained separately for replay identity only, never for computation.
 - Protect baseline dates and values, earlier reading anchors, and billed evidence against edits/deletion. Local pending readings with successors must not be silently changed.
 
+## Quantity precision
+
+Meter values and derived consumption use DECIMAL(12,2). The model subtracts integer hundredths, rejects decreasing values, and never accepts client-supplied usage as authoritative. Posting does not recalculate stored quantities. API input permits at most two decimal places; Flutter offline subtraction, administrative reports and spreadsheet exports preserve the fractional units. Historical tariff line rounding remains per line. Tests cover 35.50 units at 600.00, a 0.01-unit difference, zero usage, edits and invalid precision. No historical quantity or financial backfill is part of this schema migration.
+
 ## Historical exceptions (#43)
 
 The previously supplied cleaned SQL snapshot contains four readings on meter 95, with recorded dates earlier than the stored period start:
