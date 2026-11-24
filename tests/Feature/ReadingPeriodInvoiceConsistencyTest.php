@@ -176,7 +176,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
             'billing_period_end' => '2026-03-31',
             'consumption_fee' => 1200,
             'total_amount' => 1200,
-            'status' => 'issued',
+            'status' => 'draft',
         ]);
         $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-15', 50);
 
@@ -226,7 +226,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
             'billing_period_end' => '2026-01-31',
             'consumption_fee' => 6000,
             'total_amount' => 6000,
-            'status' => 'issued',
+            'status' => 'draft',
         ]);
         $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 10, 0, $invoice->id);
 

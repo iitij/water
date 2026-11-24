@@ -185,6 +185,8 @@ class InvoiceController extends ApiController
         }
         $components = (float) ($data['consumption_fee'] ?? 0);
         $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+            $arrears = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
@@ -194,9 +196,9 @@ class InvoiceController extends ApiController
                 'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
                 'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
                 'consumption_fee' => $data['consumption_fee'] ?? 0,
-                'previous_balance' => $data['previous_balance'] ?? 0,
-                'credit_applied' => $data['credit_applied'] ?? 0,
-                'total_amount' => $data['total_amount'] ?? $components,
+                'previous_balance' => $arrears,
+                'credit_applied' => min($subscriber->getAccountCredit(), $components),
+                'total_amount' => $components,
                 'amount_paid' => 0,
                 'status' => 'issued',
                 'notes' => $data['notes'] ?? null,
@@ -211,7 +213,7 @@ class InvoiceController extends ApiController
                 meter: $meter,
             );
 
-            return $invoice;
+            return $invoice->refresh();
         });
 
         return response()->json(['message' => 'تم إنشاء الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->load(['subscriber.square', 'meter', 'items']))], 201);

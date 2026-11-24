@@ -31,6 +31,7 @@ class PaymentResource extends Resource
                 ->columns(2)
                 ->schema([
                     Forms\Components\Select::make('subscriber_id')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('المشترك')
                         ->relationship('subscriber', 'name')
                         ->required()
@@ -63,6 +64,7 @@ class PaymentResource extends Resource
                         }),
 
                     Forms\Components\Select::make('invoice_id')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('الفاتورة (اختياري)')
                         ->relationship(
                             'invoice', 
@@ -103,9 +105,10 @@ class PaymentResource extends Resource
                         ->label('رقم سند القبض')
                         ->default(fn () => Payment::generateReceiptNumber())
                         ->disabled()
-                        ->dehydrated(),
+                        ->dehydrated(fn (?Payment $record) => $record === null),
 
                     Forms\Components\TextInput::make('amount')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('المبلغ')
                         ->numeric()
                         ->required()
@@ -113,11 +116,13 @@ class PaymentResource extends Resource
                         ->prefix('ريال'),
 
                     Forms\Components\DatePicker::make('payment_date')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('تاريخ الدفع')
                         ->default(now())
                         ->required(),
 
                     Forms\Components\Select::make('payment_method')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('طريقة الدفع')
                         ->options([
                             'cash' => 'نقدي',
@@ -128,6 +133,7 @@ class PaymentResource extends Resource
                         ->required(),
 
                     Forms\Components\TextInput::make('reason')
+                        ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('وذلك مقابل')
                         ->columnSpanFull()
                         ->nullable(),
@@ -242,7 +248,7 @@ class PaymentResource extends Resource
                     ->color('secondary')
                     ->url(fn (Payment $record) => route('payments.print', $record))
                     ->openUrlInNewTab(),
-                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\EditAction::make()->label('تعديل الملاحظات'),
             ]);
     }
 
