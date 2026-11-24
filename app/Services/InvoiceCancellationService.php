@@ -29,6 +29,11 @@ final class InvoiceCancellationService
                 throw ValidationException::withMessages(['invoice' => 'المسودة غير مرحلة مالياً.']);
             }
             $readings = $invoice->readings()->lockForUpdate()->get();
+            if ($invoice->retired_meter_id && $readings->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'تصحيح فاتورة قراءات عداد مستبدل يتطلب مسار تصحيح تاريخي مستقل؛ لا تُرحّل قراءاته إلى العداد الجديد.',
+                ]);
+            }
             $before = [
                 'status' => $invoice->status,
                 'amount_paid' => $invoice->amount_paid,

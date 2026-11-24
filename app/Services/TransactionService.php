@@ -84,7 +84,7 @@ class TransactionService
                 ]);
             }
             $original = $originals->first();
-            return $this->recordTransaction(
+            $reversal = $this->recordTransaction(
                 subscriber: $subscriber,
                 type: $originalType.'_reversal',
                 amount: -(float) $original->amount,
@@ -92,6 +92,13 @@ class TransactionService
                 reference: $reference,
                 meter: $original->meter,
             );
+            if ($original->retired_meter_id) {
+                $reversal->forceFill([
+                    'retired_meter_id' => $original->retired_meter_id,
+                    'retired_meter_code' => $original->retired_meter_code,
+                ])->saveQuietly();
+            }
+            return $reversal;
         }, 3);
     }
 

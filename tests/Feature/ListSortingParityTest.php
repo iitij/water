@@ -46,6 +46,7 @@ class ListSortingParityTest extends TestCase
             ->assertJsonPath('total', 2)->assertJsonPath('data.0.id', $one->id);
         $this->getJson('/api/meters?sort_by=square_name&sort_direction=asc')->assertOk()
             ->assertJsonPath('total', 2)->assertJsonPath('data.0.id', $two->id);
+        $two->forceDelete();
         $second->delete();
         $this->getJson('/api/subscribers?sort_by=square_name&sort_direction=asc')->assertOk()
             ->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $first->id);

@@ -122,7 +122,7 @@ class MeterController extends ApiController
 
     /**
      * Atomically purge the former meter and its linked records, then assign
-     * a fresh physical meter. No historical meter or finance record survives.
+     * a fresh physical meter without deleting financial documents.
      */
     public function replace(Request $request, int $id, SingleMeterService $singleMeterService)
     {
@@ -157,7 +157,7 @@ class MeterController extends ApiController
         );
 
         return response()->json([
-            'message' => 'تم استبدال العداد وحذف بيانات العداد السابق نهائياً.',
+            'message' => 'تم استبدال العداد مع حماية المستندات المالية المرتبطة.',
             ...$result,
         ], 201);
     }
