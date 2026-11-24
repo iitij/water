@@ -166,9 +166,9 @@ class DataExportService
             'رسوم الاستهلاك (ر.ي)',
             'متأخرات سابقة (ر.ي)',
             'إجمالي الفاتورة الحالية (ر.ي)',
-            'إجمالي المطلوب مع المتأخرات (ر.ي)',
+            'إجمالي تاريخي مع المتأخرات (غير قابل للجمع)',
             'المسدد من الفاتورة (ر.ي)',
-            'المتبقي المطلوب (ر.ي)',
+            'المتبقي من الفاتورة الحالية فقط (ر.ي)',
             'حالة الفاتورة',
             'ملاحظات',
         ];
@@ -199,7 +199,7 @@ class DataExportService
             };
 
             $totalWithPrev = (float)$inv->total_amount + (float)$inv->previous_balance;
-            $remaining = max(0, $totalWithPrev - (float)$inv->amount_paid);
+            $remaining = $inv->getRemainingAmount();
 
             $billDate = $inv->bill_date ? Carbon::parse($inv->bill_date)->format('Y-m-d') : '-';
             $periodStart = $inv->billing_period_start ? Carbon::parse($inv->billing_period_start)->format('Y-m-d') : '-';
@@ -212,7 +212,7 @@ class DataExportService
                 Cell::fromValue($sub?->name ?? '-'),
                 Cell::fromValue($sub?->phone ?? '-'),
                 Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
-                Cell::fromValue($meter?->unique_code ?? '-'),
+                Cell::fromValue($meter?->unique_code ?? $inv->retired_meter_code ?? '-'),
                 Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
                 Cell::fromValue($periodStart),
                 Cell::fromValue($periodEnd),
@@ -238,12 +238,14 @@ class DataExportService
      */
     public function exportReadings(?int $squareId = null, ?string $fromDate = null, ?string $toDate = null, ?bool $isInvoiced = null): string
     {
-        $query = Reading::with(['meter.subscriber.square', 'invoice', 'creator'])
+        $query = Reading::with(['meter.subscriber.square', 'invoice.subscriber.square', 'creator'])
             ->orderBy('reading_date', 'desc')
             ->orderBy('id', 'desc');
 
         if ($squareId) {
-            $query->whereHas('meter.subscriber', fn($q) => $q->where('square_id', $squareId));
+            $query->where(fn ($q) => $q->whereHas('meter.subscriber', fn ($sub) => $sub->where('square_id', $squareId))
+                ->orWhere(fn ($archived) => $archived->whereNotNull('retired_meter_id')
+                    ->whereHas('invoice.subscriber', fn ($sub) => $sub->where('square_id', $squareId))));
         }
 
         if ($fromDate) {
@@ -299,7 +301,7 @@ class DataExportService
 
         foreach ($readings as $rd) {
             $meter = $rd->meter;
-            $sub = $meter?->subscriber;
+            $sub = $meter?->subscriber ?? $rd->invoice?->subscriber;
 
             $invoicedText = $rd->is_invoiced ? 'مفوترة' : 'غير مفوترة';
 
@@ -314,7 +316,7 @@ class DataExportService
                 Cell::fromValue($sub?->name ?? '-'),
                 Cell::fromValue($sub?->phone ?? '-'),
                 Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
-                Cell::fromValue($meter?->unique_code ?? '-'),
+                Cell::fromValue($meter?->unique_code ?? $rd->retired_meter_code ?? '-'),
                 Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
                 Cell::fromValue((float)($rd->previous_reading ?? 0)),
                 Cell::fromValue((float)($rd->current_reading ?? 0)),

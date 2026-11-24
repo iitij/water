@@ -30,7 +30,7 @@ class TransactionController extends ApiController
         if ($request->filled('meter_id')) {
             $meterId = (string) $request->query('meter_id');
             $meterId === 'general'
-                ? $query->whereNull('meter_id')
+                ? $query->whereNull('meter_id')->whereNull('retired_meter_id')
                 : $query->where('meter_id', (int) $meterId);
         }
         if ($request->filled('square_id')) {

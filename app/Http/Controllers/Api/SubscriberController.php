@@ -195,7 +195,7 @@ class SubscriberController extends ApiController
                 'meter' => $invoice->meter,
             ];
         });
-        $payments = $subscriber->payments()->with('meter:id,unique_code,path_number')->get()->map(function (Payment $payment) {
+        $payments = $subscriber->payments()->with(['meter:id,unique_code,path_number', 'accountTransfer'])->withSum('refunds as refunded_amount', 'amount')->get()->map(function (Payment $payment) {
             return [
                 'id' => $payment->id,
                 'type' => 'payment',
@@ -204,6 +204,9 @@ class SubscriberController extends ApiController
                 'description' => 'سند قبض'.($payment->reason ? ' - '.$payment->reason : ''),
                 'amount' => (float) $payment->amount,
                 'payment_method' => $payment->payment_method,
+                'voided_at' => $payment->voided_at,
+                'refunded_amount' => (float) $payment->refunded_amount,
+                'transferred_to_subscriber_id' => $payment->accountTransfer?->to_subscriber_id,
                 'meter' => $payment->meter,
             ];
         });
@@ -212,6 +215,7 @@ class SubscriberController extends ApiController
         return response()->json([
             'subscriber' => ['id' => $subscriber->id, 'name' => $subscriber->name, 'general_balance' => (float) $subscriber->balance],
             'transactions' => $transactions,
+            'ledger' => $subscriber->transactions()->orderBy('created_at')->orderBy('id')->get(),
             'financial_summary' => $this->financialSummary($subscriber),
         ]);
     }
@@ -225,7 +229,7 @@ class SubscriberController extends ApiController
 
         if ($request->has('meter_id')) {
             if ($request->query('meter_id') === 'general') {
-                $query->whereNull('meter_id');
+                $query->whereNull('meter_id')->whereNull('retired_meter_id');
             } elseif (filter_var($request->query('meter_id'), FILTER_VALIDATE_INT) !== false) {
                 $query->where('meter_id', (int) $request->query('meter_id'));
             }
@@ -245,7 +249,7 @@ class SubscriberController extends ApiController
                 'meter_id' => $transaction->meter_id,
                 'party' => $transaction->meter_id
                     ? 'عداد رقم: '.$transaction->meter_id.($transaction->meter?->unique_code ? ' ('.$transaction->meter->unique_code.')' : '')
-                    : 'الحساب العام للمشترك',
+                    : ($transaction->retired_meter_id ? 'عداد مستبدل: '.$transaction->retired_meter_code : 'الحساب العام للمشترك'),
                 'description' => $transaction->description,
                 'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
                 'running_balance' => round($runningBalance, 2),
