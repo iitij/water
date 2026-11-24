@@ -26,6 +26,7 @@ on:
           - web-publish-audit
           - sync-web-preflight
           - publish-web-initial
+          - diagnose-public-web
           - migrate-empty
           - sync
 
@@ -91,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -984,6 +985,59 @@ jobs:
               echo 'INITIAL_PUBLICATION: INSTALLED'
               echo 'Existing hosting files preserved; no database modifications or seeders.'
               ;;
+            diagnose-public-web)
+              echo '=== READ-ONLY HOSTING WEB DIAGNOSTICS ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              docroot="$HOME/public_html"
+              echo "EXPECTED_DOCROOT: $(realpath "$docroot")"
+              stat -c 'DOCROOT_MODE: %a' "$docroot"
+              for file in index.php .htaccess build/manifest.json favicon.ico; do
+                if [[ -f "$docroot/$file" ]]; then
+                  stat -c 'PUBLIC_FILE: %n | mode %a | bytes %s' "$docroot/$file"
+                else
+                  echo "PUBLIC_FILE_MISSING: $file"
+                fi
+              done
+              "$php84" -l "$docroot/index.php"
+              echo '=== CPANEL DOMAIN DOCUMENT ROOT (SAFE FIELDS ONLY) ==='
+              if command -v uapi >/dev/null 2>&1; then
+                if uapi --output=json DomainInfo single_domain_data domain=alweshah.online 2>/dev/null | "$php84" -r '
+                  $j = json_decode(stream_get_contents(STDIN), true);
+                  $r = $j["result"] ?? [];
+                  $d = $r["data"] ?? [];
+                  if (empty($r["status"]) || !is_array($d)) { exit(1); }
+                  foreach (["domain","documentroot","document_root","ip","servername"] as $key) {
+                    if (isset($d[$key]) && is_scalar($d[$key])) echo "DOMAIN_", strtoupper($key), ": ", $d[$key], PHP_EOL;
+                  }
+                  if (!isset($d["documentroot"]) && !isset($d["document_root"])) exit(1);
+                '; then
+                  echo 'DOMAIN_INFO: AVAILABLE'
+                else
+                  echo 'DOMAIN_INFO: UNAVAILABLE_VIA_UAPI; VERIFY IN CPANEL DOMAINS'
+                fi
+              else
+                echo 'DOMAIN_INFO: UAPI_NOT_AVAILABLE; VERIFY IN CPANEL DOMAINS'
+              fi
+              echo '=== LOCAL HTTP KERNEL (PUBLIC PATH OVERRIDE) ==='
+              "$php84" -d display_errors=0 -r '
+                try {
+                  require "vendor/autoload.php";
+                  $app = require "bootstrap/app.php";
+                  $app->usePublicPath(getenv("HOME") . "/public_html");
+                  $kernel = $app->make(\Illuminate\Contracts\Http\Kernel::class);
+                  foreach (["/up", "/admin/login"] as $path) {
+                    $request = \Illuminate\Http\Request::create("https://alweshah.online" . $path, "GET");
+                    $response = $kernel->handle($request);
+                    echo "KERNEL_HTTP ", $path, ": ", $response->getStatusCode(), PHP_EOL;
+                    $kernel->terminate($request, $response);
+                  }
+                } catch (Throwable $e) {
+                  fwrite(STDERR, "KERNEL_TEST: FAILED\n");
+                  exit(1);
+                }
+              '
+              echo 'WEB_HOST_DIAGNOSTICS: COMPLETE; NO FILE OR DATABASE CHANGES'
+              ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
               php84='/opt/alt/php84/usr/bin/php'
@@ -1113,6 +1167,29 @@ jobs:
           redirect="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{redirect_url}' http://alweshah.online/admin/login)"
           test "$redirect" = "$base/admin/login"
           echo 'PUBLIC_HTTPS_AND_SECURITY_SMOKE: PASSED'
+
+      - name: Compare DNS-routed and direct-origin public requests
+        if: ${{ inputs.operation == 'diagnose-public-web' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== PUBLIC DNS ==='
+          getent ahostsv4 alweshah.online | awk '{print $1}' | sort -u || true
+          echo '=== HTTP STATUS MATRIX (NO RESPONSE BODIES) ==='
+          for target in dns origin; do
+            opts=()
+            if [[ "$target" == origin ]]; then
+              opts+=(--resolve alweshah.online:443:66.29.146.205)
+            fi
+            for path in / /index.php /up /admin/login /build/manifest.json /favicon.ico /parking-page.shtml; do
+              if info="$(curl -sS --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code} | type=%{content_type} | remote=%{remote_ip}' "${opts[@]}" "https://alweshah.online$path")"; then
+                echo "$target $path: $info"
+              else
+                echo "$target $path: CONNECTION_FAILED"
+              fi
+            done
+          done
+          echo 'PUBLIC_REQUEST_DIAGNOSTICS: COMPLETE (status matrix is informational)'
 
       - name: Security reminder
         if: always()
