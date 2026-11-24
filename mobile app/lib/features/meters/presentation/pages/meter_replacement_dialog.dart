@@ -62,7 +62,7 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
         meterId: widget.meter.id,
         uniqueCode: _code.text.trim(),
         pathNumber: _path.text.trim().isEmpty ? null : int.parse(_path.text.trim()),
-        initialReading: int.parse(_initial.text.trim()),
+        initialReading: double.parse(_initial.text.trim()),
         reason: _reason.text.trim(),
         removedAt: DateTime.now().toIso8601String().split('T').first,
       );
@@ -122,11 +122,45 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _initial,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'القراءة الابتدائية للعداد الجديد'),
                   validator: (text) {
-                    final value = int.tryParse(text?.trim() ?? '');
-                    return value == null || value < 0 ? 'أدخل قراءة صحيحة غير سالبة' : null;
+                    final raw = text?.trim() ?? '';
+                    return RegExp(r'^\d{1,10}(\.\d{1,2})?
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _reason,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'سبب الاستبدال'),
+                  validator: (text) =>
+                      text == null || text.trim().length < 3 ? 'اكتب سبب الاستبدال' : null,
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _replace,
+          child: Text(_saving ? 'جارٍ الاستبدال…' : 'استبدال العداد'),
+        ),
+      ],
+    );
+  }
+}
+).hasMatch(raw)
+                        ? null : 'أدخل قراءة غير سالبة بمنزلتين عشريتين كحد أقصى';
                   },
                 ),
                 const SizedBox(height: 12),
