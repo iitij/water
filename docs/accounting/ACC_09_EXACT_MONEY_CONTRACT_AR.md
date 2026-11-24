@@ -16,3 +16,10 @@
 - PHP 8.5.4 / PHPUnit 12.5.29: vendor/bin/phpunit --filter Acc09MoneyContractTest، 4 اختبارات و105 تحققات، صفر فشل/تخطي.
 - Dart SDK 3.14.0: dart "mobile app/test/accounting/acc09_money_contract_check.dart"، 85 تحققاً ناجحاً، صفر فشل. هذا اختبار CLI خالص وليس مجموعة Flutter الكاملة.
 - لا تغييرات على كود المنتج أو DB؛ لا تثبيت مكتبات. يظل العقد مقترحاً حتى قبول المشرف وD.
+
+## الجولة الثالثة — محرك primitives معزول
+- ExactMoney.php وexact_money.dart: قيم غير قابلة للتعديل، وحدات نقدية صحيحة، حدود التخزين، parse/decimal/fromMinor/plus/minus/negate/compare/tariffLine/allocate. PHP يحمي الوسائط بتجزئة الضرب؛ Dart يستخدم BigInt. لا تغيير لسياسة تخصيص الدفعات ولا ربط خدمات المنتج.
+- ExactMoneyTest.php وacc09_exact_money_check.dart: يستدعيان التنفيذ الفعلي مع المتجهات المشتركة و10,000 حالة إضافية للتقريب، وحدود التخزين والمدخلات المرفوضة والتوزيع.
+- في نسخة العمل المحلية المبنية على 4a97b57: PHP 6 اختبارات/10128 تحققاً؛ مع oracle السابق 10/10233؛ Dart CLI 10107 تحققاً، oracle السابق 85. dart compile js + node smoke PASS. لا قاعدة بيانات ولا CI ولا اختبار Flutter شامل. تحذير تنسيق flutter_lints لعدم تجهيز pub packages في worktree المستقل.
+- انقطع الاتصال بالجهاز بعد الاختبارات أثناء commit/push؛ أُعيد إنشاء الملفات من نفس محتوى التنفيذ وتحويلات اختبارات الجولة السابقة بواسطة GitHub API على الفرع المعتمد؛ Dart غير مطابق بايتياً للتنسيق المحلي. الأعداد السابقة أدلة النسخة المحلية لا اعتماد للـSHA الجديد. يعيد D الاختبار على SHA المرفوع. لا دمج ولا تعديل مسارات مشتركة.
+- تقرير التسليم: https://github.com/iitij/water/pull/64#issuecomment-7146704063
