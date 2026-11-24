@@ -853,7 +853,7 @@ class AppDatabase extends GeneratedDatabase {
   Future<Map<String, Object?>?> getLatestCachedReading(int meterId) async {
     final rows = await _select(
       '''SELECT * FROM cached_readings WHERE meter_id = ?
-         ORDER BY period_end DESC, reading_date DESC, updated_at DESC LIMIT 1''',
+         ORDER BY COALESCE(actual_reading_date, reading_date) DESC, updated_at DESC, local_id DESC LIMIT 1''',
       [Variable.withInt(meterId)],
     );
     return rows.isEmpty ? null : rows.first;
