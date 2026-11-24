@@ -97,6 +97,7 @@ class StrictSingleMeterPurgeTest extends TestCase
         DB::table('readings')->insert([
             'meter_id' => $old->id,
             'reading_date' => '2026-11-14',
+            'actual_reading_date' => '2026-11-14',
             'period_start' => '2026-11-01',
             'period_end' => '2026-11-14',
             'current_reading' => 30,
