@@ -320,7 +320,7 @@ class DataExportService
                 Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
                 Cell::fromValue((float)($rd->previous_reading ?? 0)),
                 Cell::fromValue((float)($rd->current_reading ?? 0)),
-                Cell::fromValue((int)($rd->consumption_units ?? 0)),
+                Cell::fromValue((float)($rd->consumption_units ?? 0)),
                 Cell::fromValue($rd->period_start ?? '-'),
                 Cell::fromValue($rd->period_end ?? '-'),
                 Cell::fromValue($invoicedText),
