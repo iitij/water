@@ -83,6 +83,43 @@ class HistoricalTariffTest extends TestCase
         $this->assertRejected($meter, $reading);
     }
 
+    public function test_used_tariff_cannot_be_repriced_deactivated_deleted_or_shortened_past_evidence(): void
+    {
+        $meter = $this->meter();
+        $tariff = $this->tariff('600.00', '2026-01-01', null);
+        $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
+        $invoice = app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+
+        foreach ([
+            fn () => $tariff->fresh()->update(['unit_price' => '800.00']),
+            fn () => $tariff->fresh()->update(['is_active' => false]),
+            fn () => $tariff->fresh()->update(['start_date' => '2026-01-02']),
+            fn () => $tariff->fresh()->update(['end_date' => '2026-01-30']),
+            fn () => $tariff->fresh()->delete(),
+            fn () => $tariff->fresh()->forceDelete(),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('A historically referenced tariff was modified.');
+            } catch (ValidationException $exception) {
+                $this->assertNotEmpty($exception->errors());
+            }
+        }
+
+        // A new tariff can start on the next reading boundary without
+        // invalidating the already recorded pricing evidence.
+        $tariff->fresh()->update(['end_date' => '2026-01-31']);
+        $this->assertSame('600.00', $tariff->fresh()->unit_price);
+        $this->assertTrue($tariff->fresh()->is_active);
+        $this->assertSame('2026-01-31', $tariff->fresh()->end_date->toDateString());
+        $this->assertDatabaseHas('invoice_tariff_lines', [
+            'invoice_id' => $invoice->id,
+            'tariff_id' => $tariff->id,
+            'unit_price' => 600,
+            'amount' => 6000,
+        ]);
+    }
+
     private function assertRejected(Meter $meter, Reading $reading): void
     {
         try {
