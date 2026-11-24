@@ -17,21 +17,25 @@ return new class extends Migration {
         $invalid = "NEW.period_basis NOT IN ('observation', 'legacy_calendar')
             OR (NEW.period_basis = 'observation' AND (
                 NEW.actual_reading_date IS NULL OR NEW.period_start IS NULL OR NEW.period_end IS NULL
+                OR DATE(NEW.period_start) IS NULL OR DATE(NEW.period_end) IS NULL OR DATE(NEW.actual_reading_date) IS NULL
                 OR DATE(NEW.period_start) >= DATE(NEW.period_end)
                 OR DATE(NEW.period_end) <> DATE(NEW.actual_reading_date)
                 OR NEW.previous_reading < 0 OR NEW.current_reading < NEW.previous_reading
+                OR ABS(NEW.previous_reading - ROUND(NEW.previous_reading, 2)) > 0.00001
+                OR ABS(NEW.current_reading - ROUND(NEW.current_reading, 2)) > 0.00001
                 OR ABS(NEW.consumption_units - (NEW.current_reading - NEW.previous_reading)) > 0.00001
             ))";
         $driver = DB::connection()->getDriverName();
         foreach (['INSERT', 'UPDATE'] as $event) {
             $name = 'readings_observation_'.strtolower($event);
+            $predicate = $event === 'UPDATE' ? "({$invalid}) OR OLD.period_basis <> NEW.period_basis" : $invalid;
             if ($driver === 'sqlite') {
                 DB::unprepared("CREATE TRIGGER {$name} BEFORE {$event} ON readings
-                    FOR EACH ROW WHEN {$invalid}
+                    FOR EACH ROW WHEN {$predicate}
                     BEGIN SELECT RAISE(ABORT, 'Invalid observation interval or consumption'); END");
             } elseif ($driver === 'mysql' || $driver === 'mariadb') {
                 DB::unprepared("CREATE TRIGGER {$name} BEFORE {$event} ON readings
-                    FOR EACH ROW BEGIN IF {$invalid} THEN
+                    FOR EACH ROW BEGIN IF {$predicate} THEN
                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid observation interval or consumption';
                     END IF; END");
             } else {
