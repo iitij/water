@@ -211,6 +211,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'transfers']);
     Route::post('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'dispatchTransfer']);
     Route::post('/treasury/transfers/{id}/receive', [\App\Http\Controllers\Api\TreasuryController::class, 'receiveTransfer'])->whereNumber('id');
+    Route::get('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'index'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'store'])->whereNumber('id');
+    Route::get('/treasury/bank-statements/{id}', [\App\Http\Controllers\Api\BankReconciliationController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/bank-statements/{id}/matches', [\App\Http\Controllers\Api\BankReconciliationController::class, 'matchLine'])->whereNumber('id');
     Route::get('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'index']);
     Route::post('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'store']);
     Route::get('/treasury/accounts/{id}', [\App\Http\Controllers\Api\TreasuryController::class, 'show'])->whereNumber('id');

@@ -1,0 +1,253 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/** Evidence matching, not permission to alter money or certify a partial treasury register. */
+final class BankReconciliationService
+{
+    private function lock(): void
+    {
+        if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+            throw new \LogicException('Financial issuance lock is missing.');
+        }
+    }
+
+    private function reject(string $field, string $message): never
+    {
+        throw ValidationException::withMessages([$field => $message]);
+    }
+
+    private function minor(string $amount): int
+    {
+        if (! preg_match('/^(-?)(\d{1,12})(?:\.(\d{1,2}))?$/D', $amount, $parts)) {
+            $this->reject('amount', 'يلزم مبلغ صحيح بحد أقصى منزلتين عشريتين.');
+        }
+        $minor = (int) $parts[2] * 100 + (int) str_pad($parts[3] ?? '', 2, '0');
+        return $parts[1] === '-' ? -$minor : $minor;
+    }
+
+    private function date(string $date): void
+    {
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
+            || ! checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))
+            || $date > now()->toDateString()) {
+            $this->reject('date', 'تاريخ كشف البنك غير صالح أو مستقبلي.');
+        }
+    }
+
+    private function account(int $id): object
+    {
+        $account = DB::table('treasury_accounts')->where('id', $id)->lockForUpdate()->first();
+        abort_unless($account, 404);
+        if ($account->channel !== 'bank') $this->reject('account', 'المطابقة تخص الحسابات البنكية فقط.');
+        return $account;
+    }
+
+    public function import(User $actor, int $accountId, array $data): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $from = $data['from_date'];
+        $to = $data['to_date'];
+        $this->date($from);
+        $this->date($to);
+        $reference = mb_strtoupper(trim($data['reference']));
+        $evidence = trim($data['evidence']);
+        if ($from > $to || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+            || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000
+            || count($data['lines']) > 1000) {
+            $this->reject('statement', 'بيانات الكشف أو الفترة أو الإثبات غير صالحة.');
+        }
+        $record = [
+            'treasury_account_id' => $accountId, 'reference' => $reference,
+            'from_date' => $from, 'to_date' => $to,
+            'opening_minor' => $this->minor((string) $data['opening_amount']),
+            'closing_minor' => $this->minor((string) $data['closing_amount']),
+            'evidence' => $evidence, 'imported_by' => $actor->id,
+        ];
+        $lines = [];
+        $seen = [];
+        $net = 0;
+        foreach ($data['lines'] as $line) {
+            $key = mb_strtoupper(trim($line['bank_reference']));
+            $description = isset($line['description']) ? trim($line['description']) : null;
+            $this->date($line['booked_on']);
+            $amount = $this->minor((string) $line['amount']);
+            if ($amount === 0 || mb_strlen($key) < 1 || mb_strlen($key) > 150
+                || isset($seen[$key]) || mb_strlen($description ?? '') > 500
+                || $line['booked_on'] < $from || $line['booked_on'] > $to) {
+                $this->reject('lines', 'حركة بنكية مكررة أو خارج الفترة أو غير صالحة.');
+            }
+            $seen[$key] = true;
+            $net += $amount;
+            $lines[] = ['treasury_account_id' => $accountId, 'bank_reference' => $key,
+                'booked_on' => $line['booked_on'], 'amount_minor' => $amount, 'description' => $description];
+        }
+        if ($record['opening_minor'] + $net !== $record['closing_minor']) {
+            $this->reject('closing_amount', 'رصيد الإغلاق لا يساوي الافتتاح مضافاً إليه صافي حركات البنك.');
+        }
+        usort($lines, fn ($a, $b) => strcmp($a['bank_reference'], $b['bank_reference']));
+        $record['content_hash'] = hash('sha256', json_encode([$record, $lines], JSON_THROW_ON_ERROR));
+        return DB::transaction(function () use ($actor, $accountId, $record, $lines, $from, $to): array {
+            $this->lock();
+            $account = $this->account($accountId);
+            $existing = DB::table('bank_statements')->where('treasury_account_id', $accountId)
+                ->where('reference', $record['reference'])->lockForUpdate()->first();
+            if ($existing) {
+                abort_unless(hash_equals($existing->content_hash, $record['content_hash']), 409, 'مرجع الكشف مرتبط ببيانات مختلفة.');
+                return $this->report($existing, $account);
+            }
+            if ($from < $account->opening_on) $this->reject('from_date', 'الفترة تسبق افتتاح الحساب.');
+            $statements = DB::table('bank_statements')->where('treasury_account_id', $accountId);
+            abort_if((clone $statements)->where('from_date', '<=', $to)->where('to_date', '>=', $from)->exists(),
+                409, 'فترة كشف البنك تتداخل مع كشف مسجل.');
+            $prior = (clone $statements)->where('to_date', \Illuminate\Support\Carbon::parse($from)->subDay()->toDateString())->first();
+            $next = (clone $statements)->where('from_date', \Illuminate\Support\Carbon::parse($to)->addDay()->toDateString())->first();
+            if (($prior && (int) $prior->closing_minor !== $record['opening_minor'])
+                || ($next && (int) $next->opening_minor !== $record['closing_minor'])) {
+                $this->reject('opening_amount', 'رصيد الكشف لا يتصل بالكشف البنكي المجاور.');
+            }
+            foreach (array_chunk(array_column($lines, 'bank_reference'), 200) as $keys) {
+                abort_if(DB::table('bank_statement_lines')->where('treasury_account_id', $accountId)
+                    ->whereIn('bank_reference', $keys)->exists(), 409, 'معرّف حركة البنك مستخدم مسبقاً.');
+            }
+            $id = DB::table('bank_statements')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
+            foreach (array_chunk($lines, 100) as $chunk) {
+                DB::table('bank_statement_lines')->insert(array_map(fn ($line) => $line + [
+                    'bank_statement_id' => $id, 'created_at' => now(), 'updated_at' => now(),
+                ], $chunk));
+            }
+            app(AuditLogger::class)->recordRequired('bank_statement.imported', [
+                'entity_type' => 'bank_statement', 'entity_id' => $id, 'actor_user_id' => $actor->id,
+                'after' => $record + ['line_count' => count($lines)],
+            ]);
+            return $this->report(DB::table('bank_statements')->find($id), $account);
+        }, 3);
+    }
+
+    private function valid(object $statement, object $line, ?object $posting, object $match): bool
+    {
+        return $posting && (int) $line->bank_statement_id === (int) $statement->id
+            && (int) $line->treasury_account_id === (int) $statement->treasury_account_id
+            && (int) $posting->treasury_account_id === (int) $statement->treasury_account_id
+            && (int) $line->amount_minor !== 0 && (int) $line->amount_minor === (int) $posting->amount_minor
+            && $line->booked_on >= $statement->from_date && $line->booked_on <= $statement->to_date
+            && $posting->effective_on >= $statement->from_date && $posting->effective_on <= $statement->to_date
+            && (int) $match->matched_by !== (int) $statement->imported_by
+            && mb_strlen(trim($match->evidence)) >= 10;
+    }
+
+    public function matchLine(User $actor, int $id, int $lineId, int $postingId, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $evidence = trim($evidence);
+        if (mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) $this->reject('evidence', 'يلزم إثبات المطابقة.');
+        return DB::transaction(function () use ($actor, $id, $lineId, $postingId, $evidence): array {
+            $this->lock();
+            $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($statement, 404);
+            $account = $this->account((int) $statement->treasury_account_id);
+            abort_if((int) $statement->imported_by === (int) $actor->id, 403, 'يلزم مراجع مستقل عن مدخل الكشف.');
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $id)->where('id', $lineId)->lockForUpdate()->first();
+            $posting = DB::table('treasury_postings')->where('id', $postingId)->lockForUpdate()->first();
+            abort_unless($line && $posting, 404);
+            $record = ['bank_statement_line_id' => $lineId, 'treasury_posting_id' => $postingId,
+                'matched_by' => $actor->id, 'evidence' => $evidence];
+            if (! $this->valid($statement, $line, $posting, (object) $record)) {
+                $this->reject('posting_id', 'الحركة لا تطابق الحساب والفترة والمبلغ والاتجاه.');
+            }
+            $existing = DB::table('bank_statement_matches')->where('bank_statement_line_id', $lineId)->first();
+            if ($existing) {
+                foreach ($record as $field => $value) {
+                    abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل مطابقة مختلفة.');
+                }
+                return $this->report($statement, $account);
+            }
+            abort_if(DB::table('bank_statement_matches')->where('treasury_posting_id', $postingId)->exists(),
+                409, 'قيد الخزينة مطابق مسبقاً.');
+            $matchId = DB::table('bank_statement_matches')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
+            app(AuditLogger::class)->recordRequired('bank_statement.matched', [
+                'entity_type' => 'bank_statement_match', 'entity_id' => $matchId,
+                'actor_user_id' => $actor->id, 'after' => $record,
+            ]);
+            return $this->report($statement, $account);
+        }, 3);
+    }
+
+    private function report(object $statement, object $account): array
+    {
+        $id = $statement->id;
+        $from = $statement->from_date;
+        $to = $statement->to_date;
+        $ledger = DB::table('treasury_postings')->where('treasury_account_id', $account->id);
+        $opening = (int) $account->opening_minor + (int) (clone $ledger)->where('effective_on', '<', $from)->sum('amount_minor');
+        $postings = (clone $ledger)->whereBetween('effective_on', [$from, $to])->orderBy('effective_on')->orderBy('id')->get()->keyBy('id');
+        $lines = DB::table('bank_statement_lines')->where('bank_statement_id', $id)->orderBy('booked_on')->orderBy('id')->get()->keyBy('id');
+        $matches = DB::table('bank_statement_matches')->whereIn('bank_statement_line_id',
+            DB::table('bank_statement_lines')->where('bank_statement_id', $id)->select('id'))->get();
+        $matchedLines = [];
+        $matchedPostings = [];
+        $issues = [];
+        foreach ($matches as $match) {
+            $line = $lines->get($match->bank_statement_line_id);
+            $posting = $postings->get($match->treasury_posting_id);
+            if (! $line || ! $this->valid($statement, $line, $posting, $match)) {
+                $issues[] = ['code' => 'invalid_match', 'match_id' => $match->id];
+                continue;
+            }
+            $matchedLines[$line->id] = true;
+            $matchedPostings[$posting->id] = true;
+        }
+        $bankOnly = $lines->reject(fn ($line) => isset($matchedLines[$line->id]))->values();
+        $ledgerOnly = $postings->reject(fn ($posting) => isset($matchedPostings[$posting->id]))->values();
+        $closing = $opening + (int) $postings->sum('amount_minor');
+        $bankClosing = (int) $statement->closing_minor;
+        $openingDifference = (int) $statement->opening_minor - $opening;
+        $difference = $bankClosing - $closing;
+        $bankUnmatched = (int) $bankOnly->sum('amount_minor');
+        $ledgerUnmatched = (int) $ledgerOnly->sum('amount_minor');
+        if ((int) $statement->opening_minor + (int) $lines->sum('amount_minor') !== $bankClosing) {
+            $issues[] = ['code' => 'statement_total_mismatch'];
+        }
+        if ($difference !== $openingDifference + $bankUnmatched - $ledgerUnmatched) {
+            $issues[] = ['code' => 'reconciliation_identity_mismatch'];
+        }
+        return [
+            'statement' => (array) $statement,
+            'recorded_opening_minor' => $opening, 'recorded_closing_minor' => $closing,
+            'opening_difference_minor' => $openingDifference, 'closing_difference_minor' => $difference,
+            'bank_unmatched_minor' => $bankUnmatched, 'ledger_unmatched_minor' => $ledgerUnmatched,
+            'matched_count' => count($matchedLines),
+            'unmatched_bank_lines' => $bankOnly->all(), 'unmatched_ledger_postings' => $ledgerOnly->all(),
+            'matches' => $matches->all(), 'issues' => $issues,
+            'fully_matched' => $issues === [] && $bankOnly->isEmpty() && $ledgerOnly->isEmpty()
+                && $openingDifference === 0 && $difference === 0,
+            'certified_balance' => false,
+        ];
+    }
+
+    public function inspect(User $actor, int $id): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        return DB::transaction(function () use ($id): array {
+            $this->lock();
+            $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($statement, 404);
+            return $this->report($statement, $this->account((int) $statement->treasury_account_id));
+        }, 3);
+    }
+
+    public function index(User $actor, int $accountId): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        return DB::transaction(function () use ($accountId): array {
+            $this->lock();
+            $this->account($accountId);
+            return ['statements' => DB::table('bank_statements')->where('treasury_account_id', $accountId)
+                ->orderByDesc('from_date')->get(), 'certified_balance' => false];
+        }, 3);
+    }
+}
