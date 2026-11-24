@@ -377,6 +377,37 @@ final class BankReconciliationService
             && $review->payment_date <= $line->booked_on;
     }
 
+    private function validClaimCollectionLink(Payment $payment, object $doc, object $line): bool
+    {
+        $claims = DB::table('noncash_collection_claims')
+            ->where(function ($query) use ($payment): void {
+                $query->where('payment_id', $payment->id);
+                if ($payment->sync_uuid) {
+                    $query->orWhere('sync_uuid', $payment->sync_uuid);
+                }
+            })->get();
+        // Historical receipts may predate the claim workflow.
+        if ($claims->isEmpty()) return true;
+        if ($claims->count() !== 1) return false;
+        $claim = $claims->first();
+
+        return $claim->status === 'cleared' && $claim->decided_at !== null
+            && (int) $claim->payment_id === (int) $payment->id
+            && $claim->sync_uuid === $payment->sync_uuid
+            && (int) $claim->subscriber_id === (int) $payment->subscriber_id
+            && (int) ($claim->invoice_id ?? 0) === (int) ($payment->invoice_id ?? 0)
+            && (int) $claim->submitted_by === (int) $payment->user_id
+            && (int) $claim->decided_by === (int) $doc->approved_by
+            && (int) $claim->submitted_by !== (int) $claim->decided_by
+            && $claim->payment_method === $payment->payment_method
+            && $claim->instrument_reference === $payment->reference_number
+            && (int) $claim->amount_minor === (int) $doc->amount_minor
+            && $claim->instrument_on <= $line->booked_on
+            && $payment->payment_date->toDateString() === $line->booked_on
+            && $payment->cash_session_id === null
+            && $claim->decision_evidence === $doc->evidence;
+    }
+
     /** Audit the bank leg independently of the original subscriber credit. */
     public function checkCollectionPosting(object $posting): bool
     {
@@ -393,6 +424,7 @@ final class BankReconciliationService
         return $doc && $payment && $line && $statement && $account && $match && $account->channel === 'bank'
             && $this->eligibleCollection($payment)
             && $this->validLateCollectionLink($payment, $doc, $line)
+            && $this->validClaimCollectionLink($payment, $doc, $line)
             && $this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $statement->id)->get())
             && (int) $statement->treasury_account_id === (int) $account->id
             && (int) $line->treasury_account_id === (int) $account->id
