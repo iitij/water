@@ -46,7 +46,7 @@ class TariffController extends ApiController
             'unit_price' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'is_active' => ['sometimes', 'boolean'],
             'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['nullable', 'date'],
         ]);
         $tariff = DB::transaction(function () use ($data) {
             // Active means approved for its dated interval, not today's sole tariff.
@@ -114,7 +114,8 @@ class TariffController extends ApiController
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
         $restored = 0;
         DB::transaction(function () use ($data, &$restored) {
-            foreach (Tariff::onlyTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
+            Tariff::lockCatalog();
+            foreach (Tariff::onlyTrashed()->whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $tariff) {
                 $tariff->restore();
                 $restored++;
             }
@@ -130,7 +131,8 @@ class TariffController extends ApiController
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct']]);
         $deleted = 0;
         DB::transaction(function () use ($data, &$deleted) {
-            foreach (Tariff::withTrashed()->whereIn('id', $data['ids'])->lockForUpdate()->get() as $tariff) {
+            Tariff::lockCatalog();
+            foreach (Tariff::withTrashed()->whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $tariff) {
                 $tariff->forceDelete();
                 $deleted++;
             }
@@ -144,6 +146,7 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:tariffs,id']]);
         $count = DB::transaction(function () use ($data) {
+            Tariff::lockCatalog();
             $tariffs = Tariff::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get();
             foreach ($tariffs as $tariff) {
                 $tariff->delete();
