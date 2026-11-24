@@ -45,33 +45,27 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
   Future<MeterPeriodResponse> _calculateOfflinePeriod(Meter meter) async {
     final cachedPeriod = await _database.getCachedMeterPeriod(meter.id);
     final latest = await _database.getLatestCachedReading(meter.id);
-    final periodName = await _database.getCachedSetting('reading_period') ?? 'monthly';
-    final readingDay = await _database.getCachedSetting('reading_day') ?? 'last_day';
     final autoSetting = await _database.getCachedSetting('auto_issue_invoice_on_reading');
     final cachedMeter = await _database.getCachedMeter(meter.id);
 
-    final latestEnd = _parseDate(latest?['period_end']);
-    final latestDate = _parseDate(latest?['reading_date']);
-    final cachedPeriodEnd = _parseDate(cachedPeriod?['period_end']);
+    final latestDate = _parseDate(
+      latest?['actual_reading_date'] ?? latest?['reading_date'],
+    );
     final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
         _asDouble(cachedPeriod?['last_reading']) ??
         _asDouble(cachedMeter?['last_reading']) ??
         meter.lastReading;
 
-    final result = latest == null && cachedPeriodStart != null && cachedPeriodEnd != null
-        ? ReadingPeriodResult(
-            periodStart: cachedPeriodStart,
-            periodEnd: cachedPeriodEnd,
-          )
-        : DatePeriodCalculator.calculate(
-            lastReadingPeriodEnd: latestEnd,
-            lastReadingDate: latestEnd == null ? latestDate : null,
-            subscriptionStartDate: meter.subscriptionStartDate ??
-                _parseDate(cachedMeter?['subscription_start_date']),
-            readingPeriod: periodName,
-            readingDay: readingDay,
-          );
+    final result = DatePeriodCalculator.calculate(
+      lastReadingDate: latestDate ??
+          (latest == null ? cachedPeriodStart : null),
+      installedAt: meter.installedAt ??
+          _parseDate(cachedMeter?['installed_at']),
+      subscriptionStartDate: meter.subscriptionStartDate ??
+          _parseDate(cachedMeter?['subscription_start_date']),
+      now: DateTime.now(),
+    );
 
     final cachedAuto = cachedPeriod?['auto_issue_invoice'];
     final autoIssue = cachedAuto != null

@@ -331,7 +331,7 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
           meterId: _meter.id,
           readingDate: _readingDate,
           periodStart: _period!.periodStart,
-          periodEnd: _period!.periodEnd,
+          periodEnd: _readingDate,
           previousReading: previousReading,
           currentReading: currentReading,
           imagePath: _imagePath,
@@ -368,9 +368,21 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
       helpText: AppStrings.of(context).readingActualDateChange,
     );
     if (selected == null || !mounted || _isSaving) return;
-    // The actual observation date is independent of the approved billing
-    // period. Do not recalculate periodStart/periodEnd when it changes.
-    setState(() => _readingDate = selected);
+    // The selected observation closes this consumption interval.
+    if (!selected.isAfter(_period!.periodStart)) {
+      _showMessage('تاريخ القراءة الجديدة يجب أن يلي تاريخ القراءة السابقة.');
+      return;
+    }
+    setState(() {
+      _readingDate = selected;
+      _period = MeterPeriodResponse(
+        lastReading: _period!.lastReading,
+        periodStart: _period!.periodStart,
+        periodEnd: selected,
+        autoIssueInvoice: _period!.autoIssueInvoice,
+        isOfflineEstimate: _period!.isOfflineEstimate,
+      );
+    });
   }
 
   Future<void> _nextPath() async {

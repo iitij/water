@@ -42,7 +42,7 @@ class SingleMeterOfflineReplacementRaceTest extends TestCase
         $currentId = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
             'reason' => 'استبدال عداد أثناء انقطاع اتصال القارئ',
-            'new_meter' => ['unique_code' => 'RACE-NEW', 'initial_reading' => 0],
+            'new_meter' => ['unique_code' => 'RACE-NEW', 'initial_reading' => 0, 'installed_at' => now()->subDays(7)->toDateString()],
         ])->assertCreated()->json('current_meter.id');
 
         $oldUuid = (string) Str::uuid();

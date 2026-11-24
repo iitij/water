@@ -1,4 +1,5 @@
-/// A billing/reading period calculated locally when the API is unavailable.
+/// A real meter consumption interval closes when the next observation occurs.
+/// Expected visits (monthly/weekly etc.) do not define the billed interval.
 class ReadingPeriodResult {
   const ReadingPeriodResult({
     required this.periodStart,
@@ -17,9 +18,8 @@ class ReadingPeriodResult {
       '${value.day.toString().padLeft(2, '0')}';
 }
 
-/// Mirrors `App\\Services\\ReadingService` for offline field reading.
-///
-/// `now` is injectable to keep the default period deterministic in tests.
+/// Mirrors the Laravel ReadingService for offline readings. The observation
+/// date is the end of the interval, even when the visit is delayed.
 class DatePeriodCalculator {
   const DatePeriodCalculator._();
 
@@ -27,79 +27,25 @@ class DatePeriodCalculator {
     DateTime? lastReadingPeriodEnd,
     DateTime? lastReadingDate,
     DateTime? subscriptionStartDate,
+    DateTime? installedAt,
     String readingPeriod = 'monthly',
     String readingDay = 'last_day',
     DateTime? now,
   }) {
-    final today = _dateOnlyValue(now ?? DateTime.now());
-    late final DateTime periodStart;
-
-    if (lastReadingPeriodEnd != null) {
-      periodStart = _addCalendarDays(_dateOnlyValue(lastReadingPeriodEnd), 1);
-    } else if (lastReadingDate != null) {
-      final readingDate = _dateOnlyValue(lastReadingDate);
-      periodStart = _addCalendarDays(_endOfMonth(readingDate), 1);
-    } else if (subscriptionStartDate != null) {
-      periodStart = _dateOnlyValue(subscriptionStartDate);
-    } else {
-      periodStart = DateTime(today.year, today.month, 1);
+    final observation = _dateOnlyValue(now ?? DateTime.now());
+    final baseline = lastReadingDate ?? installedAt ?? subscriptionStartDate;
+    if (baseline == null) {
+      throw StateError(
+        'يلزم تاريخ تركيب العداد أو تاريخ بداية خدمة المشترك لتحديد الفترة الأولى.',
+      );
     }
-
-    return ReadingPeriodResult(
-      periodStart: periodStart,
-      periodEnd: _calculateNextPeriodEnd(
-        periodStart,
-        readingPeriod,
-        readingDay,
-      ),
-    );
-  }
-
-  static DateTime _calculateNextPeriodEnd(
-    DateTime start,
-    String period,
-    String readingDay,
-  ) {
-    final endOfCurrentMonth = _endOfMonth(start);
-
-    switch (period) {
-      case 'monthly':
-        if (readingDay == 'last_day') return endOfCurrentMonth;
-        final parsedDay = int.tryParse(readingDay);
-        final targetDay = (parsedDay ?? 28).clamp(1, 31).toInt();
-        if (start.day <= targetDay) {
-          return _dateInMonth(start.year, start.month, targetDay);
-        }
-        final nextMonth = DateTime(start.year, start.month + 1, 1);
-        return _dateInMonth(nextMonth.year, nextMonth.month, targetDay);
-
-      case 'half_monthly':
-        return start.day <= 15 ? DateTime(start.year, start.month, 15) : endOfCurrentMonth;
-
-      case 'ten_days':
-        if (start.day <= 10) return DateTime(start.year, start.month, 10);
-        if (start.day <= 20) return DateTime(start.year, start.month, 20);
-        return endOfCurrentMonth;
-
-      case 'weekly':
-        return _addCalendarDays(start, 6);
-
-      default:
-        return endOfCurrentMonth;
+    final from = _dateOnlyValue(baseline);
+    if (!observation.isAfter(from)) {
+      throw StateError('تاريخ القراءة الحالية يجب أن يلي تاريخ القراءة السابقة.');
     }
+    return ReadingPeriodResult(periodStart: from, periodEnd: observation);
   }
-
-  static DateTime _dateInMonth(int year, int month, int day) {
-    final lastDay = _endOfMonth(DateTime(year, month, 1)).day;
-    return DateTime(year, month, day.clamp(1, lastDay).toInt());
-  }
-
-  static DateTime _endOfMonth(DateTime value) =>
-      DateTime(value.year, value.month + 1, 0);
 
   static DateTime _dateOnlyValue(DateTime value) =>
       DateTime(value.year, value.month, value.day);
-
-  static DateTime _addCalendarDays(DateTime value, int days) =>
-      DateTime(value.year, value.month, value.day + days);
 }
