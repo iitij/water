@@ -43,7 +43,7 @@ final class LateReceiptReviewController extends ApiController
             'approve' => ['required', 'boolean'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'evidence_reference' => ['required_if:approve,true', 'nullable', 'string', 'min:3', 'max:150'],
-            'settlement_method' => ['required_if:approve,true', 'nullable', 'in:separate_handover,verified_non_cash'],
+            'settlement_method' => ['required_if:approve,true', 'nullable', 'in:separate_handover,verified_non_cash,already_counted'],
         ]);
         return response()->json(['review' => $service->decide($id, $request->user(), $data)]);
     }

@@ -236,6 +236,15 @@
         </div>
     </div>
 
+    @if ($summary['counted_cash_allocation_eligible'] ?? false)
+        <div class="section-title">تخصيص فائض النقد المعدود (بعد الاعتماد)</div>
+        <div class="meta">
+            <div>الفائض الأصلي المتاح للتخصيص: {{ $summary['counted_cash_surplus_capacity'] }}</div>
+            <div>المخصص لسندات متأخرة: {{ $summary['counted_cash_surplus_allocated'] }}</div>
+            <div>الفائض غير المخصص: {{ $summary['counted_cash_surplus_available'] }}</div>
+        </div>
+    @endif
+
     @if ($amountInWords)
         <div class="words">
             <strong>النقد المعدود كتابةً:</strong> {{ $amountInWords }}

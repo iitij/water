@@ -126,7 +126,8 @@ class CashSessionsTable
                             ->label('القرار')->options(['approve' => 'اعتماد', 'reject' => 'رفض'])->required(),
                         \Filament\Forms\Components\Select::make('settlement_method')
                             ->label('طريقة الإثبات عند الاعتماد')
-                            ->options(['separate_handover' => 'تسليم نقدي مستقل خارج المبلغ المعدود', 'verified_non_cash' => 'إثبات تحصيل غير نقدي']),
+                            ->helperText(fn (CashSession $record): string => 'الفائض الأصلي غير المخصص: '.number_format(app(\App\Services\LateReceiptReviewService::class)->countedCashAllocation($record)['available_minor'] / 100, 2, '.', ''))
+                            ->options(['separate_handover' => 'تسليم نقدي مستقل خارج المبلغ المعدود', 'verified_non_cash' => 'إثبات تحصيل غير نقدي', 'already_counted' => 'ضمن فائض النقد المعدود المثبت']),
                         \Filament\Forms\Components\TextInput::make('evidence_reference')
                             ->label('مرجع التسوية المستقل عند الاعتماد')->maxLength(150),
                         Textarea::make('evidence')->label('الدليل وسبب القرار')->required()->minLength(10)->maxLength(2000),

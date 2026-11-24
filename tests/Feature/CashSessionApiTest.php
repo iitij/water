@@ -257,6 +257,48 @@ class CashSessionApiTest extends TestCase
         $this->assertSame('125.25', $this->invoice->fresh()->amount_paid);
     }
 
+    public function test_counted_surplus_is_allocated_once_without_rewriting_closed_snapshot(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $old = $this->postJson('/api/cash-sessions', ['opening_amount' => '100.25'])->assertCreated()->json('cash_session.id');
+        $this->postJson("/api/cash-sessions/{$old}/close", ['counted_amount' => '350.75'])->assertOk()
+            ->assertJsonPath('cash_session.variance_amount', '250.50');
+        $supervisor = User::factory()->create(['role' => 'admin']);
+        $supervisor->assignRole('super_admin');
+        $this->actingAs($supervisor, 'sanctum')->postJson("/api/cash-sessions/{$old}/approve", ['approve' => true])->assertOk();
+        $this->actingAs($this->admin, 'sanctum');
+        $new = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $payload = ['subscriber_id' => $this->subscriber->id, 'invoice_id' => $this->invoice->id,
+            'cash_session_id' => $old, 'payment_method' => 'cash', 'payment_date' => today()->toDateString()];
+        $ids = [];
+        foreach (['150.25', '100.26', '100.25'] as $amount) {
+            $ids[] = $this->postJson('/api/late-receipt-reviews', $payload + ['amount' => $amount, 'sync_uuid' => (string) Str::uuid()])
+                ->assertSuccessful()->json('review.id');
+        }
+        $this->actingAs($supervisor, 'sanctum');
+        $decision = ['approve' => true, 'evidence' => 'Verified receipt included in original cash count',
+            'settlement_method' => 'already_counted'];
+        $first = $decision + ['evidence_reference' => 'COUNTED-001'];
+        $paymentId = $this->postJson("/api/late-receipt-reviews/{$ids[0]}/decide", $first)
+            ->assertOk()->json('review.payment_id');
+        $this->postJson("/api/late-receipt-reviews/{$ids[0]}/decide", $first)->assertOk()->assertJsonPath('review.payment_id', $paymentId);
+        $this->postJson("/api/late-receipt-reviews/{$ids[1]}/decide", $decision + ['evidence_reference' => 'COUNTED-002'])
+            ->assertUnprocessable()->assertJsonValidationErrors('amount');
+        $this->postJson("/api/late-receipt-reviews/{$ids[2]}/decide", $decision + ['evidence_reference' => 'COUNTED-003'])->assertOk();
+        $this->getJson("/api/cash-sessions/{$old}/report")->assertOk()
+            ->assertJsonPath('cash_session.counted_cash_surplus_capacity', '250.50')
+            ->assertJsonPath('cash_session.counted_cash_surplus_allocated', '250.50')
+            ->assertJsonPath('cash_session.counted_cash_surplus_available', '0.00')
+            ->assertJsonPath('cash_session.variance_amount', '250.50');
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $new]);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $old]);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $old, 'expected_amount' => '100.25', 'counted_amount' => '350.75', 'variance_amount' => '250.50']);
+        $this->assertSame('250.50', $this->invoice->fresh()->amount_paid);
+        $this->postJson("/api/payments/{$paymentId}/void", ['reason' => 'Cannot void independently reviewed receipt'])
+            ->assertUnprocessable()->assertJsonValidationErrors('payment');
+    }
+
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')

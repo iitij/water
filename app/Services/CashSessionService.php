@@ -222,8 +222,8 @@ class CashSessionService
                 'total' => number_format((float) $row->total, 2, '.', ''),
             ])->values()->all();
 
-        $cashMinor = (int) round((float) ($byMethod->firstWhere('payment_method', 'cash')['total'] ?? 0) * 100);
-        $totalMinor = $byMethod->sum(fn ($row) => (int) round((float) $row['total'] * 100));
+        $cashMinor = (int) round((float) (collect($byMethod)->firstWhere('payment_method', 'cash')['total'] ?? 0) * 100);
+        $totalMinor = collect($byMethod)->sum(fn ($row) => (int) round((float) $row['total'] * 100));
 
         $voided = Payment::query()
             ->where('cash_session_id', $session->id)
@@ -231,6 +231,8 @@ class CashSessionService
             ->where(function ($query) { $query->whereNull('voided_via')->orWhere('voided_via', '!=', 'closed_correction'); })
             ->count();
         $corrections = DB::table('closed_cash_corrections')->where('cash_session_id', $session->id)->orderBy('id')->get();
+
+        $allocation = app(LateReceiptReviewService::class)->countedCashAllocation($session);
 
         return [
             'id' => $session->id,
@@ -250,6 +252,10 @@ class CashSessionService
             'variance_amount' => $session->variance_amount === null
                 ? null
                 : number_format((float) $session->variance_amount, 2, '.', ''),
+            'counted_cash_allocation_eligible' => $allocation['eligible'],
+            'counted_cash_surplus_capacity' => number_format($allocation['capacity_minor'] / 100, 2, '.', ''),
+            'counted_cash_surplus_allocated' => number_format($allocation['allocated_minor'] / 100, 2, '.', ''),
+            'counted_cash_surplus_available' => number_format($allocation['available_minor'] / 100, 2, '.', ''),
             'receipts' => (clone $payments)->count(),
             'voided_receipts' => $voided,
             'post_close_corrections' => $corrections,

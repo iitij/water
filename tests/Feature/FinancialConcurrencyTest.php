@@ -400,6 +400,35 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(500.25, $meter->subscriber->getAccountCredit());
     }
 
+    public function test_concurrent_late_receipt_approvals_cannot_allocate_same_counted_surplus(): void
+    {
+        $first = $this->fixture();
+        $second = $this->fixture();
+        $collector = User::factory()->create();
+        $supervisor = User::factory()->create();
+        $role = \Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web');
+        $supervisor->assignRole($role);
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector, 100);
+        $sessions->decide($sessions->close($session, 200), true, $supervisor);
+        $reviews = app(\App\Services\LateReceiptReviewService::class);
+        $payload = ['cash_session_id' => $session->id, 'amount' => '75.25',
+            'payment_method' => 'cash', 'payment_date' => today()->toDateString()];
+        $one = $reviews->submit($collector, $payload + ['subscriber_id' => $first->subscriber_id, 'sync_uuid' => (string) Str::uuid()]);
+        $two = $reviews->submit($collector, $payload + ['subscriber_id' => $second->subscriber_id, 'sync_uuid' => (string) Str::uuid()]);
+        $approve = fn (array $review, string $reference) => app(\App\Services\LateReceiptReviewService::class)->decide(
+            $review['id'], User::findOrFail($supervisor->id), ['approve' => true,
+                'settlement_method' => 'already_counted', 'evidence_reference' => $reference,
+                'evidence' => 'Verified cash already included in closing count'])['payment_id'];
+        $results = $this->race(fn () => $approve($one, 'RACE-COUNT-1'), fn () => $approve($two, 'RACE-COUNT-2'));
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(ValidationException::class, collect($results)->firstWhere('ok', false)['error']);
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Transaction::count());
+        $this->assertSame(2475, $reviews->countedCashAllocation($session->fresh())['available_minor']);
+        $this->assertSame('100.00', $session->fresh()->variance_amount);
+    }
+
     public function test_parallel_cash_open_and_stale_close_are_rejected(): void
     {
         $user = User::factory()->create();

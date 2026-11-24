@@ -137,6 +137,7 @@ class PaymentService
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
@@ -233,6 +234,7 @@ class PaymentService
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
@@ -300,6 +302,7 @@ class PaymentService
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }

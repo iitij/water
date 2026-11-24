@@ -79,6 +79,36 @@ final class LateReceiptReviewService
         }, 3);
     }
 
+    /**
+     * Only the positive, original physical-cash variance can be allocated.
+     * Never infer available cash from legacy totals or later bookkeeping corrections.
+     * Approval holds the issuance and session locks when calling this method.
+     */
+    public function countedCashAllocation(CashSession $session): array
+    {
+        $eligible = $session->isApproved() && $session->settlement_basis === 'physical_cash'
+            && $session->expected_amount !== null && $session->counted_amount !== null
+            && $session->variance_amount !== null;
+        $minor = static fn ($value): int => (int) round((float) $value * 100);
+        $variance = $minor($session->variance_amount);
+        $eligible = $eligible && $variance === $minor($session->counted_amount) - $minor($session->expected_amount);
+        $capacity = $eligible ? max(0, $variance) : 0;
+        // Use a locking read when approving inside a transaction, not a stale MVCC snapshot.
+        $query = DB::table('late_receipt_reviews')->where('cash_session_id', $session->id)
+            ->where('status', 'approved')->where('settlement_method', 'already_counted');
+        if (DB::transactionLevel() > 0) {
+            $query->lockForUpdate();
+        }
+        $allocated = $query->get(['amount'])->sum(fn ($row) => $minor($row->amount));
+
+        return [
+            'eligible' => $eligible,
+            'capacity_minor' => $capacity,
+            'allocated_minor' => $allocated,
+            'available_minor' => max(0, $capacity - $allocated),
+        ];
+    }
+
     public function decide(int $id, User $actor, array $data): array
     {
         abort_unless($this->canDecide($actor), 403);
@@ -108,9 +138,16 @@ final class LateReceiptReviewService
             if ($approve) {
                 $session = CashSession::query()->lockForUpdate()->findOrFail($review->cash_session_id);
                 abort_unless($session->isApproved() && (int) $session->user_id === (int) $review->collector_id, 409, 'يلزم اعتماد الصندوق الأصلي أولاً.');
-                $requiredMethod = $review->payment_method === 'cash' ? 'separate_handover' : 'verified_non_cash';
-                if ($method !== $requiredMethod) {
-                    throw ValidationException::withMessages(['settlement_method' => 'يلزم إثبات تسليم مستقل خارج النقد المعدود أو إثبات التحصيل غير النقدي.']);
+                $allowedMethods = $review->payment_method === 'cash'
+                    ? ['separate_handover', 'already_counted'] : ['verified_non_cash'];
+                if (! in_array($method, $allowedMethods, true)) {
+                    throw ValidationException::withMessages(['settlement_method' => 'طريقة التسوية لا تتوافق مع وسيلة التحصيل.']);
+                }
+                if ($method === 'already_counted') {
+                    $allocation = $this->countedCashAllocation($session);
+                    if (! $allocation['eligible'] || (int) round((float) $review->amount * 100) > $allocation['available_minor']) {
+                        throw ValidationException::withMessages(['amount' => 'لا يوجد فائض نقدي أصلي مثبت وكافٍ لهذه التسوية.']);
+                    }
                 }
                 abort_if(DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->lockForUpdate()->first(),
                     409, 'مرجع التسوية مستخدم مسبقاً.');
@@ -129,7 +166,8 @@ final class LateReceiptReviewService
             DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
             app(AuditLogger::class)->recordRequired('late_receipt.'.$status, [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'before' => (array) $review,
-                'after' => $decision, 'actor_user_id' => $actor->id,
+                'after' => $decision + ['new_cash_movement' => false,
+                    'counted_cash_allocation' => $approve && $method === 'already_counted'], 'actor_user_id' => $actor->id,
             ]);
             return (array) DB::table('late_receipt_reviews')->find($id);
         }, 3);
