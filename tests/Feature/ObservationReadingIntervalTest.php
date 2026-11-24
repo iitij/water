@@ -172,6 +172,37 @@ class ObservationReadingIntervalTest extends TestCase
     }
 
 
+    public function test_calendar_record_cannot_reenable_the_old_edit_algorithm(): void
+    {
+        $meter = $this->meter();
+        $reading = Reading::create([
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
+            'period_start' => '2026-02-01', 'period_end' => '2026-02-28',
+            'previous_reading' => 100, 'current_reading' => 135,
+        ]);
+        $this->putJson('/api/readings/'.$reading->id, [
+            'reading_date' => '2026-02-15', 'current_reading' => 140,
+        ])->assertUnprocessable()->assertJsonValidationErrors('period_start');
+        try {
+            $reading->update(['current_reading' => 140]);
+            $this->fail('Calendar edit path was accepted.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertArrayHasKey('period_start', $e->errors());
+        }
+        $this->assertSame('135.00', $reading->fresh()->current_reading);
+    }
+
+    public function test_observation_cannot_change_its_preceding_value(): void
+    {
+        $meter = $this->meter();
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12', 'current_reading' => 135,
+        ])->assertCreated()->json('reading.id');
+        $this->putJson('/api/readings/'.$id, ['previous_reading' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('previous_reading');
+        $this->assertSame('100.00', Reading::findOrFail($id)->previous_reading);
+    }
+
     public function test_updating_latest_observation_recalculates_period_end(): void
     {
         $meter = $this->meter();
