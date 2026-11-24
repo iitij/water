@@ -335,7 +335,7 @@ class PaymentService
             }
 
             if ($syncUuid) {
-                $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->first();
+                $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->lockForUpdate()->first();
                 if ($existing) {
                     if ($existing->trashed()) {
                         abort(409, 'عملية الدفع المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
@@ -352,17 +352,7 @@ class PaymentService
                 }
             }
 
-            // العداد مرجع للحركة فقط؛ الحساب المالي هو المشترك.
-            $meterId = $requestedMeterId;
-            $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
-            if ($invoiceId) {
-                $invoice = Invoice::where('subscriber_id', $subscriber->id)->where('status', '!=', 'draft')->findOrFail($invoiceId);
-                $meterId = $invoice->meter_id;
-                $meter = $invoice->meter;
-            }
-
-            // ربط السند بالصندوق المفتوح للمحصّل نفسه، إن وُجد.
-            // السند بلا صندوق يبقى صالحاً (توافق خلفي) لكنه لا يدخل تسوية يومية.
+            // Acquire collector/till locks before financial reads and number generation.
             $cashSessionId = null;
             if ($userId) {
                 User::query()->lockForUpdate()->findOrFail($userId);
@@ -371,6 +361,15 @@ class PaymentService
                     ->where('state', \App\Models\CashSession::STATE_OPEN)
                     ->latest('id')->lockForUpdate()->first();
                 $cashSessionId = $cashSession?->id;
+            }
+
+            // العداد مرجع للحركة فقط؛ الحساب المالي هو المشترك.
+            $meterId = $requestedMeterId;
+            $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
+            if ($invoiceId) {
+                $invoice = Invoice::where('subscriber_id', $subscriber->id)->where('status', '!=', 'draft')->findOrFail($invoiceId);
+                $meterId = $invoice->meter_id;
+                $meter = $invoice->meter;
             }
 
             // 1. إنشاء سجل الدفع
