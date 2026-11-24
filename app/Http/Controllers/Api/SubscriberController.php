@@ -298,6 +298,12 @@ class SubscriberController extends ApiController
         return response()->json(['message' => 'تم تسجيل الدفعة بنجاح.', 'payment' => $payment->load(['subscriber', 'invoice', 'meter', 'user'])], 201);
     }
 
+    public function allocationReconciliation(int $id)
+    {
+        $this->authorizeApi(Subscriber::class, 'view');
+        return response()->json(app(\App\Services\PaymentAllocationReadService::class)->reconcile(Subscriber::findOrFail($id)));
+    }
+
     public function unpaidInvoicesSummary(int $id)
     {
         $this->authorizeApi(Subscriber::class, 'view');

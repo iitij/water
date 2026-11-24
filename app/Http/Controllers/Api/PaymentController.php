@@ -80,6 +80,7 @@ class PaymentController extends ApiController
             'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
         ])->withSum('refunds as refunded_amount', 'amount')->findOrFail($id);
 
+        $payment->setAttribute('allocation_snapshot', app(\App\Services\PaymentAllocationReadService::class)->forPayment($payment));
         return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
 

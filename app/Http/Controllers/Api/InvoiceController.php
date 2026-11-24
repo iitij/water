@@ -151,7 +151,9 @@ class InvoiceController extends ApiController
             'payments' => fn ($q) => $q->with(['user:id,name', 'meter:id,unique_code'])->latest('payment_date'),
         ])->findOrFail($id);
 
-        return response()->json(['invoice' => $this->decorate($invoice)]);
+        $data = $this->decorate($invoice);
+        $data['allocation_snapshot'] = app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice);
+        return response()->json(['invoice' => $data]);
     }
 
     public function store(Request $request)

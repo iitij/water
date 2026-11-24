@@ -197,6 +197,17 @@ class PaymentResource extends Resource
                     ]),
             ])
             ->actions([
+                \Filament\Actions\Action::make('view_allocations')
+                    ->label('تخصيصات السند')
+                    ->icon('heroicon-o-list-bullet')
+                    ->visible(fn (Payment $record) => auth()->user()?->can('view', $record))
+                    ->modalHeading('توزيع السند الحالي')
+                    ->modalContent(function (Payment $record) {
+                        \Illuminate\Support\Facades\Gate::authorize('view', $record);
+                        return view('filament.accounting.allocation-snapshot', [
+                            'snapshot' => app(\App\Services\PaymentAllocationReadService::class)->forPayment($record),
+                        ]);
+                    })->modalSubmitAction(false)->modalCancelActionLabel('إغلاق'),
                 \Filament\Actions\Action::make('record_refund')
                     ->label('تسجيل صرف رصيد دائن')
                     ->color('warning')

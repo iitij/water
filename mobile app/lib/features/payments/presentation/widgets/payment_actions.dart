@@ -251,6 +251,11 @@ Future<void> showPaymentActionSheet(
 
   final actions = <_PaymentSheetAction>[
     _PaymentSheetAction(
+      icon: Icons.list_alt_outlined,
+      label: 'تخصيصات السند',
+      run: () => showPaymentAllocations(context, payment),
+    ),
+    _PaymentSheetAction(
       icon: Icons.picture_as_pdf_outlined,
       label: 'عرض سند القبض PDF',
       run: () => openPaymentPdfPreview(context, payment),
@@ -406,4 +411,52 @@ class _PaymentSheetAction {
   final String label;
   final VoidCallback run;
   final bool destructive;
+}
+
+
+/// Always load the server's latest snapshot. Do not reconstruct allocations
+/// from a partial offline list or claim a missing snapshot is a zero allocation.
+Future<void> showPaymentAllocations(BuildContext context, PaymentModel payment) async {
+  try {
+    final current = await sl<PaymentsRepository>().byId(payment.id);
+    if (!context.mounted) return;
+    final snapshot = current.allocationSnapshot;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تخصيصات السند'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (snapshot?.integrityValid == false)
+                const Text('تعذر التحقق من سلامة سجل التخصيص. يلزم مراجعة المسؤول المالي.')
+              else if (snapshot == null || !snapshot.available)
+                const Text('لا يوجد إصدار تخصيص محفوظ لهذا الحساب بعد.')
+              else ...[
+                Text('الحساب #${snapshot.subscriberId} — الإصدار ${snapshot.revision}'),
+                if (snapshot.recordedAt != null) Text('تاريخ الإصدار: ${snapshot.recordedAt}'),
+                const Divider(),
+                if (snapshot.rows.isEmpty) const Text('لا توجد تخصيصات سارية في هذا الإصدار.'),
+                for (final row in snapshot.rows)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(row.billNumber ?? 'رصيد دائن غير مخصص'),
+                    subtitle: row.accountTransferId == null ? null : const Text('تحويل محاسبي'),
+                    trailing: Text((row.amountMinor / 100).toStringAsFixed(2)),
+                  ),
+                const Divider(),
+                Text('المخصص: ${((snapshot.allocatedMinor ?? 0) / 100).toStringAsFixed(2)} ريال'),
+                Text('غير المخصص: ${((snapshot.unallocatedMinor ?? 0) / 100).toStringAsFixed(2)} ريال'),
+              ],
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('إغلاق'))],
+      ),
+    );
+  } on AppFailure catch (failure) {
+    if (context.mounted) AppFeedback.error(context, failure.message);
+  }
 }

@@ -388,6 +388,17 @@ class InvoiceResource extends Resource
                     ->url(fn(Invoice $record) => route('invoices.print', $record))
                     ->openUrlInNewTab(),
 
+                \Filament\Actions\Action::make('view_allocations')
+                    ->label('تخصيصات الفاتورة')
+                    ->icon('heroicon-o-list-bullet')
+                    ->visible(fn (Invoice $record) => auth()->user()?->can('view', $record))
+                    ->modalHeading('المدفوعات المخصصة للفاتورة')
+                    ->modalContent(function (Invoice $record) {
+                        \Illuminate\Support\Facades\Gate::authorize('view', $record);
+                        return view('filament.accounting.allocation-snapshot', [
+                            'snapshot' => app(\App\Services\PaymentAllocationReadService::class)->forInvoice($record),
+                        ]);
+                    })->modalSubmitAction(false)->modalCancelActionLabel('إغلاق'),
                 \Filament\Actions\Action::make('correct_historical')
                     ->label('تصحيح فاتورة عداد مستبدل')
                     ->color('warning')

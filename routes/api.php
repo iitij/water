@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/subscribers/{id}/statement', [SubscriberController::class, 'statement']);
     Route::get('/subscribers/{id}/transactions', [SubscriberController::class, 'transactions']);
     Route::get('/subscribers/{id}/unpaid-invoices-summary', [SubscriberController::class, 'unpaidInvoicesSummary']);
+    Route::get('/subscribers/{id}/allocation-reconciliation', [SubscriberController::class, 'allocationReconciliation'])->whereNumber('id');
     Route::post('/subscribers/{id}/collect-payment', [SubscriberController::class, 'collectPayment']);
     Route::post('/subscribers/bulk-delete', [SubscriberController::class, 'bulkDelete']);
     Route::apiResource('subscribers', SubscriberController::class)->parameters(['subscribers' => 'id']);
