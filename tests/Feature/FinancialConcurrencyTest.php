@@ -160,6 +160,41 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(2, Transaction::count());
     }
 
+    public function test_parallel_overlapping_tariff_approvals_only_commit_once(): void
+    {
+        \App\Models\Tariff::firstOrFail()->update(['end_date' => '2026-01-31']);
+        $approve = fn () => \App\Models\Tariff::create([
+            'name' => 'Concurrent approval',
+            'unit_price' => 800,
+            'is_active' => true,
+            'start_date' => '2026-02-01',
+        ])->id;
+        $results = $this->race($approve, $approve);
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(ValidationException::class, collect($results)->firstWhere('ok', false)['error']);
+        $this->assertSame(2, \App\Models\Tariff::where('is_active', true)->count());
+    }
+
+    public function test_parallel_invoice_and_tariff_repricing_preserve_pricing_evidence(): void
+    {
+        $meter = $this->fixture();
+        $tariffId = \App\Models\Tariff::firstOrFail()->id;
+        $results = $this->race(
+            fn () => app(InvoiceService::class)->generateInvoice(
+                Subscriber::findOrFail($meter->subscriber_id), Meter::findOrFail($meter->id))->id,
+            fn () => \App\Models\Tariff::findOrFail($tariffId)->update(['unit_price' => 800]),
+        );
+        $this->assertTrue($results[0]['ok'], json_encode($results));
+        if (! $results[1]['ok']) {
+            $this->assertSame(ValidationException::class, $results[1]['error']);
+        }
+        $expected = $results[1]['ok'] ? '8000.00' : '6000.00';
+        $this->assertSame($expected, Invoice::firstOrFail()->total_amount);
+        $this->assertEquals((float) $expected, (float) DB::table('invoice_tariff_lines')->sole()->amount);
+        $this->assertSame($results[1]['ok'] ? '800.00' : '600.00',
+            \App\Models\Tariff::findOrFail($tariffId)->unit_price);
+    }
+
     public function test_parallel_cash_open_and_stale_close_are_rejected(): void
     {
         $user = User::factory()->create();
