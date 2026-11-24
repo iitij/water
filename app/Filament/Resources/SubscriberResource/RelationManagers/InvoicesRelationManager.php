@@ -45,6 +45,7 @@ class InvoicesRelationManager extends RelationManager
                         'partially_paid' => 'مسددة جزئياً',
                         'paid' => 'مسددة',
                         'overdue' => 'متأخرة',
+                        'cancelled' => 'ملغاة',
                         default => $state,
                     })
                     ->colors([

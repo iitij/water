@@ -87,6 +87,7 @@ class InvoiceResource extends Resource
                             'partially_paid' => 'مسددة جزئياً',
                             'paid' => 'مسددة',
                             'overdue' => 'متأخرة',
+                        'cancelled' => 'ملغاة',
                         ])
                         ->default('issued')
                         ->disabled()
@@ -241,6 +242,7 @@ class InvoiceResource extends Resource
                         'partially_paid' => 'مسددة جزئياً',
                         'paid' => 'مسددة',
                         'overdue' => 'متأخرة',
+                        'cancelled' => 'ملغاة',
                         default => $state,
                     })
                     ->colors([
@@ -316,6 +318,7 @@ class InvoiceResource extends Resource
                         'partially_paid' => 'مسددة جزئياً',
                         'paid' => 'مسددة',
                         'overdue' => 'متأخرة',
+                        'cancelled' => 'ملغاة',
                     ]),
 
                 Tables\Filters\SelectFilter::make('subscriber_id')
@@ -379,6 +382,17 @@ class InvoiceResource extends Resource
                     ->url(fn(Invoice $record) => route('invoices.print', $record))
                     ->openUrlInNewTab(),
 
+                \Filament\Actions\Action::make('cancel_invoice')
+                    ->label('إلغاء الفاتورة')
+                    ->color('danger')
+                    ->visible(fn (Invoice $record) => in_array($record->status, ['issued', 'partially_paid', 'paid', 'overdue'], true)
+                        && auth()->user()?->can('delete', $record))
+                    ->action(function (Invoice $record, array $data) {
+                        \Illuminate\Support\Facades\Gate::authorize('delete', $record);
+                        app(\App\Services\InvoiceCancellationService::class)->cancel($record, $data['reason'], auth()->id(), 'web');
+                    })
+                    ->form([Forms\Components\Textarea::make('reason')->label('سبب الإلغاء')->required()->minLength(10)->maxLength(1000)])
+                    ->requiresConfirmation(),
                 \Filament\Actions\Action::make('collect_payment')
                     ->label('تحصيل')
                     ->icon('heroicon-o-banknotes')
@@ -527,7 +541,7 @@ class InvoiceResource extends Resource
             ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([
-                    \Filament\Actions\DeleteBulkAction::make(),
+
                 ]),
             ]);
     }
