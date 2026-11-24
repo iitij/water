@@ -36,6 +36,20 @@ final class LateReceiptReviewController extends ApiController
         return response()->json(DB::table('late_receipt_reviews')->where('cash_session_id', $id)->orderByDesc('id')->paginate(25));
     }
 
+    public function clearBank(Request $request, int $id, \App\Services\PaymentService $service)
+    {
+        app(\App\Services\TreasuryRegisterService::class)->authorize($request->user());
+        $data = $request->validate([
+            'statement_id' => ['required', 'integer', 'min:1'],
+            'line_id' => ['required', 'integer', 'min:1'],
+            'evidence_reference' => ['required', 'string', 'max:150'],
+            'bank_clearance_reference' => ['required', 'string', 'max:150'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        return response()->json($service->clearLateNonCash($request->user(), $id, (int) $data['statement_id'],
+            (int) $data['line_id'], $data['evidence_reference'], $data['bank_clearance_reference'], $data['evidence']));
+    }
+
     public function decide(Request $request, int $id, LateReceiptReviewService $service)
     {
         abort_unless($service->canDecide($request->user()), 403);

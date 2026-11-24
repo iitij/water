@@ -204,6 +204,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/noncash-claims/{id}/reject', [\App\Http\Controllers\Api\NonCashClaimController::class, 'reject'])->whereNumber('id');
     Route::post('/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'store']);
     Route::get('/cash-sessions/{id}/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'index'])->whereNumber('id');
+    Route::post('/late-receipt-reviews/{id}/clear-bank', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'clearBank'])->whereNumber('id');
     Route::post('/late-receipt-reviews/{id}/decide', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'decide'])->whereNumber('id');
     Route::get('/cash-sessions/current', [CashSessionController::class, 'current']);
     Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');

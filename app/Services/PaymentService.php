@@ -436,7 +436,8 @@ class PaymentService
                     && (int) ($review->invoice_id ?? 0) === (int) ($invoiceId ?? 0)
                     && (float) $review->amount === $amount
                     && $review->payment_method === $paymentMethod
-                    && $review->payment_date === $paymentDate
+                    && ($clearedClaim && in_array($paymentMethod, ['bank_transfer', 'check'], true)
+                        ? $paymentDate !== null && $paymentDate >= $review->payment_date : $review->payment_date === $paymentDate)
                     && ($review->reference_number ?? '') === ($referenceNumber ?? '')
                     && ($review->reason ?? '') === ($reason ?? '')
                     && $requestedMeterId === null && $requestedCashSessionId === null, 409, 'بيانات التسوية الاستثنائية غير مطابقة.');
@@ -456,7 +457,7 @@ class PaymentService
                         || (! $invoiceId && (int) (($approvedReview ? $review->submitted_meter_id : ($existing->meter_id ?? $existing->retired_meter_id)) ?? 0) !== (int) ($requestedMeterId ?? 0))
                         || ($requestedCashSessionId !== null && (int) ($approvedReview ? $review->cash_session_id : $existing->cash_session_id) !== $requestedCashSessionId)
                         || $existing->payment_method !== $paymentMethod
-                        || ($paymentDate !== null && $existing->payment_date->toDateString() !== \Carbon\CarbonImmutable::parse($paymentDate)->toDateString())
+                        || ($paymentDate !== null && ($approvedReview ? $review->payment_date : $existing->payment_date->toDateString()) !== \Carbon\CarbonImmutable::parse($paymentDate)->toDateString())
                         || ($existing->reference_number ?? '') !== ($referenceNumber ?? '')
                         || ($existing->reason ?? '') !== ($reason ?? '')) {
                         abort(409, 'معرّف المزامنة مستخدم مسبقاً لعملية دفع مختلفة.');
@@ -597,6 +598,85 @@ class PaymentService
                 'after' => $decision + ['bank_collection_id' => $result['collection']['id']],
             ]);
             return ['claim' => (array) DB::table('noncash_collection_claims')->find($id), 'payment_id' => $payment->id, 'bank' => $result];
+        }, 3);
+    }
+
+    /** Resolve a late, unposted noncash receipt against actual bank clearance. */
+    public function clearLateNonCash(User $actor, int $id, int $statementId, int $lineId, string $reviewReference, string $bankReference, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $reviewReference = mb_strtoupper(trim($reviewReference));
+        $bankReference = mb_strtoupper(trim($bankReference));
+        $evidence = trim($evidence);
+        if (mb_strlen($reviewReference) < 3 || mb_strlen($reviewReference) > 150
+            || mb_strlen($bankReference) < 3 || mb_strlen($bankReference) > 150
+            || $reviewReference === $bankReference || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
+            throw ValidationException::withMessages(['evidence_reference' => 'يلزم مرجعان مستقلان ودليل صالح.']);
+        }
+        $candidate = DB::table('late_receipt_reviews')->find($id);
+        abort_unless($candidate, 404);
+        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $candidate): array {
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Payment issuance lock missing.');
+            }
+            $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
+            abort_unless((int) $review->subscriber_id === (int) $subscriber->id, 409);
+            abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
+            $bank = app(BankReconciliationService::class);
+            if ($review->status !== 'pending') {
+                abort_unless($review->status === 'approved' && $review->settlement_method === 'verified_non_cash'
+                    && (int) $review->decided_by === (int) $actor->id && $review->payment_id
+                    && $review->evidence_reference === $reviewReference && $review->bank_clearance_reference === $bankReference
+                    && $review->evidence === $evidence, 409, 'سبق البت في المطالبة بطريقة مختلفة.');
+                return ['review' => (array) $review, 'bank' => $bank->confirmCollection($actor, $statementId, $lineId,
+                    (int) $review->payment_id, $bankReference, $evidence)];
+            }
+            $session = \App\Models\CashSession::query()->lockForUpdate()->findOrFail($review->cash_session_id);
+            abort_unless($session->isApproved() && (int) $session->user_id === (int) $review->collector_id,
+                409, 'يلزم اعتماد الصندوق الأصلي أولاً.');
+            $instrument = mb_strtoupper(trim((string) $review->reference_number));
+            if (! in_array($review->payment_method, ['bank_transfer', 'check'], true)
+                || mb_strlen($instrument) < 3 || mb_strlen($instrument) > 150) {
+                throw ValidationException::withMessages(['payment_method' => 'يلزم مطالبة غير نقدية بمرجع وسيلة تحصيل موثق.']);
+            }
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('id', $lineId)->lockForUpdate()->first();
+            abort_unless($line, 404);
+            $minor = (int) round((float) $review->amount * 100);
+            if ($minor <= 0 || (int) $line->amount_minor !== $minor || $line->booked_on < $review->payment_date) {
+                throw ValidationException::withMessages(['line_id' => 'يجب مطابقة مبلغ المطالبة وتاريخ تحقق التحصيل.']);
+            }
+            abort_if(Payment::withTrashed()->where('sync_uuid', $review->sync_uuid)->exists()
+                || Payment::withTrashed()->where('payment_method', $review->payment_method)
+                    ->whereRaw('UPPER(TRIM(reference_number)) = ?', [$instrument])->exists()
+                || DB::table('noncash_collection_claims')->where('sync_uuid', $review->sync_uuid)->exists()
+                || DB::table('noncash_collection_claims')->where('payment_method', $review->payment_method)
+                    ->where('instrument_reference', $instrument)->exists(), 409, 'معرّف أو مرجع التحصيل مستخدم مسبقاً.');
+            abort_if(DB::table('late_receipt_reviews')->where('evidence_reference', $reviewReference)->exists()
+                || DB::table('treasury_accounts')->where('opening_reference', $reviewReference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reviewReference)->exists()
+                || DB::table('cash_handovers')->where('reference', $reviewReference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reviewReference)->exists(),
+                409, 'مرجع المراجعة مستخدم مسبقاً.');
+            $payment = $this->postPayment($subscriber, $minor / 100,
+                $review->invoice_id ? (int) $review->invoice_id : null, $review->payment_method,
+                $review->reference_number, $review->notes, $review->reason, (int) $review->collector_id,
+                $line->booked_on, null, $review->sync_uuid, null, false, $id, true);
+            // The bank verifier checks the approved review against the receipt.
+            // Both changes remain invisible until the outer transaction commits.
+            $decision = ['status' => 'approved', 'payment_id' => $payment->id,
+                'decided_by' => $actor->id, 'decided_at' => now(), 'settlement_method' => 'verified_non_cash',
+                'evidence_reference' => $reviewReference, 'bank_clearance_reference' => $bankReference,
+                'evidence' => $evidence, 'updated_at' => now()];
+            DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
+            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $bankReference, $evidence);
+            app(AuditLogger::class)->recordRequired('late_receipt.approved', [
+                'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'actor_user_id' => $actor->id,
+                'before' => (array) $review, 'after' => $decision + [
+                    'new_cash_movement' => false, 'bank_collection_id' => $result['collection']['id'],
+                ],
+            ]);
+            return ['review' => (array) DB::table('late_receipt_reviews')->find($id), 'bank' => $result];
         }, 3);
     }
 }

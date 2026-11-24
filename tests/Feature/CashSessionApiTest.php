@@ -283,6 +283,73 @@ class CashSessionApiTest extends TestCase
         $this->assertSame('125.25', $this->invoice->fresh()->amount_paid);
     }
 
+    public function test_late_noncash_requires_actual_bank_clearance_without_rewriting_original_till(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $old = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $this->postJson("/api/cash-sessions/{$old}/close", ['counted_amount' => 0])->assertOk();
+        $reviewer = User::factory()->create(['role' => 'admin']);
+        $reviewer->assignRole('super_admin');
+        $this->actingAs($reviewer, 'sanctum')->postJson("/api/cash-sessions/{$old}/approve", ['approve' => true])->assertOk();
+        $this->actingAs($this->admin, 'sanctum');
+        $new = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $date = today()->toDateString();
+        $payload = ['subscriber_id' => $this->subscriber->id, 'invoice_id' => $this->invoice->id,
+            'cash_session_id' => $old, 'sync_uuid' => (string) Str::uuid(), 'amount' => '125.25',
+            'payment_method' => 'check', 'payment_date' => $date, 'reference_number' => 'LATE-CHECK-001'];
+        $id = $this->postJson('/api/late-receipt-reviews', $payload)->assertOk()->json('review.id');
+        $bank = app(\App\Services\TreasuryRegisterService::class)->open($this->admin, [
+            'code' => 'LATE-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '0', 'opening_reference' => 'LATE-BANK-OPEN',
+            'opening_evidence' => 'Independent opening bank statement',
+        ]);
+        // Actual bank booking occurs after closure of the original till.
+        $this->travel(1)->days();
+        $clearDate = today()->toDateString();
+        $statement = $this->postJson('/api/treasury/accounts/'.$bank['id'].'/bank-statements', [
+            'reference' => 'LATE-BANK-STMT', 'from_date' => $date, 'to_date' => $clearDate,
+            'opening_amount' => '0', 'closing_amount' => '130.25', 'evidence' => 'Actual bank statement with two credits',
+            'lines' => [
+                ['bank_reference' => 'LATE-IN', 'booked_on' => $clearDate, 'amount' => '125.25'],
+                ['bank_reference' => 'OTHER-IN', 'booked_on' => $clearDate, 'amount' => '5.00'],
+            ],
+        ])->assertOk()->json('statement.id');
+        $db = \Illuminate\Support\Facades\DB::class;
+        $data = ['statement_id' => $statement, 'line_id' => $db::table('bank_statement_lines')->where('bank_reference', 'LATE-IN')->value('id'),
+            'evidence_reference' => 'LATE-REVIEW-001', 'bank_clearance_reference' => 'LATE-PROOF-001',
+            'evidence' => 'Independent verified bank clearance after till closure'];
+        $url = "/api/late-receipt-reviews/{$id}/clear-bank";
+        $this->postJson($url, $data)->assertForbidden();
+        $this->actingAs($reviewer, 'sanctum')->postJson("/api/late-receipt-reviews/{$id}/decide", [
+            'approve' => true, 'settlement_method' => 'verified_non_cash', 'evidence_reference' => $data['evidence_reference'],
+            'evidence' => $data['evidence'],
+        ])->assertUnprocessable();
+        $this->postJson($url, array_replace($data, ['line_id' => $db::table('bank_statement_lines')->where('bank_reference', 'OTHER-IN')->value('id')]))->assertUnprocessable();
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertSame('0.00', $this->invoice->fresh()->amount_paid);
+        $paymentId = $this->postJson($url, $data)->assertOk()->assertJsonPath('review.status', 'approved')
+            ->assertJsonPath('review.payment_date', $date)->assertJsonPath('bank.posting.amount_minor', 12525)
+            ->assertJsonPath('bank.reconciliation.closing_difference_minor', 500)->json('review.payment_id');
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('review.payment_id', $paymentId);
+        $this->postJson($url, array_replace($data, ['bank_clearance_reference' => 'OTHER-PROOF']))->assertConflict();
+        $this->assertSame($clearDate, Payment::findOrFail($paymentId)->payment_date->toDateString());
+        $this->assertDatabaseHas('payments', ['id' => $paymentId, 'cash_session_id' => null, 'sync_uuid' => $payload['sync_uuid']]);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $old, 'expected_amount' => 0, 'counted_amount' => 0, 'variance_amount' => 0]);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $new]);
+        $this->assertSame('125.25', $this->invoice->fresh()->amount_paid);
+        $this->actingAs($this->admin, 'sanctum')->postJson('/api/invoices/'.$this->invoice->id.'/pay',
+            $payload + ['deferred_sync' => true])->assertSuccessful()->assertJsonPath('payment.id', $paymentId);
+        $this->assertDatabaseCount('payments', 1);
+        $this->actingAs($reviewer, 'sanctum')->getJson('/api/treasury/accounts/'.$bank['id'])->assertOk()->assertJsonPath('issues', []);
+        $db::table('late_receipt_reviews')->where('id', $id)->update(['bank_clearance_reference' => 'CORRUPTED-REF']);
+        $this->getJson('/api/treasury/accounts/'.$bank['id'])->assertOk()->assertJsonPath('issues.0.code', 'bank_collection_source_mismatch');
+        $this->travelBack();
+    }
+
     public function test_counted_surplus_is_allocated_once_without_rewriting_closed_snapshot(): void
     {
         $this->actingAs($this->admin, 'sanctum');

@@ -360,6 +360,23 @@ final class BankReconciliationService
                 ->where('type', 'payment_reversal')->exists();
     }
 
+    private function validLateCollectionLink(Payment $payment, object $doc, object $line): bool
+    {
+        $review = DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->first();
+        if (! $review || $review->bank_clearance_reference === null) return true;
+        $session = \App\Models\CashSession::find($review->cash_session_id);
+        return $session && $session->isApproved() && (int) $session->user_id === (int) $review->collector_id
+            && (int) $review->collector_id === (int) $payment->user_id
+            && (int) $review->decided_by === (int) $doc->approved_by
+            && $review->bank_clearance_reference === $doc->reference && $review->evidence === $doc->evidence
+            && $review->evidence_reference !== $review->bank_clearance_reference
+            && $review->sync_uuid === $payment->sync_uuid && $review->reference_number === $payment->reference_number
+            && (int) ($review->invoice_id ?? 0) === (int) ($payment->invoice_id ?? 0)
+            && ($review->reason ?? '') === ($payment->reason ?? '')
+            && $payment->cash_session_id === null && $payment->payment_date->toDateString() === $line->booked_on
+            && $review->payment_date <= $line->booked_on;
+    }
+
     /** Audit the bank leg independently of the original subscriber credit. */
     public function checkCollectionPosting(object $posting): bool
     {
@@ -375,6 +392,7 @@ final class BankReconciliationService
         $match = $line ? DB::table('bank_statement_matches')->where('bank_statement_line_id', $line->id)->first() : null;
         return $doc && $payment && $line && $statement && $account && $match && $account->channel === 'bank'
             && $this->eligibleCollection($payment)
+            && $this->validLateCollectionLink($payment, $doc, $line)
             && $this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $statement->id)->get())
             && (int) $statement->treasury_account_id === (int) $account->id
             && (int) $line->treasury_account_id === (int) $account->id

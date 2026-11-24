@@ -132,7 +132,7 @@ final class LateReceiptReviewService
             if ($review->status !== 'pending') {
                 abort_unless($review->status === $status && (int) $review->decided_by === (int) $actor->id
                     && $review->evidence === $evidence && $review->evidence_reference === $reference
-                    && $review->settlement_method === $method, 409, 'سبق البت في المطالبة.');
+                    && $review->settlement_method === $method && $review->bank_clearance_reference === null, 409, 'سبق البت في المطالبة.');
                 return (array) $review;
             }
             $paymentId = null;
@@ -143,6 +143,9 @@ final class LateReceiptReviewService
                     ? ['separate_handover', 'already_counted'] : ['verified_non_cash'];
                 if (! in_array($method, $allowedMethods, true)) {
                     throw ValidationException::withMessages(['settlement_method' => 'طريقة التسوية لا تتوافق مع وسيلة التحصيل.']);
+                }
+                if ($method === 'verified_non_cash') {
+                    throw ValidationException::withMessages(['settlement_method' => 'اعتماد التحصيل غير النقدي المتأخر يتطلب ربط حركة البنك عبر مسار الإثبات البنكي.']);
                 }
                 if ($method === 'already_counted') {
                     $allocation = $this->countedCashAllocation($session, true);
