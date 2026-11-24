@@ -41,6 +41,11 @@ final class ClosedCashCorrectionService
                 abort_unless((int) $existing->duplicate_of_id === $originalId, 409, 'سبق تصحيح هذا السند بمرجع مختلف.');
                 return (array) $existing;
             }
+            if (\App\Models\PaymentAccountTransfer::whereIn('payment_id', [$payment->id, $original->id])->exists()
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || $payment->hasPendingVoidRequest() || $original->hasPendingVoidRequest()) {
+                throw ValidationException::withMessages(['payment' => 'السند مرتبط بتصحيح مالي آخر.']);
+            }
             if (! $session->isApproved() || $payment->isVoided() || $original->isVoided()
                 || $payment->amount !== $original->amount
                 || $payment->payment_method !== $original->payment_method) {

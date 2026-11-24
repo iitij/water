@@ -259,6 +259,20 @@ class PaymentController extends ApiController
         ]);
     }
 
+    public function transferAccount(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'to_subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'no_new_cash_movement' => ['required', 'accepted'],
+        ]);
+        $transfer = app(\App\Services\PaymentAccountTransferService::class)->transfer(
+            Payment::findOrFail($id), (int) $data['to_subscriber_id'], $request->user(), $data['reason'], $data['evidence']
+        );
+        return response()->json(['transfer' => $transfer]);
+    }
+
     public function destroy(int $id)
     {
         $this->authorizeApi(Payment::class, 'delete');

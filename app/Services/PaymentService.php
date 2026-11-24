@@ -28,7 +28,17 @@ class PaymentService
                 ->orderBy('bill_date')->orderBy('id')->lockForUpdate()->get();
             $payments = Payment::where('subscriber_id', $subscriber->id)
                 ->whereNull('voided_at')
+                ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
                 ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
+            $credits = $payments->map(fn ($payment) => [
+                'amount' => $payment->amount, 'target' => $payment->invoice_id,
+                'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id,
+            ])->all();
+            foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
+                $credits[] = ['amount' => $transfer->amount, 'target' => null,
+                    'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
+            }
+            usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
 
             // Use integer minor units inside allocation so cents cannot disappear.
             $paid = [];
@@ -38,9 +48,9 @@ class PaymentService
                 $caps[$invoice->id] = max(0, (int) round((float) $invoice->total_amount * 100));
             }
 
-            foreach ($payments as $payment) {
-                $remaining = max(0, (int) round((float) $payment->amount * 100));
-                $target = $payment->invoice_id;
+            foreach ($credits as $credit) {
+                $remaining = max(0, (int) round((float) $credit['amount'] * 100));
+                $target = $credit['target'];
                 if ($target !== null && isset($caps[$target])) {
                     $applied = min($remaining, $caps[$target] - $paid[$target]);
                     $paid[$target] += $applied;
@@ -98,6 +108,10 @@ class PaymentService
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
+            }
             if ($payment->voided_at !== null) {
                 return $payment;
             }
@@ -189,6 +203,10 @@ class PaymentService
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
+            }
             $reason = trim($reason);
             if (\Illuminate\Support\Str::length($reason) < 10) {
                 throw ValidationException::withMessages([
@@ -251,6 +269,10 @@ class PaymentService
         return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source) {
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
+            }
 
             if ($payment->isVoided()) {
                 return $payment;
