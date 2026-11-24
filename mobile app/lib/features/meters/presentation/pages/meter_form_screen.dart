@@ -37,6 +37,8 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _uniqueCodeController = TextEditingController();
   final _pathController = TextEditingController();
+  final _initialController = TextEditingController(text: '0');
+  DateTime? _installedAt;
   Timer? _pathValidationTimer;
   int _pathValidationSequence = 0;
   List<SubscriberOption> _subscribers = const [];
@@ -207,6 +209,8 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
           subscriberId: subscriber.id,
           pathNumber: pathNumber,
           status: _status,
+          initialReading: widget.meter == null ? double.parse(CompoundSearchQuery.normalizeDigits(_initialController.text.trim())) : null,
+          installedAt: widget.meter == null ? _installedAt : null,
         ),
         meterId: widget.meter?.id,
       );
@@ -264,6 +268,7 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
     _pathValidationTimer?.cancel();
     _uniqueCodeController.dispose();
     _pathController.dispose();
+    _initialController.dispose();
     super.dispose();
   }
 
@@ -405,6 +410,73 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                         ),
                                       ],
                                       const SizedBox(height: 12),
+                                      if (widget.meter == null) ...[
+                                        TextFormField(
+                                          controller: _initialController,
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          decoration: const InputDecoration(labelText: 'القراءة الابتدائية'),
+                                          validator: (value) => RegExp(r'^\d{1,10}(\.\d{1,2})?
+                                        initialValue: _status,
+                                        decoration: const InputDecoration(
+                                          labelText: 'حالة العداد',
+                                          prefixIcon: Icon(Icons.toggle_on_outlined),
+                                        ),
+                                        items: const [
+                                          DropdownMenuItem(value: 'active', child: Text('نشط')),
+                                          DropdownMenuItem(value: 'inactive', child: Text('غير نشط')),
+                                        ],
+                                        onChanged: (value) {
+                                          if (value != null) setState(() => _status = value);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                AppPrimaryButton(
+                                  label: _isSaving ? 'جارٍ الحفظ…' : 'حفظ بيانات العداد',
+                                  icon: Icons.save_outlined,
+                                  loading: _isSaving,
+                                  onPressed: _isSaving || _isCheckingPath ? null : () => _save(),
+                                ),
+                                if (widget.meter != null && widget.meter!.removedAt == null) ...[
+                                  const SizedBox(height: 12),
+                                  AppSecondaryButton(
+                                    label: 'استبدال العداد مع حفظ تاريخه',
+                                    icon: Icons.swap_horiz_rounded,
+                                    onPressed: _isSaving ? null : _replaceCurrentMeter,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+      ),
+    );
+  }
+}
+).hasMatch(
+                                            CompoundSearchQuery.normalizeDigits(value?.trim() ?? ''))
+                                              ? null : 'أدخل قراءة غير سالبة بمنزلتين عشريتين كحد أقصى.',
+                                        ),
+                                        const SizedBox(height: 12),
+                                        ListTile(
+                                          title: const Text('تاريخ تركيب العداد'),
+                                          subtitle: Text(_installedAt?.toIso8601String().split('T').first
+                                              ?? 'يُستخدم تاريخ بدء الخدمة الموثق إن لم يُحدد'),
+                                          trailing: const Icon(Icons.calendar_today_outlined),
+                                          onTap: () async {
+                                            final date = await showDatePicker(context: context,
+                                              initialDate: _installedAt ?? DateTime.now(),
+                                              firstDate: DateTime(1900), lastDate: DateTime.now());
+                                            if (mounted && date != null) setState(() => _installedAt = date);
+                                          },
+                                        ),
+                                        const SizedBox(height: 12),
+                                      ],
                                       DropdownButtonFormField<String>(
                                         key: ValueKey<String>('status-$_status'),
                                         initialValue: _status,
