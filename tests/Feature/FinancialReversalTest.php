@@ -219,4 +219,43 @@ class FinancialReversalTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['event' => 'cash_session.duplicate_corrected', 'entity_id' => (string) $session->id]);
     }
 
+
+    public function test_replacing_billed_meter_preserves_readings_receipts_and_debt_without_second_meter(): void
+    {
+        [$subscriber, $old, $reading, $invoice] = $this->fixture();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 2000, $invoice->id);
+        $replacement = app(\App\Services\SingleMeterService::class)->replace($old, [
+            'unique_code' => 'ACC05-REPLACEMENT',
+            'initial_reading' => 100,
+        ], '2026-02-02', 'Synthetic replacement after billing')['current_meter'];
+
+        $this->assertNotSame($old->id, $replacement->id);
+        $this->assertSame(1, Meter::withTrashed()->where('subscriber_id', $subscriber->id)->count());
+        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+        $this->assertDatabaseHas('readings', ['id' => $reading->id, 'invoice_id' => $invoice->id,
+            'meter_id' => null, 'retired_meter_id' => $old->id, 'retired_meter_code' => $old->unique_code]);
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'invoice_id' => $invoice->id,
+            'meter_id' => null, 'retired_meter_id' => $old->id]);
+        $this->assertSame('6000.00', $invoice->fresh()->total_amount);
+        $this->assertSame('2000.00', $invoice->fresh()->amount_paid);
+        $this->assertSame(4000.0, $subscriber->getAccountDebt());
+        $this->assertSame(100.0, $replacement->getLastReadingValue());
+
+        Reading::create([
+            'meter_id' => $replacement->id, 'reading_date' => '2026-02-28',
+            'period_start' => '2026-02-02', 'period_end' => '2026-02-28',
+            'previous_reading' => 100, 'current_reading' => 105,
+        ]);
+        $next = app(InvoiceService::class)->generateInvoice($subscriber, $replacement);
+        $this->assertSame('3000.00', $next->total_amount);
+        $this->assertSame('4000.00', $next->previous_balance);
+        $this->assertSame(7000.0, $subscriber->getAccountDebt());
+        $this->assertSame(3, Transaction::count());
+
+        app(PaymentService::class)->voidPayment($payment, 'Synthetic old receipt reversal');
+        $this->assertSame(9000.0, $subscriber->getAccountDebt());
+        $this->assertDatabaseHas('transactions', ['reference_type' => Payment::class, 'reference_id' => $payment->id,
+            'type' => 'payment_reversal', 'amount' => -2000, 'retired_meter_id' => $old->id]);
+    }
+
 }
