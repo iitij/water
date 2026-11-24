@@ -81,3 +81,7 @@ coverage/
 
 # Mobile app icon generator (scripts in "mobile app/tool")
 /mobile app/tool/node_modules/
+
+# Private backup scheduling runtime data
+/storage/backup-control/
+/storage/app/private/backup-control/
