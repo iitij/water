@@ -54,22 +54,24 @@
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "BLOCKED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
       "next": "Submit exact final acceptance evidence for bcc63f2. Recheck MySQL restricted TRIGGER privileges and migration recovery after partial DDL, SQLite INSERT OR REPLACE and direct SQL bypass, user deactivation vs concurrent token/session and role changes, protect actor authorization, no schema/production writes. Fix any proved gaps on own branch only. ACC-12/13 read-only audit against a5f2cac/539c4ae; no duplicate period changes.",
       "branch": "fix/accounting-acc-10",
-      "sha": "bcc63f2ef4078b8d00eef1a2df602632c7f5c65e",
+      "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
         "last_remote_sha": "bcc63f2ef4078b8d00eef1a2df602632c7f5c65e",
-        "reported_evidence": "Local unpushed fixes after six demonstrated gaps; reported SQLite 20/23 passing, 88 assertions, 2 nonpassing cases and 1 skip; confirm precise failure/error details from logs.",
-        "next": "First in exclusive local-test queue after device is stable. Inspect own worktree git status/diff/log; preserve uncommitted files and test logs; do not reset/clean/checkout over changes. Check orphaned test processes only in own scope, never production/shared DB. Run only unfinished focused tests sequentially, document Trigger privileges/DDL/SQLite REPLACE/concurrency and ACC12/13 read-only audit; commit/push own branch and report exact SHA, counts, blockers."
+        "reported_evidence": "Owner supplied completion screenshot: ACC-12/13 audit complete; changes/logs saved; local slot released. Earlier displayed MySQL focused 25 passed/0 failed/1 skipped/143 assertions; restricted privilege and DDL recovery 10/10 reported. These are team-reported results, not independently rerun or proven on final SHA.",
+        "next": "Preserve branch; no further local tests or product edits until supervisor assignment.",
+        "latest_verified_remote_sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
+        "remaining": "Independent D review, full regression on final SHA, CI, actual hosting privileges and explicitly unexecuted security checks. Hold merge; no repeat of blocked security work in ordinary Codex."
       }
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "BLOCKED",
+      "status": "IN_PROGRESS",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
@@ -77,7 +79,7 @@
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
-        "next": "Wait for C to release exclusive local-test slot. Recover existing logs and identify exact SHA/test outcome. Rerun only missing or interrupted tests and changed-code regressions, sequentially; independent review of new C head and latest A/B deliverables. Report CI/scheduler/concurrency gaps without claiming passes. No product edits."
+        "next": "Exclusive local slot released by C; resume recovery under 30cfd85. Retrieve logs first, independently review final ACC10 SHA 76eac62 and latest A/B deliverables, run only unfinished ordinary regression tests and justified changed-code checks sequentially. Record security checks limited by tool as blocked, do not retry them through another tool. No product edits, main merge or production changes."
       }
     }
   },
@@ -132,9 +134,9 @@
     {
       "id": "ACC-10",
       "owner": "C",
-      "status": "BLOCKED",
+      "status": "REVIEW",
       "next": "read-only audit and file reservation",
-      "evidence": "Last remote bcc63f2; reported local fixes interrupted before push, partial tests only"
+      "evidence": "Verified remote head 76eac62; team C reports recovery complete and saved; independent full acceptance outstanding."
     },
     {
       "id": "ACC-11",
@@ -163,7 +165,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "HOLD_ROUND_4_RECOVERY_QUEUE_C_THEN_D",
+    "decision": "HOLD_ROUND_4_C_HANDOFF_ACCEPTED_D_RECOVERY_AUTHORIZED",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -177,11 +179,11 @@
       "https://github.com/iitij/water/commit/c2c0305829873b3c654c5341878dd75f43423c14",
       "https://github.com/iitij/water/commit/bcc63f2ef4078b8d00eef1a2df602632c7f5c65e"
     ],
-    "limitations": "Remote GitHub heads verified; C/D local logs and unpushed changes not inspected; reports retrieved from conversations. Device presence reported online but not health/stability. No new tests launched.",
+    "limitations": "GitHub C head verified; C test evidence from owner screenshots and cloud counts from owner report; no independent execution by supervisor. D final report pending. Round four still held.",
     "round": 3,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
-      "exclusive_local_test_slot": "C first; D only after C releases; A/B paused",
+      "exclusive_local_test_slot": "D only; C released; A/B/C paused",
       "rules": [
         "Do not delete/reset local worktrees or test logs",
         "Check device stability, memory, swap, storage and active test processes before resuming; no parallel full suites",
@@ -189,6 +191,52 @@
         "Record exact SHA, command, counts, skips and blockers; no assumed success",
         "No main merge or production data writes; round four requires supervisor review of recovery handoffs"
       ]
+    },
+    "cloud_readiness": {
+      "draft_revision": 8,
+      "status": "PARTIALLY_VALIDATED_PENDING_PUBLISH_AND_NETWORK_VERIFICATION",
+      "sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
+      "source": "Owner-pasted Codex report; not independently rerun",
+      "versions": {
+        "php": "8.4.28",
+        "composer": "2.9.8",
+        "node": "24.22.3",
+        "npm": "11.19.1",
+        "mysql": "8.0.46",
+        "flutter": "3.44.0 (draft pin only)",
+        "dart": "3.12.0 (draft pin only)"
+      },
+      "checks": [
+        {
+          "name": "SQLite accounting regression",
+          "passed": 74,
+          "failed": 0,
+          "skipped": 0,
+          "assertions": 628
+        },
+        {
+          "name": "MySQL accounting regression",
+          "passed": 74,
+          "failed": 0,
+          "skipped": 0,
+          "assertions": 627
+        },
+        {
+          "name": "MySQL concurrent financial writes",
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0,
+          "assertions": 53
+        }
+      ],
+      "blockers": [
+        "Full SQLite baseline historical inventory failure",
+        "Single-meter smoke MySQL error 1553; diagnose helper vs product migration without changing main",
+        "Vite/Flutter and Composer archive probe proxy 403; restricted draft domains api.github.com, fonts.bunny.net, storage.googleapis.com pending user review/save/publish and retest",
+        "Flutter SDK and package resolution not executed; device builds not run",
+        "No integrated candidate or latest team branch acceptance established by baseline results"
+      ],
+      "next": "Review restricted network settings and save/publish private environment; validate on fresh cloud task, including exact versions, Vite, locked Flutter dependency resolution and representative tests. Preserve all blockers and no production data/secrets. Do not use ordinary Codex to circumvent restricted security checks."
     }
   }
 }
