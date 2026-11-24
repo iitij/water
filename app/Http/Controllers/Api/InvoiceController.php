@@ -452,28 +452,32 @@ class InvoiceController extends ApiController
     public function recalculate(int $id, PaymentService $paymentService)
     {
         $this->authorizeApi(Invoice::class, 'update');
-        $invoice = Invoice::with(['subscriber', 'meter', 'readings'])->findOrFail($id);
-        if ($invoice->isFinanciallyLocked()) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'invoice' => 'لا يمكن إعادة احتساب فاتورة معتمدة بالتعرفة الحالية. التصحيح يتطلب مستنداً مالياً موثقاً.',
-            ]);
-        }
-        $readings = $invoice->readings;
-        if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
-            $invoice->billing_period_start = $readings->min('period_start');
-            $invoice->billing_period_end = $readings->max('period_end');
-            $invoice->consumption_fee = app(\App\Services\HistoricalTariffService::class)->quote($readings)['total'];
-        }
-        $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
-            ->where('id', '<', $invoice->id)
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->get();
-        $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
-        $invoice->total_amount = (float) $invoice->consumption_fee;
-        DB::transaction(function () use ($invoice) {
+        $subscriberId = Invoice::findOrFail($id)->subscriber_id;
+        $invoice = DB::transaction(function () use ($id, $subscriberId) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
+            $invoice = Invoice::query()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($id);
+            if ($invoice->isFinanciallyLocked()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'invoice' => 'لا يمكن إعادة احتساب فاتورة معتمدة بالتعرفة الحالية. التصحيح يتطلب مستنداً مالياً موثقاً.',
+                ]);
+            }
+            $readings = $invoice->readings()->orderBy('id')->lockForUpdate()->get();
+            if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
+                $invoice->billing_period_start = $readings->min('period_start');
+                $invoice->billing_period_end = $readings->max('period_end');
+                $invoice->consumption_fee = app(\App\Services\HistoricalTariffService::class)->quote($readings)['total'];
+            }
+            $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
+                ->where('id', '<', $invoice->id)
+                ->whereNotIn('status', ['draft', 'cancelled'])
+                ->get();
+            $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
+            $invoice->total_amount = $invoice->consumption_fee;
             $invoice->save();
             $this->syncItems($invoice);
-        });
+
+            return $invoice;
+        }, 3);
 
         return response()->json(['message' => 'تمت إعادة احتساب الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter', 'items', 'readings']))]);
     }
