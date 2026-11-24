@@ -52,7 +52,7 @@ class FouadModulesApiTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_subscriber_360_summary_isolates_general_and_meter_balances(): void
+    public function test_subscriber_360_summary_nets_signed_ledger_across_meter_metadata(): void
     {
         $square = Square::create(['name' => 'مربع 1']);
         $subscriber = Subscriber::create([
@@ -62,12 +62,17 @@ class FouadModulesApiTest extends TestCase
             'unique_code' => 'W-1', 'status' => 'active', 'balance' => -9500,
         ]);
 
+        // Real financial movements are the source of truth, not cached balance fields.
+        Transaction::create(['subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => 2000]);
+        Transaction::create(['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id, 'type' => 'invoice', 'amount' => -9500]);
+
         $this->actingAs($this->user, 'sanctum')
             ->getJson("/api/subscribers/{$subscriber->id}")
             ->assertOk()
             ->assertJsonPath('financial_summary.general_balance', 2000)
-            ->assertJsonPath('financial_summary.total_credit_balance', 2000)
-            ->assertJsonPath('financial_summary.total_debit_balance', 9500)
+            ->assertJsonPath('financial_summary.total_credit_balance', 0)
+            ->assertJsonPath('financial_summary.total_debit_balance', 7500)
+            ->assertJsonPath('financial_summary.account_balance', -7500)
             ->assertJsonPath('meters.0.meter_debit', 9500);
         $this->assertNotNull($meter);
     }

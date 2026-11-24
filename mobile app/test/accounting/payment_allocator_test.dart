@@ -194,7 +194,7 @@ void main() {
       expect(result.invoices.firstWhere((i) => i.id == 1).amountPaid, 0);
     });
 
-    test('عزل الحساب: دفعة العداد لا تلمس الحساب العام', () {
+    test('توحيد الحساب: دفعة العداد تسدد أيضاً فاتورة المشترك العامة', () {
       final invoices = <InvoiceModel>[
         _invoice(id: 1, totalAmount: 500, meterId: 77, billDate: jan),
         _invoice(id: 2, totalAmount: 300, meterId: null, billDate: feb),
@@ -211,10 +211,26 @@ void main() {
       );
 
       expect(result.invoices.firstWhere((i) => i.id == 1).amountPaid, 500);
-      // فاتورة الحساب العام خارج نطاق إعادة الاحتساب أصلاً (عزل الحساب).
-      expect(result.invoices.where((i) => i.id == 2), isEmpty);
-      expect(result.surplusCredit, 100);
+      expect(result.invoices.firstWhere((i) => i.id == 2).amountPaid, 100);
+      expect(result.surplusCredit, 0);
     });
+  });
+
+  test('subscriber isolation remains strict after meter account unification', () {
+    final result = PaymentAllocator.recalculate(
+      invoices: [
+        _invoice(id: 1, totalAmount: 500, meterId: 77),
+        _invoice(id: 2, totalAmount: 900, subscriberId: 2),
+      ],
+      payments: [
+        _payment(id: 1, amount: 600),
+        _payment(id: 2, amount: 1000, subscriberId: 2),
+      ],
+      subscriberId: 1,
+    );
+    expect(result.invoices.single.id, 1);
+    expect(result.invoices.single.amountPaid, 500);
+    expect(result.surplusCredit, 100);
   });
 
   group('validate', () {
@@ -245,8 +261,8 @@ void main() {
         amount: 200,
       );
 
-      expect(shortfall.due, 600);
-      expect(shortfall.remainingAfter, 400);
+      expect(shortfall.due, 500);
+      expect(shortfall.remainingAfter, 300);
       expect(shortfall.message, isNull);
     });
   });

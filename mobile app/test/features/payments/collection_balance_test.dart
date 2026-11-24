@@ -176,4 +176,28 @@ void main() {
     await cubit.close();
   });
 
+
+  test('unified account summary loads all open invoices and FIFO never duplicates arrears', () async {
+    final payments = _Payments();
+    final references = _References();
+    const general = InvoiceModel(
+      id: 2, subscriberId: 2, invoiceType: InvoiceType.meter,
+      billNumber: 'INV-2', totalAmount: 600, status: InvoiceStatus.issued,
+    );
+    when(() => references.dueSummary(2)).thenAnswer((_) async =>
+        const SubscriberDueSummary(subscriberId: 2, dueAmount: 5600,
+            invoices: [_partial, general]));
+    when(() => payments.latestUnpaidInvoice(2)).thenAnswer((_) async => general);
+    final cubit = CollectPaymentCubit(paymentsRepository: payments,
+        references: references, meterId: null);
+    await cubit.openForSubscriber(2);
+    expect(cubit.state.openInvoices.length, 2);
+    expect(cubit.state.amount, 5600);
+    cubit.useFifoAutomatically();
+    expect(cubit.state.dueAmount, 5600);
+    expect(cubit.state.previewAllocation.totalApplied, 5600);
+    expect(cubit.state.previewAllocation.surplusCredit, 0);
+    await cubit.close();
+  });
+
 }

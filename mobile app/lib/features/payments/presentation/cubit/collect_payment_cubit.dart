@@ -38,7 +38,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
   /// الشاشات القديمة، لكنه مربوط في كل مسارات الإنتاج عبر DI.
   final CashSessionService? _cashSessions;
 
-  /// إن فُتحت النافذة من سياق عداد محدد (يُحافظ على العزل في المعاينة).
+  /// معرّف العداد مرجع للعملية فقط، وليس حساباً مالياً مستقلاً.
   final int? _meterId;
 
   /// فتح من فاتورة محددة (`SCR-13`/`SCR-15`/ودجة الفواتير المتأخرة).
@@ -83,21 +83,31 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
       final summary = await _references.dueSummary(subscriberId);
       final invoice = await _payments.latestUnpaidInvoice(subscriberId);
       if (isClosed || state.subscriberId != subscriberId) return;
+      // Use all outstanding invoices supplied by the account summary.
+      final open = InvoiceAccounting.openInvoicesForAccount(
+        invoices: summary?.invoices.isNotEmpty == true
+            ? summary!.invoices
+            : <InvoiceModel>[if (invoice != null && invoice.subscriberId == subscriberId) invoice],
+        subscriberId: subscriberId,
+      );
       // Refreshing account context must not replace the invoice the user opened.
       if (!autoSelectLatest) {
         final selected = state.openInvoices
             .where((item) => item.id == state.invoiceId)
             .firstOrNull;
         if (selected != null) {
-          final refreshed =
-              invoice?.id == selected.id && invoice?.meterId == selected.meterId
-              ? invoice!
-              : selected;
+          final refreshed = open.where((item) => item.id == selected.id).firstOrNull ??
+              (invoice?.id == selected.id && invoice?.subscriberId == subscriberId && invoice?.meterId == selected.meterId
+                  ? invoice! : selected);
+          final accountInvoices = <InvoiceModel>[
+            ...open.where((item) => item.id != refreshed.id),
+            refreshed,
+          ];
           final due = refreshed.payableAmount;
           emit(
             state.copyWith(
               loadingInvoices: false,
-              openInvoices: [refreshed],
+              openInvoices: accountInvoices,
               dueAmount: due,
               amount: state.amount == state.dueAmount ? due : state.amount,
             ),
@@ -105,25 +115,21 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
           return;
         }
       }
-      final open = InvoiceAccounting.openInvoicesForAccount(
-        invoices: <InvoiceModel>[if (invoice != null) invoice],
-        subscriberId: subscriberId,
-        meterId: meterId ?? invoice?.meterId,
-      );
-
-      final due = autoSelectLatest || invoice != null
-          ? (invoice?.payableAmount ?? summary?.dueAmount ?? 0)
-          : (summary?.dueAmount ?? 0);
+      final selected = invoice != null && invoice.subscriberId == subscriberId
+          ? invoice
+          : InvoiceAccounting.latestUnpaidOf(subscriberId, open);
+      final due = summary?.invoices.isNotEmpty == true
+          ? summary!.dueAmount
+          : (selected?.payableAmount ?? summary?.dueAmount ?? 0);
 
       emit(
         state.copyWith(
           loadingInvoices: false,
-          openInvoices: open.isEmpty && invoice != null
-              ? <InvoiceModel>[invoice]
-              : open,
-          invoiceId: invoice?.id ?? state.invoiceId,
+          openInvoices: open,
+          clearInvoice: selected == null,
+          invoiceId: selected?.id,
           dueAmount: due,
-          amount: state.amount > 0 && !autoSelectLatest ? state.amount : due,
+          amount: due,
         ),
       );
     } catch (error) {
@@ -160,8 +166,10 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
   }
 
   /// خيار «تطبيق على الأقدم تلقائياً (FIFO)».
-  void useFifoAutomatically() =>
-      emit(state.copyWith(clearInvoice: true, dueAmount: _totalDueOfOpen()));
+  void useFifoAutomatically() {
+    final due = _totalDueOfOpen();
+    emit(state.copyWith(clearInvoice: true, dueAmount: due, amount: due));
+  }
 
   void setAmount(double value) =>
       emit(state.copyWith(amount: value, clearValidation: true));
@@ -211,7 +219,8 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     return CollectPaymentRequest(
       subscriberId: subscriberId,
       invoiceId: state.invoiceId,
-      meterId: _meterId,
+      meterId: state.openInvoices.where((i) => i.id == state.invoiceId).firstOrNull?.meterId ??
+          (state.invoiceId == null ? null : _meterId),
       amount: state.amount,
       method: state.method,
       referenceNumber: state.referenceNumber.trim().isEmpty

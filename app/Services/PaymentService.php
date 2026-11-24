@@ -18,148 +18,62 @@ class PaymentService
      */
     public function recalculateInvoices(Subscriber $subscriber, ?int $meterId = null): void
     {
-        // 1. Get all invoices
-        $query = Invoice::where('subscriber_id', $subscriber->id)->orderBy('bill_date')->orderBy('id');
-        if ($meterId) {
-            $query->where('meter_id', $meterId);
-        } else {
-            $query->whereNull('meter_id');
-        }
-        $invoices = $query->get();
+        // The optional meter ID is retained for existing callers, but it never
+        // scopes money. Only the subscriber is the financial account.
+        DB::transaction(function () use ($subscriber): void {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
-        // 2. Reset them in memory
-        foreach ($invoices as $inv) {
-            $inv->amount_paid = 0;
-            $inv->status = 'issued';
-        }
+            $invoices = Invoice::where('subscriber_id', $subscriber->id)
+                ->where('status', '!=', 'draft')
+                ->orderBy('bill_date')->orderBy('id')->get();
+            $payments = Payment::where('subscriber_id', $subscriber->id)
+                ->whereNull('voided_at')
+                ->orderBy('payment_date')->orderBy('id')->get();
 
-        // 3. Get all payments
-        $pQuery = Payment::where('subscriber_id', $subscriber->id)
-            ->whereNull('voided_at')
-            ->orderBy('payment_date')
-            ->orderBy('id');
-        if ($meterId) {
-            $pQuery->where('meter_id', $meterId);
-        } else {
-            $pQuery->whereNull('meter_id');
-        }
-        $payments = $pQuery->get();
+            // Use integer minor units inside allocation so cents cannot disappear.
+            $paid = [];
+            $caps = [];
+            foreach ($invoices as $invoice) {
+                $paid[$invoice->id] = 0;
+                $caps[$invoice->id] = max(0, (int) round((float) $invoice->total_amount * 100));
+            }
 
-        // 4. Distribute each payment
-        foreach ($payments as $payment) {
-            $remaining = (float) $payment->amount;
-            $targetId = $payment->invoice_id;
-
-            // First apply to target
-            if ($targetId && $remaining > 0) {
-                $target = $invoices->firstWhere('id', $targetId);
-                if ($target) {
-                    $due = (float) $target->total_amount - (float) $target->amount_paid;
-                    $applied = min($remaining, $due);
-                    if ($applied > 0) {
-                        $target->amount_paid += $applied;
-                        $remaining -= $applied;
+            foreach ($payments as $payment) {
+                $remaining = max(0, (int) round((float) $payment->amount * 100));
+                $target = $payment->invoice_id;
+                if ($target !== null && isset($caps[$target])) {
+                    $applied = min($remaining, $caps[$target] - $paid[$target]);
+                    $paid[$target] += $applied;
+                    $remaining -= $applied;
+                }
+                foreach ($invoices as $invoice) {
+                    if ($remaining === 0) {
+                        break;
                     }
+                    $id = $invoice->id;
+                    $applied = min($remaining, $caps[$id] - $paid[$id]);
+                    $paid[$id] += $applied;
+                    $remaining -= $applied;
                 }
             }
 
-            // Then FIFO
-            if ($remaining > 0) {
-                foreach ($invoices as $inv) {
-                    if ($remaining <= 0) break;
-                    $due = (float) $inv->total_amount - (float) $inv->amount_paid;
-                    if ($due > 0) {
-                        $applied = min($remaining, $due);
-                        $inv->amount_paid += $applied;
-                        $remaining -= $applied;
-                    }
+            // Persist all allocations before deriving any cumulative status.
+            foreach ($invoices as $invoice) {
+                $invoice->amount_paid = number_format($paid[$invoice->id] / 100, 2, '.', '');
+                if ($invoice->isDirty('amount_paid')) {
+                    $invoice->saveQuietly();
                 }
             }
-        }
-
-        // 5. Save changes and update status
-        foreach ($invoices as $inv) {
-            if ($inv->isDirty('amount_paid')) {
-                $inv->saveQuietly();
+            foreach ($invoices as $invoice) {
+                $invoice->updateStatus();
             }
-            $inv->updateStatus();
-        }
+        });
     }
+
     public function distributePayment(Payment $payment): void
     {
-        $remainingAmount = $payment->amount;
-        $subscriber = $payment->subscriber;
-        $meterId = $payment->meter_id;
-        $invoiceId = $payment->invoice_id;
-
-        // 1. تطبيق المبلغ على الفاتورة المحددة أولاً (إذا وجدت)
-        if ($invoiceId && $remainingAmount > 0) {
-            $targetInvoice = Invoice::find($invoiceId);
-            if ($targetInvoice && in_array($targetInvoice->status, ['issued', 'partially_paid', 'overdue'])) {
-                $totalDue = (float) $targetInvoice->total_amount;
-                $alreadyPaid = (float) $targetInvoice->amount_paid;
-                $invoiceRemaining = max(0, $totalDue - $alreadyPaid);
-                $applied = min($remainingAmount, $invoiceRemaining);
-
-                if ($applied > 0) {
-                    $targetInvoice->update(['amount_paid' => $alreadyPaid + $applied]);
-                    $targetInvoice->refresh();
-                    $targetInvoice->updateStatus();
-                    $remainingAmount -= $applied;
-                }
-            }
-        }
-
-        // 2. تطبيق المبلغ المتبقي على أقدم الفواتير غير المسددة المعزولة بالعداد (FIFO)
-        if ($remainingAmount > 0) {
-            $unpaidInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
-                ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
-                ->orderBy('bill_date')
-                ->orderBy('id');
-
-            if ($invoiceId) {
-                $unpaidInvoicesQuery->where('id', '!=', $invoiceId);
-            }
-
-            if ($meterId) {
-                $unpaidInvoicesQuery->where('meter_id', $meterId);
-            } else {
-                $unpaidInvoicesQuery->whereNull('meter_id');
-            }
-
-            $unpaidInvoices = $unpaidInvoicesQuery->get();
-
-            foreach ($unpaidInvoices as $inv) {
-                if ($remainingAmount <= 0) break;
-
-                $totalDue = (float) $inv->total_amount;
-                $alreadyPaid = (float) $inv->amount_paid;
-                $invoiceRemaining = max(0, $totalDue - $alreadyPaid);
-                $applied = min($remainingAmount, $invoiceRemaining);
-
-                if ($applied > 0) {
-                    $inv->update(['amount_paid' => $alreadyPaid + $applied]);
-                    $inv->refresh();
-                    $inv->updateStatus();
-                }
-
-                $remainingAmount -= $applied;
-            }
-        }
-
-        // 3. تحديث حالة الفواتير
-        $allInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
-            ->whereIn('status', ['issued', 'partially_paid', 'overdue']);
-            
-        if ($meterId) {
-            $allInvoicesQuery->where('meter_id', $meterId);
-        } else {
-            $allInvoicesQuery->whereNull('meter_id');
-        }
-        
-        foreach ($allInvoicesQuery->get() as $inv) {
-            $inv->updateStatus();
-        }
+        // One replay algorithm for a new receipt, edits, voids and new invoices.
+        $this->recalculateInvoices($payment->subscriber);
     }
 
     /**
@@ -404,6 +318,11 @@ class PaymentService
         ?string $syncUuid = null,
     ): Payment {
         return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+            if (! is_finite($amount) || $amount <= 0 || round($amount, 2) != $amount) {
+                throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
+            }
+
             if ($syncUuid) {
                 $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->first();
                 if ($existing) {
@@ -422,11 +341,11 @@ class PaymentService
                 }
             }
 
-            // استنتاج العداد من الفاتورة، أو من الاختيار الصريح للحساب المعزول.
+            // العداد مرجع للحركة فقط؛ الحساب المالي هو المشترك.
             $meterId = $requestedMeterId;
             $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
             if ($invoiceId) {
-                $invoice = Invoice::where('subscriber_id', $subscriber->id)->findOrFail($invoiceId);
+                $invoice = Invoice::where('subscriber_id', $subscriber->id)->where('status', '!=', 'draft')->findOrFail($invoiceId);
                 $meterId = $invoice->meter_id;
                 $meter = $invoice->meter;
             }

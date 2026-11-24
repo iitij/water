@@ -30,6 +30,7 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if ($includeReadings) {
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             }
@@ -64,12 +65,8 @@ class InvoiceService
             // 2. المتأخرات السابقة (فقط فواتير سابقة غير مسددة من نفس النوع)
             $previousBalance = 0;
             $unpaidInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
-                ->where('invoice_type', $invoiceType)
-                ->whereIn('status', ['issued', 'partially_paid', 'overdue']);
-                
-            if ($invoiceType === 'meter' && $meter) {
-                $unpaidInvoicesQuery->where('meter_id', $meter->id);
-            }
+                ->where('status', '!=', 'draft')
+                ->whereColumn('total_amount', '>', 'amount_paid');
 
             $unpaidInvoices = $unpaidInvoicesQuery->get();
             $previousBalance = $unpaidInvoices->sum(fn($inv) => $inv->getRemainingAmount());
@@ -82,7 +79,7 @@ class InvoiceService
             }
 
             $creditApplied = 0;
-            $availableBalance = $meter ? (float) $meter->balance : (float) $subscriber->balance;
+            $availableBalance = $subscriber->getAccountCredit();
             
             if ($availableBalance > 0 && $subtotal > 0) {
                 $creditApplied = min($availableBalance, $subtotal);
@@ -182,7 +179,7 @@ class InvoiceService
                 }
             }
 
-            return $invoice;
+            return $invoice->refresh();
         });
     }
 

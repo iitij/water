@@ -364,8 +364,8 @@ class PaymentController extends ApiController
         $amountInWords = ArabicNumber::spellout($amount);
         $invoiceRemaining = $payment->invoice ? $payment->invoice->getTrueRemainingAmount() : null;
         $subscriber = $payment->subscriber;
-        $debit = $subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
-        $credit = max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
+        $debit = $subscriber->getAccountDebt();
+        $credit = $subscriber->getAccountCredit();
 
         return [
             'receipt_number' => $payment->receipt_number,

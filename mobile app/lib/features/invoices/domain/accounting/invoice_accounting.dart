@@ -1,4 +1,3 @@
-import '../../../../core/accounting/account_isolation.dart';
 import '../../data/models/invoice_model.dart';
 import 'finance_enums.dart';
 
@@ -26,7 +25,7 @@ class InvoiceAccounting {
   }
 
   /// المتبقي التراكمي الحي: متبقي الفاتورة + متبقي كل أقدم منها في نفس الحساب المعزول.
-  /// يطابق `getTrueRemainingAmount()` (تجميع بـ `subscriber_id + invoice_type (+meter_id)`).
+  /// يطابق `getTrueRemainingAmount()` (تجميع بـ `subscriber_id` فقط).
   static double trueRemaining(
     InvoiceModel invoice,
     List<InvoiceModel> siblings,
@@ -36,21 +35,13 @@ class InvoiceAccounting {
       return invoice.serverTrueRemaining!;
     }
 
-    final groupKey = AccountIsolation.arrearsGroupKey(
-      subscriberId: invoice.subscriberId,
-      invoiceType: invoice.invoiceType.wire,
-      meterId: invoice.meterId,
-    );
-
     var total = ownRemaining(invoice);
     for (final other in siblings) {
-      if (other.id >= invoice.id) continue;
-      final otherKey = AccountIsolation.arrearsGroupKey(
-        subscriberId: other.subscriberId,
-        invoiceType: other.invoiceType.wire,
-        meterId: other.meterId,
-      );
-      if (otherKey != groupKey) continue;
+      if (other.id >= invoice.id ||
+          other.subscriberId != invoice.subscriberId ||
+          other.isDeleted ||
+          other.status == InvoiceStatus.draft ||
+          other.status == InvoiceStatus.cancelled) continue;
       total += ownRemaining(other);
     }
     return total < 0 ? 0 : total;
@@ -61,21 +52,12 @@ class InvoiceAccounting {
     final flag = invoice.isLatestInvoice;
     if (flag != null) return flag;
 
-    final groupKey = AccountIsolation.arrearsGroupKey(
-      subscriberId: invoice.subscriberId,
-      invoiceType: invoice.invoiceType.wire,
-      meterId: invoice.meterId,
-    );
-
     for (final other in siblings) {
-      if (other.id <= invoice.id) continue;
-      if (other.id == invoice.id) continue;
-      final otherKey = AccountIsolation.arrearsGroupKey(
-        subscriberId: other.subscriberId,
-        invoiceType: other.invoiceType.wire,
-        meterId: other.meterId,
-      );
-      if (otherKey == groupKey) return false;
+      if (other.id > invoice.id &&
+          other.subscriberId == invoice.subscriberId &&
+          !other.isDeleted &&
+          other.status != InvoiceStatus.draft &&
+          other.status != InvoiceStatus.cancelled) return false;
     }
     return true;
   }
@@ -162,7 +144,7 @@ class InvoiceAccounting {
     return best;
   }
 
-  /// كل الفواتير المفتوحة لنفس الحساب المعزول (العداد أو الحساب العام) بترتيب الأقدم
+  /// كل الفواتير المفتوحة لحساب المشترك الموحد بترتيب الأقدم
   /// — كما في `PaymentService::distributePayment`.
   static List<InvoiceModel> openInvoicesForAccount({
     required List<InvoiceModel> invoices,
@@ -172,11 +154,8 @@ class InvoiceAccounting {
     final list = invoices
         .where((i) =>
             i.subscriberId == subscriberId &&
-            i.status.isOpenForCollection &&
-            AccountIsolation.sameAllocationAccount(
-              paymentMeterId: meterId,
-              invoiceMeterId: i.meterId,
-            ))
+            !i.isDeleted &&
+            i.status.isOpenForCollection)
         .toList();
     list.sort((a, b) {
       final byDate = a.billDate?.compareTo(b.billDate ?? DateTime(1970)) ?? 0;

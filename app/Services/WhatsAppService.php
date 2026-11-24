@@ -185,17 +185,8 @@ class WhatsAppService
         $defaultMsg = "أهلاً بك {name}،\nاستلمنا دفعتك بنجاح بموجب سند قبض رقم {receipt_number}.\nإجمالي المبلغ المدفوع: {amount} ريال.\nشكراً لتعاملك معنا.";
         $template = Setting::get('whatsapp_payment_message', $defaultMsg);
 
-        $invoiceRemaining = 0;
-        if ($payment->invoice) {
-            $invoiceTotal = $payment->invoice->total_amount + $payment->invoice->previous_balance;
-            $creditApplied = $payment->invoice->credit_applied ?? 0;
-            $directPaidBefore = Payment::where('invoice_id', $payment->invoice_id)
-                ->where('id', '<', $payment->id)
-                ->sum('amount');
-            $paidBefore = $directPaidBefore + $creditApplied;
-            $dueBefore = $invoiceTotal - $paidBefore;
-            $invoiceRemaining = $dueBefore - $payment->amount;
-        }
+        // Current remaining debt; never reconstruct it from historical arrears.
+        $invoiceRemaining = $payment->invoice?->getCollectibleAmount() ?? 0;
 
         $message = str_replace(
             [
@@ -212,8 +203,8 @@ class WhatsAppService
                 $payment->receipt_number,
                 $amount,
                 number_format((float) $invoiceRemaining, 2),
-                number_format((float) $payment->subscriber->getOutstandingBalance(), 2),
-                number_format((float) $payment->subscriber->balance, 2),
+                number_format((float) $payment->subscriber->getAccountDebt(), 2),
+                number_format($payment->subscriber->getAccountCredit(), 2),
                 route('payments.print', $payment),
             ],
             $template

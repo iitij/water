@@ -29,7 +29,7 @@ class CollectPaymentState extends Equatable {
   final String? subscriberName;
   final int? invoiceId;
 
-  /// فواتير الحساب المعزول المفتوحة (FIFO معاينة).
+  /// فواتير حساب المشترك الموحد المفتوحة (FIFO معاينة).
   final List<InvoiceModel> openInvoices;
 
   /// المستحق الحي للفاتورة المحددة، دون تكرار المتأخرات التاريخية.
@@ -121,6 +121,7 @@ class CollectPaymentState extends Equatable {
   List<Object?> get props => <Object?>[
         subscriberId,
         invoiceId,
+        openInvoices,
         dueAmount,
         amount,
         method,

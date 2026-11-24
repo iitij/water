@@ -298,28 +298,29 @@ class SubscriberController extends ApiController
         $subscriber = Subscriber::findOrFail($id);
         $invoices = $subscriber->invoices()
             ->with('meter:id,unique_code,path_number')
-            ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            ->where('status', '!=', 'draft')
+            ->whereColumn('total_amount', '>', 'amount_paid')
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
         // مفاتيح يقرأها تطبيق الهاتف لملء شاشة التحصيل السريع مسبقاً
         // (references_remote_datasource.SubscriberDueSummary) — تُضاف إضافياً
         // دون كسر المفاتيح القديمة (general_balance/invoices/total_remaining).
-        $latestUnpaid = $invoices->first();
+        $latestUnpaid = $invoices->sortByDesc('id')->first();
+        $invoiceDebt = round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2);
         $subscriber->loadMissing('meters');
-        $outstanding = (float) $subscriber->getOutstandingBalance()
-            + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
-        $credit = max(0, (float) $subscriber->balance)
-            + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance));
+        $net = $subscriber->getAccountBalance();
+        $outstanding = max(0, -$net);
+        $credit = max(0, $net);
 
         return response()->json([
             'subscriber_id' => $subscriber->id,
             'general_balance' => (float) $subscriber->balance,
             'invoices' => $invoices,
-            'total_remaining' => round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2),
+            'total_remaining' => $invoiceDebt,
             'invoice_id' => $latestUnpaid?->id,
             'bill_number' => $latestUnpaid?->bill_number,
-            'due_amount' => $latestUnpaid ? round((float) $latestUnpaid->getRemainingAmount(), 2) : 0.0,
+            'due_amount' => $invoiceDebt,
             'outstanding_balance' => round($outstanding, 2),
             'credit_balance' => round($credit, 2),
             'open_invoices_count' => $invoices->count(),
@@ -381,8 +382,9 @@ class SubscriberController extends ApiController
         $generalBalance = (float) $subscriber->balance;
         $meterCredit = (float) $subscriber->meters->sum(fn (Meter $meter) => max(0, (float) $meter->balance));
         $meterDebit = (float) $subscriber->meters->sum(fn (Meter $meter) => $meter->getOutstandingBalance());
-        $totalCredit = max(0, $generalBalance) + $meterCredit;
-        $totalDebit = max(0, -$generalBalance) + $meterDebit;
+        $net = $subscriber->getAccountBalance();
+        $totalCredit = max(0, $net);
+        $totalDebit = max(0, -$net);
 
         return [
             'total_credit_balance' => round($totalCredit, 2),

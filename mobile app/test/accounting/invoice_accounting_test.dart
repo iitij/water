@@ -77,17 +77,17 @@ void main() {
       expect(InvoiceAccounting.trueRemaining(latest, <InvoiceModel>[older, latest]), 900);
     });
 
-    test('حساب العداد لا يختلط بالحساب العام للمشترك', () {
+    test('الفواتير العامة وفواتير العداد تنتمي لحساب المشترك نفسه', () {
       final meterInvoice = _invoice(id: 1, totalAmount: 500, meterId: 77);
       final generalInvoice = _invoice(id: 2, totalAmount: 400, meterId: null);
 
-      // الأحدث في الحساب العام لا يرث دين فاتورة العداد.
+      // الأحدث في الحساب الموحد يشمل الدين الحقيقي للفاتورة الأقدم.
       expect(
         InvoiceAccounting.trueRemaining(generalInvoice, <InvoiceModel>[
           meterInvoice,
           generalInvoice,
         ]),
-        400,
+        900,
       );
     });
 
@@ -259,7 +259,7 @@ void main() {
       expect(picked?.id, 3);
     });
 
-    test('openInvoicesForAccount يعزل فاتورة العداد عن العامة ويرتب بالأقدم', () {
+    test('openInvoicesForAccount يجمع فواتير المشترك ويرتب بالأقدم', () {
       final invoices = <InvoiceModel>[
         _invoice(id: 3, totalAmount: 300, meterId: 77),
         _invoice(id: 1, totalAmount: 100, meterId: 77),
@@ -272,13 +272,13 @@ void main() {
         subscriberId: 1,
         meterId: 77,
       );
-      expect(meterScoped.map((i) => i.id).toList(), <int>[1, 3]);
+      expect(meterScoped.map((i) => i.id).toList(), <int>[1, 2, 3]);
 
       final generalScoped = InvoiceAccounting.openInvoicesForAccount(
         invoices: invoices,
         subscriberId: 1,
       );
-      expect(generalScoped.map((i) => i.id).toList(), <int>[2]);
+      expect(generalScoped.map((i) => i.id).toList(), <int>[1, 2, 3]);
     });
   });
 }

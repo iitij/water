@@ -458,8 +458,8 @@ class InvoiceController extends ApiController
             $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
-            ->where('invoice_type', $invoice->invoice_type)->where('id', '<', $invoice->id)
-            ->when($invoice->meter_id, fn ($q) => $q->where('meter_id', $invoice->meter_id), fn ($q) => $q->whereNull('meter_id'))
+            ->where('id', '<', $invoice->id)
+            ->where('status', '!=', 'draft')
             ->get();
         $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
         $invoice->total_amount = (float) $invoice->consumption_fee;
@@ -644,8 +644,8 @@ class InvoiceController extends ApiController
             'subscriber_name' => $subscriber->name,
             'subscriber_phone' => $subscriber->phone,
             'invoice_remaining' => number_format($invoiceRemaining, 2, '.', ''),
-            'outstanding_balance' => number_format($subscriber->getOutstandingBalance() + $subscriber->meters->sum(fn ($meter) => $meter->getOutstandingBalance()), 2, '.', ''),
-            'credit_balance' => number_format(max(0, (float) $subscriber->balance) + $subscriber->meters->sum(fn ($meter) => max(0, (float) $meter->balance)), 2, '.', ''),
+            'outstanding_balance' => number_format($subscriber->getAccountDebt(), 2, '.', ''),
+            'credit_balance' => number_format($subscriber->getAccountCredit(), 2, '.', ''),
             'collector' => $request->user()?->name,
             'pdf_url' => url('/api/payments/'.$payment->id.'/pdf'),
             // نص رسالة واتساب للفاتورة — يستخدمه التطبيق في شاشة الإيصال.
