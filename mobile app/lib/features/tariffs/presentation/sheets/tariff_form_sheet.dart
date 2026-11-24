@@ -211,7 +211,7 @@ class _TariffFormSheetState extends State<TariffFormSheet> {
                                   ),
                                   SizedBox(height: 1),
                                   Text(
-                                    'تسعيرة واحدة فقط تكون نشطة للسعر الافتراضي',
+                                    'تعرفة معتمدة لفترتها، دون تداخل مع أي تعرفة أخرى',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: AppColors.neutral,
