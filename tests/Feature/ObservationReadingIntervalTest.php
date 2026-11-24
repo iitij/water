@@ -215,6 +215,28 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertDatabaseCount('readings', 2);
     }
 
+    public function test_observation_audit_reports_legacy_exception_without_rewriting_it(): void
+    {
+        $meter = $this->meter();
+        $legacy = Reading::create([
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
+            'period_start' => '2026-03-01', 'period_end' => '2026-03-31',
+            'previous_reading' => 100, 'current_reading' => 135,
+        ]);
+        $before = \Illuminate\Support\Facades\DB::table('readings')->where('id', $legacy->id)->first();
+        $this->artisan('water:audit-observation-intervals')
+            ->expectsOutputToContain('LEGACY_EARLY_OBSERVATION reading #'.$legacy->id)->assertSuccessful();
+        $this->assertEquals($before, \Illuminate\Support\Facades\DB::table('readings')->where('id', $legacy->id)->first());
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-14', 'current_reading' => 148,
+        ])->assertCreated()->json('reading.id');
+        $this->artisan('water:audit-observation-intervals')->assertSuccessful();
+        \Illuminate\Support\Facades\DB::table('readings')->where('id', $id)->update(['previous_reading' => 134]);
+        $this->artisan('water:audit-observation-intervals')
+            ->expectsOutputToContain('BROKEN_OBSERVATION_ANCHOR reading #'.$id)->assertFailed();
+        $this->assertEquals(134, Reading::findOrFail($id)->previous_reading);
+    }
+
     public function test_reference_dates_and_initial_meter_value_are_frozen_after_reading(): void
     {
         $meter = $this->meter();
