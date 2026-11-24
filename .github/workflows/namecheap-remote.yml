@@ -31,6 +31,7 @@ on:
           - pdf-runtime-audit
           - pdf-browser-trial
           - pdf-browser-retest
+          - pdf-library-audit
           - migrate-empty
           - sync
 
@@ -96,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|pdf-runtime-audit|pdf-browser-trial|pdf-browser-retest|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|pdf-runtime-audit|pdf-browser-trial|pdf-browser-retest|pdf-library-audit|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -1257,6 +1258,52 @@ jobs:
               timeout --signal=TERM --kill-after=5s 30s node "$trial/smoke.mjs"
               echo 'PDF_BROWSER_TRIAL: PASSED'
               echo 'No persistent browser process, no Laravel changes, no public deployment, no real data.'
+              ;;
+            pdf-library-audit)
+              echo '=== HOST ABI AND PDF LIBRARY DISCOVERY (READ-ONLY) ==='
+              uname -m
+              uname -r
+              for file in /etc/os-release /etc/redhat-release /etc/cloudlinux-release; do
+                if [[ -r "$file" ]]; then
+                  echo "RELEASE_FILE: $file"
+                  if [[ "$file" == /etc/os-release ]]; then
+                    grep -E '^(ID|ID_LIKE|VERSION_ID|PLATFORM_ID|PRETTY_NAME)=' "$file" || true
+                  else
+                    cat "$file"
+                  fi
+                fi
+              done
+              getconf GNU_LIBC_VERSION || true
+              for tool in rpm rpm2cpio cpio readelf ldd ldconfig; do
+                if binary="$(command -v "$tool")"; then echo "AVAILABLE_TOOL $tool: $binary"; else echo "AVAILABLE_TOOL $tool: NO"; fi
+              done
+              if command -v rpm >/dev/null 2>&1; then
+                for package in glibc atk at-spi2-atk at-spi2-core dbus-libs glib2 libX11; do
+                  rpm -q --qf '%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n' "$package" 2>/dev/null || true
+                done
+              fi
+              echo '=== EXISTING USER-ACCESSIBLE LIBRARIES ==='
+              shopt -s nullglob
+              for root in /lib64 /usr/lib64 /usr/local/lib64 /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/alt/*/root/usr/lib64 /opt/alt/*/usr/lib64; do
+                if [[ -d "$root" && -r "$root" ]]; then
+                  for lib in "$root"/libatk-bridge-2.0.so* "$root"/libatspi.so*; do
+                    if [[ -f "$lib" && -r "$lib" ]]; then
+                      echo "READABLE_LIBRARY: $lib"
+                      readlink -f "$lib" || true
+                    fi
+                  done
+                fi
+              done
+              stage="$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1"
+              browser="$stage/browser-transfer-45300277484-1/chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell"
+              test -f "$browser" && test -x "$browser"
+              echo '=== VERIFIED BROWSER CURRENT DEPENDENCIES ==='
+              ldd "$browser" || true
+              if command -v readelf >/dev/null 2>&1; then
+                readelf -h "$browser" | grep -E 'Class:|Machine:' || true
+                readelf --version-info "$browser" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sort -Vu | tail -n 5 || true
+              fi
+              echo 'PDF_LIBRARY_AUDIT: COMPLETE; NO SYSTEM CHANGES, DOWNLOAD OR BROWSER LAUNCH'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
