@@ -331,7 +331,7 @@ class ObservationReadingIntervalTest extends TestCase
             }
         }
         $this->assertSame('2026-01-10', $meter->fresh()->installed_at->toDateString());
-        $this->assertSame(100, $meter->fresh()->initial_reading);
+        $this->assertSame('100.00', $meter->fresh()->initial_reading);
         $this->assertSame('2026-01-01', $meter->subscriber->fresh()->subscription_start_date->toDateString());
     }
 
