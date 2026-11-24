@@ -20,7 +20,6 @@ class Reading extends Model
         'actual_reading_date',
         'previous_reading',
         'current_reading',
-        'consumption_units',
         'is_invoiced',
         'invoice_id',
         'created_by',
@@ -38,6 +37,7 @@ class Reading extends Model
         'actual_reading_date' => 'date',
         'previous_reading' => 'decimal:2',
         'current_reading' => 'decimal:2',
+        'consumption_units' => 'decimal:2',
         'is_invoiced' => 'boolean',
     ];
 
@@ -146,6 +146,23 @@ class Reading extends Model
         $this->period_end = $end;
     }
 
+    /** Meter readings have two decimal places; calculate in hundredths, not floats. */
+    private function calculateConsumption(): void
+    {
+        $toHundredths = static function ($value): int {
+            if (! preg_match('/^\d{1,10}\.\d{2}$/D', (string) $value)) {
+                throw ValidationException::withMessages(['current_reading' => 'قيمة قراءة العداد خارج النطاق المسموح.']);
+            }
+
+            return (int) str_replace('.', '', (string) $value);
+        };
+        $units = $toHundredths($this->current_reading) - $toHundredths($this->previous_reading);
+        if ($units < 0) {
+            throw ValidationException::withMessages(['current_reading' => 'القراءة الحالية أقل من القراءة السابقة.']);
+        }
+        $this->consumption_units = intdiv($units, 100).'.'.str_pad((string) ($units % 100), 2, '0', STR_PAD_LEFT);
+    }
+
     // ─── Boot: Auto-calculate consumption ───
 
     protected static function booted(): void
@@ -179,7 +196,7 @@ class Reading extends Model
             }
 
             // Calculate consumption units
-            $reading->consumption_units = max(0, (int) ($reading->current_reading - $reading->previous_reading));
+            $reading->calculateConsumption();
         });
 
         static::updating(function (Reading $reading) {
@@ -187,7 +204,12 @@ class Reading extends Model
                 throw \Illuminate\Validation\ValidationException::withMessages(['reading' => 'قراءة مالية تاريخية غير قابلة للتعديل.']);
             }
             $reading->guardObservationUpdate();
-            $reading->consumption_units = max(0, (int) ($reading->current_reading - $reading->previous_reading));
+            if ($reading->isDirty('consumption_units')) {
+                throw ValidationException::withMessages(['consumption_units' => 'الاستهلاك قيمة محسوبة لا تُعدل مباشرة.']);
+            }
+            if ($reading->isDirty(['previous_reading', 'current_reading'])) {
+                $reading->calculateConsumption();
+            }
         });
     }
 }
