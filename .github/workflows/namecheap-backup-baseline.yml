@@ -1,0 +1,49 @@
+name: Water | Create encrypted baseline and restore drill
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-baseline.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check backup script syntax
+        run: bash -n scripts/hosting/water-backup.sh
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Install the private backup script and run verified baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum scripts/hosting/water-backup.sh | awk '{print $1}')"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 \
+            "set -eu; umask 077; test \"\$(id -un)\" = alweufti; test ! -L \"\$HOME/.water-backup-ops\"; mkdir -p \"\$HOME/.water-backup-ops\"; chmod 700 \"\$HOME/.water-backup-ops\"; cd \"\$HOME/.water-backup-ops\"; tmp=\$(mktemp .script-XXXXXXXX); trap 'rm -f \"\$tmp\"' EXIT; cat > \"\$tmp\"; printf '%s  %s\n' '$digest' \"\$tmp\" | sha256sum -c --quiet -; bash -n \"\$tmp\"; chmod 700 \"\$tmp\"; mv \"\$tmp\" water-backup.sh; timeout --kill-after=20s 1200s bash water-backup.sh --restore-drill" \
+            < scripts/hosting/water-backup.sh
