@@ -185,7 +185,9 @@ class Payment extends Model
         $prefix = 'REC-'.date('Ym').'-';
         $lastPayment = static::withTrashed()
             ->where('receipt_number', 'like', $prefix.'%')
+            ->orderByRaw('LENGTH(receipt_number) DESC')
             ->orderByDesc('receipt_number')
+            ->lockForUpdate()
             ->first();
 
         if ($lastPayment) {

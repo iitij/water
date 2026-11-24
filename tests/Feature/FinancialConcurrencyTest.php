@@ -288,6 +288,37 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(1500.25, $meter->subscriber->getAccountCredit());
     }
 
+    public function test_parallel_payments_for_different_subscribers_cannot_share_uuid(): void
+    {
+        $first = $this->fixture();
+        $second = $this->fixture();
+        $uuid = (string) Str::uuid();
+        $collect = fn (Meter $meter) => app(PaymentService::class)->collectPayment(
+            Subscriber::findOrFail($meter->subscriber_id), 1500.25, syncUuid: $uuid)->id;
+        $results = $this->race(fn () => $collect($first), fn () => $collect($second));
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(\Symfony\Component\HttpKernel\Exception\HttpException::class,
+            collect($results)->firstWhere('ok', false)['error']);
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(1, Transaction::count());
+        $this->assertEquals(1500.25, $first->subscriber->getAccountCredit() + $second->subscriber->getAccountCredit());
+    }
+
+    public function test_parallel_distinct_payments_get_unique_receipt_numbers_and_ledger_entries(): void
+    {
+        $first = $this->fixture();
+        $second = $this->fixture();
+        $collect = fn (Meter $meter) => app(PaymentService::class)->collectPayment(
+            Subscriber::findOrFail($meter->subscriber_id), 1500.25, syncUuid: (string) Str::uuid())->id;
+        $results = $this->race(fn () => $collect($first), fn () => $collect($second));
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(2, Payment::count());
+        $this->assertSame(2, Payment::distinct()->count('receipt_number'));
+        $this->assertSame(2, Transaction::count());
+        $this->assertSame(1500.25, $first->subscriber->getAccountCredit());
+        $this->assertSame(1500.25, $second->subscriber->getAccountCredit());
+    }
+
     public function test_invoice_and_collection_in_parallel_conserve_the_balance(): void
     {
         $meter = $this->fixture();

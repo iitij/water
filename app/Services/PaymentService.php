@@ -381,10 +381,21 @@ class PaymentService
         ?int $requestedMeterId = null,
         ?string $syncUuid = null,
     ): Payment {
+        $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
+        if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
+            throw ValidationException::withMessages(['sync_uuid' => 'معرّف المزامنة غير صالح.']);
+        }
         return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
-            if (! is_finite($amount) || $amount <= 0 || round($amount, 2) != $amount) {
+            if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount) {
                 throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
+            }
+
+            // Different subscriber/collector locks cannot arbitrate a global UUID
+            // or a shared monthly receipt sequence. Hold this row through posting.
+            $issuer = DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first();
+            if (! $issuer) {
+                throw new \LogicException('Payment issuance lock is missing.');
             }
 
             if ($syncUuid) {
@@ -398,7 +409,10 @@ class PaymentService
                         || (int) ($existing->invoice_id ?? 0) !== (int) ($invoiceId ?? 0)
                         || round((float) $existing->amount, 2) !== round($amount, 2)
                         || (! $invoiceId && (int) ($existing->meter_id ?? 0) !== (int) ($requestedMeterId ?? 0))
-                        || $existing->payment_method !== $paymentMethod) {
+                        || $existing->payment_method !== $paymentMethod
+                        || ($paymentDate !== null && $existing->payment_date->toDateString() !== \Carbon\CarbonImmutable::parse($paymentDate)->toDateString())
+                        || ($existing->reference_number ?? '') !== ($referenceNumber ?? '')
+                        || ($existing->reason ?? '') !== ($reason ?? '')) {
                         abort(409, 'معرّف المزامنة مستخدم مسبقاً لعملية دفع مختلفة.');
                     }
                     return $existing;

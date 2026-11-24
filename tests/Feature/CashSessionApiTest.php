@@ -130,6 +130,40 @@ class CashSessionApiTest extends TestCase
             ->assertJsonStructure(['cash_session', 'payments', 'generated_at']);
     }
 
+    public function test_payment_replay_after_cash_session_close_never_posts_again_or_changes_identity(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $sessionId = $this->postJson('/api/cash-sessions', ['opening_amount' => 0])
+            ->assertCreated()->json('cash_session.id');
+        $uuid = 'abcdef12-3456-4789-abcd-ef1234567890';
+        $payload = ['amount' => '600.25', 'payment_method' => 'cash',
+            'payment_date' => today()->toDateString(), 'reference_number' => 'OFFLINE-1',
+            'sync_uuid' => strtoupper($uuid)];
+        $endpoint = "/api/invoices/{$this->invoice->id}/pay";
+        $id = $this->postJson($endpoint, $payload)->assertCreated()->json('payment.id');
+        $this->postJson("/api/cash-sessions/{$sessionId}/close", ['counted_amount' => 600.25])
+            ->assertOk()->assertJsonPath('cash_session.expected_amount', '600.25');
+        $newId = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+
+        $payload['sync_uuid'] = $uuid;
+        $this->postJson($endpoint, $payload)->assertSuccessful()->assertJsonPath('payment.id', $id);
+        foreach ([
+            ['amount' => '600.26'],
+            ['payment_date' => today()->subDay()->toDateString()],
+            ['reference_number' => 'OFFLINE-2'],
+            ['payment_method' => 'bank_transfer'],
+            ['reason' => 'Changed financial reason'],
+        ] as $change) {
+            $this->postJson($endpoint, array_replace($payload, $change))->assertConflict();
+        }
+
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('payments', ['id' => $id, 'sync_uuid' => $uuid, 'cash_session_id' => $sessionId]);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $newId]);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $sessionId, 'expected_amount' => 600.25, 'state' => 'closed']);
+        $this->assertSame('600.25', $this->invoice->fresh()->amount_paid);
+    }
+
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')
