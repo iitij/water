@@ -13,6 +13,11 @@ class EditSubscriber extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('ledger_statement')
+                ->label('كشف الحساب')
+                ->icon('heroicon-o-document-text')
+                ->visible(fn (): bool => SubscriberResource::canView($this->record))
+                ->url(fn (): string => SubscriberResource::getUrl('ledger-statement', ['record' => $this->record])),
             Actions\DeleteAction::make(),
         ];
     }

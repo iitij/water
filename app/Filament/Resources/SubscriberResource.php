@@ -259,6 +259,11 @@ class SubscriberResource extends Resource
                     }),
 
 
+                Action::make('ledger_statement')
+                    ->label('كشف الحساب')
+                    ->icon('heroicon-o-document-text')
+                    ->visible(fn (Subscriber $record): bool => static::canView($record))
+                    ->url(fn (Subscriber $record): string => static::getUrl('ledger-statement', ['record' => $record])),
                 ViewAction::make(),
                 EditAction::make(),
             ])
@@ -284,6 +289,7 @@ class SubscriberResource extends Resource
             'index' => Pages\ListSubscribers::route('/'),
             'create' => Pages\CreateSubscriber::route('/create'),
             'edit' => Pages\EditSubscriber::route('/{record}/edit'),
+            'ledger-statement' => Pages\SubscriberLedgerStatement::route('/{record}/ledger-statement'),
         ];
     }
 }

@@ -54,3 +54,9 @@ Route::middleware(['web', \Filament\Http\Middleware\Authenticate::class])->prefi
     Route::get('/invoices', [ExportController::class, 'exportInvoices'])->name('admin.export.invoices')->can('viewAny', \App\Models\Invoice::class);
     Route::get('/readings', [ExportController::class, 'exportReadings'])->name('admin.export.readings')->can('viewAny', \App\Models\Reading::class);
 });
+
+// Official ledger export uses the same projection and subscriber policy as the API.
+Route::get('/subscribers/{subscriber}/ledger-statement/{format}', [\App\Http\Controllers\WebLedgerStatementController::class, 'download'])
+    ->whereIn('format', ['xlsx', 'pdf'])
+    ->middleware(['web', \Filament\Http\Middleware\Authenticate::class, 'can:view,subscriber'])
+    ->name('subscribers.ledger-statement.download');

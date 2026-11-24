@@ -25,7 +25,7 @@ class SubscriberTransactionsTable extends Component implements HasForms, HasTabl
     public function table(Table $table): Table
     {
         return $table
-            ->heading('سجل الحركات')
+            ->heading('سجل الحركات حسب المرجع — ليس كشف حساب مستقلاً')
             ->query(
                 Transaction::query()->where('subscriber_id', $this->record?->id ?? -1)->latest()
             )
@@ -50,7 +50,7 @@ class SubscriberTransactionsTable extends Component implements HasForms, HasTabl
                 TextColumn::make('meter_id')
                     ->label('الجهة')
                     ->formatStateUsing(function ($state, $record) {
-                        return $state ? 'عداد رقم: ' . $state : 'الحساب العام';
+                        return $state ? 'عداد رقم: ' . $state : ($record->retired_meter_id ? 'عداد مستبدل: '.$record->retired_meter_code : 'بلا مرجع عداد');
                     })
                     ->badge()
                     ->color(fn ($state) => $state ? 'info' : 'gray'),
@@ -64,10 +64,10 @@ class SubscriberTransactionsTable extends Component implements HasForms, HasTabl
             ])
             ->filters([
                 \Filament\Tables\Filters\SelectFilter::make('meter_id')
-                    ->label('الحساب (الجهة)')
+                    ->label('مرجع الحركة')
                     ->options(function () {
                         if (!$this->record) return [];
-                        $options = ['general' => 'الحساب العام'];
+                        $options = ['general' => 'بلا مرجع عداد', 'retired' => 'عدادات مستبدلة'];
                         foreach ($this->record->meters as $meter) {
                             $options[$meter->id] = 'عداد رقم: ' . $meter->id . ' (' . $meter->unique_code . ')';
                         }
@@ -75,7 +75,9 @@ class SubscriberTransactionsTable extends Component implements HasForms, HasTabl
                     })
                     ->query(function ($query, array $data) {
                         if (isset($data['value']) && $data['value'] === 'general') {
-                            $query->whereNull('meter_id');
+                            $query->whereNull('meter_id')->whereNull('retired_meter_id');
+                        } elseif (($data['value'] ?? null) === 'retired') {
+                            $query->whereNull('meter_id')->whereNotNull('retired_meter_id');
                         } elseif (!empty($data['value'])) {
                             $query->where('meter_id', $data['value']);
                         }
