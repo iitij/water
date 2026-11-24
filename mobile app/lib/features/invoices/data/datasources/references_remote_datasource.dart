@@ -177,11 +177,10 @@ class SubscriberDueSummary {
   final int? latestUnpaidInvoiceId;
   final String? latestUnpaidBillNumber;
 
-  /// `total_amount + previous_balance - amount_paid` لأحدث فاتورة غير مسددة
-  /// (يطابق `PaymentResource::form` سطر 42-46).
+  /// المستحق الفعلي من الخادم، دون تكرار المتأخرات التاريخية.
   final double dueAmount;
 
-  /// إجمالي الدين على المشترك وكل عداداته (`getOutstandingBalance` + مجاميع العدادات).
+  /// صافي مديونية الحساب المالي الموحد للمشترك.
   final double outstandingBalance;
   final double creditBalance;
   final int openInvoicesCount;

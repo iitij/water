@@ -1,4 +1,3 @@
-import '../../../../core/accounting/account_isolation.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../../invoices/domain/accounting/invoice_accounting.dart';
@@ -10,8 +9,7 @@ import '../../data/models/payment_model.dart';
 ///
 /// الترتيب الحرج (أي تغيير فيه يكسر المطابقة مع الخادم):
 ///  1. تُطبَّق الدفعة أولاً على الفاتورة المحددة `invoice_id` (إن كانت مفتوحة).
-///  2. الفائض يُوزَّع FIFO على الأقدم داخل **نفس الحساب المعزول**
-///     (`meter_id` للعداد، أو `meter_id IS NULL` للحساب العام).
+///  2. الفائض يُوزَّع FIFO على الأقدم داخل حساب المشترك الموحد؛ معرّف العداد مرجع فقط.
 ///  3. السقف هو `total_amount` لكل فاتورة **بدون** `previous_balance` —
 ///     وإلا تضاعفت المتأخرات (القاعدة 3 في §1.3 من الخطة).
 ///  4. الفائض بعد استيفاء كل الفواتير يتحول رصيداً دائناً (`credit`) يُخصم من
@@ -25,6 +23,9 @@ class PaymentAllocator {
     required double amount,
     int? targetInvoiceId,
   }) {
+    if (invoices.map((i) => i.subscriberId).toSet().length > 1) {
+      throw ArgumentError('Allocation must belong to a single subscriber.');
+    }
     final working = List<InvoiceModel>.of(invoices);
     var remaining = amount;
     final allocations = <InvoiceAllocation>[];
@@ -53,7 +54,7 @@ class PaymentAllocator {
       }
     }
 
-    // 2) ثم FIFO على الأقدم داخل نفس الحساب المعزول.
+    // 2) ثم FIFO على الأقدم داخل حساب المشترك.
     if (remaining > 0) {
       final ordered = _oldestFirst(working)
           .where((i) => i.id != targetInvoiceId && i.status.isOpenForCollection)
@@ -91,11 +92,7 @@ class PaymentAllocator {
 
     final orderedPayments = _oldestFirstPayment(payments)
         .where((p) =>
-            p.subscriberId == subscriberId &&
-            AccountIsolation.sameAllocationAccount(
-              paymentMeterId: meterId,
-              invoiceMeterId: p.meterId,
-            ))
+            p.subscriberId == subscriberId && !p.isDeleted && !p.isVoided)
         .toList();
 
     var current = scoped;
@@ -135,7 +132,7 @@ class PaymentAllocator {
     required InvoiceModel invoice,
     required double amount,
   }) {
-    final due = invoice.netPayable;
+    final due = invoice.payableAmount;
     if (amount <= 0) {
       return PaymentShortfall(
         accepted: false,
@@ -165,10 +162,9 @@ class PaymentAllocator {
       invoices
           .where((i) =>
               i.subscriberId == subscriberId &&
-              AccountIsolation.sameAllocationAccount(
-                paymentMeterId: meterId,
-                invoiceMeterId: i.meterId,
-              ))
+              !i.isDeleted &&
+              i.status != InvoiceStatus.draft &&
+              i.status != InvoiceStatus.cancelled)
           .toList();
 
   static List<InvoiceModel> _oldestFirst(List<InvoiceModel> invoices) {
