@@ -37,6 +37,7 @@ class InvoiceController extends ApiController
             'subscriber:id,name,phone,square_id',
             'subscriber.square:id,name,code',
             'meter:id,unique_code,path_number',
+            'tariffLines',
         ])->latest('bill_date')->latest('id');
 
         if ($request->filled('status') && $request->query('status') !== 'all') {
@@ -101,7 +102,7 @@ class InvoiceController extends ApiController
     public function unpaid(Request $request)
     {
         $this->authorizeApi(Invoice::class, 'viewAny');
-        $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter'])
+        $query = Invoice::with(['subscriber.square', 'subscriber.meters:id,subscriber_id,path_number', 'meter', 'tariffLines'])
             ->withOwnDebt()->latest('bill_date')->latest('id');
         if ($request->filled('square_id')) {
             $query->whereHas('subscriber', fn ($q) => $q->where('square_id', $request->integer('square_id')));
@@ -153,7 +154,6 @@ class InvoiceController extends ApiController
 
         $data = $this->decorate($invoice);
         $data['allocation_snapshot'] = app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice);
-        $data['tariff_lines'] = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->orderBy('period_start')->orderBy('id')->get();
         return response()->json(['invoice' => $data]);
     }
 
@@ -282,7 +282,6 @@ class InvoiceController extends ApiController
                 (string) $data['historical_unit_price'], $data['reason'], $data['evidence']);
         $replacement = Invoice::findOrFail($correction->replacement_invoice_id);
         $data = $this->decorate($replacement);
-        $data['tariff_lines'] = DB::table('invoice_tariff_lines')->where('invoice_id', $replacement->id)->orderBy('period_start')->orderBy('id')->get();
 
         return response()->json(['correction' => $correction, 'invoice' => $data]);
     }
@@ -576,6 +575,7 @@ class InvoiceController extends ApiController
 
     private function decorate(Invoice $invoice): array
     {
+        $invoice->loadMissing('tariffLines');
         $data = $invoice->toArray();
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();
