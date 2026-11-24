@@ -138,6 +138,7 @@ class SingleMeterService
             $newMeterData['subscriber_id'] = $subscriber->id;
             $newMeterData['removed_at'] = null;
             $newMeterData['status'] ??= 'active';
+            $newMeterData['installed_at'] ??= $removedAt;
 
             // Validate BEFORE deleting the old meter; rollback is still a final
             // safety net for unique constraints and concurrent requests.
@@ -153,7 +154,6 @@ class SingleMeterService
                 || $old->transactions()->withTrashed()->exists();
             if ($hasFinancialHistory) {
                 app(FinancialMeterRetirementService::class)->retire($old, $subscriber);
-                $newMeterData['installed_at'] ??= $removedAt;
             } else {
                 app(MeterDataPurger::class)->purge((int) $old->id);
             }
