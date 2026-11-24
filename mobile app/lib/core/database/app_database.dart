@@ -991,7 +991,7 @@ class AppDatabase extends GeneratedDatabase {
         '''UPDATE cached_meters SET last_reading = COALESCE(
              (SELECT current_reading FROM cached_readings
               WHERE meter_id = ?
-              ORDER BY period_end DESC, reading_date DESC, updated_at DESC LIMIT 1),
+              ORDER BY COALESCE(actual_reading_date, reading_date) DESC, updated_at DESC, local_id DESC LIMIT 1),
              initial_reading
            ) WHERE server_id = ?''',
         [meterId, meterId],
