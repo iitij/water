@@ -307,9 +307,12 @@
 
     $previous_reading = $firstReading?->previous_reading;
     $current_reading = $lastReading?->current_reading;
-            $consumption = $readings->sum('consumption_units');
-
-            $price_per_unit = $consumption > 0 ? $invoice->consumption_fee / $consumption : null;
+            $tariffLines = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+                ->where('invoice_id', $invoice->id)->orderBy('period_start')->orderBy('id')->get();
+            $hasConsumptionEvidence = $tariffLines->isNotEmpty() || $readings->isNotEmpty();
+            $consumption = $tariffLines->isNotEmpty() ? $tariffLines->sum('units') : $readings->sum('consumption_units');
+            $prices = $tariffLines->pluck('unit_price')->map(fn ($price) => number_format((float) $price, 2, '.', ''))->unique();
+            $price_per_unit = $prices->count() === 1 ? $prices->first() : null;
 
             // Logo
             $logoPath = Setting::get('invoice_logo', null);
@@ -403,11 +406,11 @@
                 }
                 if($chk('inv_show_units')) {
                 $consHeaders[] = $lbl('inv_lbl_units', 'وحدات الاستهلاك');
-                $consValues[] = $readings->isNotEmpty() ? '<strong style="font-size:12px;">' . $consumption . '</strong>' : '—';
+                $consValues[] = $hasConsumptionEvidence ? '<strong style="font-size:12px;">' . $consumption . '</strong>' : '—';
                 }
                 if($chk('inv_show_unit_price')) {
                 $consHeaders[] = $lbl('inv_lbl_unit_price', 'سعر الوحدة');
-                $consValues[] = $price_per_unit !== null ? number_format($price_per_unit, 2) : '—';
+                $consValues[] = $price_per_unit !== null ? number_format((float) $price_per_unit, 2) : ($prices->count() > 1 ? 'تعرفات متعددة' : 'غير موثقة');
                 }
                 if($chk('inv_show_cons_value')) {
                 $consHeaders[] = $lbl('inv_lbl_cons_value', 'قيمة الاستهلاك');
