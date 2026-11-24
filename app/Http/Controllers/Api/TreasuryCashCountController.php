@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Services\TreasuryCashCountService;
+use App\Services\TreasuryRegisterService;
+use Illuminate\Http\Request;
+
+final class TreasuryCashCountController extends ApiController
+{
+    public function index(Request $request, int $id, TreasuryCashCountService $service)
+    {
+        return response()->json($service->index($request->user(), $id));
+    }
+
+    public function show(Request $request, int $id, TreasuryCashCountService $service)
+    {
+        return response()->json($service->inspect($request->user(), $id));
+    }
+
+    public function store(Request $request, int $id, TreasuryCashCountService $service)
+    {
+        app(TreasuryRegisterService::class)->authorize($request->user());
+        $data = $request->validate([
+            'counted_amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
+            'reference' => ['required', 'string', 'max:150'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'observed_at' => ['prohibited'],
+        ]);
+        return response()->json($service->record($request->user(), $id, (string) $data['counted_amount'],
+            $data['reference'], $data['evidence']));
+    }
+
+    public function review(Request $request, int $id, TreasuryCashCountService $service)
+    {
+        app(TreasuryRegisterService::class)->authorize($request->user());
+        $data = $request->validate([
+            'accept' => ['required', 'boolean'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        return response()->json($service->review($request->user(), $id, (bool) $data['accept'], $data['evidence']));
+    }
+}
