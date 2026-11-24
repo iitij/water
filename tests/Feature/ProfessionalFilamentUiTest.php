@@ -100,7 +100,7 @@ class ProfessionalFilamentUiTest extends TestCase
     {
         $square = Square::create(['name' => 'مربع فحص الواجهات']);
         $subscriber = Subscriber::create(['name' => 'مشترك فحص الواجهات', 'status' => 'active', 'square_id' => $square->id]);
-        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'UI-TEST-METER']);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'UI-TEST-METER', 'installed_at' => '2026-11-01']);
         $reading = \App\Models\Reading::create([
             'meter_id' => $meter->id, 'reading_date' => '2026-11-03',
             'previous_reading' => 0, 'current_reading' => 12,
