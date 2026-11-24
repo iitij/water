@@ -1,0 +1,137 @@
+name: Water | PDF template compatibility (mPDF)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  template-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Install locked Laravel dependencies and isolated mPDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          mkdir -p "$RUNNER_TEMP/mpdf" "$RUNNER_TEMP/pdf-preview"
+          cd "$RUNNER_TEMP/mpdf"
+          printf '%s\n' '{"require":{"mpdf/mpdf":"8.3.1"},"config":{"allow-plugins":false}}' > composer.json
+          composer update --no-dev --no-scripts --no-plugins --prefer-dist --no-interaction --no-progress
+          composer audit --locked --no-dev
+      - name: Render existing invoice and receipt views with synthetic data
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/template-trial.php" <<'PHP'
+          <?php
+          declare(strict_types=1);
+          require getcwd().'/vendor/autoload.php';
+          $app = require getcwd().'/bootstrap/app.php';
+          $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+          if (!app()->environment('testing') || config('database.default') !== 'sqlite' || config('database.connections.sqlite.database') !== ':memory:') {
+              throw new RuntimeException('Only isolated in-memory test database is permitted');
+          }
+          \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+          require getenv('RUNNER_TEMP').'/mpdf/vendor/autoload.php';
+          $square = \App\Models\Square::create(['name' => 'مربع الاختبار']);
+          $subscriber = \App\Models\Subscriber::create(['name' => 'مشترك تجريبي', 'status' => 'active', 'square_id' => $square->id]);
+          $invoice = \App\Models\Invoice::create([
+              'subscriber_id' => $subscriber->id, 'bill_number' => 'INV-931001',
+              'bill_date' => '2026-11-03', 'total_amount' => 1200,
+              'consumption_fee' => 1200, 'previous_balance' => 0, 'credit_applied' => 0,
+              'status' => 'issued',
+          ]);
+          $payment = new \App\Models\Payment([
+              'receipt_number' => 'REC-931002', 'amount' => 125.50,
+              'payment_date' => '2026-11-03', 'payment_method' => 'cash',
+          ]);
+          $payment->id = 999999;
+          $payment->subscriber_id = $subscriber->id;
+          $payment->invoice_id = $invoice->id;
+          $payment->setRelation('subscriber', $subscriber);
+          $payment->setRelation('invoice', $invoice);
+          $payment->setRelation('user', null);
+          $dirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
+          $fonts = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
+          $out = getenv('RUNNER_TEMP').'/pdf-preview';
+          foreach (['invoice' => ['invoice' => $invoice], 'receipt' => ['payment' => $payment]] as $view => $data) {
+              $html = view('pdf.'.$view, $data)->render();
+              if (preg_match('~@import|(?:src|href|url)\s*[=(]\s*[\x22\x27]?\s*(?:https?:)?//~i', $html)) {
+                  throw new RuntimeException('External asset detected in '.$view);
+              }
+              // mPDF uses local font registration rather than embedded CSS font faces.
+              $html = preg_replace('~@font-face\s*\{[^}]*\}~is', '', $html);
+              $html = str_replace("'Tajawal', 'Segoe UI', sans-serif", 'tajawal', $html);
+              $pdf = new \Mpdf\Mpdf([
+                  'mode' => 'utf-8', 'format' => 'A5-L',
+                  'tempDir' => getenv('RUNNER_TEMP').'/mpdf-tmp',
+                  'fontDir' => array_merge($dirs, [resource_path('fonts/tajawal')]),
+                  'fontdata' => $fonts + ['tajawal' => ['R'=>'Tajawal-Regular.ttf','B'=>'Tajawal-Bold.ttf','useOTL'=>255,'useKashida'=>0]],
+                  'default_font' => 'tajawal',
+                  'margin_left' => 0, 'margin_right' => 0, 'margin_top' => 0, 'margin_bottom' => 0,
+              ]);
+              $pdf->SetDirectionality('rtl');
+              $start = hrtime(true);
+              $pdf->WriteHTML($html);
+              $bytes = $pdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+              if (!str_starts_with($bytes, '%PDF-') || strlen($bytes) < 1000) {
+                  throw new RuntimeException('Invalid '.$view.' PDF');
+              }
+              file_put_contents($out.'/'.$view.'.pdf', $bytes);
+              echo strtoupper($view).'_PAGES: '.$pdf->page.PHP_EOL;
+              echo strtoupper($view).'_RENDER_MS: '.round((hrtime(true)-$start)/1e6).PHP_EOL;
+          }
+          PHP
+          mkdir -p "$RUNNER_TEMP/mpdf-tmp"
+          php "$RUNNER_TEMP/template-trial.php"
+      - name: Inspect PDF structure, embedded fonts, and financial values
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pdfinfo >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends poppler-utils
+          fi
+          cd "$RUNNER_TEMP/pdf-preview"
+          result=0
+          for doc in invoice receipt; do
+            pdfinfo "$doc.pdf" | tee "$doc.info.txt"
+            pdffonts "$doc.pdf" | tee "$doc.fonts.txt"
+            pdftotext -layout "$doc.pdf" "$doc.text.txt"
+            pdftoppm -f 1 -l 1 -scale-to 1200 -png -singlefile "$doc.pdf" "$doc"
+            grep -Eq '^Pages:[[:space:]]+1$' "$doc.info.txt" || result=1
+            grep -Ei 'tajawal.*yes' "$doc.fonts.txt" || result=1
+          done
+          grep -F '931001' invoice.text.txt || result=1
+          grep -F '1,200.00' invoice.text.txt || result=1
+          grep -F '931002' receipt.text.txt || result=1
+          grep -F '125.50' receipt.text.txt || result=1
+          if [[ "$result" == 0 ]]; then echo 'TEMPLATE_STRUCTURAL_CHECK: PASSED'; else echo 'TEMPLATE_STRUCTURAL_CHECK: NEEDS_LAYOUT_OR_TEXT_FIX'; fi
+          exit "$result"
+      - name: Upload synthetic previews for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: water-mpdf-template-preview
+          path: ${{ runner.temp }}/pdf-preview/
+          if-no-files-found: warn
+          retention-days: 7
