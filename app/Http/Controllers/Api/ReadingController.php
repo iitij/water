@@ -6,7 +6,6 @@ use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
-use App\Models\Tariff;
 use App\Services\InvoiceService;
 use App\Services\ReadingService;
 use Carbon\Carbon;
@@ -494,8 +493,11 @@ class ReadingController extends ApiController
         $readings = $invoice->readings->sortBy(fn (Reading $r) => sprintf('%s|%s|%010d', $r->period_start, $r->period_end, $r->id));
         $first = $readings->first();
         $last = $readings->last();
-        $units = (int) $readings->sum('consumption_units');
-        $unitPrice = $units > 0 ? round((float) $invoice->consumption_fee / $units, 2) : Tariff::getActivePrice();
+        $units = (float) $readings->sum('consumption_units');
+        $tariffLines = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+            ->where('invoice_id', $invoice->id)->orderBy('period_start')->orderBy('id')->get();
+        $prices = $tariffLines->pluck('unit_price')->map(fn ($price) => number_format((float) $price, 2, '.', ''))->unique();
+        $unitPrice = $prices->count() === 1 ? $prices->first() : null;
 
         return [
             'id' => $invoice->id,
@@ -512,7 +514,8 @@ class ReadingController extends ApiController
             'previous_reading' => $first?->previous_reading,
             'current_reading' => $last?->current_reading,
             'consumption_units' => $units,
-            'unit_price' => number_format($unitPrice, 2, '.', ''),
+            'unit_price' => $unitPrice,
+            'tariff_lines' => $tariffLines,
             'consumption_fee' => number_format((float) $invoice->consumption_fee, 2, '.', ''),
             'previous_balance' => number_format((float) $invoice->previous_balance, 2, '.', ''),
             'credit_applied' => number_format((float) $invoice->credit_applied, 2, '.', ''),
