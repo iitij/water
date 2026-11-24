@@ -107,8 +107,8 @@ class Reading extends Model
         }
 
         return self::query()->where('meter_id', $this->getOriginal('meter_id'))
-            ->whereKeyNot($this->id)->where('period_basis', 'observation')
-            ->whereDate('period_start', CarbonImmutable::parse($date)->toDateString())->exists();
+            ->whereKeyNot($this->id)
+            ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) > ?', [CarbonImmutable::parse($date)->toDateString()])->exists();
     }
 
     private function guardObservationUpdate(): void
@@ -126,12 +126,14 @@ class Reading extends Model
             throw ValidationException::withMessages(['period_basis' => 'لا يمكن تغيير أساس الفترة المحفوظ.']);
         }
         if ($this->getOriginal('period_basis') !== 'observation') {
-            return;
+            throw ValidationException::withMessages(['period_start' => 'لا يمكن تعديل فترة غير قائمة على قراءة فعلية.']);
         }
         if ($this->isDirty(['meter_id', 'previous_reading', 'period_start'])) {
             throw ValidationException::withMessages(['period_start' => 'لا يجوز تغيير العداد أو بداية الفترة أو قيمة القراءة السابقة.']);
         }
-        if ($this->isDirty('reading_date') && ! $this->isDirty('actual_reading_date')) {
+        if ($this->isDirty('reading_date') && ! $this->isDirty('actual_reading_date')
+            && ($this->getOriginal('actual_reading_date') === null
+                || $this->getOriginal('actual_reading_date')->toDateString() === $this->getOriginal('reading_date')->toDateString())) {
             $this->actual_reading_date = $this->reading_date;
         }
         $observed = $this->actual_reading_date ?? $this->reading_date;
@@ -160,8 +162,20 @@ class Reading extends Model
 
         static::creating(function (Reading $reading) {
             // Auto-fill previous reading from meter's last reading
-            if (empty($reading->previous_reading)) {
+            if ($reading->previous_reading === null) {
                 $reading->previous_reading = $reading->meter->getLastReadingValue();
+            }
+
+            if ($reading->period_basis === 'observation') {
+                $meter = $reading->meter()->firstOrFail();
+                $reading->actual_reading_date ??= $reading->reading_date;
+                app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
+                    $meter, $reading->current_reading, $reading->period_start, $reading->period_end,
+                    $reading->actual_reading_date->toDateString()
+                );
+                if ((float) $reading->previous_reading !== $meter->getLastReadingValue()) {
+                    throw ValidationException::withMessages(['previous_reading' => 'القيمة السابقة لا تطابق آخر قراءة معتمدة.']);
+                }
             }
 
             // Calculate consumption units
