@@ -54,9 +54,15 @@ class PaymentService
                 ->pluck('replacement_invoice_id', 'original_invoice_id');
             $allocationRows = [];
             $availableMinor = 0;
+            $sourceAmounts = [];
             foreach ($credits as $credit) {
                 $remaining = max(0, (int) round((float) $credit['amount'] * 100));
                 $availableMinor += $remaining;
+                $sourceKey = ($credit['kind'] === 0 ? 'payment:' : 'transfer:').$credit['id'];
+                if (array_key_exists($sourceKey, $sourceAmounts)) {
+                    throw new \LogicException('Duplicate allocation credit source.');
+                }
+                $sourceAmounts[$sourceKey] = $remaining;
                 $source = [
                     'payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
                     'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null,
@@ -86,7 +92,7 @@ class PaymentService
                 }
                 $record(null, $remaining);
             }
-            app(PaymentAllocationHistory::class)->append($subscriber, $allocationRows, $paid, $availableMinor);
+            app(PaymentAllocationHistory::class)->append($subscriber, $allocationRows, $paid, $availableMinor, $sourceAmounts);
 
             // Persist all allocations before deriving any cumulative status.
             foreach ($invoices as $invoice) {

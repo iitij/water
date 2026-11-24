@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  */
 class PaymentAllocationHistory
 {
-    public function append(Subscriber $subscriber, array $rows, array $paid, int $available): int
+    public function append(Subscriber $subscriber, array $rows, array $paid, int $available, array $sourceAmounts = []): int
     {
         if (DB::transactionLevel() < 1) {
             throw new \LogicException('Allocation snapshots require an account transaction.');
@@ -21,11 +21,17 @@ class PaymentAllocationHistory
         $allocated = 0;
         $unallocated = 0;
         $byInvoice = array_fill_keys(array_keys($paid), 0);
+        $bySource = array_fill_keys(array_keys($sourceAmounts), 0);
         foreach ($rows as $row) {
             if (($row['payment_id'] === null) === ($row['account_transfer_id'] === null)
                 || ! is_int($row['amount_minor']) || $row['amount_minor'] <= 0) {
                 throw new \LogicException('Invalid allocation source or amount.');
             }
+            $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : 'transfer:'.$row['account_transfer_id'];
+            if (! array_key_exists($sourceKey, $bySource)) {
+                throw new \LogicException('Unknown allocation credit source.');
+            }
+            $bySource[$sourceKey] += $row['amount_minor'];
             if ($row['invoice_id'] === null) {
                 $unallocated += $row['amount_minor'];
             } else {
@@ -36,7 +42,7 @@ class PaymentAllocationHistory
                 $byInvoice[$row['invoice_id']] += $row['amount_minor'];
             }
         }
-        if ($byInvoice !== $paid || $allocated + $unallocated !== $available) {
+        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || $allocated + $unallocated !== $available) {
             throw new \LogicException('Allocation snapshot does not conserve money.');
         }
         $hash = hash('sha256', json_encode(['paid' => $paid, 'rows' => $rows], JSON_THROW_ON_ERROR));

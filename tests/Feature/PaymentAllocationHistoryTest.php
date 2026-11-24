@@ -145,4 +145,30 @@ class PaymentAllocationHistoryTest extends TestCase
         $this->assertSame($before->id, $this->current($subscriber)->id);
     }
 
+
+    public function test_database_rejects_rewriting_or_deleting_saved_allocations(): void
+    {
+        $subscriber = $this->account();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'ACC07-4']);
+        $invoice = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 1);
+        app(PaymentService::class)->collectPayment($subscriber, 100, $invoice->id);
+        $revision = $this->current($subscriber);
+        $originalRows = $this->rows($revision);
+        foreach ([
+            fn () => DB::table('payment_allocation_revisions')->where('id', $revision->id)->update(['available_minor' => 1]),
+            fn () => DB::table('payment_allocation_revisions')->where('id', $revision->id)->delete(),
+            fn () => DB::table('payment_allocations')->where('revision_id', $revision->id)->update(['amount_minor' => 1]),
+            fn () => DB::table('payment_allocations')->where('revision_id', $revision->id)->delete(),
+        ] as $operation) {
+            try {
+                DB::transaction($operation);
+                $this->fail('Saved accounting history was mutable.');
+            } catch (\Illuminate\Database\QueryException $e) {
+                $this->assertStringContainsString('Allocation history is append-only', $e->getMessage());
+            }
+        }
+        $this->assertSame($originalRows, $this->rows($revision));
+        $this->assertSame(10000, (int) $this->current($subscriber)->available_minor);
+    }
+
 }
