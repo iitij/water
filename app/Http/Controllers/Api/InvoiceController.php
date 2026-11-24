@@ -274,7 +274,11 @@ class InvoiceController extends ApiController
             Invoice::findOrFail($id), $request->user(), (string) $data['corrected_units'],
             (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
         );
-        return response()->json(['correction' => $correction, 'invoice' => $this->decorate(Invoice::findOrFail($correction->replacement_invoice_id))]);
+        $replacement = Invoice::findOrFail($correction->replacement_invoice_id);
+        $data = $this->decorate($replacement);
+        $data['tariff_lines'] = DB::table('invoice_tariff_lines')->where('invoice_id', $replacement->id)->orderBy('period_start')->orderBy('id')->get();
+
+        return response()->json(['correction' => $correction, 'invoice' => $data]);
     }
 
     public function cancel(Request $request, int $id)
