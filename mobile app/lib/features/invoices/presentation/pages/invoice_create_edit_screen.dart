@@ -90,6 +90,10 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
       double.tryParse(controller.text.trim()) ?? 0;
 
   Future<void> _save() async {
+    if (isEditing && widget.invoice!.status != InvoiceStatus.draft) {
+      setState(() => _error = 'لا يجوز تعديل فاتورة معتمدة؛ يلزم إجراء تصحيح محاسبي موثق.');
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_subscriberId == null) {
       setState(() => _error = 'اختر المشترك أولاً.');
@@ -133,6 +137,12 @@ class _InvoiceCreateEditScreenState extends State<InvoiceCreateEditScreen> {
   @override
   Widget build(BuildContext context) {
     final gutter = context.gutter;
+    if (isEditing && widget.invoice!.status != InvoiceStatus.draft) {
+      return SubPageScaffold(
+        title: 'فاتورة معتمدة',
+        child: Center(child: Text('البيانات المالية للفاتورة المعتمدة غير قابلة للتعديل.')),
+      );
+    }
 
     return SubPageScaffold(
       title: isEditing ? 'تعديل فاتورة' : 'فاتورة يدوية',

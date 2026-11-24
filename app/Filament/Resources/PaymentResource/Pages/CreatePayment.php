@@ -18,8 +18,9 @@ class CreatePayment extends CreateRecord
             $data['payment_method'] ?? 'cash',
             $data['reference_number'] ?? null,
             $data['notes'] ?? null,
-            null,
-            \Illuminate\Support\Facades\Auth::id()
+            $data['reason'] ?? null,
+            \Illuminate\Support\Facades\Auth::id(),
+            $data['payment_date'] ?? null
         );
     }
 }

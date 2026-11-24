@@ -36,6 +36,7 @@ class InvoiceResource extends Resource
                 ->columns(2)
                 ->schema([
                     Forms\Components\Select::make('subscriber_id')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('المشترك')
                         ->relationship('subscriber', 'name')
                         ->required()
@@ -57,19 +58,22 @@ class InvoiceResource extends Resource
                         ->label('رقم الفاتورة')
                         ->default(fn() => Invoice::generateBillNumber())
                         ->disabled()
-                        ->dehydrated(),
+                        ->dehydrated(fn (?Invoice $record) => $record === null),
 
                     Forms\Components\DatePicker::make('bill_date')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('تاريخ الفاتورة')
                         ->default(now())
                         ->required(),
 
                     Forms\Components\DatePicker::make('billing_period_start')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('بداية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->helperText('فترة الاستهلاك مستقلة عن تاريخ إصدار الفاتورة.'),
 
                     Forms\Components\DatePicker::make('billing_period_end')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('نهاية فترة استهلاك المياه')
                         ->readOnly(fn (?Invoice $record) => $record !== null && $record->readings()->exists())
                         ->rules(['after_or_equal:billing_period_start'])
@@ -84,20 +88,23 @@ class InvoiceResource extends Resource
                             'paid' => 'مسددة',
                             'overdue' => 'متأخرة',
                         ])
-                        ->default('draft')
-                        ->required(),
+                        ->default('issued')
+                        ->disabled()
+                        ->dehydrated(false),
                 ]),
 
             \Filament\Schemas\Components\Section::make('تفاصيل المبالغ')
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('consumption_fee')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('قيمة الاستهلاك')
                         ->numeric()
                         ->default(0)
                         ->prefix('ريال'),
 
                     Forms\Components\TextInput::make('previous_balance')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('المتأخرات السابقة')
                         ->numeric()
                         ->default(0)
@@ -105,12 +112,14 @@ class InvoiceResource extends Resource
 
 
                     Forms\Components\TextInput::make('credit_applied')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('خصم رصيد دائن')
                         ->numeric()
                         ->default(0)
                         ->prefix('ريال'),
 
                     Forms\Components\TextInput::make('total_amount')
+                        ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('الإجمالي')
                         ->numeric()
                         ->default(0)
@@ -122,7 +131,7 @@ class InvoiceResource extends Resource
                         ->default(0)
                         ->prefix('ريال')
                         ->disabled()
-                        ->dehydrated(),
+                        ->dehydrated(false),
                 ]),
 
             \Filament\Schemas\Components\Section::make('ملاحظات')

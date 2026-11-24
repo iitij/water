@@ -132,49 +132,31 @@ class Payment extends Model
         return $this->void_requested_at !== null && $this->voided_at === null;
     }
 
+    public function assertFinancialFieldsUnchanged(): void
+    {
+        $errors = [];
+        foreach ([
+            'subscriber_id', 'meter_id', 'invoice_id', 'user_id', 'receipt_number',
+            'amount', 'payment_date', 'payment_method', 'reference_number',
+            'reason', 'sync_uuid', 'cash_session_id',
+        ] as $field) {
+            if ($this->isDirty($field)) {
+                $errors[$field] = 'لا يجوز تعديل بيانات سند قبض معتمد؛ استخدم إجراء إلغاء السند المعتمد ثم سجل سنداً صحيحاً.';
+            }
+        }
+        if ($errors !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+        }
+    }
+
     protected static function booted()
     {
+        static::updating(function (Payment $payment): void {
+            $payment->assertFinancialFieldsUnchanged();
+        });
+
         // ملاحظة: منطق الإنشاء يُعالَج بالكامل في PaymentService
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
-
-        static::updated(function (Payment $payment) {
-            $transactionService = new TransactionService;
-            $paymentService = new PaymentService;
-            $oldSubscriberId = (int) $payment->getOriginal('subscriber_id');
-            $oldMeterId = $payment->getOriginal('meter_id') ? (int) $payment->getOriginal('meter_id') : null;
-
-            $transaction = Transaction::where('reference_type', Payment::class)
-                ->where('reference_id', $payment->id)
-                ->first();
-            if ($transaction) {
-                $transaction->update([
-                    'subscriber_id' => $payment->subscriber_id,
-                    'meter_id' => $payment->meter_id,
-                    'amount' => $payment->amount,
-                ]);
-            }
-
-            if ($oldMeterId) {
-                if ($oldMeter = Meter::find($oldMeterId)) {
-                    $transactionService->updateMeterBalance($oldMeter);
-                }
-            } elseif ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
-                $transactionService->updateSubscriberBalance($oldSubscriber);
-            }
-
-            if ($payment->meter_id && $payment->meter) {
-                $transactionService->updateMeterBalance($payment->meter);
-            } elseif ($payment->subscriber) {
-                $transactionService->updateSubscriberBalance($payment->subscriber);
-            }
-
-            if ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
-                $paymentService->recalculateInvoices($oldSubscriber, $oldMeterId);
-            }
-            if ($payment->subscriber) {
-                $paymentService->recalculateInvoices($payment->subscriber, $payment->meter_id);
-            }
-        });
 
         static::deleted(function (Payment $payment) {
             Transaction::where('reference_type', Payment::class)

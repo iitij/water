@@ -185,6 +185,8 @@ class InvoiceController extends ApiController
         }
         $components = (float) ($data['consumption_fee'] ?? 0);
         $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+            $arrears = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
@@ -194,9 +196,9 @@ class InvoiceController extends ApiController
                 'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
                 'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
                 'consumption_fee' => $data['consumption_fee'] ?? 0,
-                'previous_balance' => $data['previous_balance'] ?? 0,
-                'credit_applied' => $data['credit_applied'] ?? 0,
-                'total_amount' => $data['total_amount'] ?? $components,
+                'previous_balance' => $arrears,
+                'credit_applied' => min($subscriber->getAccountCredit(), $components),
+                'total_amount' => $components,
                 'amount_paid' => 0,
                 'status' => 'issued',
                 'notes' => $data['notes'] ?? null,
@@ -211,7 +213,7 @@ class InvoiceController extends ApiController
                 meter: $meter,
             );
 
-            return $invoice;
+            return $invoice->refresh();
         });
 
         return response()->json(['message' => 'تم إنشاء الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->load(['subscriber.square', 'meter', 'items']))], 201);
@@ -221,9 +223,6 @@ class InvoiceController extends ApiController
     {
         $this->authorizeApi(Invoice::class, 'update');
         $invoice = Invoice::findOrFail($id);
-        $oldSubscriber = $invoice->subscriber;
-        $oldMeter = $invoice->meter;
-        $oldMeterId = $invoice->meter_id;
         $data = $request->validate([
             'subscriber_id' => ['sometimes', 'required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['sometimes', 'nullable', 'integer', 'exists:meters,id'],
@@ -237,6 +236,15 @@ class InvoiceController extends ApiController
             'total_amount' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        if ($invoice->isFinanciallyLocked()) {
+            $invoice->fill($data);
+            $invoice->assertFinancialFieldsUnchanged();
+            $invoice->save();
+
+            return response()->json(['message' => 'تم تحديث الملاحظات.', 'invoice' => $this->decorate($invoice->fresh(['subscriber.square', 'meter', 'items', 'readings', 'payments']))]);
+        }
+
+        // Only unposted drafts can change their financial data.
         // The billing period is the period of linked water readings, never
         // their entry dates. An edit must not desynchronize these values.
         $linkedReadings = $invoice->readings()->get(['period_start', 'period_end']);
@@ -271,59 +279,22 @@ class InvoiceController extends ApiController
 
         // Preserve historical invoices, but do not move new consumption onto a retired meter.
         if (array_key_exists('meter_id', $data) && $data['meter_id'] !== null
-            && (int) $data['meter_id'] !== (int) ($oldMeterId ?? 0)
+            && (int) $data['meter_id'] !== (int) ($invoice->meter_id ?? 0)
             && ! Meter::findOrFail($data['meter_id'])->isCurrent()) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'meter_id' => ['لا يمكن نقل الفاتورة إلى عداد منزوع.'],
             ]);
         }
-        DB::transaction(function () use ($invoice, $data, $oldSubscriber, $oldMeter, $oldMeterId) {
-            if (array_key_exists('subscriber_id', $data) && ! array_key_exists('meter_id', $data) && $invoice->meter_id) {
-                $data['meter_id'] = null;
-            }
+        DB::transaction(function () use ($invoice, $data) {
+            $subscriber = Subscriber::findOrFail($data['subscriber_id'] ?? $invoice->subscriber_id);
+            $meterId = $data['meter_id'] ?? $invoice->meter_id;
+            $meter = $meterId ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
+            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             $invoice->fill($data);
-            if (! array_key_exists('total_amount', $data) && array_key_exists('consumption_fee', $data)) {
-                $invoice->total_amount = (float) $invoice->consumption_fee;
-            }
+            $invoice->meter_id = $meter->id;
+            $invoice->total_amount = $invoice->consumption_fee;
             $invoice->save();
-            $invoice->refresh();
             $this->syncItems($invoice);
-
-            $transaction = Transaction::where('reference_type', Invoice::class)->where('reference_id', $invoice->id)->first();
-            if ($transaction) {
-                $transaction->update([
-                    'subscriber_id' => $invoice->subscriber_id,
-                    'meter_id' => $invoice->meter_id,
-                    'amount' => -(float) $invoice->total_amount,
-                    'description' => 'إصدار فاتورة رقم '.$invoice->bill_number,
-                ]);
-            } else {
-                app(TransactionService::class)->recordTransaction(
-                    subscriber: $invoice->subscriber,
-                    type: 'invoice',
-                    amount: -(float) $invoice->total_amount,
-                    description: 'إصدار فاتورة رقم '.$invoice->bill_number,
-                    reference: $invoice,
-                    meter: $invoice->meter,
-                );
-            }
-
-            $transactions = app(TransactionService::class);
-            if ($oldMeter) {
-                $transactions->updateMeterBalance($oldMeter);
-            } elseif ($oldSubscriber) {
-                $transactions->updateSubscriberBalance($oldSubscriber);
-            }
-            if ($invoice->meter) {
-                $transactions->updateMeterBalance($invoice->meter);
-            } else {
-                $transactions->updateSubscriberBalance($invoice->subscriber);
-            }
-            $paymentService = app(PaymentService::class);
-            $paymentService->recalculateInvoices($oldSubscriber, $oldMeterId);
-            if ($oldSubscriber->id !== $invoice->subscriber_id || (int) ($oldMeterId ?? 0) !== (int) ($invoice->meter_id ?? 0)) {
-                $paymentService->recalculateInvoices($invoice->subscriber, $invoice->meter_id);
-            }
         });
 
         return response()->json(['message' => 'تم تحديث الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->fresh(['subscriber.square', 'meter', 'items', 'readings', 'payments']))]);
@@ -451,6 +422,11 @@ class InvoiceController extends ApiController
     {
         $this->authorizeApi(Invoice::class, 'update');
         $invoice = Invoice::with(['subscriber', 'meter', 'readings'])->findOrFail($id);
+        if ($invoice->isFinanciallyLocked()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'invoice' => 'لا يمكن إعادة احتساب فاتورة معتمدة بالتعرفة الحالية. التصحيح يتطلب مستنداً مالياً موثقاً.',
+            ]);
+        }
         $readings = $invoice->readings;
         if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
             $invoice->billing_period_start = $readings->min('period_start');
@@ -463,14 +439,9 @@ class InvoiceController extends ApiController
             ->get();
         $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
         $invoice->total_amount = (float) $invoice->consumption_fee;
-        DB::transaction(function () use ($invoice, $paymentService) {
+        DB::transaction(function () use ($invoice) {
             $invoice->save();
             $this->syncItems($invoice);
-            $transaction = Transaction::where('reference_type', Invoice::class)->where('reference_id', $invoice->id)->first();
-            if ($transaction) {
-                $transaction->update(['amount' => -(float) $invoice->total_amount]);
-            }
-            $paymentService->recalculateInvoices($invoice->subscriber, $invoice->meter_id);
         });
 
         return response()->json(['message' => 'تمت إعادة احتساب الفاتورة.', 'invoice' => $this->decorate($invoice->fresh(['subscriber', 'meter', 'items', 'readings']))]);

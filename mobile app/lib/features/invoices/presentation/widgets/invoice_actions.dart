@@ -238,7 +238,7 @@ Future<void> showInvoiceActionSheet(
         color: AppColors.whatsapp,
         onTap: () => sendInvoiceWhatsapp(context, invoice),
       ),
-    if (!invoice.isDeleted)
+    if (!invoice.isDeleted && invoice.status.wire == 'draft')
       _SheetAction(
         icon: Icons.refresh,
         label: 'إعادة احتساب (Recalculate)',
@@ -248,7 +248,7 @@ Future<void> showInvoiceActionSheet(
           if (ok == null) {
             AppFeedback.error(context, 'تعذّرت إعادة الاحتساب.');
           } else {
-            AppFeedback.success(context, 'تمت إعادة الاحتساب وتوزيع الدفعات.');
+            AppFeedback.success(context, 'تمت إعادة احتساب المسودة.');
           }
         },
       ),
