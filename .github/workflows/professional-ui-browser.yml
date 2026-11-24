@@ -18,7 +18,6 @@ jobs:
       APP_DEBUG: 'false'
       APP_URL: http://127.0.0.1:8799
       DB_CONNECTION: sqlite
-      DB_DATABASE: ${{ runner.temp }}/water-ui-test.sqlite
       DB_URL: ''
       CACHE_STORE: array
       SESSION_DRIVER: file
@@ -41,6 +40,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          export DB_DATABASE="$RUNNER_TEMP/water-ui-test.sqlite"
+          echo "DB_DATABASE=$DB_DATABASE" >> "$GITHUB_ENV"
           touch .env "$DB_DATABASE"
           composer install --no-interaction --no-progress --prefer-dist
           php artisan migrate --force --no-interaction
