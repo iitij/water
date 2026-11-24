@@ -1,3 +1,4 @@
+import '../../../../core/error/failures.dart';
 import '../../domain/repositories/paginated_tariffs_repository.dart';
 import '../../domain/repositories/tariffs_repository.dart';
 import '../datasources/tariffs_remote_datasource.dart';
@@ -54,7 +55,11 @@ class TariffsRepositoryImpl
   Future<double> activePrice() async {
     final result = await _remote.fetch();
     _cachedActivePrice = result.activePrice;
-    return result.activePrice ?? 600;
+    final price = result.activePrice;
+    if (price == null) {
+      throw const UnexpectedFailure('لا توجد تعرفة حالية معتمدة وغير متعارضة.');
+    }
+    return price;
   }
 
   double? get cachedActivePrice => _cachedActivePrice;
