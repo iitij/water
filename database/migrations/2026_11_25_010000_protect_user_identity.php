@@ -13,10 +13,15 @@ return new class extends Migration {
         if (DB::getDriverName() === 'sqlite') {
             DB::unprepared("CREATE TRIGGER IF NOT EXISTS protect_user_identity_delete BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'User identity cannot be deleted'); END");
         } elseif (DB::getDriverName() === 'mysql') {
-            $exists = DB::table('information_schema.TRIGGERS')
+            $existing = DB::table('information_schema.TRIGGERS')
                 ->where('TRIGGER_SCHEMA', DB::getDatabaseName())
-                ->where('TRIGGER_NAME', 'protect_user_identity_delete')->exists();
-            if (! $exists) {
+                ->where('TRIGGER_NAME', 'protect_user_identity_delete')->first();
+            if ($existing && ($existing->EVENT_OBJECT_TABLE !== 'users' || $existing->ACTION_TIMING !== 'BEFORE'
+                || $existing->EVENT_MANIPULATION !== 'DELETE'
+                || ! preg_match("/^SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT\s*=\s*'User identity cannot be deleted'$/i", trim($existing->ACTION_STATEMENT)))) {
+                throw new RuntimeException('Unexpected user delete guard definition; DBA review required.');
+            }
+            if (! $existing) {
                 DB::unprepared("CREATE TRIGGER protect_user_identity_delete BEFORE DELETE ON users FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User identity cannot be deleted'");
             }
         } else {
@@ -25,8 +30,11 @@ return new class extends Migration {
 
         if (! Schema::hasColumn('users', 'disabled_at')) {
             Schema::table('users', function (Blueprint $table) {
-                $table->timestamp('disabled_at')->nullable()->index();
+                $table->timestamp('disabled_at')->nullable();
             });
+        }
+        if (! Schema::hasIndex('users', ['disabled_at'])) {
+            Schema::table('users', fn (Blueprint $table) => $table->index('disabled_at'));
         }
     }
 

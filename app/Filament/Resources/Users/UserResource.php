@@ -66,7 +66,7 @@ class UserResource extends Resource
             ->modalSubmitActionLabel('تعطيل')
             ->successNotificationTitle('تم تعطيل الحساب')
             ->visible(fn (User $record): bool => $record->canBeDeactivatedBy(auth()->user()))
-            ->using(fn (User $record): bool => $record->deactivate(auth()->user()));
+            ->using(fn (User $record): bool => $record->deactivate(auth()->user(), api: false));
     }
 
     public static function deactivateBulkAction(): \Filament\Actions\DeleteBulkAction
@@ -78,8 +78,11 @@ class UserResource extends Resource
             ->successNotificationTitle('تم تعطيل الحسابات')
             ->using(function (\Filament\Actions\DeleteBulkAction $action, $records): void {
                 \Illuminate\Support\Facades\DB::transaction(function () use ($action, $records): void {
-                    foreach ($records->sortBy('id') as $record) {
-                        if (! $record->deactivate(auth()->user())) {
+                    $actor = auth()->user();
+                    $ids = $records->pluck('id')->all();
+                    $locked = User::lockAccounts([...$ids, $actor->id]);
+                    foreach ($locked->only($ids) as $record) {
+                        if (! $record->deactivate($actor, bulk: true, api: false)) {
                             $action->reportBulkProcessingFailure();
                         }
                     }

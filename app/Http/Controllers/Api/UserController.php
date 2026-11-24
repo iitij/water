@@ -114,8 +114,10 @@ class UserController extends ApiController
         $disabled = 0;
         $skipped = [];
         DB::transaction(function () use ($data, &$disabled, &$skipped, $request) {
-            foreach (User::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $user) {
-                if (! $user->deactivate($request->user())) {
+            $actor = $request->user();
+            $locked = User::lockAccounts([...$data['ids'], $actor->id]);
+            foreach ($locked->only($data['ids']) as $user) {
+                if (! $user->deactivate($actor, bulk: true)) {
                     $skipped[] = $user->id;
                     continue;
                 }

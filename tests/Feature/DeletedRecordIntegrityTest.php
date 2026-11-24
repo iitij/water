@@ -34,7 +34,7 @@ class DeletedRecordIntegrityTest extends TestCase
         }
         if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
             || DB::getDatabaseName() !== 'water_test' || getenv('ACC10_RACE_TEST') !== '1'
-            || ! function_exists('pcntl_fork')) {
+            || ! function_exists('pcntl_fork') || ! function_exists('posix_kill')) {
             $this->markTestSkipped('Requires explicitly authorized disposable MySQL water_test and pcntl.');
         }
         // The forked connections must see committed fixtures, not a parent transaction.
@@ -291,6 +291,137 @@ class DeletedRecordIntegrityTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $target->id]);
     }
 
+    public function test_replace_cannot_reassign_existing_identity_or_email(): void
+    {
+        $target = User::factory()->create();
+        [, $session, $payment, $event] = $this->financialFixture($target);
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('PRAGMA recursive_triggers = OFF');
+        }
+        foreach ([
+            [$target->id, 'new-address@example.test'],
+            [$target->id + 1000, $target->email],
+        ] as [$id, $email]) {
+            try {
+                DB::statement('REPLACE INTO users (id, name, email, password) VALUES (?, ?, ?, ?)', [$id, 'Replacement', $email, 'synthetic']);
+                $this->fail('REPLACE overwrote a user identity');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('User identity', $e->getMessage());
+            }
+        }
+        $this->assertDatabaseHas('users', ['id' => $target->id, 'email' => $target->email, 'name' => $target->name]);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $session->id, 'user_id' => $target->id]);
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'user_id' => $target->id]);
+        $this->assertDatabaseHas('audit_events', ['id' => $event->id, 'actor_user_id' => $target->id]);
+    }
+
+    public function test_update_replace_cannot_delete_another_identity(): void
+    {
+        if (DB::getDriverName() !== 'sqlite') $this->markTestSkipped('SQLite UPDATE OR REPLACE syntax only.');
+        $target = User::factory()->create();
+        $other = User::factory()->create();
+        try {
+            DB::statement('UPDATE OR REPLACE users SET email = ? WHERE id = ?', [$other->email, $target->id]);
+            $this->fail('UPDATE OR REPLACE deleted another user');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('User identity', $e->getMessage());
+        }
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'email' => $other->email]);
+    }
+
+    public function test_direct_sql_cannot_change_primary_identity_or_reactivate_account(): void
+    {
+        $target = User::factory()->create();
+        $target->deactivate($this->admin());
+        foreach ([['id' => $target->id + 1000], ['disabled_at' => null], ['password' => Hash::make('synthetic')]] as $change) {
+            try {
+                DB::table('users')->where('id', $target->id)->update($change);
+                $this->fail('Direct SQL modified protected identity');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('User identity', $e->getMessage());
+            }
+        }
+        $this->assertTrue($target->fresh()->isDisabled());
+    }
+
+    public function test_model_deactivation_rechecks_actor_permission_and_active_state(): void
+    {
+        $target = User::factory()->create();
+        $ordinary = User::factory()->create(['role' => 'collector']);
+        $this->assertFalse($target->deactivate($ordinary));
+        $permission = \Spatie\Permission\Models\Permission::findOrCreate('Delete:User', 'web');
+        $ordinary->givePermissionTo($permission);
+        $stale = $ordinary->fresh('permissions');
+        $ordinary->revokePermissionTo($permission);
+        $this->assertFalse($target->deactivate($stale));
+        $ordinary->givePermissionTo($permission);
+        $stale = $ordinary->fresh('permissions');
+        $ordinary->deactivate($this->admin());
+        $this->assertFalse($target->deactivate($stale));
+        $this->assertFalse($target->fresh()->isDisabled());
+    }
+
+    public function test_stale_user_cannot_reset_password_or_assign_roles_after_deactivation(): void
+    {
+        $target = User::factory()->create();
+        $stale = $target->fresh();
+        $target->deactivate($this->admin());
+        $password = $target->fresh()->password;
+        foreach ([
+            fn () => $stale->update(['password' => Hash::make('old session attack')]),
+            fn () => $stale->assignRole(Role::findOrCreate('super_admin', 'web')),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Stale user modified disabled account');
+            } catch (ValidationException $e) {
+                $this->assertNotEmpty($e->errors());
+            }
+        }
+        $this->assertSame($password, $target->fresh()->password);
+        $this->assertFalse($target->fresh()->hasRole('super_admin'));
+    }
+
+    public function test_stale_session_and_token_identity_are_rejected(): void
+    {
+        $target = User::factory()->create();
+        $token = $target->createToken('prior')->accessToken;
+        $stale = $target->fresh();
+        $target->deactivate($this->admin());
+        $this->assertFalse($stale->canAccessPanel(Filament::getDefaultPanel()));
+        try {
+            $stale->withAccessToken($token);
+            $this->fail('Stale identity accepted a revoked token');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            $this->assertSame(401, $e->getStatusCode());
+        }
+    }
+
+    public function test_revoked_bearer_token_cannot_be_refreshed(): void
+    {
+        $target = User::factory()->create();
+        $token = $target->createToken('prior')->plainTextToken;
+        $this->assertTrue($target->deactivate($this->admin()));
+        $this->withToken($token)->postJson('/api/refresh')->assertUnauthorized();
+        $this->assertSame(0, $target->tokens()->count());
+    }
+
+    public function test_individual_and_bulk_permissions_are_not_interchangeable(): void
+    {
+        $actor = User::factory()->create(['role' => 'collector']);
+        $target = User::factory()->create();
+        $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('DeleteAny:User', 'web'));
+        $this->assertFalse($target->deactivate($actor));
+        $this->assertTrue($target->deactivate($actor, bulk: true));
+    }
+
+    public function test_legacy_super_admin_is_protected_even_without_role_pivot(): void
+    {
+        $target = User::factory()->create(['role' => 'super_admin']);
+        $this->assertFalse($target->deactivate($this->admin()));
+        $this->assertFalse($target->fresh()->isDisabled());
+    }
+
     /** Independent connections and a start barrier, on a disposable database only. */
     private function race(callable $first, callable $second): array
     {
@@ -327,11 +458,16 @@ class DeletedRecordIntegrityTest extends TestCase
                 usleep(1000);
             }
             touch("$dir/start");
-            foreach ($pids as $pid) {
-                pcntl_waitpid($pid, $status);
+            $deadline = microtime(true) + 30;
+            foreach ($pids as $index => $pid) {
+                while (pcntl_waitpid($pid, $status, WNOHANG) === 0) {
+                    if (microtime(true) > $deadline) throw new \RuntimeException('worker timeout');
+                    usleep(10000);
+                }
+                unset($pids[$index]);
+                $this->assertTrue(pcntl_wifexited($status));
                 $this->assertSame(0, pcntl_wexitstatus($status));
             }
-            $pids = [];
             DB::purge();
             return array_map(fn ($index) => json_decode(file_get_contents("$dir/result-$index"), true, 512, JSON_THROW_ON_ERROR), [0, 1]);
         } finally {
@@ -381,6 +517,71 @@ class DeletedRecordIntegrityTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $collectorId]);
         $this->assertDatabaseHas('cash_sessions', ['id' => $sessionId, 'user_id' => $collectorId]);
         $this->assertDatabaseHas('payments', ['receipt_number' => 'ACC10-R2', 'user_id' => $collectorId, 'amount' => 25]);
+
+        // Promotion and disable serialize on the same target. A promoted super
+        // admin cannot be disabled; a disabled user cannot receive the role.
+        $promoteId = User::factory()->create(['role' => 'collector'])->id;
+        $result = $this->race(
+            fn () => User::findOrFail($promoteId)->deactivate(User::findOrFail($adminId)),
+            fn () => User::findOrFail($promoteId)->assignRole('super_admin')->id,
+        );
+        $this->assertTrue($result[0]['ok'], json_encode($result));
+        $promoted = User::findOrFail($promoteId);
+        if ($promoted->isDisabled()) {
+            $this->assertTrue($result[0]['value']);
+            $this->assertFalse($result[1]['ok']);
+            $this->assertSame(ValidationException::class, $result[1]['class']);
+            $this->assertFalse($promoted->hasRole('super_admin'));
+        } else {
+            $this->assertFalse($result[0]['value']);
+            $this->assertTrue($result[1]['ok']);
+            $this->assertTrue($promoted->hasRole('super_admin'));
+        }
+
+        // Revocation and an already loaded actor compete. Whichever transaction
+        // acquires the actor lock first determines the outcome, never stale roles.
+        $actor = User::factory()->create(['role' => 'collector']);
+        $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('Delete:User', 'web'));
+        $actorId = $actor->id;
+        $victimId = User::factory()->create(['role' => 'collector'])->id;
+        $staleActor = $actor->fresh('permissions');
+        $result = $this->race(
+            fn () => User::findOrFail($victimId)->deactivate($staleActor),
+            fn () => User::findOrFail($actorId)->revokePermissionTo('Delete:User')->id,
+        );
+        $this->assertTrue($result[0]['ok'] && $result[1]['ok'], json_encode($result));
+        $this->assertSame($result[0]['value'], User::findOrFail($victimId)->isDisabled());
+        $this->assertFalse(User::findOrFail($actorId)->hasPermissionTo('Delete:User'));
+        $other = User::factory()->create(['role' => 'collector']);
+        $this->assertFalse($other->deactivate($staleActor));
+
+        // A session writer that was already in flight may write a row after
+        // revocation. Its identity must remain unusable regardless of ordering.
+        config(['session.driver' => 'database', 'session.connection' => DB::getDefaultConnection(), 'session.table' => 'sessions']);
+        $sessionUser = User::factory()->create(['role' => 'collector']);
+        $sessionUserId = $sessionUser->id;
+        $staleSession = $sessionUser->fresh();
+        $sessionToken = $sessionUser->createToken('prior session')->accessToken;
+        $result = $this->race(
+            fn () => User::findOrFail($sessionUserId)->deactivate(User::findOrFail($adminId)),
+            fn () => DB::table('sessions')->insert([
+                'id' => 'acc10-late-session', 'user_id' => $sessionUserId,
+                'payload' => '', 'last_activity' => time(),
+            ]),
+        );
+        $this->assertTrue($result[0]['ok'] && $result[0]['value'] && $result[1]['ok'], json_encode($result));
+        $this->assertFalse($staleSession->canAccessPanel(Filament::getDefaultPanel()));
+        try {
+            $staleSession->withAccessToken($sessionToken);
+            $this->fail('Concurrent session could authenticate after revocation');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            $this->assertSame(401, $e->getStatusCode());
+        }
+        $this->assertSame(0, User::findOrFail($sessionUserId)->tokens()->count());
+        // The actual HTTP auth paths also reject a stale session identity.
+        $this->actingAs($staleSession, 'web')->get('/admin')->assertForbidden();
+        $this->actingAs($staleSession, 'web')->getJson('/api/me')->assertUnauthorized();
+
     }
 
 }
