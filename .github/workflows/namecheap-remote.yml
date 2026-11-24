@@ -28,6 +28,7 @@ on:
           - publish-web-initial
           - diagnose-public-web
           - verify-public-web
+          - pdf-runtime-audit
           - migrate-empty
           - sync
 
@@ -93,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|pdf-runtime-audit|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -1049,6 +1050,70 @@ jobs:
                 test ! -e "$docroot/$entry" && test ! -L "$docroot/$entry"
               done
               echo 'PUBLIC_FILE_LAYOUT: PASSED'
+              ;;
+            pdf-runtime-audit)
+              echo '=== READ-ONLY PDF RUNTIME COMPATIBILITY ==='
+              php84='/opt/alt/php84/usr/bin/php'
+              echo "PHP: $("$php84" -r 'echo PHP_VERSION;')"
+              "$php84" -r '
+                foreach (["proc_open","proc_close","proc_get_status","proc_terminate","popen","exec","shell_exec"] as $fn) {
+                  echo "PHP_FUNCTION ", $fn, ": ", function_exists($fn) ? "YES" : "NO", PHP_EOL;
+                }
+                foreach (["gd","mbstring","fileinfo","openssl","zlib","intl","dom","xml","curl"] as $ext) {
+                  echo "PHP_EXTENSION ", $ext, ": ", extension_loaded($ext) ? "YES" : "NO", PHP_EOL;
+                }
+                echo "PHP_MEMORY_LIMIT: ", ini_get("memory_limit"), PHP_EOL;
+                echo "PHP_MAX_EXECUTION_TIME: ", ini_get("max_execution_time"), PHP_EOL;
+                echo "PHP_TEMP_WRITABLE: ", is_writable(sys_get_temp_dir()) ? "YES" : "NO", PHP_EOL;
+              '
+              echo '=== NODE AND BROWSER EXECUTABLES (NO BROWSER LAUNCH) ==='
+              for name in node npm chromium chromium-browser google-chrome google-chrome-stable chrome-headless-shell wkhtmltopdf; do
+                if binary="$(command -v "$name")" && [[ -x "$binary" ]]; then
+                  echo "PATH_EXECUTABLE $name: $binary"
+                else
+                  echo "PATH_EXECUTABLE $name: ABSENT"
+                fi
+              done
+              shopt -s nullglob
+              for binary in /opt/alt/alt-nodejs*/root/usr/bin/node /opt/alt/alt-nodejs*/root/usr/bin/npm /opt/alt/nodejs*/root/usr/bin/node /opt/alt/nodejs*/root/usr/bin/npm /opt/cpanel/ea-nodejs*/bin/node /opt/cpanel/ea-nodejs*/bin/npm "$HOME"/nodevenv/*/*/bin/node "$HOME"/nodevenv/*/*/bin/npm "$HOME"/.local/bin/node "$HOME"/.local/bin/npm; do
+                if [[ -x "$binary" ]]; then
+                  echo "CANDIDATE: $binary"
+                  if [[ "$(basename "$binary")" == node ]]; then
+                    if version="$(timeout 5 "$binary" --version 2>/dev/null)"; then
+                      echo "NODE_VERSION: $version"
+                    else
+                      echo 'NODE_VERSION: UNAVAILABLE'
+                    fi
+                  fi
+                fi
+              done
+              for binary in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome /usr/bin/google-chrome-stable /opt/google/chrome/chrome "$HOME"/.cache/puppeteer/chrome/*/chrome-linux64/chrome "$HOME"/.cache/puppeteer/chrome-headless-shell/*/chrome-headless-shell-linux64/chrome-headless-shell; do
+                if [[ -x "$binary" ]]; then
+                  echo "BROWSER_CANDIDATE: $binary"
+                fi
+              done
+              echo '=== INSTALLED PROJECT PDF DEPENDENCIES ==='
+              "$php84" -r '
+                require "vendor/autoload.php";
+                foreach (["spatie/laravel-pdf","spatie/browsershot","mpdf/mpdf","dompdf/dompdf","tecnickcom/tcpdf"] as $package) {
+                  echo "COMPOSER_PACKAGE ", $package, ": ", \Composer\InstalledVersions::isInstalled($package) ? \Composer\InstalledVersions::getPrettyVersion($package) : "ABSENT", PHP_EOL;
+                }
+                $app = require "bootstrap/app.php";
+                $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+                echo "PDF_DRIVER: ", get_class($app->make(\Spatie\LaravelPdf\Drivers\PdfDriver::class)), PHP_EOL;
+                echo "REUSE_BROWSER: ", config("water-pdf.reuse_browser") ? "YES" : "NO", PHP_EOL;
+                echo "STORAGE_APP_WRITABLE: ", is_writable(storage_path("app")) ? "YES" : "NO", PHP_EOL;
+                echo "CACHE_WRITABLE: ", is_writable(storage_path("framework/cache/data")) ? "YES" : "NO", PHP_EOL;
+              '
+              if [[ -f node_modules/puppeteer/package.json ]]; then
+                "$php84" -r '$p=json_decode(file_get_contents("node_modules/puppeteer/package.json"),true); echo "PUPPETEER_INSTALLED: ", $p["version"] ?? "UNKNOWN", PHP_EOL;'
+              else
+                echo 'PUPPETEER_INSTALLED: NO'
+              fi
+              "$php84" -r '$p=json_decode(file_get_contents("package-lock.json"),true,512,JSON_THROW_ON_ERROR);$v=$p["packages"]["node_modules/puppeteer"];echo "PUPPETEER_LOCKED: ",$v["version"],PHP_EOL;echo "NODE_REQUIREMENT: ",$v["engines"]["node"],PHP_EOL;'
+              echo '=== DISK AVAILABILITY (KB) ==='
+              df -Pk "$HOME" | tail -n 1
+              echo 'PDF_RUNTIME_AUDIT: COMPLETE; NO INSTALLATION, BROWSER LAUNCH, OR PUBLIC CHANGES'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
