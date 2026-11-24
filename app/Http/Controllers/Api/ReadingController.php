@@ -178,85 +178,28 @@ class ReadingController extends ApiController
             'period_start' => ['sometimes', 'required', 'date'],
             'period_end' => ['sometimes', 'required', 'date', 'after_or_equal:period_start'],
         ]);
-        $previous = (float) ($data['previous_reading'] ?? $reading->previous_reading);
-        $current = (float) ($data['current_reading'] ?? $reading->current_reading);
-        if ($current < $previous) {
-            return response()->json(['errors' => ['current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة.']]], 422);
+        // There is one writable interval contract. Calendar-era records are
+        // not a reason to retain a second, incorrect editing algorithm.
+        if ($reading->period_basis !== 'observation') {
+            throw ValidationException::withMessages([
+                'period_start' => ['هذه القراءة لا تتبع منطق الفترات الفعلية؛ لا يمكن تعديلها عبر مسار القراءات.'],
+            ]);
         }
-        if ($reading->period_basis === 'observation') {
-            $oldObservation = ($reading->actual_reading_date ?? $reading->reading_date)->toDateString();
-            $newObservation = \Carbon\Carbon::parse(
-                $data['actual_reading_date']
-                    ?? $data['reading_date']
-                    ?? $oldObservation
-            )->toDateString();
+        if (isset($data['period_start'])
+            && Carbon::parse($data['period_start'])->toDateString() !== Carbon::parse($reading->period_start)->toDateString()) {
+            throw ValidationException::withMessages(['period_start' => ['بداية الفترة محسوبة من القراءة السابقة.']]);
+        }
+        if (isset($data['previous_reading']) && (float) $data['previous_reading'] !== (float) $reading->previous_reading) {
+            throw ValidationException::withMessages(['previous_reading' => ['القراءة السابقة قيمة محسوبة لا تُعدل يدوياً.']]);
+        }
 
-            // A later observation uses this reading's date and meter value as
-            // its start anchor. A silent edit would corrupt that next interval.
-            $hasSuccessor = Reading::where('meter_id', $reading->meter_id)
-                ->where('id', '!=', $reading->id)
-                ->whereRaw('COALESCE(actual_reading_date, reading_date) > ?', [$oldObservation])
-                ->exists();
-            if ($hasSuccessor && (
-                array_key_exists('reading_date', $data)
-                || array_key_exists('actual_reading_date', $data)
-                || array_key_exists('current_reading', $data)
-                || array_key_exists('previous_reading', $data)
-                || array_key_exists('period_start', $data)
-                || array_key_exists('period_end', $data)
-            )) {
-                throw ValidationException::withMessages([
-                    'reading_date' => ['لا يمكن تغيير قراءة أصبحت نقطة بداية للفترة التالية؛ يلزم إجراء تصحيح متسلسل ومعتمد.'],
-                ]);
-            }
+        // The model owns validation and synchronization of both date fields.
+        // Client period fields are not authoritative.
+        unset($data['period_start'], $data['period_end'], $data['previous_reading']);
+        if (array_key_exists('actual_reading_date', $data) && $data['actual_reading_date'] === null) {
+            throw ValidationException::withMessages(['actual_reading_date' => ['يلزم تحديد تاريخ أخذ القراءة الفعلي.']]);
+        }
 
-            if (isset($data['period_start'])
-                && Carbon::parse($data['period_start'])->toDateString() !== $reading->period_start) {
-                throw ValidationException::withMessages([
-                    'period_start' => ['بداية الفترة هي تاريخ القراءة السابقة ولا تُعدّل يدوياً.'],
-                ]);
-            }
-            if ($newObservation <= $reading->period_start
-                || $newObservation > today()->toDateString()) {
-                throw ValidationException::withMessages([
-                    'reading_date' => ['تاريخ القراءة يجب أن يلي السابقة وألا يقع في المستقبل.'],
-                ]);
-            }
-
-            // The current observation is the end boundary by definition.
-            $data['period_start'] = $reading->period_start;
-            $data['period_end'] = $newObservation;
-        }
-        $periodStart = $data['period_start'] ?? $reading->period_start;
-        $periodEnd = $data['period_end'] ?? $reading->period_end;
-        $periodStart = Carbon::parse($periodStart)->toDateString();
-        $periodEnd = Carbon::parse($periodEnd)->toDateString();
-        if ($periodEnd < $periodStart) {
-            return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
-        }
-        if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where(function ($query) use ($reading, $periodStart, $periodEnd) {
-                if ($reading->period_basis === 'observation') {
-                    $query->where('period_basis', 'observation')
-                        ->where('period_start', '<', $periodEnd)
-                        ->where('period_end', '>', $periodStart);
-                } else {
-                    $query->where('period_basis', 'legacy_calendar')
-                        ->where('period_start', '<=', $periodEnd)
-                        ->where('period_end', '>=', $periodStart);
-                }
-            })->exists()) {
-            return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
-        }
-        // Reading date is the entered date when no separate actual date was
-        // explicitly stored. Keep both in sync on edits without overwriting
-        // an intentionally distinct actual date from an older record.
-        if (array_key_exists('reading_date', $data)
-            && ! array_key_exists('actual_reading_date', $data)
-            && ($reading->actual_reading_date === null
-                || $reading->actual_reading_date->toDateString() === $reading->reading_date->toDateString())) {
-            $data['actual_reading_date'] = $data['reading_date'];
-        }
         $reading->update($data);
 
         return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
