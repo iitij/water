@@ -21,26 +21,22 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
   })  : _repository = invoicesRepository,
         _invoicesSource = invoicesSource,
         _references = references,
-        _tariffs = tariffsRepository,
         super(const InvoiceGenerationState());
 
   final InvoicesRepository _repository;
   final InvoicesRemoteDataSource _invoicesSource;
   final ReferencesRemoteDataSource _references;
-  final TariffsRepository _tariffs;
 
-  /// يحمّل المربعات/المشتركين/السعر النشط — يُستدعى عند فتح النافذة.
+  /// يحمّل المربعات/المشتركين — يُستدعى عند فتح النافذة.
   Future<void> bootstrap({String? preselectedSubscriberId}) async {
     emit(state.copyWith(loadingReferences: true, clearError: true));
     try {
       final results = await Future.wait(<Future<Object>>[
         _references.squares(),
         _references.subscribers(status: 'active', limit: 500),
-        _tariffs.activePrice(),
       ]);
 
       final subscribers = results[1] as List<SubscriberOption>;
-      final unitPrice = results[2] as double;
 
       SubscriberOption? preselected;
       if (preselectedSubscriberId != null) {
@@ -53,7 +49,6 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
         loadingReferences: false,
         squares: results[0] as List<SquareOption>,
         subscribers: subscribers,
-        unitPrice: unitPrice,
         selectedSubscriber: preselected,
       ));
 
@@ -69,11 +64,9 @@ class InvoiceGenerationCubit extends Cubit<InvoiceGenerationState> {
     try {
       final results = await Future.wait(<Future<Object>>[
         _references.subscribers(search: query, status: 'active', limit: 100),
-        _tariffs.activePrice(),
       ]);
       emit(state.copyWith(
         subscribers: results[0] as List<SubscriberOption>,
-        unitPrice: results[1] as double,
       ));
     } catch (error) {
       emit(state.copyWith(errorMessage: '$error'));
