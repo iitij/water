@@ -415,50 +415,7 @@ class _MeterFormScreenState extends State<MeterFormScreen> {
                                           controller: _initialController,
                                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                           decoration: const InputDecoration(labelText: 'القراءة الابتدائية'),
-                                          validator: (value) => RegExp(r'^\d{1,10}(\.\d{1,2})?
-                                        initialValue: _status,
-                                        decoration: const InputDecoration(
-                                          labelText: 'حالة العداد',
-                                          prefixIcon: Icon(Icons.toggle_on_outlined),
-                                        ),
-                                        items: const [
-                                          DropdownMenuItem(value: 'active', child: Text('نشط')),
-                                          DropdownMenuItem(value: 'inactive', child: Text('غير نشط')),
-                                        ],
-                                        onChanged: (value) {
-                                          if (value != null) setState(() => _status = value);
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                AppPrimaryButton(
-                                  label: _isSaving ? 'جارٍ الحفظ…' : 'حفظ بيانات العداد',
-                                  icon: Icons.save_outlined,
-                                  loading: _isSaving,
-                                  onPressed: _isSaving || _isCheckingPath ? null : () => _save(),
-                                ),
-                                if (widget.meter != null && widget.meter!.removedAt == null) ...[
-                                  const SizedBox(height: 12),
-                                  AppSecondaryButton(
-                                    label: 'استبدال العداد مع حفظ تاريخه',
-                                    icon: Icons.swap_horiz_rounded,
-                                    onPressed: _isSaving ? null : _replaceCurrentMeter,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-      ),
-    );
-  }
-}
-).hasMatch(
+                                          validator: (value) => RegExp(r'^\d{1,10}(\.\d{1,2})?$').hasMatch(
                                             CompoundSearchQuery.normalizeDigits(value?.trim() ?? ''))
                                               ? null : 'أدخل قراءة غير سالبة بمنزلتين عشريتين كحد أقصى.',
                                         ),
