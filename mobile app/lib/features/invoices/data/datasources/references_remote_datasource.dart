@@ -4,6 +4,7 @@ import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/models/square_label.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/utils/json_utils.dart';
+import '../models/invoice_model.dart';
 
 /// مراجع خفيفة تحتاجها نوافذ الإصدار الثلاثية وشاشات التحصيل:
 /// المربعات، المشتركون (مع العداد الحالي والرسوم المعلّقة)، وملخص الاستحقاق.
@@ -171,6 +172,7 @@ class SubscriberDueSummary {
     this.outstandingBalance = 0,
     this.creditBalance = 0,
     this.openInvoicesCount = 0,
+    this.invoices = const <InvoiceModel>[],
   });
 
   final int subscriberId;
@@ -184,6 +186,7 @@ class SubscriberDueSummary {
   final double outstandingBalance;
   final double creditBalance;
   final int openInvoicesCount;
+  final List<InvoiceModel> invoices;
 
   bool get hasInvoiceToCollect => latestUnpaidInvoiceId != null;
 
@@ -195,6 +198,7 @@ class SubscriberDueSummary {
         outstandingBalance: JsonUtils.asDouble(json['outstanding_balance']),
         creditBalance: JsonUtils.asDouble(json['credit_balance']),
         openInvoicesCount: JsonUtils.asInt(json['open_invoices_count']),
+        invoices: JsonUtils.asMapList(json['invoices']).map(InvoiceModel.fromJson).toList(growable: false),
       );
 
   @override

@@ -306,7 +306,8 @@ class SubscriberController extends ApiController
         // مفاتيح يقرأها تطبيق الهاتف لملء شاشة التحصيل السريع مسبقاً
         // (references_remote_datasource.SubscriberDueSummary) — تُضاف إضافياً
         // دون كسر المفاتيح القديمة (general_balance/invoices/total_remaining).
-        $latestUnpaid = $invoices->first();
+        $latestUnpaid = $invoices->sortByDesc('id')->first();
+        $invoiceDebt = round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2);
         $subscriber->loadMissing('meters');
         $net = $subscriber->getAccountBalance();
         $outstanding = max(0, -$net);
@@ -316,10 +317,10 @@ class SubscriberController extends ApiController
             'subscriber_id' => $subscriber->id,
             'general_balance' => (float) $subscriber->balance,
             'invoices' => $invoices,
-            'total_remaining' => round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2),
+            'total_remaining' => $invoiceDebt,
             'invoice_id' => $latestUnpaid?->id,
             'bill_number' => $latestUnpaid?->bill_number,
-            'due_amount' => $latestUnpaid ? round((float) $latestUnpaid->getRemainingAmount(), 2) : 0.0,
+            'due_amount' => $invoiceDebt,
             'outstanding_balance' => round($outstanding, 2),
             'credit_balance' => round($credit, 2),
             'open_invoices_count' => $invoices->count(),
