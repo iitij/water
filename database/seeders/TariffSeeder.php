@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use App\Models\Tariff;
 
 class TariffSeeder extends Seeder
 {
@@ -12,14 +12,12 @@ class TariffSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('tariffs')->insert([
-            'name' => 'التسعيرة الافتراضية',
+        // Sample data is a draft, never an automatically approved price.
+        Tariff::firstOrCreate(['name' => 'تعرفة تجريبية غير معتمدة'], [
             'unit_price' => 600.00,
             'start_date' => now()->toDateString(),
             'end_date' => null,
-            'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'is_active' => false,
         ]);
     }
 }
