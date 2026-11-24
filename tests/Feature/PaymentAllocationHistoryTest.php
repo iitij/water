@@ -154,6 +154,25 @@ class PaymentAllocationHistoryTest extends TestCase
         app(PaymentService::class)->collectPayment($subscriber, 100, $invoice->id);
         $revision = $this->current($subscriber);
         $originalRows = $this->rows($revision);
+        $protection = app(\App\Services\AllocationHistoryProtection::class);
+        if (DB::getDriverName() !== 'sqlite' && ! $protection->active()) {
+            // Restricted hosting: a raw write is detectable, not preventable.
+            DB::table('payment_allocations')->where('revision_id', $revision->id)->update(['amount_minor' => 1]);
+            $reader = app(\App\Services\PaymentAllocationReadService::class);
+            $this->assertFalse($reader->reconcile($subscriber)['integrity_valid']);
+            $this->assertFalse($reader->reconcile($subscriber)['matches']);
+            $this->assertFalse($reader->forInvoice($invoice)['available']);
+            try {
+                app(PaymentService::class)->collectPayment($subscriber, 20, $invoice->id);
+                $this->fail('Replay accepted a damaged allocation history.');
+            } catch (\RuntimeException $e) {
+                $this->assertStringContainsString('integrity failure', $e->getMessage());
+            }
+            $this->assertDatabaseCount('payments', 1);
+            $this->assertSame($revision->id, $this->current($subscriber)->id);
+            return;
+        }
+        $this->assertTrue($protection->active());
         foreach ([
             fn () => DB::table('payment_allocation_revisions')->where('id', $revision->id)->update(['available_minor' => 1]),
             fn () => DB::table('payment_allocation_revisions')->where('id', $revision->id)->delete(),

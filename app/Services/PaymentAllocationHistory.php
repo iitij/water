@@ -45,9 +45,13 @@ class PaymentAllocationHistory
         if ($byInvoice !== $paid || $bySource !== $sourceAmounts || $allocated + $unallocated !== $available) {
             throw new \LogicException('Allocation snapshot does not conserve money.');
         }
-        $hash = hash('sha256', json_encode(['paid' => $paid, 'rows' => $rows], JSON_THROW_ON_ERROR));
+        $integrity = app(AllocationSnapshotIntegrity::class);
+        $hash = $integrity->fingerprint((int) $subscriber->id, $available, $allocated, $unallocated, $rows);
         $latest = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)
             ->orderByDesc('revision')->lockForUpdate()->first();
+        if ($latest && ! $integrity->valid($latest)) {
+            throw new \RuntimeException('Allocation history integrity failure; financial replay blocked.');
+        }
         if ($latest && hash_equals($latest->allocation_hash, $hash)) {
             return (int) $latest->id;
         }

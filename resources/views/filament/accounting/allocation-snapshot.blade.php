@@ -1,5 +1,7 @@
 <div class="space-y-4" dir="rtl">
-    @if (!$snapshot['available'])
+    @if (($snapshot['integrity_valid'] ?? null) === false)
+        <p>تعذر التحقق من سلامة سجل التخصيص. يلزم مراجعة المسؤول المالي.</p>
+    @elseif (!$snapshot['available'])
         <p>لا يوجد إصدار تخصيص محفوظ لهذا الحساب بعد. لا يعني ذلك أن السند غير مخصص.</p>
     @else
         <p class="text-sm">الحساب #{{ $snapshot['subscriber_id'] }} — الإصدار {{ $snapshot['revision'] }} — {{ $snapshot['recorded_at'] }}</p>
