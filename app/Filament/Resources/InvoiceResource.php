@@ -382,10 +382,30 @@ class InvoiceResource extends Resource
                     ->url(fn(Invoice $record) => route('invoices.print', $record))
                     ->openUrlInNewTab(),
 
+                \Filament\Actions\Action::make('correct_historical')
+                    ->label('تصحيح فاتورة عداد مستبدل')
+                    ->color('warning')
+                    ->visible(fn (Invoice $record) => $record->retired_meter_id && ! in_array($record->status, ['draft', 'cancelled'], true)
+                        && ! \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $record->id)->exists()
+                        && auth()->user()?->can('delete', $record) && auth()->user()?->can('create', Invoice::class))
+                    ->form([
+                        Forms\Components\TextInput::make('corrected_units')->label('الوحدات التاريخية المصححة')->numeric()->minValue(0)->required(),
+                        Forms\Components\TextInput::make('historical_unit_price')->label('تعرفة الفترة الأصلية المثبتة')->numeric()->minValue(0)->required(),
+                        Forms\Components\Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
+                        Forms\Components\Textarea::make('evidence')->label('دليل القراءة والتعرفة التاريخية')->required()->minLength(10)->maxLength(2000),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (Invoice $record, array $data): void {
+                        app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
+                            $record, auth()->user(), (string) $data['corrected_units'],
+                            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
+                        );
+                        \Filament\Notifications\Notification::make()->title('تم إصدار فاتورة تاريخية مصححة')->success()->send();
+                    }),
                 \Filament\Actions\Action::make('cancel_invoice')
                     ->label('إلغاء الفاتورة')
                     ->color('danger')
-                    ->visible(fn (Invoice $record) => in_array($record->status, ['issued', 'partially_paid', 'paid', 'overdue'], true)
+                    ->visible(fn (Invoice $record) => ! $record->retired_meter_id && in_array($record->status, ['issued', 'partially_paid', 'paid', 'overdue'], true)
                         && auth()->user()?->can('delete', $record))
                     ->action(function (Invoice $record, array $data) {
                         \Illuminate\Support\Facades\Gate::authorize('delete', $record);

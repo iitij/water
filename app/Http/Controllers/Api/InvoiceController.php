@@ -602,6 +602,8 @@ class InvoiceController extends ApiController
         $data['remaining_amount'] = $invoice->getRemainingAmount();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
         $data['meter_code'] = $invoice->meter?->unique_code ?? $invoice->retired_meter_code;
+        $data['historical_correction'] = \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $invoice->id)->first();
+        $data['corrected_by_invoice_id'] = \App\Models\HistoricalInvoiceCorrection::where('original_invoice_id', $invoice->id)->value('replacement_invoice_id');
 
         return $data;
     }

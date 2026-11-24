@@ -379,4 +379,62 @@ class FinancialReversalTest extends TestCase
         }
     }
 
+
+    public function test_historical_invoice_correction_preserves_archived_readings_and_allocates_original_receipt(): void
+    {
+        [$subscriber, $old, $reading, $invoice] = $this->fixture();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 2000.25, $invoice->id);
+        $new = app(\App\Services\SingleMeterService::class)->replace($old, [
+            'unique_code' => 'HIST-CORRECTION-NEW', 'initial_reading' => 100,
+        ], '2026-02-02', 'Synthetic meter replacement after billing')['current_meter'];
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $collector = User::factory()->create(['role' => 'collector']);
+        $payload = [
+            'corrected_units' => '7.50', 'historical_unit_price' => '600.00',
+            'reason' => 'Synthetic historical consumption correction',
+            'evidence' => 'Synthetic verified archived meter evidence',
+        ];
+        $url = '/api/invoices/'.$invoice->id.'/correct-historical';
+        $this->actingAs($collector, 'sanctum')->postJson($url, $payload)->assertForbidden();
+        $this->actingAs($admin, 'sanctum');
+        $response = $this->postJson($url, $payload)->assertOk();
+        $id = $response->json('correction.id');
+        $replacementId = $response->json('correction.replacement_invoice_id');
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('correction.id', $id);
+        $this->postJson($url, array_replace($payload, ['corrected_units' => '8.00']))->assertConflict();
+        $replacement = Invoice::findOrFail($replacementId);
+        $this->assertDatabaseCount('historical_invoice_corrections', 1);
+        $this->assertDatabaseCount('invoices', 2);
+        $this->assertDatabaseCount('transactions', 4);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame('6000.00', $invoice->fresh()->total_amount);
+        $this->assertSame('4500.00', $replacement->total_amount);
+        $this->assertSame('2000.25', $replacement->amount_paid);
+        $this->assertSame(2499.75, $subscriber->getAccountDebt());
+        $this->assertSame($invoice->id, $payment->fresh()->invoice_id);
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+        $this->assertTrue($reading->fresh()->is_invoiced);
+        $this->assertNull($reading->fresh()->meter_id);
+        $this->assertSame($old->id, $replacement->retired_meter_id);
+        $this->assertSame($invoice->billing_period_start->toDateString(), $replacement->billing_period_start->toDateString());
+        $this->assertSame(1, Meter::withTrashed()->where('subscriber_id', $subscriber->id)->count());
+        $this->assertSame(100.0, $new->getLastReadingValue());
+        $this->assertDatabaseHas('transactions', ['reference_type' => Invoice::class,
+            'reference_id' => $invoice->id, 'type' => 'invoice_reversal', 'amount' => 6000]);
+        $this->assertDatabaseHas('audit_events', ['event' => 'invoice.historical_corrected', 'entity_id' => (string) $id]);
+
+        // The replacement must not fall through the normal cancellation path.
+        $this->postJson('/api/invoices/'.$replacementId.'/cancel', ['reason' => 'Synthetic unsupported second correction'])->assertUnprocessable();
+        Reading::create([
+            'meter_id' => $new->id, 'reading_date' => '2026-03-01',
+            'period_start' => '2026-02-02', 'period_end' => '2026-03-01',
+            'previous_reading' => 100, 'current_reading' => 102,
+        ]);
+        $next = app(InvoiceService::class)->generateInvoice($subscriber, $new);
+        $this->assertSame('1200.00', $next->total_amount);
+        $this->assertSame(3699.75, $subscriber->getAccountDebt());
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+    }
+
 }
