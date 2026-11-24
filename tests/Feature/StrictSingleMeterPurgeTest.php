@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
-/** Acceptance tests for the owner-requested irreversible meter data cleanup. */
+/** Acceptance tests for one meter per subscriber with protected financial history. */
 class StrictSingleMeterPurgeTest extends TestCase
 {
     use RefreshDatabase;
@@ -30,7 +30,7 @@ class StrictSingleMeterPurgeTest extends TestCase
         $this->assertFalse(Schema::hasColumn('meters', 'current_subscriber_id'));
     }
 
-    public function test_replacement_removes_every_meter_linked_record_without_affecting_general_subscriber_fees(): void
+    public function test_replacement_cannot_destroy_financial_history_or_rewrite_closed_till(): void
     {
         $square = Square::create(['name' => 'Purge regression square']);
         $subscriber = Subscriber::create([
@@ -131,40 +131,27 @@ class StrictSingleMeterPurgeTest extends TestCase
             'amount' => 25,
         ]);
 
-        $currentId = $this->postJson('/api/meters/'.$old->id.'/replace', [
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
-            'reason' => 'حذف كامل لبيانات العداد التالف',
+            'reason' => 'اختبار حماية السجل المالي',
             'new_meter' => ['unique_code' => 'PURGE-NEW', 'path_number' => 7],
-        ])->assertCreated()->json('current_meter.id');
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
 
-        $this->assertNotSame($old->id, $currentId);
-        $this->assertDatabaseMissing('meters', ['id' => $old->id]);
-        $this->assertDatabaseHas('meters', ['id' => $currentId, 'subscriber_id' => $subscriber->id]);
+        $this->assertDatabaseHas('meters', ['id' => $old->id]);
         $this->assertDatabaseCount('meters', 1);
-        foreach ([
-            'invoices', 'invoice_items', 'payments', 'readings',
-            'reading_faults', 'route_visits',
-        ] as $table) {
-            $this->assertDatabaseCount($table, 0);
-        }
-        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseHas('invoices', ['id' => $invoice, 'meter_id' => $old->id]);
+        $this->assertDatabaseHas('payments', ['id' => $payment, 'meter_id' => $old->id]);
+        $this->assertDatabaseCount('invoice_items', 1);
+        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseCount('reading_faults', 1);
+        $this->assertDatabaseCount('route_visits', 1);
+        $this->assertDatabaseCount('transactions', 3);
         $this->assertDatabaseHas('cash_sessions', [
-            'id' => $cashSessionId,
-            'state' => 'closed',
-            'expected_amount' => 0,
-            'counted_amount' => 50,
-            'variance_amount' => 50,
+            'id' => $cashSessionId, 'state' => 'closed', 'expected_amount' => 50,
+            'counted_amount' => 50, 'variance_amount' => 0,
         ]);
-        $this->assertSame('25.00', (string) $subscriber->fresh()->balance);
-        $this->assertDatabaseMissing('audit_events', [
-            'entity_type' => 'meter',
-            'entity_id' => (string) $old->id,
-        ]);
-        $this->assertDatabaseHas('audit_events', [
-            'entity_type' => 'meter',
-            'entity_id' => (string) $currentId,
-            'event' => 'meter.replaced',
-        ]);
+        $this->assertSame(-20.0, $subscriber->getAccountBalance());
+        $this->assertDatabaseHas('audit_events', ['entity_type' => 'meter', 'entity_id' => (string) $old->id]);
     }
 
     public function test_replacement_does_not_delete_a_different_subscribers_meter_or_bills(): void
@@ -193,7 +180,7 @@ class StrictSingleMeterPurgeTest extends TestCase
         $this->assertDatabaseCount('meters', 2);
     }
 
-    public function test_deleting_old_meter_receipt_reconciles_cash_session_without_touching_other_receipts(): void
+    public function test_replacement_cannot_remove_a_closed_till_receipt(): void
     {
         $square = Square::create(['name' => 'Cash reconciliation square']);
         $owner = Subscriber::create(['name' => 'Old owner', 'square_id' => $square->id]);
@@ -232,22 +219,22 @@ class StrictSingleMeterPurgeTest extends TestCase
             'removed_at' => now()->toDateString(),
             'reason' => 'حذف العداد القديم مع سند صندوق',
             'new_meter' => ['unique_code' => 'CASH-NEW'],
-        ])->assertCreated();
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
 
-        $this->assertDatabaseMissing('payments', ['id' => $oldReceiptId]);
+        $this->assertDatabaseHas('payments', ['id' => $oldReceiptId, 'meter_id' => $oldMeter->id]);
         $this->assertDatabaseHas('payments', ['id' => $otherReceiptId, 'meter_id' => $otherMeter->id]);
         $this->assertDatabaseHas('cash_sessions', [
             'id' => $session,
             'state' => 'closed',
-            'expected_amount' => 70,
+            'expected_amount' => 120,
             'counted_amount' => 120,
-            'variance_amount' => 50,
+            'variance_amount' => 0,
         ]);
-        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('payments', 2);
         $this->assertDatabaseCount('meters', 2);
     }
 
-    public function test_deleting_old_meter_receipt_does_not_invent_cached_totals_for_open_cash_session(): void
+    public function test_replacement_cannot_remove_an_open_till_receipt(): void
     {
         $square = Square::create(['name' => 'Open cash square']);
         $owner = Subscriber::create(['name' => 'Open cash owner', 'square_id' => $square->id]);
@@ -272,7 +259,7 @@ class StrictSingleMeterPurgeTest extends TestCase
             'removed_at' => now()->toDateString(),
             'reason' => 'اختبار صندوق مفتوح',
             'new_meter' => ['unique_code' => 'OPEN-CASH-NEW'],
-        ])->assertCreated();
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
 
         $this->assertDatabaseHas('cash_sessions', [
             'id' => $session,
@@ -280,7 +267,7 @@ class StrictSingleMeterPurgeTest extends TestCase
             'expected_amount' => null,
             'variance_amount' => null,
         ]);
-        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('payments', 1);
     }
 
     public function test_plain_meter_deletion_removes_fault_visit_and_meter_audit_rows_permanently(): void
