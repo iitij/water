@@ -225,6 +225,46 @@ class HistoricalTariffTest extends TestCase
         $this->travelBack();
     }
 
+    public function test_bulk_catalog_changes_roll_back_when_any_selected_tariff_is_protected(): void
+    {
+        $draft = Tariff::create(['name' => 'Draft', 'unit_price' => 900, 'is_active' => false]);
+        $used = $this->tariff('600.00', '2026-01-01', null);
+        $meter = $this->meter();
+        $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
+        app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+        $service = app(\App\Services\TariffBulkService::class);
+
+        foreach (['delete', 'forceDelete'] as $operation) {
+            try {
+                $service->apply([$draft->id, $used->id], $operation);
+                $this->fail('Protected tariff bulk action was accepted.');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('tariff', $exception->errors());
+            }
+            $this->assertDatabaseHas('tariffs', ['id' => $draft->id, 'deleted_at' => null]);
+            $this->assertDatabaseHas('tariffs', ['id' => $used->id, 'deleted_at' => null]);
+        }
+        $this->assertSame(1, $service->apply([$draft->id], 'delete'));
+        $this->assertSame(1, $service->apply([$draft->id], 'restore'));
+    }
+
+    public function test_bulk_restore_is_atomic_when_a_restored_tariff_overlaps(): void
+    {
+        $draft = Tariff::create(['name' => 'Draft', 'unit_price' => 900, 'is_active' => false]);
+        $old = $this->tariff('600.00', '2026-01-01', null);
+        $draft->delete();
+        $old->delete();
+        $this->tariff('800.00', '2026-01-01', null);
+        try {
+            app(\App\Services\TariffBulkService::class)->apply([$draft->id, $old->id], 'restore');
+            $this->fail('Conflicting bulk restore was accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('is_active', $exception->errors());
+        }
+        $this->assertTrue(Tariff::withTrashed()->findOrFail($draft->id)->trashed());
+        $this->assertTrue(Tariff::withTrashed()->findOrFail($old->id)->trashed());
+    }
+
     private function assertRejected(Meter $meter, Reading $reading): void
     {
         try {
