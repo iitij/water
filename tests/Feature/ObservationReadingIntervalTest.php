@@ -215,6 +215,60 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertDatabaseCount('readings', 2);
     }
 
+    public function test_reference_dates_and_initial_meter_value_are_frozen_after_reading(): void
+    {
+        $meter = $this->meter();
+        $meter->subscriber->update(['subscription_start_date' => '2026-01-01']);
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12', 'current_reading' => 135,
+        ])->assertCreated();
+        foreach ([
+            fn () => $meter->fresh()->update(['installed_at' => '2026-01-11']),
+            fn () => $meter->fresh()->update(['initial_reading' => 105]),
+            fn () => $meter->subscriber->fresh()->update(['subscription_start_date' => '2026-01-02']),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('A historical baseline was changed.');
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $this->assertNotEmpty($e->errors());
+            }
+        }
+        $this->assertSame('2026-01-10', $meter->fresh()->installed_at->toDateString());
+        $this->assertSame(100, $meter->fresh()->initial_reading);
+        $this->assertSame('2026-01-01', $meter->subscriber->fresh()->subscription_start_date->toDateString());
+    }
+
+    public function test_stale_reading_cannot_overwrite_concurrent_change(): void
+    {
+        $meter = $this->meter();
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12', 'current_reading' => 135,
+        ])->assertCreated()->json('reading.id');
+        $stale = Reading::findOrFail($id);
+        Reading::findOrFail($id)->update(['current_reading' => 140]);
+        try {
+            $stale->update(['current_reading' => 141]);
+            $this->fail('A stale update was accepted.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertArrayHasKey('reading_date', $e->errors());
+        }
+        $this->assertSame('140.00', Reading::findOrFail($id)->current_reading);
+    }
+
+    public function test_offline_retry_rejects_changed_actual_observation_date(): void
+    {
+        $meter = $this->meter();
+        $payload = ['meter_id' => $meter->id, 'reading_date' => '2026-02-13',
+            'actual_reading_date' => '2026-02-12', 'current_reading' => 135,
+            'sync_uuid' => (string) \Illuminate\Support\Str::uuid()];
+        $this->postJson('/api/readings', $payload)->assertCreated();
+        $this->postJson('/api/readings', $payload)->assertOk()->assertJsonPath('duplicate', true);
+        $this->postJson('/api/readings', array_replace($payload, ['actual_reading_date' => '2026-02-11']))
+            ->assertConflict();
+        $this->assertDatabaseCount('readings', 1);
+    }
+
     public function test_prior_observation_cannot_be_modified_after_a_successor_exists(): void
     {
         $meter = $this->meter();
