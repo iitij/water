@@ -28,6 +28,29 @@ class Subscriber extends Model
         'subscription_start_date' => 'date',
     ];
 
+    public function save(array $options = [])
+    {
+        if (! $this->exists || ! $this->isDirty('subscription_start_date')) {
+            return parent::save($options);
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
+            $fresh = self::query()->lockForUpdate()->findOrFail($this->id);
+            if ($fresh->getRawOriginal('subscription_start_date') != $this->getRawOriginal('subscription_start_date')) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['subscription_start_date' => 'تغير تاريخ الخدمة؛ حدّث البيانات أولاً.']);
+            }
+            $meters = $fresh->meters()->withTrashed()->orderBy('id')->lockForUpdate()->get();
+            if ($meters->contains(fn (Meter $meter) => $meter->readings()->withTrashed()->exists())
+                || $fresh->invoices()->withTrashed()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'subscription_start_date' => 'لا يمكن تغيير تاريخ بدء الخدمة بعد تسجيل القراءات أو الفواتير.',
+                ]);
+            }
+
+            return parent::save($options);
+        }, 3);
+    }
+
     protected static function booted(): void
     {
         static::deleting(function (Subscriber $subscriber): void {
