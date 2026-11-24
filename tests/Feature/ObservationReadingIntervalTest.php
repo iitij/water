@@ -59,6 +59,46 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('35.50', $reading->consumption_units);
     }
 
+    public function test_model_creates_only_actual_observations_without_client_periods(): void
+    {
+        $meter = $this->meter();
+        $reading = Reading::create(['meter_id' => $meter->id,
+            'reading_date' => '2026-02-12', 'current_reading' => '135.25']);
+        $this->assertSame('observation', $reading->period_basis);
+        $this->assertSame('2026-01-10', $reading->period_start);
+        $this->assertSame('2026-02-12', $reading->period_end);
+        $this->assertSame('35.25', $reading->consumption_units);
+
+        foreach ([['period_basis' => 'legacy_calendar'], ['period_start' => '2026-02-01'],
+            ['previous_reading' => 0], ['current_reading' => '136.123']] as $invalid) {
+            try {
+                Reading::create(array_replace(['meter_id' => $meter->id,
+                    'reading_date' => '2026-03-14', 'current_reading' => '136.00'], $invalid));
+                $this->fail('Invalid observation accepted.');
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $this->assertNotEmpty($e->errors());
+            }
+        }
+        $this->assertDatabaseCount('readings', 1);
+    }
+
+    public function test_database_rejects_inconsistent_observations(): void
+    {
+        $meter = $this->meter();
+        $reading = Reading::create(['meter_id' => $meter->id,
+            'reading_date' => '2026-02-12', 'current_reading' => '135.25']);
+        foreach ([['consumption_units' => 1], ['period_end' => '2026-02-13'],
+            ['actual_reading_date' => null], ['period_basis' => 'legacy_calendar']] as $invalid) {
+            try {
+                \Illuminate\Support\Facades\DB::table('readings')->where('id', $reading->id)->update($invalid);
+                $this->fail('Database accepted an inconsistent observation.');
+            } catch (\Illuminate\Database\QueryException $e) {
+                $this->assertStringContainsString('Invalid observation', $e->getMessage());
+            }
+        }
+        $this->assertSame('35.25', $reading->fresh()->consumption_units);
+    }
+
     public function test_fractional_consumption_survives_storage_edit_and_invoice_posting(): void
     {
         $meter = $this->meter();
@@ -326,7 +366,7 @@ class ObservationReadingIntervalTest extends TestCase
             'meter_id' => $meter->id, 'reading_date' => '2026-03-14', 'current_reading' => 148,
         ])->assertCreated()->json('reading.id');
         $this->artisan('water:audit-observation-intervals')->assertSuccessful();
-        \Illuminate\Support\Facades\DB::table('readings')->where('id', $id)->update(['previous_reading' => 134]);
+        \Illuminate\Support\Facades\DB::table('readings')->where('id', $id)->update(['previous_reading' => 134, 'consumption_units' => 14]);
         $this->artisan('water:audit-observation-intervals')
             ->expectsOutputToContain('BROKEN_OBSERVATION_ANCHOR reading #'.$id)->assertFailed();
         $this->assertEquals(134, Reading::findOrFail($id)->previous_reading);
