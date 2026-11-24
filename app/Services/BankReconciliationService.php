@@ -66,7 +66,7 @@ final class BankReconciliationService
             'from_date' => $from, 'to_date' => $to,
             'opening_minor' => $this->minor((string) $data['opening_amount']),
             'closing_minor' => $this->minor((string) $data['closing_amount']),
-            'evidence' => $evidence, 'imported_by' => $actor->id,
+            'evidence' => $evidence, 'imported_by' => (int) $actor->id,
         ];
         $lines = [];
         $seen = [];
@@ -98,7 +98,9 @@ final class BankReconciliationService
                 ->where('reference', $record['reference'])->lockForUpdate()->first();
             if ($existing) {
                 abort_unless(hash_equals($existing->content_hash, $record['content_hash']), 409, 'مرجع الكشف مرتبط ببيانات مختلفة.');
-                return $this->report($existing, $account);
+                $report = $this->report($existing, $account);
+                abort_if(! $report['statement_integrity_matches'], 409, 'بيانات الكشف المسجل لا تطابق بصمته الأصلية.');
+                return $report;
             }
             if ($from < $account->opening_on) $this->reject('from_date', 'الفترة تسبق افتتاح الحساب.');
             $statements = DB::table('bank_statements')->where('treasury_account_id', $accountId);
@@ -128,6 +130,31 @@ final class BankReconciliationService
         }, 3);
     }
 
+    /** Rebuild the original canonical payload; offsetting edits cannot hide behind a zero net. */
+    private function intact(object $statement, $lines): bool
+    {
+        $record = [
+            'treasury_account_id' => (int) $statement->treasury_account_id,
+            'reference' => $statement->reference, 'from_date' => $statement->from_date,
+            'to_date' => $statement->to_date, 'opening_minor' => (int) $statement->opening_minor,
+            'closing_minor' => (int) $statement->closing_minor, 'evidence' => $statement->evidence,
+            'imported_by' => (int) $statement->imported_by,
+        ];
+        $canonical = [];
+        foreach ($lines as $line) {
+            $canonical[] = [
+                'treasury_account_id' => (int) $line->treasury_account_id,
+                'bank_reference' => $line->bank_reference, 'booked_on' => $line->booked_on,
+                'amount_minor' => (int) $line->amount_minor, 'description' => $line->description,
+            ];
+            if ((int) $line->treasury_account_id !== (int) $statement->treasury_account_id
+                || $line->booked_on < $statement->from_date || $line->booked_on > $statement->to_date
+                || (int) $line->amount_minor === 0) return false;
+        }
+        usort($canonical, fn ($a, $b) => strcmp($a['bank_reference'], $b['bank_reference']));
+        return hash_equals($statement->content_hash, hash('sha256', json_encode([$record, $canonical], JSON_THROW_ON_ERROR)));
+    }
+
     private function valid(object $statement, object $line, ?object $posting, object $match): bool
     {
         return $posting && (int) $line->bank_statement_id === (int) $statement->id
@@ -151,6 +178,8 @@ final class BankReconciliationService
             abort_unless($statement, 404);
             $account = $this->account((int) $statement->treasury_account_id);
             abort_if((int) $statement->imported_by === (int) $actor->id, 403, 'يلزم مراجع مستقل عن مدخل الكشف.');
+            abort_unless($this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $id)->get()),
+                409, 'بيانات الكشف المسجل لا تطابق بصمته الأصلية.');
             $line = DB::table('bank_statement_lines')->where('bank_statement_id', $id)->where('id', $lineId)->lockForUpdate()->first();
             $posting = DB::table('treasury_postings')->where('id', $postingId)->lockForUpdate()->first();
             abort_unless($line && $posting, 404);
@@ -190,7 +219,8 @@ final class BankReconciliationService
             DB::table('bank_statement_lines')->where('bank_statement_id', $id)->select('id'))->get();
         $matchedLines = [];
         $matchedPostings = [];
-        $issues = [];
+        $intact = $this->intact($statement, $lines);
+        $issues = $intact ? [] : [['code' => 'statement_content_mismatch']];
         foreach ($matches as $match) {
             $line = $lines->get($match->bank_statement_line_id);
             $posting = $postings->get($match->treasury_posting_id);
@@ -217,6 +247,7 @@ final class BankReconciliationService
         }
         return [
             'statement' => (array) $statement,
+            'statement_integrity_matches' => $intact,
             'recorded_opening_minor' => $opening, 'recorded_closing_minor' => $closing,
             'opening_difference_minor' => $openingDifference, 'closing_difference_minor' => $difference,
             'bank_unmatched_minor' => $bankUnmatched, 'ledger_unmatched_minor' => $ledgerUnmatched,

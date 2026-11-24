@@ -49,7 +49,7 @@ final class BankReconciliationTest extends TestCase
         $this->postJson('/api/treasury/accounts/'.$cash['id'].'/bank-statements', $payload)->assertUnprocessable();
         $response = $this->postJson($url, $payload)->assertOk()
             ->assertJsonPath('closing_difference_minor', -25)
-            ->assertJsonPath('matched_count', 0)->assertJsonPath('certified_balance', false);
+            ->assertJsonPath('matched_count', 0)->assertJsonPath('statement_integrity_matches', true)->assertJsonPath('certified_balance', false);
         $id = $response->json('statement.id');
         $line = DB::table('bank_statement_lines')->where('bank_reference', 'DEP-001')->first();
         $fee = DB::table('bank_statement_lines')->where('bank_reference', 'FEE-001')->first();
@@ -91,5 +91,13 @@ final class BankReconciliationTest extends TestCase
         ])->assertOk()->assertJsonPath('closing_difference_minor', 0)
             ->assertJsonPath('bank_unmatched_minor', 0)->assertJsonCount(2, 'unmatched_bank_lines')
             ->assertJsonPath('fully_matched', false)->assertJsonPath('certified_balance', false);
+        // Deliberate isolated raw SQL corruption: the two changes cancel in the balance.
+        DB::table('bank_statement_lines')->where('bank_reference', 'ZERO-IN')->update(['amount_minor' => 2000]);
+        DB::table('bank_statement_lines')->where('bank_reference', 'ZERO-OUT')->update(['amount_minor' => -2000]);
+        $id = DB::table('bank_statements')->where('reference', 'ZERO-STATEMENT')->value('id');
+        $this->getJson('/api/treasury/bank-statements/'.$id)->assertOk()
+            ->assertJsonPath('closing_difference_minor', 0)
+            ->assertJsonPath('statement_integrity_matches', false)
+            ->assertJsonPath('issues.0.code', 'statement_content_mismatch');
     }
 }
