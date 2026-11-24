@@ -538,6 +538,44 @@ class FinancialReversalTest extends TestCase
         $this->assertDatabaseCount('transactions', 1);
         $this->assertDatabaseCount('invoice_tariff_lines', 2);
         $this->assertSame(10000.0, $subscriber->getAccountDebt());
+
+        [$first, $second] = $invoice->readings()->orderBy('id')->get()->all();
+        $url = '/api/invoices/'.$invoice->id.'/correct-historical';
+        $payload = ['readings' => [
+            ['reading_id' => $first->id, 'corrected_units' => '8.00'],
+            ['reading_id' => $second->id, 'corrected_units' => '4.50'],
+        ], 'reason' => 'Synthetic historical correction reason', 'evidence' => 'Synthetic archived reading evidence'];
+        $this->postJson($url, array_replace($payload, ['readings' => [$payload['readings'][0]]]))
+            ->assertUnprocessable()->assertJsonValidationErrors('readings');
+        $this->postJson($url, array_replace($payload, ['readings' => [$payload['readings'][0], $payload['readings'][0]]]))
+            ->assertUnprocessable();
+        $this->postJson($url, array_replace($payload, ['readings' => [
+            $payload['readings'][0], ['reading_id' => 999999, 'corrected_units' => 4],
+        ]]))->assertUnprocessable()->assertJsonValidationErrors('readings');
+        $this->postJson($url, $payload + ['historical_unit_price' => 600])->assertUnprocessable();
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+
+        $response = $this->postJson($url, $payload)->assertOk()
+            ->assertJsonPath('correction.historical_unit_price', null)
+            ->assertJsonPath('correction.corrected_units', '12.50')
+            ->assertJsonPath('correction.corrected_amount', '8400.00');
+        $replacementId = $response->json('correction.replacement_invoice_id');
+        $correctionId = $response->json('correction.id');
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $first->id, 'units' => 8, 'unit_price' => 600, 'amount' => 4800]);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
+            'reading_id' => $second->id, 'units' => 4.5, 'unit_price' => 800, 'amount' => 3600]);
+        $this->assertDatabaseCount('invoice_tariff_lines', 4);
+        $this->assertDatabaseCount('transactions', 3);
+        $this->assertSame(8400.0, $subscriber->getAccountDebt());
+        $this->assertSame($invoice->id, $first->fresh()->invoice_id);
+        $this->assertSame($invoice->id, $second->fresh()->invoice_id);
+        $this->postJson($url, array_replace($payload, ['readings' => array_reverse($payload['readings'])]))
+            ->assertOk()->assertJsonPath('correction.id', $correctionId);
+        $payload['readings'][0]['corrected_units'] = '8.01';
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('transactions', 3);
     }
 
     public function test_field_pack_contains_unified_balance_after_meter_billing_and_payment(): void
