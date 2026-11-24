@@ -50,7 +50,12 @@ class InvoiceWhatsAppBuilder {
 
     final firstReading = invoice.readings.isEmpty ? null : invoice.readings.first;
     final lastReading = invoice.readings.isEmpty ? null : invoice.readings.last;
-    final unitPrice = invoice.impliedUnitPrice ?? 0.0;
+    final unitPrice = invoice.impliedUnitPrice;
+    final priceLabel = unitPrice != null
+        ? CurrencyFormatter.amount(unitPrice)
+        : (invoice.tariffLines?.map((line) => line.unitPrice).toSet().length ?? 0) > 1
+            ? 'تعرفات متعددة حسب فترات الاستهلاك'
+            : 'غير موثقة في الفاتورة';
 
     final variables = <String, String>{
       'subscriber_name': invoice.messageRecipientName.isEmpty
@@ -61,12 +66,14 @@ class InvoiceWhatsAppBuilder {
       'pdf_url': pdfUrl ?? '',
       'period_start': DateFormat.day(invoice.periodStart),
       'period_end': DateFormat.day(invoice.periodEnd),
-      'meter_code': invoice.meter?.uniqueCode ?? '',
+      'meter_code': invoice.meter?.uniqueCode ?? invoice.retiredMeterCode ?? '',
       'square': invoice.subscriber?.squareName ?? '',
       'previous_reading': _num(firstReading?.previousReading),
       'current_reading': _num(lastReading?.currentReading),
-      'consumption_units': _num(invoice.consumptionUnits),
-      'unit_price': CurrencyFormatter.amount(unitPrice),
+      'consumption_units': invoice.tariffLines?.isNotEmpty == true || invoice.correctedUnits != null || invoice.readings.isNotEmpty
+          ? _num(invoice.consumptionUnits)
+          : 'غير موثقة',
+      'unit_price': priceLabel,
       'consumption_fee': CurrencyFormatter.amount(invoice.consumptionFee),
       'previous_balance': CurrencyFormatter.amount(invoice.previousBalance),
       'credit_applied': CurrencyFormatter.amount(invoice.creditApplied),
@@ -87,5 +94,5 @@ class InvoiceWhatsAppBuilder {
     );
   }
 
-  static String _num(double? value) => CurrencyFormatter.amount(value);
+  static String _num(double? value) => value == null ? '' : CurrencyFormatter.amount(value);
 }
