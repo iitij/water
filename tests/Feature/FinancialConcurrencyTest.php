@@ -46,7 +46,7 @@ class FinancialConcurrencyTest extends TestCase
             'status' => 'active',
         ]);
         $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'CONC-'.$subscriber->id]);
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $meter->id, 'reading_date' => '2026-02-01',
             'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
             'previous_reading' => 0, 'current_reading' => 10,
