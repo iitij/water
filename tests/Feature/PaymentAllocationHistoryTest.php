@@ -109,4 +109,40 @@ class PaymentAllocationHistoryTest extends TestCase
         $this->assertSame('0.00', $invoice->fresh()->amount_paid);
         $this->assertSame($before->id, $this->current($subscriber)->id);
     }
+
+    public function test_read_projection_distinguishes_uninitialized_account_from_zero_and_does_not_write(): void
+    {
+        $subscriber = $this->account();
+        $reader = app(\App\Services\PaymentAllocationReadService::class);
+        $initial = $reader->reconcile($subscriber);
+        $this->assertFalse($initial['available']);
+        $this->assertNull($initial['matches']);
+        $this->assertDatabaseCount('payment_allocation_revisions', 0);
+
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'ACC07-3']);
+        $invoice = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 1);
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, 750.25, $invoice->id);
+        $before = $this->current($subscriber);
+        $this->assertTrue($reader->reconcile($subscriber)['matches']);
+        $this->assertSame(60000, $reader->forInvoice($invoice)['allocated_minor']);
+        $this->assertSame(15025, $reader->forPayment($receipt)['unallocated_minor']);
+        $admin = \App\Models\User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/payments/'.$receipt->id)->assertOk()
+            ->assertJsonPath('payment.allocation_snapshot.allocated_minor', 60000);
+        $this->getJson('/api/invoices/'.$invoice->id)->assertOk()
+            ->assertJsonPath('invoice.allocation_snapshot.allocated_minor', 60000);
+        $this->getJson('/api/subscribers/'.$subscriber->id.'/allocation-reconciliation')->assertOk()
+            ->assertJsonPath('matches', true)->assertJsonPath('difference_minor', 0);
+        $this->assertSame($before->id, $this->current($subscriber)->id);
+
+        // Deliberately simulate a legacy accounting discrepancy; the read audit
+        // must report it without silently changing the account or replaying money.
+        DB::table('transactions')->where('subscriber_id', $subscriber->id)->where('type', 'payment')->update(['amount' => 750]);
+        $this->assertFalse($reader->reconcile($subscriber)['matches']);
+        $this->assertSame(-25, $reader->reconcile($subscriber)['difference_minor']);
+        $this->assertSame($before->id, $this->current($subscriber)->id);
+    }
+
 }

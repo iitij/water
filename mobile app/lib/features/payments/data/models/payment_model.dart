@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/models/record_location.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../../invoices/domain/accounting/finance_enums.dart';
+import 'allocation_snapshot.dart';
 
 /// نموذج سند القبض — يعكس `App\Models\Payment` + `receipt_data` التي يرجعها
 /// `InvoiceController::pay` (سطر 138-152) و`GET /api/payments/{id}` (§2.3-49).
@@ -36,6 +37,7 @@ class PaymentModel extends Equatable {
     this.cashSessionId,
     this.transferredToSubscriberId,
     this.refundedAmount = 0,
+    this.allocationSnapshot,
     this.whatsappSentAt,
     this.whatsappSentVia,
   });
@@ -77,6 +79,7 @@ class PaymentModel extends Equatable {
   final int? cashSessionId;
   final int? transferredToSubscriberId;
   final double refundedAmount;
+  final AllocationSnapshot? allocationSnapshot;
   double get effectiveAmount => (amount - refundedAmount).clamp(0.0, amount).toDouble();
   bool get isAccountTransferred => transferredToSubscriberId != null;
 
@@ -149,6 +152,7 @@ class PaymentModel extends Equatable {
       voidedVia: JsonUtils.asStringOrNull(json['voided_via']),
       cashSessionId: JsonUtils.asIntOrNull(json['cash_session_id']),
       refundedAmount: JsonUtils.asDouble(json['refunded_amount']),
+      allocationSnapshot: JsonUtils.asMap(json['allocation_snapshot']) == null ? null : AllocationSnapshot.fromJson(JsonUtils.asMap(json['allocation_snapshot'])!),
       transferredToSubscriberId: JsonUtils.asIntOrNull(JsonUtils.asMap(json['account_transfer'])?['to_subscriber_id'] ?? json['transferred_to_subscriber_id']),
       whatsappSentAt: JsonUtils.asDate(json['whatsapp_sent_at']),
       whatsappSentVia: JsonUtils.asStringOrNull(json['whatsapp_sent_via']),
@@ -172,6 +176,7 @@ class PaymentModel extends Equatable {
     'cash_session_id': cashSessionId,
     'transferred_to_subscriber_id': transferredToSubscriberId,
     'refunded_amount': refundedAmount,
+    if (allocationSnapshot != null) 'allocation_snapshot': allocationSnapshot!.toJson(),
     'whatsapp_sent_at': DateFormat.dateTime(whatsappSentAt),
     'whatsapp_sent_via': whatsappSentVia,
   };
@@ -228,6 +233,7 @@ class PaymentModel extends Equatable {
     cashSessionId,
     transferredToSubscriberId,
     refundedAmount,
+    allocationSnapshot,
     whatsappSentAt,
     whatsappSentVia,
   ];

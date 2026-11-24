@@ -303,6 +303,15 @@ class FinancialReversalTest extends TestCase
         $this->assertSame('1500.25', $toInvoice->fresh()->amount_paid);
         $this->assertSame(6000.0, $from->getAccountDebt());
         $this->assertSame(1499.75, $to->getAccountDebt());
+        $projection = app(\App\Services\PaymentAllocationReadService::class);
+        $snapshot = $projection->forPayment($payment->fresh());
+        $this->assertSame($to->id, $snapshot['subscriber_id']);
+        $this->assertSame(150025, $snapshot['allocated_minor']);
+        $this->assertSame($toInvoice->id, $snapshot['rows'][0]['invoice_id']);
+        $this->assertNull($snapshot['rows'][0]['payment_id']);
+        $this->assertNotNull($snapshot['rows'][0]['account_transfer_id']);
+        $this->assertTrue($projection->reconcile($from)['matches']);
+        $this->assertTrue($projection->reconcile($to)['matches']);
         $this->assertSame(7499.75, $from->getAccountDebt() + $to->getAccountDebt());
         $this->getJson('/api/admin/dashboard')->assertOk()->assertJsonPath('stats_overview.outstanding_amount', 7499.75);
         $this->getJson('/api/admin/reports?from_date='.now()->toDateString().'&to_date='.now()->toDateString())
@@ -360,6 +369,11 @@ class FinancialReversalTest extends TestCase
         $this->assertNull($payment->fresh()->voided_at);
         $this->assertSame('6000.00', $invoice->fresh()->amount_paid);
         $this->assertSame(749.75, $subscriber->getAccountCredit());
+        $projection = app(\App\Services\PaymentAllocationReadService::class);
+        $snapshot = $projection->forPayment($payment->fresh());
+        $this->assertSame(600000, $snapshot['allocated_minor']);
+        $this->assertSame(74975, $snapshot['unallocated_minor']);
+        $this->assertTrue($projection->reconcile($subscriber)['matches']);
         $this->getJson('/api/admin/reports?from_date='.now()->toDateString().'&to_date='.now()->toDateString())
             ->assertOk()->assertJsonPath('financial_movements.gross_valid_receipts', 8000)
             ->assertJsonPath('financial_movements.refunds_disbursed', 1250.25)
