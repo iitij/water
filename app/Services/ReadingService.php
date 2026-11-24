@@ -18,9 +18,13 @@ class ReadingService
 {
     public function latestReading(int $meterId): ?Reading
     {
-        return Reading::where('meter_id', $meterId)
+        $query = Reading::where('meter_id', $meterId)
             ->orderByRaw('COALESCE(actual_reading_date, reading_date) DESC')
-            ->orderByDesc('id')->first();
+            ->orderByDesc('id');
+        if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) {
+            $query->lockForUpdate();
+        }
+        return $query->first();
     }
 
     public function calculateReadingPeriod(int $meterId, ?string $readingDate = null): array
