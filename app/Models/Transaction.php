@@ -26,6 +26,18 @@ class Transaction extends Model
         'amount' => 'decimal:2',
     ];
 
+    protected static function booted(): void
+    {
+        $reject = static function (): void {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'transaction' => 'حركة دفتر الأستاذ غير قابلة للتعديل أو الحذف أو الاستعادة. استخدم مستند تصحيح معتمداً.',
+            ]);
+        };
+        static::updating($reject);
+        static::deleting($reject);
+        static::restoring($reject);
+    }
+
     public function subscriber(): BelongsTo
     {
         return $this->belongsTo(Subscriber::class);

@@ -481,4 +481,32 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(1000.25, $subscriber->getAccountCredit());
     }
 
+
+    public function test_posted_ledger_cannot_be_updated_deleted_or_restored_directly(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 2000, $invoice->id);
+        $entry = Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)->firstOrFail();
+        foreach ([
+            fn () => $entry->fresh()->update(['amount' => 1]),
+            fn () => $entry->fresh()->update(['subscriber_id' => 999]),
+            fn () => $entry->fresh()->delete(),
+            fn () => $entry->fresh()->forceDelete(),
+            fn () => $entry->fresh()->restore(),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('A direct ledger mutation was allowed.');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('transaction', $exception->errors());
+            }
+        }
+        $this->assertSame('2000.00', $entry->fresh()->amount);
+        $this->assertSame(2, Transaction::count());
+        $this->assertSame(4000.0, $subscriber->getAccountDebt());
+        app(PaymentService::class)->voidPayment($payment, 'Synthetic allowed reversal through accounting service');
+        $this->assertSame(3, Transaction::count());
+        $this->assertSame(6000.0, $subscriber->getAccountDebt());
+    }
+
 }

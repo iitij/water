@@ -22,7 +22,9 @@ class TransactionService
         return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
-            if ($reference instanceof \App\Models\Invoice || $reference instanceof \App\Models\Payment) {
+            if ($reference instanceof \App\Models\Invoice || $reference instanceof \App\Models\Payment
+                || $reference instanceof \App\Models\PaymentAccountTransfer
+                || $reference instanceof \App\Models\PaymentRefund) {
                 $existing = Transaction::withTrashed()
                     ->where('reference_type', get_class($reference))
                     ->where('reference_id', $reference->id)
