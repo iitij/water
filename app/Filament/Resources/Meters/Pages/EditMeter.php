@@ -38,7 +38,7 @@ class EditMeter extends EditRecord
                         ->default(fn (): ?int => $this->record?->path_number),
                     \Filament\Forms\Components\TextInput::make('initial_reading')
                         ->label('القراءة الابتدائية للعداد الجديد')
-                        ->integer()
+                        ->numeric()->step(0.01)->maxValue(9999999999.99)->rule('decimal:0,2')
                         ->minValue(0)
                         ->default(0)
                         ->required(),
