@@ -36,7 +36,7 @@ class SingleCurrentMeterTest extends TestCase
     private function measuredConsumption(Meter $meter, int $units): void
     {
         \App\Models\Tariff::create(['name' => 'Synthetic measured tariff', 'unit_price' => 1, 'is_active' => true]);
-        \App\Models\Reading::create(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
             'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
             'previous_reading' => 0, 'current_reading' => $units]);
     }
