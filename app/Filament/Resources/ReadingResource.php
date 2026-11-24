@@ -152,8 +152,14 @@ class ReadingResource extends Resource
                 ->label('تاريخ إدخال القراءة الفعلي')
                 ->default(now())
                 ->live()
-                ->afterStateUpdated(function ($set, $get, $state) {
+                ->afterStateUpdated(function ($set, $get, $state, ?Reading $record) {
                     if (! $state || ! $get('meter_id')) return;
+                    if ($record !== null) {
+                        if ($record->period_basis === 'observation') {
+                            $set('period_end', \Carbon\CarbonImmutable::parse($state)->toDateString());
+                        }
+                        return;
+                    }
                     $period = app(\App\Services\ReadingService::class)
                         ->calculateReadingPeriod((int) $get('meter_id'), $state);
                     $set('period_start', $period['period_start']);
