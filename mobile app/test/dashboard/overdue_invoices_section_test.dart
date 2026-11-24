@@ -4,7 +4,7 @@ import 'package:water_project/features/dashboard/domain/entities/dashboard_entit
 import 'package:water_project/features/dashboard/presentation/widgets/invoice_sections.dart';
 
 void main() {
-  testWidgets('shows the green celebration when no invoices are overdue', (tester) async {
+  testWidgets('shows a professional success state when no invoices are overdue', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -16,8 +16,10 @@ void main() {
       ),
     );
 
-    expect(find.text('لا توجد فواتير متأخرة 🎉'), findsOneWidget);
-    expect(find.byIcon(Icons.celebration_rounded), findsOneWidget);
+    expect(find.text('لا توجد فواتير متأخرة'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
+    expect(find.textContaining('🎉'), findsNothing);
+    expect(find.byIcon(Icons.celebration_rounded), findsNothing);
   });
 
   testWidgets('delegates immediate collection and WhatsApp reminder', (tester) async {

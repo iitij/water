@@ -1,0 +1,67 @@
+name: Water | Real browser Filament theme acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/professional-ui-browser.yml'
+      - 'tests/scripts/professional_ui_browser*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      APP_DEBUG: 'false'
+      APP_URL: http://127.0.0.1:8799
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ${{ runner.temp }}/water-ui-test.sqlite
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare isolated web environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          touch .env "$DB_DATABASE"
+          composer install --no-interaction --no-progress --prefer-dist
+          php artisan migrate --force --no-interaction
+          php artisan shield:generate --all --panel=admin --option=permissions --no-interaction
+          php artisan db:seed --class=CashSessionPermissionsSeeder --force --no-interaction
+          php tests/scripts/professional_ui_browser_fixture.php
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          chrome="$(command -v google-chrome || command -v chromium || true)"
+          test -n "$chrome"
+          "$chrome" --version
+          echo "CHROME_BIN=$chrome" >> "$GITHUB_ENV"
+      - name: Run authenticated visual checks in actual Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          php artisan serve --host=127.0.0.1 --port=8799 > "$RUNNER_TEMP/ui-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true; rm -f "$RUNNER_TEMP/ui-browser-fixture.json"' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8799/up >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8799/up >/dev/null
+          node tests/scripts/professional_ui_browser.mjs
