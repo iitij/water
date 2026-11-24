@@ -38,6 +38,47 @@ class ObservationReadingIntervalTest extends TestCase
         ]);
     }
 
+    public function test_fractional_consumption_survives_storage_edit_and_invoice_posting(): void
+    {
+        $meter = $this->meter();
+        $meter->update(['initial_reading' => '100.25']);
+        $tariff = \App\Models\Tariff::create(['name' => 'Decimal test tariff', 'unit_price' => '600.00',
+            'start_date' => '2026-01-10', 'is_active' => true]);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
+            'current_reading' => '135.75', 'consumption_units' => 9999,
+        ])->assertCreated()->json('reading.id');
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('35.50', $reading->consumption_units);
+        $this->putJson('/api/readings/'.$id, ['current_reading' => '135.76'])->assertOk();
+        $this->assertSame('35.51', $reading->fresh()->consumption_units);
+        $this->putJson('/api/readings/'.$id, ['current_reading' => '135.765'])
+            ->assertUnprocessable()->assertJsonValidationErrors('current_reading');
+        $this->putJson('/api/readings/'.$id, ['current_reading' => '135.75'])->assertOk();
+        $invoice = app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+        $this->assertSame('21300.00', $invoice->consumption_fee);
+        $this->assertSame('35.50', $reading->fresh()->consumption_units);
+        $this->assertDatabaseHas('invoice_tariff_lines', [
+            'invoice_id' => $invoice->id, 'reading_id' => $id, 'tariff_id' => $tariff->id,
+            'units' => 35.50, 'amount' => 21300,
+        ]);
+        $this->assertSame(21300.0, $meter->subscriber->fresh()->getAccountDebt());
+    }
+
+    public function test_hundredths_are_not_lost_when_meter_values_are_close(): void
+    {
+        $meter = $this->meter();
+        $meter->update(['initial_reading' => '100.29']);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12', 'current_reading' => '100.30',
+        ])->assertCreated()->json('reading.id');
+        $this->assertSame('0.01', Reading::findOrFail($id)->consumption_units);
+        $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-14', 'current_reading' => '100.30',
+        ])->assertCreated();
+        $this->assertSame('0.00', Reading::latest('id')->firstOrFail()->consumption_units);
+    }
+
     public function test_first_interval_runs_from_installation_to_actual_reading_date(): void
     {
         $meter = $this->meter();
