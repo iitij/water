@@ -71,6 +71,26 @@ class Subscriber extends Model
     /**
      * حساب إجمالي المتأخرات (الفواتير غير المسددة بالكامل)
      */
+    /**
+     * Canonical signed subscriber account balance. Meter IDs are provenance,
+     * not separate accounts. The ledger, not legacy balance caches, is authoritative.
+     */
+    public function getAccountBalance(): float
+    {
+        return round((float) $this->transactions()->sum('amount'), 2);
+    }
+
+    public function getAccountCredit(): float
+    {
+        return max(0, $this->getAccountBalance());
+    }
+
+    public function getAccountDebt(): float
+    {
+        return max(0, -$this->getAccountBalance());
+    }
+
+    /** Legacy general-only projection; not a collectible balance. */
     public function getOutstandingBalance(): float
     {
         // A negative balance means they owe money.

@@ -194,9 +194,7 @@ class Invoice extends Model
         $thisRemaining = $this->getRemainingAmount();
 
         $olderInvoicesRemaining = self::where('subscriber_id', $this->subscriber_id)
-            ->where('invoice_type', $this->invoice_type)
             ->where('id', '<', $this->id)
-            ->where('meter_id', $this->meter_id)
             ->where('status', '!=', 'draft')
             ->get()
             ->sum(function ($inv) {
@@ -211,9 +209,6 @@ class Invoice extends Model
     public function isLatestInvoice(): bool
     {
         $query = self::where('subscriber_id', $this->subscriber_id)
-            ->where('invoice_type', $this->invoice_type);
-            
-        $query->where('meter_id', $this->meter_id)
             ->where('status', '!=', 'draft');
         
         $latest = $query->orderBy('id', 'desc')->first();
@@ -226,6 +221,10 @@ class Invoice extends Model
      */
     public function updateStatus(): void
     {
+        if ($this->trashed() || $this->status === 'draft') {
+            return;
+        }
+
         $gracePeriod = (int) \App\Models\Setting::get('grace_period', '14');
         $strictOverdue = \App\Models\Setting::get('strict_overdue_on_new_invoice', '0') === '1';
 
