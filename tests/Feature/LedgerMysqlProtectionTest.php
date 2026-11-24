@@ -20,6 +20,9 @@ final class LedgerMysqlProtectionTest extends TestCase
             || DB::connection()->getDatabaseName() !== 'water_test') {
             $this->markTestSkipped('Requires isolated MySQL water_test database.');
         }
+        // This test deliberately recreates the disposable database outside RefreshDatabase.
+        // Force the next transactional test class to rebuild its own empty fixtures.
+        \Illuminate\Foundation\Testing\RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
         $this->artisan('ledger:protect', ['--install' => true])->assertExitCode(0);
         $this->artisan('ledger:protect', ['--check' => true])->assertExitCode(0);

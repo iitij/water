@@ -490,7 +490,7 @@ class ReadingController extends ApiController
                 }
 
                 return $created;
-            });
+            }, 3);
         } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
             // Other subscribers use different row locks. The global unique index
             // arbitrates a UUID collision; resolve the winner only after rollback.

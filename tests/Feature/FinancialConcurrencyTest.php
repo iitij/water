@@ -34,6 +34,9 @@ class FinancialConcurrencyTest extends TestCase
             $this->markTestSkipped('Requires isolated MySQL water_test database.');
         }
         $this->assertTrue(function_exists('pcntl_fork'), 'MySQL concurrency CI requires pcntl.');
+        // This test deliberately recreates the disposable database outside RefreshDatabase.
+        // Force the next transactional test class to rebuild its own empty fixtures.
+        \Illuminate\Foundation\Testing\RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
         \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
     }
