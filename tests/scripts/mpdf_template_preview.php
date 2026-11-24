@@ -78,8 +78,12 @@ function waterMpdfPreviewHtml(string $html): string
                         $first->setAttribute('class', 'amount-heading');
                     }
                 }
-                while ($child->firstChild) {
-                    $td->appendChild($child->firstChild);
+                if ($child->tagName === 'table') {
+                    $td->appendChild($child);
+                } else {
+                    while ($child->firstChild) {
+                        $td->appendChild($child->firstChild);
+                    }
                 }
                 $tr->appendChild($td);
             }
@@ -120,6 +124,11 @@ CSS;
     // The current preview uses no watermark. Fail rather than silently remove one.
     if ($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," watermark ")]')->length > 0) {
         throw new RuntimeException('Watermark fixture requires a separate native mPDF test');
+    }
+    foreach (iterator_to_array($document->childNodes) as $node) {
+        if ($node->nodeType === XML_PI_NODE) {
+            $document->removeChild($node);
+        }
     }
     return $document->saveHTML();
 }
