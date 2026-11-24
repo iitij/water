@@ -22,16 +22,22 @@ class Meter extends Model
         'initial_reading',
     ];
 
+    protected $attributes = ['initial_reading' => '0.00'];
+
     protected $casts = [
         'installed_at' => 'date',
         'removed_at' => 'date',
-        'initial_reading' => 'integer',
+        'initial_reading' => 'decimal:2',
         'balance' => 'decimal:2',
         'path_number' => 'integer',
     ];
 
     public function save(array $options = [])
     {
+        if ((! $this->exists || $this->isDirty('initial_reading'))
+            && ! preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', (string) $this->getAttributes()['initial_reading'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['initial_reading' => 'القراءة الابتدائية يجب أن تكون غير سالبة وبمنزلتين عشريتين كحد أقصى.']);
+        }
         if (! $this->exists || ! $this->isDirty(['installed_at', 'initial_reading'])) {
             return parent::save($options);
         }
