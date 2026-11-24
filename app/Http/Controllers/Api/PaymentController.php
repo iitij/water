@@ -25,7 +25,8 @@ class PaymentController extends ApiController
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
-        ])->latest('payment_date')->latest('id');
+            'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
+        ])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id');
 
         if ($request->filled('cash_session_id')) {
             $query->where('cash_session_id', $request->integer('cash_session_id'));
@@ -76,7 +77,8 @@ class PaymentController extends ApiController
         $this->authorizeApi(Payment::class, 'view');
         $payment = Payment::with([
             'subscriber.square', 'meter', 'invoice', 'user',
-        ])->findOrFail($id);
+            'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
+        ])->withSum('refunds as refunded_amount', 'amount')->findOrFail($id);
 
         return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);
     }
@@ -257,6 +259,39 @@ class PaymentController extends ApiController
             'payment' => $payment,
             'receipt_data' => $this->receiptData($payment),
         ]);
+    }
+
+    public function recordRefund(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+            'disbursement_reference' => ['required', 'string', 'min:3', 'max:150'],
+            'method' => ['required', 'in:treasury_cash,bank_transfer'],
+            'disbursed_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'disbursement_confirmed' => ['required', 'accepted'],
+        ]);
+        $refund = app(\App\Services\PaymentRefundService::class)->record(
+            Payment::findOrFail($id), $request->user(), (string) $data['amount'],
+            $data['disbursement_reference'], $data['method'], $data['disbursed_on'],
+            $data['reason'], $data['evidence']
+        );
+        return response()->json(['refund' => $refund]);
+    }
+
+    public function transferAccount(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'to_subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'no_new_cash_movement' => ['required', 'accepted'],
+        ]);
+        $transfer = app(\App\Services\PaymentAccountTransferService::class)->transfer(
+            Payment::findOrFail($id), (int) $data['to_subscriber_id'], $request->user(), $data['reason'], $data['evidence']
+        );
+        return response()->json(['transfer' => $transfer]);
     }
 
     public function destroy(int $id)

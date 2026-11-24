@@ -56,7 +56,7 @@ class Reading extends Model
     protected static function booted(): void
     {
         static::deleting(function (Reading $reading) {
-            if ($reading->is_invoiced) {
+            if ($reading->is_invoiced || $reading->retired_meter_id) {
                 throw new \Exception('لا يمكن حذف قراءة مفوترة. الرجاء حذف الفاتورة المرتبطة بها أولاً.');
             }
         });
@@ -72,6 +72,9 @@ class Reading extends Model
         });
 
         static::updating(function (Reading $reading) {
+            if ($reading->getOriginal('retired_meter_id') || $reading->isDirty(['retired_meter_id', 'retired_meter_code'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['reading' => 'قراءة مالية تاريخية غير قابلة للتعديل.']);
+            }
             $reading->consumption_units = max(0, (int) ($reading->current_reading - $reading->previous_reading));
         });
     }

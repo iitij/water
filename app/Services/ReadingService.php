@@ -28,6 +28,9 @@ class ReadingService
         } else {
             $subStart = $meter->subscriber->subscription_start_date ? Carbon::parse($meter->subscriber->subscription_start_date) : now()->startOfMonth();
             $periodStart = $subStart;
+            if ($meter->installed_at && Carbon::parse($meter->installed_at)->gt($periodStart)) {
+                $periodStart = Carbon::parse($meter->installed_at)->startOfDay();
+            }
         }
 
         $periodEnd = $this->calculateNextPeriodEnd($periodStart, $readingPeriod, $readingDay);

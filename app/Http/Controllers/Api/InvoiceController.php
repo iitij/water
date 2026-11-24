@@ -188,7 +188,7 @@ class InvoiceController extends ApiController
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             $meter = Meter::query()->where('subscriber_id', $subscriber->id)->lockForUpdate()->findOrFail($meter->id);
             $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-            $arrears = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
+            $arrears = $subscriber->invoices()->whereNotIn('status', ['draft', 'cancelled'])->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
@@ -300,6 +300,32 @@ class InvoiceController extends ApiController
         });
 
         return response()->json(['message' => 'تم تحديث الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->fresh(['subscriber.square', 'meter', 'items', 'readings', 'payments']))]);
+    }
+
+    public function correctHistorical(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'corrected_units' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'historical_unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        $correction = app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
+            Invoice::findOrFail($id), $request->user(), (string) $data['corrected_units'],
+            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
+        );
+        return response()->json(['correction' => $correction, 'invoice' => $this->decorate(Invoice::findOrFail($correction->replacement_invoice_id))]);
+    }
+
+    public function cancel(Request $request, int $id)
+    {
+        $this->authorizeApi(Invoice::class, 'delete');
+        $data = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000']]);
+        $invoice = app(\App\Services\InvoiceCancellationService::class)->cancel(
+            Invoice::findOrFail($id), $data['reason'], $request->user()?->id,
+            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api'
+        );
+        return response()->json(['message' => 'تم إلغاء الفاتورة بحركة عكسية.', 'invoice' => $this->decorate($invoice)]);
     }
 
     public function destroy(int $id)
@@ -437,7 +463,7 @@ class InvoiceController extends ApiController
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
             ->where('id', '<', $invoice->id)
-            ->where('status', '!=', 'draft')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->get();
         $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
         $invoice->total_amount = (float) $invoice->consumption_fee;
@@ -545,6 +571,11 @@ class InvoiceController extends ApiController
                 'invoice_status' => $invoice->status,
                 'receipt_data' => $this->receiptData($payment, $invoice, $request),
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            throw $exception;
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $exception) {
+            return response()->json(['message' => 'تعذر تخصيص الدفعة: الفاتورة ملغاة أو لم تعد صالحة للتحصيل. يلزم مراجعة العملية.',
+                'errors' => ['invoice_id' => ['الفاتورة غير صالحة للتحصيل.']]], 422);
         } catch (HttpExceptionInterface $exception) {
             return response()->json(['message' => $exception->getMessage()], $exception->getStatusCode());
         } catch (\Throwable $exception) {
@@ -575,6 +606,9 @@ class InvoiceController extends ApiController
         $data['true_remaining_amount'] = $invoice->getTrueRemainingAmount();
         $data['remaining_amount'] = $invoice->getRemainingAmount();
         $data['is_latest_invoice'] = $invoice->isLatestInvoice();
+        $data['meter_code'] = $invoice->meter?->unique_code ?? $invoice->retired_meter_code;
+        $data['historical_correction'] = \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $invoice->id)->first();
+        $data['corrected_by_invoice_id'] = \App\Models\HistoricalInvoiceCorrection::where('original_invoice_id', $invoice->id)->value('replacement_invoice_id');
 
         return $data;
     }

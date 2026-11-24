@@ -29,7 +29,7 @@ import '../widgets/payment_card.dart';
 
 /// `SCR-17` — قائمة سندات القبض (`PaymentTable` في Filament):
 /// بحث برقم السند/المشترك/اسم المحصل، فلترة بطريقة الدفع وبفترة زمنية،
-/// حذف فردي/جماعي (ناعم مع إعادة احتساب الفواتير)، وملخص المبالغ.
+/// إلغاء موثق للسندات وملخص المبالغ.
 class PaymentsListScreen extends StatelessWidget {
   const PaymentsListScreen({super.key, this.initialQuery});
 
@@ -201,8 +201,6 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                   setState(() => _selecting = true);
                 case _PaymentListAction.selectAll:
                   cubit.selectAll();
-                case _PaymentListAction.deleteSelected:
-                  await _bulkDelete(context, cubit);
                 case _PaymentListAction.voidRequests:
                   final remaining = await VoidRequestsSheet.show(
                     context,
@@ -221,11 +219,6 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                   value: _PaymentListAction.selectAll,
                   height: 48,
                   child: Text(ListClarityStrings.selectAll),
-                ),
-                const PopupMenuItem(
-                  value: _PaymentListAction.deleteSelected,
-                  height: 48,
-                  child: Text(ListClarityStrings.deleteSelected),
                 ),
               ] else ...[
                 const PopupMenuItem(
@@ -353,7 +346,6 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
                       cubit.clearSelection();
                       setState(() => _selecting = false);
                     },
-                    onBulkDelete: () => _bulkDelete(context, cubit),
                   ),
                 Expanded(child: _buildList(context, cubit, state)),
                 if (state.status != PaymentsLoadStatus.idle)
@@ -417,26 +409,6 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     );
   }
 
-  Future<void> _bulkDelete(BuildContext context, PaymentsCubit cubit) async {
-    final state = cubit.state;
-    if (state.selectedIds.isEmpty) return;
-
-    final confirmed = await ConfirmDialog.show(
-      context,
-      title: 'حذف ${state.selectedIds.length} سند',
-      message: 'سيُحذف كل سند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة به.',
-      confirmLabel: 'حذف الكل',
-      destructive: true,
-    );
-    if (!confirmed || !context.mounted) return;
-
-    final count = await cubit.bulkDelete();
-    if (!context.mounted) return;
-    if (count > 0) {
-      AppFeedback.success(context, 'تم حذف $count سند.');
-    }
-    if (mounted) setState(() => _selecting = false);
-  }
 
   Widget _buildList(
     BuildContext context,
@@ -497,34 +469,7 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
     final selected = state.selectedIds.contains(payment.id);
 
     if (!_selecting) {
-      return Dismissible(
-        key: ValueKey<int>(payment.id),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          color: AppColors.danger,
-          child: const Icon(Icons.delete_outline, color: Colors.white),
-        ),
-        confirmDismiss: (_) async {
-          final confirmed = await ConfirmDialog.show(
-            context,
-            title: 'حذف سند قبض',
-            message:
-                'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفاتورة المرتبطة.',
-            details: <String>[
-              payment.receiptNumber,
-              CurrencyFormatter.withLabel(payment.amount),
-            ],
-            confirmLabel: 'حذف',
-            destructive: true,
-          );
-          if (!confirmed) return false;
-          final deleted = await cubit.deletePayment(payment.id);
-          if (deleted && mounted) AppFeedback.success(context, 'تم حذف السند.');
-          return deleted;
-        },
-        child: GestureDetector(
+      return GestureDetector(
           onLongPress: () {
             setState(() => _selecting = true);
             cubit.toggleSelection(payment.id);
@@ -533,9 +478,9 @@ class _PaymentsListBodyState extends State<_PaymentsListBody> {
             payment: payment,
             dense: _presentation.compact,
             hiddenFields: _presentation.hiddenFields,
-            onTap: () => showPaymentActionSheet(context, payment: payment),
+            onTap: () => showPaymentActionSheet(context, payment: payment,
+              onDeleted: () async { await cubit.load(refresh: true); }),
           ),
-        ),
       );
     }
 
@@ -629,13 +574,11 @@ class _SelectionBar extends StatelessWidget {
     required this.count,
     required this.onSelectAll,
     required this.onClear,
-    required this.onBulkDelete,
   });
 
   final int count;
   final VoidCallback onSelectAll;
   final VoidCallback onClear;
-  final VoidCallback onBulkDelete;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -664,18 +607,7 @@ class _SelectionBar extends StatelessWidget {
             onPressed: onClear,
             child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
           ),
-          TextButton.icon(
-            onPressed: onBulkDelete,
-            icon: const Icon(
-              Icons.delete_outline,
-              size: 18,
-              color: AppColors.onPanelSoft,
-            ),
-            label: const Text(
-              'حذف المحدد',
-              style: TextStyle(color: AppColors.onPanelSoft),
-            ),
-          ),
+
         ],
       ),
     ),
@@ -801,7 +733,6 @@ class _PaymentsFilterSheetState extends State<_PaymentsFilterSheet> {
 enum _PaymentListAction {
   multiSelect,
   selectAll,
-  deleteSelected,
   voidRequests,
   exportToday,
 }

@@ -26,9 +26,11 @@ class Invoice extends Model
         'amount_paid',
         'status',
         'notes',
+        'voided_at', 'void_reason', 'voided_by',
     ];
 
     protected $casts = [
+        'voided_at' => 'datetime',
         'bill_date' => 'date',
         'billing_period_start' => 'date',
         'billing_period_end' => 'date',
@@ -57,6 +59,7 @@ class Invoice extends Model
             'subscriber_id', 'meter_id', 'invoice_type', 'bill_number', 'bill_date',
             'billing_period_start', 'billing_period_end', 'consumption_fee',
             'previous_balance', 'credit_applied', 'total_amount', 'amount_paid', 'status',
+            'voided_at', 'void_reason', 'voided_by', 'retired_meter_id', 'retired_meter_code',
         ] as $field) {
             if ($this->isDirty($field)) {
                 $errors[$field] = 'لا يجوز تعديل بيانات فاتورة معتمدة؛ يجب استخدام إجراء تصحيح محاسبي موثق.';
@@ -87,63 +90,15 @@ class Invoice extends Model
             }
         });
 
-        static::deleting(function (Invoice $invoice) {
-            // عند حذف الفاتورة، نقوم بإرجاع القراءات المرتبطة بها لتصبح غير مفوترة
-            \App\Models\Reading::where('invoice_id', $invoice->id)->update([
-                'is_invoiced' => false,
-                'invoice_id' => null,
-            ]);
-        });
-
-        static::deleted(function (Invoice $invoice) {
-            // Unlink readings so they can be invoiced again
-            $invoice->readings()->update([
-                'is_invoiced' => false,
-                'invoice_id' => null
-            ]);
-            // Delete financial transactions related to this invoice
-            \App\Models\Transaction::where('reference_type', Invoice::class)
-                ->where('reference_id', $invoice->id)
-                ->delete();
-
-            // Unlink payments attached to this invoice
-            $payments = \App\Models\Payment::where('invoice_id', $invoice->id)->get();
-            foreach ($payments as $payment) {
-                // Legacy invoice deletion detaches references internally.
-                // ACC-05 will replace deletion with a documented reversal.
-                $payment->updateQuietly(['invoice_id' => null]);
+        $guard = function (Invoice $invoice): void {
+            if ($invoice->isFinanciallyLocked()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'invoice' => 'لا يجوز حذف أو استعادة فاتورة معتمدة؛ استخدم الإلغاء المحاسبي.',
+                ]);
             }
-
-            // Update balance after transaction is deleted
-            $transactionService = new \App\Services\TransactionService();
-            if ($invoice->meter) {
-                $transactionService->updateMeterBalance($invoice->meter);
-            } elseif ($invoice->subscriber) {
-                $transactionService->updateSubscriberBalance($invoice->subscriber);
-            }
-            
-            // Recalculate ALL invoices to redistribute payments
-            if ($invoice->subscriber) {
-                $paymentService = new \App\Services\PaymentService();
-                $paymentService->recalculateInvoices($invoice->subscriber, $invoice->meter_id);
-            }
-        });
-
-        static::restored(function (Invoice $invoice) {
-            // استعادة السجل المالي المرتبط بالفاتورة
-            \App\Models\Transaction::withTrashed()
-                ->where('reference_type', Invoice::class)
-                ->where('reference_id', $invoice->id)
-                ->restore();
-                
-            // إعادة حساب الرصيد
-            $transactionService = new \App\Services\TransactionService();
-            if ($invoice->meter) {
-                $transactionService->updateMeterBalance($invoice->meter);
-            } elseif ($invoice->subscriber) {
-                $transactionService->updateSubscriberBalance($invoice->subscriber);
-            }
-        });
+        };
+        static::deleting($guard);
+        static::restoring($guard);
     }
 
     public function subscriber(): BelongsTo
@@ -178,6 +133,9 @@ class Invoice extends Model
      */
     public function getRemainingAmount(): float
     {
+        if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
+            return 0.0;
+        }
         // المبلغ الكلي المستحق لهذه الفاتورة فقط (تجاهل المتأخرات السابقة لتجنب المضاعفة)
         return max(0, (float) $this->total_amount - (float) $this->amount_paid);
     }
@@ -188,7 +146,7 @@ class Invoice extends Model
      */
     public function getCollectibleAmount(): float
     {
-        if ($this->trashed() || $this->status === 'draft') {
+        if ($this->trashed() || in_array($this->status, ['draft', 'cancelled'], true)) {
             return 0.0;
         }
 
@@ -202,11 +160,14 @@ class Invoice extends Model
      */
     public function getTrueRemainingAmount(): float
     {
+        if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
+            return 0.0;
+        }
         $thisRemaining = $this->getRemainingAmount();
 
         $olderInvoicesRemaining = self::where('subscriber_id', $this->subscriber_id)
             ->where('id', '<', $this->id)
-            ->where('status', '!=', 'draft')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->get()
             ->sum(function ($inv) {
                 return $inv->getRemainingAmount();
@@ -220,7 +181,7 @@ class Invoice extends Model
     public function isLatestInvoice(): bool
     {
         $query = self::where('subscriber_id', $this->subscriber_id)
-            ->where('status', '!=', 'draft');
+            ->whereNotIn('status', ['draft', 'cancelled']);
         
         $latest = $query->orderBy('id', 'desc')->first();
 
@@ -232,7 +193,7 @@ class Invoice extends Model
      */
     public function updateStatus(): void
     {
-        if ($this->trashed() || $this->status === 'draft') {
+        if ($this->trashed() || in_array($this->status, ['draft', 'cancelled'], true)) {
             return;
         }
 

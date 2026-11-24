@@ -19,7 +19,7 @@ class CreateInvoice extends CreateRecord
         $data['invoice_type'] = 'meter';
         $data['status'] = 'issued';
         $data['total_amount'] = $consumption;
-        $data['previous_balance'] = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn ($invoice) => $invoice->getRemainingAmount());
+        $data['previous_balance'] = $subscriber->invoices()->whereNotIn('status', ['draft', 'cancelled'])->get()->sum(fn ($invoice) => $invoice->getRemainingAmount());
         $data['credit_applied'] = min($subscriber->getAccountCredit(), $consumption);
         $data['amount_paid'] = 0;
 

@@ -79,6 +79,7 @@ class PaymentAllocator {
     required List<InvoiceModel> invoices,
     required List<PaymentModel> payments,
     required int subscriberId,
+    List<AccountTransferCredit> incomingTransfers = const [],
     int? meterId,
     int gracePeriodDays = 14,
     bool strictOverdueOnNewInvoice = false,
@@ -90,19 +91,39 @@ class PaymentAllocator {
       meterId: meterId,
     ).map((i) => i.copyWith(amountPaid: 0, status: InvoiceStatus.issued)).toList();
 
-    final orderedPayments = _oldestFirstPayment(payments)
-        .where((p) =>
-            p.subscriberId == subscriberId && !p.isDeleted && !p.isVoided)
-        .toList();
+    final credits = <({double amount, int? target, DateTime? date, int kind, int id})>[
+      for (final payment in payments)
+        if (payment.subscriberId == subscriberId && !payment.isDeleted &&
+            !payment.isVoided && !payment.isAccountTransferred)
+          (amount: payment.effectiveAmount, target: payment.invoiceId,
+            date: payment.paymentDate, kind: 0, id: payment.id),
+      for (final transfer in incomingTransfers)
+        if (transfer.subscriberId == subscriberId)
+          (amount: transfer.amount, target: null, date: transfer.createdAt,
+            kind: 1, id: transfer.id),
+    ]..sort((a, b) {
+      if (a.date != null && b.date != null) {
+        final byDate = a.date!.compareTo(b.date!);
+        if (byDate != 0) return byDate;
+      } else if (a.date != null || b.date != null) {
+        return a.date == null ? -1 : 1;
+      }
+      final byKind = a.kind.compareTo(b.kind);
+      return byKind != 0 ? byKind : a.id.compareTo(b.id);
+    });
 
+    final replacements = <int, int>{
+      for (final invoice in scoped)
+        if (invoice.originalInvoiceId != null) invoice.originalInvoiceId!: invoice.id,
+    };
     var current = scoped;
     var surplus = 0.0;
 
-    for (final payment in orderedPayments) {
+    for (final credit in credits) {
       final result = allocate(
         invoices: current,
-        amount: payment.amount,
-        targetInvoiceId: payment.invoiceId,
+        amount: credit.amount,
+        targetInvoiceId: replacements[credit.target] ?? credit.target,
       );
       current = result.invoices;
       surplus = double.parse((surplus + result.surplusCredit).toStringAsFixed(2));
@@ -181,21 +202,19 @@ class PaymentAllocator {
     return list;
   }
 
-  static List<PaymentModel> _oldestFirstPayment(List<PaymentModel> payments) {
-    final list = List<PaymentModel>.of(payments);
-    list.sort((a, b) {
-      final aDate = a.paymentDate;
-      final bDate = b.paymentDate;
-      if (aDate != null && bDate != null) {
-        final byDate = aDate.compareTo(bDate);
-        if (byDate != 0) return byDate;
-      }
-      return a.id.compareTo(b.id);
-    });
-    return list;
-  }
-
   static double _round(double value) => double.parse(value.toStringAsFixed(2));
+}
+
+/// Account transfer is an accounting credit, never a second physical receipt.
+class AccountTransferCredit {
+  const AccountTransferCredit({
+    required this.id, required this.subscriberId, required this.amount,
+    required this.createdAt,
+  });
+  final int id;
+  final int subscriberId;
+  final double amount;
+  final DateTime createdAt;
 }
 
 class InvoiceAllocation {

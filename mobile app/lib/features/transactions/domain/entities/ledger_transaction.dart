@@ -36,6 +36,10 @@ class LedgerTransaction extends Equatable {
     'payment' || 'credit' => 'سند قبض (دائن)',
     'invoice' || 'debit' => 'فاتورة (مدين)',
     'adjustment' => 'تسوية',
+    'payment_reversal' => 'عكس سند قبض',
+    'invoice_reversal' => 'عكس فاتورة',
+    'payment_transfer_in' => 'تصحيح تخصيص وارد',
+    'payment_refund' => 'استرداد رصيد دائن',
     _ => type,
   };
   @override

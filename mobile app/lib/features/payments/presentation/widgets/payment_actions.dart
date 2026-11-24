@@ -266,13 +266,13 @@ Future<void> showPaymentActionSheet(
         label: 'إرسال واتساب',
         run: () => sendPaymentWhatsapp(context, payment, receiptData: receiptData),
       ),
-    if (!payment.isVoided)
+    if (!payment.isVoided && !payment.isAccountTransferred && payment.refundedAmount == 0)
       _PaymentSheetAction(
         icon: Icons.edit_outlined,
         label: 'تعديل الملاحظات',
         run: () => context.push('/payments/${payment.id}/edit', extra: payment),
       ),
-    if (!payment.isVoided)
+    if (!payment.isVoided && !payment.isAccountTransferred && payment.refundedAmount == 0)
       _PaymentSheetAction(
         icon: Icons.block_outlined,
         label: 'إلغاء السند بسبب مكتوب',
@@ -280,23 +280,6 @@ Future<void> showPaymentActionSheet(
         run: () async {
           final cancelled = await voidPaymentWithReason(context, payment);
           if (cancelled) await onDeleted?.call();
-        },
-      ),
-    if (onDeleted != null)
-      _PaymentSheetAction(
-        icon: Icons.delete_outline,
-        label: 'حذف السند',
-        destructive: true,
-        run: () async {
-          final confirmed = await ConfirmDialog.show(
-            context,
-            title: 'حذف سند قبض',
-            message: 'سيُحذف السند حذفًا ناعمًا ويُعاد احتساب الفواتير المرتبطة به.',
-            confirmLabel: 'حذف',
-            destructive: true,
-          );
-          if (!confirmed) return;
-          await onDeleted();
         },
       ),
   ];
@@ -332,7 +315,9 @@ Future<void> showPaymentActionSheet(
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        payment.displayName,
+                        payment.isAccountTransferred
+                            ? 'تم تصحيح تخصيص السند إلى حساب #${payment.transferredToSubscriberId}'
+                            : payment.displayName,
                         style: theme.textTheme.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

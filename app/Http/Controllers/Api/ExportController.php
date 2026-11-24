@@ -38,7 +38,7 @@ class ExportController extends ApiController
             'square_id' => ['nullable', 'integer', 'exists:squares,id'],
             'from_date' => ['nullable', 'date'],
             'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
-            'status' => ['nullable', 'in:draft,issued,partially_paid,paid,overdue'],
+            'status' => ['nullable', 'in:draft,issued,partially_paid,paid,overdue,cancelled'],
         ]);
         $file = $service->exportInvoices($data['square_id'] ?? null, $data['from_date'] ?? null, $data['to_date'] ?? null, $data['status'] ?? null);
         return response()->download($file, 'فواتير_المشتركين_' . now()->format('Y-m-d') . '.xlsx')->deleteFileAfterSend(true);

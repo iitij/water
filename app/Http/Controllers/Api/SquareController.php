@@ -138,7 +138,10 @@ class SquareController extends ApiController
         $subscribers = $square->subscribers()
             ->select('id', 'square_id', 'name', 'phone', 'address', 'status', 'balance', 'subscription_start_date')
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->each(function (\App\Models\Subscriber $subscriber): void {
+                $subscriber->setAttribute('account_balance', $subscriber->getAccountBalance());
+            });
 
         $meters = Meter::with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code'])
             ->withCount('readings')

@@ -111,8 +111,8 @@ class SingleMeterService
     /**
      * Replace one physical meter without keeping a second, historical record.
      *
-     * Linked test readings, invoices, payments and ledger entries of the old
-     * meter are permanently erased in the same transaction. The new meter
+     * Financial documents and billed readings retain their original meter identity.
+     * The physical meter row is replaced without changing the account. The new meter
      * receives a fresh ID so offline requests for the old ID cannot be posted
      * silently to the replacement.
      */
@@ -147,8 +147,20 @@ class SingleMeterService
                 $old->id
             );
 
-            app(MeterDataPurger::class)->purge((int) $old->id);
+            $beforeBalance = $subscriber->getAccountBalance();
+            $hasFinancialHistory = $old->invoices()->withTrashed()->exists()
+                || $old->payments()->withTrashed()->exists()
+                || $old->transactions()->withTrashed()->exists();
+            if ($hasFinancialHistory) {
+                app(FinancialMeterRetirementService::class)->retire($old, $subscriber);
+                $newMeterData['installed_at'] ??= $removedAt;
+            } else {
+                app(MeterDataPurger::class)->purge((int) $old->id);
+            }
             $replacement = $this->create($newMeterData);
+            if ($beforeBalance !== $subscriber->getAccountBalance()) {
+                throw new \RuntimeException('Meter replacement changed the subscriber financial balance.');
+            }
 
             AuditEvent::create([
                 'actor_user_id' => $actorId,
@@ -159,7 +171,11 @@ class SingleMeterService
                 'after' => [
                     'subscriber_id' => $subscriber->id,
                     'reason' => $reason,
-                    'old_meter_data_purged' => true,
+                    'old_meter_data_purged' => ! $hasFinancialHistory,
+                    'financial_history_preserved' => $hasFinancialHistory,
+                    'old_meter_id' => $old->id,
+                    'old_meter_code' => $old->unique_code,
+                    'removed_at' => $removedAt,
                 ],
                 'source' => 'api',
                 'occurred_at' => now(),

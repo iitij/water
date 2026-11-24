@@ -28,6 +28,20 @@ class Subscriber extends Model
         'subscription_start_date' => 'date',
     ];
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Subscriber $subscriber): void {
+            if ($subscriber->meters()->withTrashed()->exists()
+                || $subscriber->invoices()->withTrashed()->exists()
+                || $subscriber->payments()->withTrashed()->exists()
+                || $subscriber->transactions()->withTrashed()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'subscriber' => 'لا يجوز حذف مشترك له عداد أو سجل مالي. يمكن إيقاف نشاطه.',
+                ]);
+            }
+        });
+    }
+
     // ─── Relationships ───
 
     public function square(): BelongsTo

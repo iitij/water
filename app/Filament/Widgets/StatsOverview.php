@@ -16,14 +16,13 @@ class StatsOverview extends BaseWidget
     {
         $totalSubscribers = Subscriber::where('status', 'active')->count();
 
-        $outstandingAmount = Invoice::whereIn('status', ['issued', 'partially_paid', 'overdue'])
-            ->selectRaw('COALESCE(SUM(total_amount - amount_paid), 0) as total')
-            ->value('total');
+        $outstandingAmount = app(\App\Services\FinancialReportingService::class)->outstandingDebt();
 
-        $monthlyCollection = Payment::whereMonth('payment_date', now()->month)
+        $monthlyCollection = Payment::active()->whereMonth('payment_date', now()->month)
             ->whereYear('payment_date', now()->year)
             ->sum('amount');
 
+        $cash = app(\App\Services\FinancialReportingService::class)->movements(now()->startOfMonth()->toDateString(), now()->toDateString(), null, (float) $monthlyCollection);
         $overdueCount = Invoice::where('status', 'overdue')->count();
 
         return [
@@ -39,11 +38,13 @@ class StatsOverview extends BaseWidget
                 ->color('danger'),
 
             Stat::make('تحصيل الشهر', number_format((float) $monthlyCollection, 2) . ' ريال')
-                ->description('إجمالي التحصيل هذا الشهر')
+                ->description('إجمالي سندات القبض السارية قبل الاسترداد')
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('success')
                 ->chart([3, 5, 7, 4, 6, 8, 5]),
 
+            Stat::make('المسترد خلال الشهر', number_format($cash['refunds_disbursed'], 2).' ريال')->color('danger'),
+            Stat::make('صافي التحصيل بعد الاسترداد', number_format($cash['net_receipts_after_refunds'], 2).' ريال')->color('primary'),
             Stat::make('فواتير متأخرة', $overdueCount)
                 ->description('تحتاج متابعة')
                 ->descriptionIcon('heroicon-m-clock')

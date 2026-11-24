@@ -108,6 +108,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/invoices/bulk-delete', [InvoiceController::class, 'bulkDelete']);
     Route::post('/invoices/bulk-restore', [InvoiceController::class, 'bulkRestore']);
     Route::post('/invoices/bulk-force-delete', [InvoiceController::class, 'bulkForceDelete']);
+    Route::post('/invoices/{id}/correct-historical', [InvoiceController::class, 'correctHistorical'])->whereNumber('id');
+    Route::post('/invoices/{id}/cancel', [InvoiceController::class, 'cancel']);
     Route::post('/invoices/{id}/restore', [InvoiceController::class, 'restore']);
     Route::delete('/invoices/{id}/force', [InvoiceController::class, 'forceDestroy']);
     Route::post('/invoices/{id}/recalculate', [InvoiceController::class, 'recalculate']);
@@ -130,6 +132,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/send-whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
+    Route::post('/payments/{id}/refund', [PaymentController::class, 'recordRefund'])->whereNumber('id');
+    Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
 
@@ -194,6 +198,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');
     Route::get('/cash-sessions/{id}/report/pdf', [CashSessionController::class, 'downloadPdf'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/close', [CashSessionController::class, 'close'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/correct-duplicate', [CashSessionController::class, 'correctDuplicate'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
     Route::apiResource('cash-sessions', CashSessionController::class)
         ->only(['index', 'store', 'show'])

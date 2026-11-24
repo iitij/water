@@ -185,9 +185,11 @@ class CashSessionService
             return [];
         }
 
-        $payments = Payment::query()
-            ->where('cash_session_id', $session->id)
-            ->whereNull('voided_at');
+        // Corrections posted after approval do not rewrite the original till report.
+        $payments = Payment::query()->where('cash_session_id', $session->id)
+            ->where(function ($query) {
+                $query->whereNull('voided_at')->orWhere('voided_via', 'closed_correction');
+            });
 
         $byMethod = (clone $payments)
             ->selectRaw('payment_method, COUNT(*) as receipts, COALESCE(SUM(amount), 0) as total')
@@ -202,7 +204,9 @@ class CashSessionService
         $voided = Payment::query()
             ->where('cash_session_id', $session->id)
             ->whereNotNull('voided_at')
+            ->where(function ($query) { $query->whereNull('voided_via')->orWhere('voided_via', '!=', 'closed_correction'); })
             ->count();
+        $corrections = DB::table('closed_cash_corrections')->where('cash_session_id', $session->id)->orderBy('id')->get();
 
         return [
             'id' => $session->id,
@@ -220,6 +224,8 @@ class CashSessionService
                 : number_format((float) $session->variance_amount, 2, '.', ''),
             'receipts' => (clone $payments)->count(),
             'voided_receipts' => $voided,
+            'post_close_corrections' => $corrections,
+            'post_close_correction_total' => number_format((float) $corrections->sum('amount'), 2, '.', ''),
             'by_method' => $byMethod,
             'opened_at' => optional($session->opened_at)->toIso8601String(),
             'closed_at' => optional($session->closed_at)->toIso8601String(),

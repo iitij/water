@@ -595,7 +595,7 @@ class _ActionGrid extends StatelessWidget {
                 onPressed: state.printingBusy ? null : () => printInvoiceThermal(context, invoice),
                 icon: Icons.print_outlined,
               ),
-              if (whatsappEnabled)
+              if (whatsappEnabled && invoice.status.wire != 'cancelled')
                 AppIconButton(
                   tooltip: whatsappIsApi ? 'واتساب (PDF)' : 'واتساب',
                   size: 38,
@@ -615,25 +615,7 @@ class _ActionGrid extends StatelessWidget {
                         }),
                   icon: Icons.chat_bubble_outline_rounded,
                 ),
-              if (invoice.isDeleted)
-                AppIconButton(
-                  tooltip: 'استعادة',
-                  size: 38,
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          final ok = await ConfirmDialog.show(
-                            context,
-                            title: 'استعادة الفاتورة ${invoice.billNumber}',
-                            message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب.',
-                            confirmLabel: 'استعادة',
-                          );
-                          if (!ok) return;
-                          await cubit.restore();
-                        },
-                  icon: Icons.restore_rounded,
-                )
-              else if (invoice.status.wire == 'draft') ...<Widget>[
+              if (!invoice.isDeleted && invoice.status.wire == 'draft') ...<Widget>[
                 AppIconButton(
                   tooltip: 'إعادة احتساب',
                   size: 38,
@@ -654,28 +636,24 @@ class _ActionGrid extends StatelessWidget {
                   icon: Icons.edit_outlined,
                 ),
               ],
-              PopupMenuButton<String>(
-                tooltip: 'خيارات الحذف',
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-                icon: Icon(
-                  Icons.more_horiz_rounded,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              if (!invoice.isDeleted && invoice.retiredMeterId == null && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
+                AppIconButton(
+                  tooltip: 'إلغاء الفاتورة',
+                  size: 38,
+                  color: AppColors.danger,
+                  icon: Icons.block_outlined,
+                  onPressed: busy ? null : () async {
+                    final updated = await cancelInvoiceWithReason(context, invoice);
+                    if (updated != null) await cubit.load();
+                  },
                 ),
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 38),
-                onSelected: (value) => _runDestructive(context, value),
-                itemBuilder: (context) => <PopupMenuEntry<String>>[
-                  if (!invoice.isDeleted)
-                    const PopupMenuItem<String>(
-                      value: 'soft',
-                      child: Text('حذف ناعم'),
-                    ),
-                  const PopupMenuItem<String>(
-                    value: 'force',
-                    child: Text('حذف نهائي'),
-                  ),
-                ],
-              ),
+              if (!invoice.isDeleted && invoice.status.wire == 'draft')
+                AppIconButton(
+                  tooltip: 'حذف المسودة',
+                  size: 38,
+                  icon: Icons.delete_outline,
+                  onPressed: busy ? null : () => _runDestructive(context, 'soft'),
+                ),
             ],
           ),
         ],

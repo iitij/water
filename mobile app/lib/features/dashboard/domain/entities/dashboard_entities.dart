@@ -33,8 +33,9 @@ class DashboardInvoice extends Equatable {
 
   /// Net due without counting previous arrears twice.
   double get remainingAmount {
+    if (status == 'draft' || status == 'cancelled') return 0;
     if (trueRemainingAmount != null) return trueRemainingAmount!;
-    return (totalAmount + previousBalance - creditApplied - amountPaid)
+    return (totalAmount - amountPaid)
         .clamp(0, double.infinity)
         .toDouble();
   }
@@ -45,6 +46,7 @@ class DashboardInvoice extends Equatable {
     'partially_paid' => 'مسددة جزئياً',
     'paid' => 'مسددة',
     'overdue' => 'متأخرة',
+    'cancelled' => 'ملغاة',
     _ => status.isEmpty ? 'غير محدد' : status,
   };
 
@@ -205,6 +207,8 @@ class FinancialReport extends Equatable {
     required this.statusBreakdown,
     required this.squareBreakdown,
     this.hasDetailedData = true,
+    this.refundsDisbursed,
+    this.netReceiptsAfterRefunds,
   });
 
   final double totalInvoiced;
@@ -220,13 +224,15 @@ class FinancialReport extends Equatable {
 
   /// Older servers supply only invoice and collection totals.
   final bool hasDetailedData;
+  final double? refundsDisbursed;
+  final double? netReceiptsAfterRefunds;
 
   double get collectionRate => totalInvoiced <= 0
       ? 0
       : (totalCollected / totalInvoiced * 100).clamp(0, 100).toDouble();
 
   @override
-  List<Object> get props => [
+  List<Object?> get props => [
     totalInvoiced,
     totalCollected,
     totalOutstanding,
@@ -238,6 +244,8 @@ class FinancialReport extends Equatable {
     statusBreakdown,
     squareBreakdown,
     hasDetailedData,
+    refundsDisbursed,
+    netReceiptsAfterRefunds,
   ];
 }
 

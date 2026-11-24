@@ -266,4 +266,47 @@ void main() {
       expect(shortfall.message, isNull);
     });
   });
+
+  test('historical replacement retains target, incoming transfers and refunds are applied once', () {
+    final original = _invoice(id: 1, totalAmount: 6000, status: InvoiceStatus.cancelled);
+    final other = _invoice(id: 2, totalAmount: 1000, billDate: jan);
+    final replacement = InvoiceModel.fromJson({
+      'id': 3, 'subscriber_id': 1, 'invoice_type': 'meter',
+      'bill_number': 'HIST-3', 'total_amount': '4500.00',
+      'bill_date': '2026-02-01', 'status': 'issued', 'retired_meter_id': 77,
+      'historical_correction': {
+        'original_invoice_id': 1, 'corrected_units': '7.50',
+        'historical_unit_price': '600.00',
+      },
+    });
+    final restored = InvoiceModel.fromJson(replacement.toJson());
+    expect(restored.originalInvoiceId, 1);
+    expect(restored.consumptionUnits, 7.5);
+    expect(restored.impliedUnitPrice, 600);
+    final payment = PaymentModel.fromJson({
+      'id': 1, 'subscriber_id': 1, 'invoice_id': 1,
+      'receipt_number': 'REC-1', 'amount': '2500.25',
+      'payment_method': 'cash', 'payment_date': '2026-01-20',
+      'refunded_amount': '500.00',
+    });
+    final transferred = PaymentModel.fromJson({
+      'id': 2, 'subscriber_id': 1, 'amount': '900.00',
+      'receipt_number': 'REC-2', 'payment_method': 'cash',
+      'account_transfer': {'to_subscriber_id': 2},
+    });
+    final result = PaymentAllocator.recalculate(
+      invoices: [original, other, restored],
+      payments: [payment, transferred],
+      subscriberId: 1,
+      incomingTransfers: [
+        AccountTransferCredit(id: 10, subscriberId: 1, amount: 700, createdAt: feb),
+        AccountTransferCredit(id: 11, subscriberId: 2, amount: 5000, createdAt: feb),
+      ],
+    );
+    expect(result.invoices.map((i) => i.id), [2, 3]);
+    expect(result.invoices.firstWhere((i) => i.id == 3).amountPaid, 2000.25);
+    expect(result.invoices.firstWhere((i) => i.id == 2).amountPaid, 700);
+    expect(result.surplusCredit, 0);
+  });
+
 }

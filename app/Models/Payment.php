@@ -76,6 +76,16 @@ class Payment extends Model
         return $this->belongsTo(Invoice::class);
     }
 
+    public function refunds(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PaymentRefund::class);
+    }
+
+    public function accountTransfer(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(PaymentAccountTransfer::class);
+    }
+
     public function cashSession(): BelongsTo
     {
         return $this->belongsTo(CashSession::class);
@@ -138,7 +148,7 @@ class Payment extends Model
         foreach ([
             'subscriber_id', 'meter_id', 'invoice_id', 'user_id', 'receipt_number',
             'amount', 'payment_date', 'payment_method', 'reference_number',
-            'reason', 'sync_uuid', 'cash_session_id',
+            'reason', 'sync_uuid', 'cash_session_id', 'voided_at', 'void_reason', 'voided_by', 'voided_via', 'retired_meter_id', 'retired_meter_code',
         ] as $field) {
             if ($this->isDirty($field)) {
                 $errors[$field] = 'لا يجوز تعديل بيانات سند قبض معتمد؛ استخدم إجراء إلغاء السند المعتمد ثم سجل سنداً صحيحاً.';
@@ -158,23 +168,13 @@ class Payment extends Model
         // ملاحظة: منطق الإنشاء يُعالَج بالكامل في PaymentService
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
 
-        static::deleted(function (Payment $payment) {
-            Transaction::where('reference_type', Payment::class)
-                ->where('reference_id', $payment->id)
-                ->delete();
-
-            $transactionService = new TransactionService;
-            if ($payment->meter) {
-                $transactionService->updateMeterBalance($payment->meter);
-            } elseif ($payment->subscriber) {
-                $transactionService->updateSubscriberBalance($payment->subscriber);
-            }
-
-            if ($payment->subscriber) {
-                $paymentService = new PaymentService;
-                $paymentService->recalculateInvoices($payment->subscriber, $payment->meter_id);
-            }
-        });
+        $guard = function (): void {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'payment' => 'لا يجوز حذف أو استعادة سند قبض؛ استخدم إجراء الإلغاء المحاسبي.',
+            ]);
+        };
+        static::deleting($guard);
+        static::restoring($guard);
     }
 
     /**

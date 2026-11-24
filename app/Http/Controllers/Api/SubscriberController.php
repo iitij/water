@@ -81,11 +81,13 @@ class SubscriberController extends ApiController
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
             'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
-            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name'])->latest('payment_date')->latest('id'),
+            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id'),
             'transactions' => fn ($q) => $q->latest(),
         ])->findOrFail($id);
 
         $subscriber->setAttribute('financial_summary', $this->financialSummary($subscriber));
+        $subscriber->setAttribute('account_balance', $subscriber->getAccountBalance());
+        $subscriber->setAttribute('incoming_account_transfers', \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->orderBy('created_at')->orderBy('id')->get(['id', 'payment_id', 'to_subscriber_id', 'amount', 'created_at']));
         $subscriber->meters->each(function (Meter $meter) {
             $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
             $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
@@ -193,7 +195,7 @@ class SubscriberController extends ApiController
                 'meter' => $invoice->meter,
             ];
         });
-        $payments = $subscriber->payments()->with('meter:id,unique_code,path_number')->get()->map(function (Payment $payment) {
+        $payments = $subscriber->payments()->with(['meter:id,unique_code,path_number', 'accountTransfer'])->withSum('refunds as refunded_amount', 'amount')->get()->map(function (Payment $payment) {
             return [
                 'id' => $payment->id,
                 'type' => 'payment',
@@ -202,6 +204,9 @@ class SubscriberController extends ApiController
                 'description' => 'سند قبض'.($payment->reason ? ' - '.$payment->reason : ''),
                 'amount' => (float) $payment->amount,
                 'payment_method' => $payment->payment_method,
+                'voided_at' => $payment->voided_at,
+                'refunded_amount' => (float) $payment->refunded_amount,
+                'transferred_to_subscriber_id' => $payment->accountTransfer?->to_subscriber_id,
                 'meter' => $payment->meter,
             ];
         });
@@ -210,6 +215,7 @@ class SubscriberController extends ApiController
         return response()->json([
             'subscriber' => ['id' => $subscriber->id, 'name' => $subscriber->name, 'general_balance' => (float) $subscriber->balance],
             'transactions' => $transactions,
+            'ledger' => $subscriber->transactions()->orderBy('created_at')->orderBy('id')->get(),
             'financial_summary' => $this->financialSummary($subscriber),
         ]);
     }
@@ -223,7 +229,7 @@ class SubscriberController extends ApiController
 
         if ($request->has('meter_id')) {
             if ($request->query('meter_id') === 'general') {
-                $query->whereNull('meter_id');
+                $query->whereNull('meter_id')->whereNull('retired_meter_id');
             } elseif (filter_var($request->query('meter_id'), FILTER_VALIDATE_INT) !== false) {
                 $query->where('meter_id', (int) $request->query('meter_id'));
             }
@@ -243,7 +249,7 @@ class SubscriberController extends ApiController
                 'meter_id' => $transaction->meter_id,
                 'party' => $transaction->meter_id
                     ? 'عداد رقم: '.$transaction->meter_id.($transaction->meter?->unique_code ? ' ('.$transaction->meter->unique_code.')' : '')
-                    : 'الحساب العام للمشترك',
+                    : ($transaction->retired_meter_id ? 'عداد مستبدل: '.$transaction->retired_meter_code : 'الحساب العام للمشترك'),
                 'description' => $transaction->description,
                 'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
                 'running_balance' => round($runningBalance, 2),
@@ -298,7 +304,7 @@ class SubscriberController extends ApiController
         $subscriber = Subscriber::findOrFail($id);
         $invoices = $subscriber->invoices()
             ->with('meter:id,unique_code,path_number')
-            ->where('status', '!=', 'draft')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->whereColumn('total_amount', '>', 'amount_paid')
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
@@ -390,6 +396,8 @@ class SubscriberController extends ApiController
             'total_credit_balance' => round($totalCredit, 2),
             'total_debit_balance' => round($totalDebit, 2),
             'account_balance' => round($totalCredit - $totalDebit, 2),
+            'transferred_in' => (float) \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->sum('amount'),
+            'transferred_out' => (float) \App\Models\PaymentAccountTransfer::where('from_subscriber_id', $subscriber->id)->sum('amount'),
             'general_balance' => round($generalBalance, 2),
             'general_credit_balance' => round(max(0, $generalBalance), 2),
             'general_debit_balance' => round(max(0, -$generalBalance), 2),

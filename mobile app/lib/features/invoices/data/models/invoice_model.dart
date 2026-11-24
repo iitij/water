@@ -20,6 +20,12 @@ class InvoiceModel extends Equatable {
     required this.invoiceType,
     required this.billNumber,
     this.meterId,
+    this.retiredMeterId,
+    this.retiredMeterCode,
+    this.correctedUnits,
+    this.historicalUnitPrice,
+    this.originalInvoiceId,
+    this.correctedByInvoiceId,
     this.billDate,
     this.periodStart,
     this.periodEnd,
@@ -46,6 +52,12 @@ class InvoiceModel extends Equatable {
   final int id;
   final int subscriberId;
   final int? meterId;
+  final int? retiredMeterId;
+  final String? retiredMeterCode;
+  final double? correctedUnits;
+  final double? historicalUnitPrice;
+  final int? originalInvoiceId;
+  final int? correctedByInvoiceId;
   final InvoiceType invoiceType;
   final String billNumber;
   final DateTime? billDate;
@@ -123,10 +135,11 @@ class InvoiceModel extends Equatable {
   bool get isOverdue => status == InvoiceStatus.overdue;
 
   double get consumptionUnits =>
-      readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
+      correctedUnits ?? readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
 
   /// سعر الوحدة الضمني (مطابق لمنطق `WhatsAppService#L120`).
   double? get impliedUnitPrice {
+    if (historicalUnitPrice != null) return historicalUnitPrice;
     final units = consumptionUnits;
     if (units > 0 && consumptionFee > 0) {
       return double.parse((consumptionFee / units).toStringAsFixed(2));
@@ -145,11 +158,18 @@ class InvoiceModel extends Equatable {
       json['payments'],
     ).map(InvoicePaymentRecord.fromJson).toList(growable: false);
 
+    final correction = JsonUtils.asMap(json['historical_correction']);
     return InvoiceModel(
       id: JsonUtils.asInt(json['id']),
       location: RecordLocation.fromJson(json),
       subscriberId: JsonUtils.asInt(json['subscriber_id']),
       meterId: JsonUtils.asIntOrNull(json['meter_id']),
+      retiredMeterId: JsonUtils.asIntOrNull(json['retired_meter_id']),
+      retiredMeterCode: JsonUtils.asStringOrNull(json['retired_meter_code']),
+      correctedUnits: JsonUtils.asDoubleOrNull(correction?['corrected_units']),
+      historicalUnitPrice: JsonUtils.asDoubleOrNull(correction?['historical_unit_price']),
+      originalInvoiceId: JsonUtils.asIntOrNull(correction?['original_invoice_id']),
+      correctedByInvoiceId: JsonUtils.asIntOrNull(json['corrected_by_invoice_id']),
       invoiceType: InvoiceType.parse(json['invoice_type'] as String?),
       billNumber: JsonUtils.asString(json['bill_number']),
       billDate: JsonUtils.asDate(json['bill_date']),
@@ -191,6 +211,14 @@ class InvoiceModel extends Equatable {
     'id': id,
     'subscriber_id': subscriberId,
     'meter_id': meterId,
+    'retired_meter_id': retiredMeterId,
+    'retired_meter_code': retiredMeterCode,
+    'corrected_by_invoice_id': correctedByInvoiceId,
+    if (originalInvoiceId != null) 'historical_correction': {
+      'original_invoice_id': originalInvoiceId,
+      'corrected_units': correctedUnits,
+      'historical_unit_price': historicalUnitPrice,
+    },
     'invoice_type': invoiceType.wire,
     'bill_number': billNumber,
     'bill_date': DateFormat.day(billDate),
@@ -239,6 +267,12 @@ class InvoiceModel extends Equatable {
     id: id,
     subscriberId: subscriberId,
     meterId: meterId,
+    retiredMeterId: retiredMeterId,
+    retiredMeterCode: retiredMeterCode,
+    correctedUnits: correctedUnits,
+    historicalUnitPrice: historicalUnitPrice,
+    originalInvoiceId: originalInvoiceId,
+    correctedByInvoiceId: correctedByInvoiceId,
     invoiceType: invoiceType,
     billNumber: billNumber,
     billDate: billDate ?? this.billDate,
@@ -276,6 +310,12 @@ class InvoiceModel extends Equatable {
     creditApplied,
     serverTrueRemaining,
     isLatestInvoice,
+    retiredMeterId,
+    retiredMeterCode,
+    correctedUnits,
+    historicalUnitPrice,
+    originalInvoiceId,
+    correctedByInvoiceId,
   ];
 }
 

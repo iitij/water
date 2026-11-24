@@ -401,7 +401,7 @@ class AppDatabase extends GeneratedDatabase {
             squareLabelOrNull(subscriber['square_name'] ?? square?['name'], subscriber['square_code'] ?? square?['code']),
             (subscriber['status'] ?? 'active').toString(),
             _date(subscriber['subscription_start_date']),
-            _double(subscriber['balance'] ?? subscriber['account_balance']),
+            _double(subscriber['account_balance'] ?? subscriber['balance']),
             currentMeterCount,
           ],
         );

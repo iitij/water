@@ -12,6 +12,8 @@ import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/widgets/pdf_preview_sheet.dart';
 import '../../../payments/presentation/sheets/collect_payment_sheet.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/datasources/invoices_remote_datasource.dart';
+import '../../../../core/error/failures.dart';
 import '../../domain/repositories/invoices_repository.dart';
 import '../cubit/invoices_cubit.dart';
 import '../thermal/invoice_thermal_ticket.dart';
@@ -160,6 +162,44 @@ Future<bool> collectInvoicePayment(
   return true;
 }
 
+/// Cancellation must be confirmed online; no optimistic ledger mutation.
+Future<InvoiceModel?> cancelInvoiceWithReason(BuildContext context, InvoiceModel invoice) async {
+  if (invoice.isDeleted || invoice.retiredMeterId != null || invoice.status.wire == 'draft' || invoice.status.wire == 'cancelled') return null;
+  var reason = '';
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('إلغاء الفاتورة ${invoice.billNumber}'),
+      content: TextField(
+        maxLines: 3,
+        maxLength: 1000,
+        onChanged: (value) => reason = value.trim(),
+        decoration: const InputDecoration(
+          labelText: 'سبب الإلغاء (10 أحرف على الأقل)',
+          helperText: 'سيبقى المستند الأصلي وتُسجل حركة عكسية.',
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رجوع')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('تأكيد الإلغاء')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return null;
+  if (reason.length < 10) {
+    AppFeedback.error(context, 'سبب الإلغاء يجب ألا يقل عن 10 أحرف.');
+    return null;
+  }
+  try {
+    final updated = await sl<InvoicesRemoteDataSource>().cancel(invoice.id, reason);
+    if (context.mounted) AppFeedback.success(context, 'أُلغيت الفاتورة بحركة عكسية موثقة.');
+    return updated;
+  } on AppFailure catch (failure) {
+    if (context.mounted) AppFeedback.error(context, failure.message);
+    return null;
+  }
+}
+
 /// غلاف يربط بطاقة الفاتورة بإجراءاتها (يُستخدم في القوائم).
 class InvoiceCardActions extends StatelessWidget {
   const InvoiceCardActions({
@@ -231,7 +271,7 @@ Future<void> showInvoiceActionSheet(
       label: 'طباعة حرارية بلوتوث',
       onTap: () => printInvoiceThermal(context, invoice),
     ),
-    if (!invoice.isDeleted && config.whatsappEnabled)
+    if (!invoice.isDeleted && invoice.status.wire != 'cancelled' && config.whatsappEnabled)
       _SheetAction(
         icon: Icons.chat_outlined,
         label: config.isApiSend ? 'إرسال واتساب (PDF)' : 'إرسال واتساب',
@@ -252,96 +292,29 @@ Future<void> showInvoiceActionSheet(
           }
         },
       ),
-    if (invoice.isDeleted)
+    if (!invoice.isDeleted && invoice.retiredMeterId == null && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
       _SheetAction(
-        icon: Icons.restore_from_trash_outlined,
-        label: 'استعادة الفاتورة (Restore)',
-        color: Theme.of(context).colorScheme.primary,
-        onTap: () async {
-          final confirmed = await ConfirmDialog.show(
-            context,
-            title: 'استعادة الفاتورة ${invoice.billNumber}',
-            message: 'ستُستعاد الفاتورة من سلة المحذوفات ويعاد احتساب أرصدة الحساب المرتبط.',
-            confirmLabel: 'استعادة',
-          );
-          if (!confirmed) return;
-          if (cubit != null) {
-            final ok = await cubit.restoreInvoice(invoice.id);
-            if (!context.mounted) return;
-            if (ok) {
-              AppFeedback.success(context, 'تمت استعادة الفاتورة بنجاح.');
-            } else {
-              AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّرت الاستعادة.');
-            }
-          } else {
-            try {
-              await sl<InvoicesRepository>().restore(invoice.id);
-              if (context.mounted) {
-                AppFeedback.success(context, 'تمت استعادة الفاتورة بنجاح.');
-              }
-            } catch (e) {
-              if (context.mounted) AppFeedback.error(context, 'تعذّرت الاستعادة: $e');
-            }
-          }
-        },
-      ),
-    if (!invoice.isDeleted)
-      _SheetAction(
-        icon: Icons.delete_outline,
-        label: 'حذف الفاتورة (سلة المحذوفات)',
+        icon: Icons.block_outlined,
+        label: 'إلغاء الفاتورة بحركة عكسية',
         color: Theme.of(context).colorScheme.error,
         onTap: () async {
-          final confirmed = await ConfirmDialog.show(
-            context,
-            title: 'حذف الفاتورة ${invoice.billNumber}',
-            message: 'سيُحذف الحذف الناعم، وتُفكّ ارتباط القراءات والأقساط، '
-                'وتُعاد توزيع الدفعات تلقائياً.',
-            confirmLabel: 'حذف',
-            destructive: true,
-          );
-          if (!confirmed || cubit == null) return;
-          final ok = await cubit.deleteInvoice(invoice.id);
-          if (!context.mounted) return;
-          if (ok) {
-            AppFeedback.success(context, 'تم حذف الفاتورة.');
-          } else {
-            AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف.');
-          }
+          final updated = await cancelInvoiceWithReason(context, invoice);
+          if (updated != null) cubit?.applyLocalInvoiceUpdate(updated);
         },
       ),
-    _SheetAction(
-      icon: Icons.delete_forever_outlined,
-      label: 'حذف نهائي (Force Delete)',
-      color: Theme.of(context).colorScheme.error,
-      onTap: () async {
-        final confirmed = await ConfirmDialog.show(
-          context,
-          title: 'حذف نهائي للفاتورة ${invoice.billNumber}',
-          message: 'تحذير: سيُحذف سجل الفاتورة نهائياً من قاعدة البيانات ولا يمكن استعادتها لاحقاً!',
-          confirmLabel: 'حذف نهائي',
-          destructive: true,
-        );
-        if (!confirmed) return;
-        if (cubit != null) {
-          final ok = await cubit.forceDeleteInvoice(invoice.id);
-          if (!context.mounted) return;
-          if (ok) {
-            AppFeedback.success(context, 'تم حذف الفاتورة نهائياً.');
-          } else {
-            AppFeedback.error(context, cubit.state.errorMessage ?? 'تعذّر الحذف النهائي.');
-          }
-        } else {
-          try {
-            await sl<InvoicesRepository>().forceDelete(invoice.id);
-            if (context.mounted) {
-              AppFeedback.success(context, 'تم حذف الفاتورة نهائياً.');
-            }
-          } catch (e) {
-            if (context.mounted) AppFeedback.error(context, 'تعذّر الحذف النهائي: $e');
-          }
-        }
-      },
-    ),
+    if (!invoice.isDeleted && invoice.status.wire == 'draft' && cubit != null)
+      _SheetAction(
+        icon: Icons.delete_outline,
+        label: 'حذف المسودة',
+        color: Theme.of(context).colorScheme.error,
+        onTap: () async {
+          final confirmed = await ConfirmDialog.show(context,
+            title: 'حذف مسودة الفاتورة', message: 'المسودة غير مرحلة مالياً.',
+            confirmLabel: 'حذف', destructive: true);
+          if (!confirmed) return;
+          await cubit.deleteInvoice(invoice.id);
+        },
+      ),
   ];
 
   await showModalBottomSheet<void>(

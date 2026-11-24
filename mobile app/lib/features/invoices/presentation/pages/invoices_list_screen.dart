@@ -454,10 +454,6 @@ class _BulkActionsBar extends StatelessWidget {
     final selectedInvoices = state.invoices
         .where((i) => state.selectedIds.contains(i.id))
         .toList();
-    final hasDeleted =
-        selectedInvoices.any((i) => i.isDeleted) ||
-        state.query.trashed == 'only';
-    final hasActive = selectedInvoices.any((i) => !i.isDeleted);
     final onlyDrafts = selectedInvoices.isNotEmpty &&
         selectedInvoices.length == state.selectedIds.length &&
         selectedInvoices.every((i) => !i.isDeleted && i.status.wire == 'draft');
@@ -512,44 +508,12 @@ class _BulkActionsBar extends StatelessWidget {
                       style: TextStyle(color: Colors.white),
                     ),
                   ),
-                if (hasDeleted)
-                  TextButton.icon(
-                    onPressed: () => _bulkRestore(context),
-                    icon: const Icon(
-                      Icons.restore_from_trash_outlined,
-                      size: 18,
-                      color: AppColors.onPanelSoft,
-                    ),
-                    label: const Text(
-                      'استعادة',
-                      style: TextStyle(color: AppColors.onPanelSoft),
-                    ),
-                  ),
-                if (hasActive)
+                if (onlyDrafts)
                   TextButton.icon(
                     onPressed: () => _bulkDelete(context),
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      size: 18,
-                      color: AppColors.onPanelSoft,
-                    ),
-                    label: const Text(
-                      'حذف ناعم',
-                      style: TextStyle(color: AppColors.onPanelSoft),
-                    ),
+                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.onPanelSoft),
+                    label: const Text('حذف المسودات', style: TextStyle(color: AppColors.onPanelSoft)),
                   ),
-                TextButton.icon(
-                  onPressed: () => _bulkForceDelete(context),
-                  icon: const Icon(
-                    Icons.delete_forever_outlined,
-                    size: 18,
-                    color: AppColors.onPanelSoft,
-                  ),
-                  label: const Text(
-                    'حذف نهائي',
-                    style: TextStyle(color: AppColors.onPanelSoft),
-                  ),
-                ),
               ],
             ],
           ),
@@ -583,30 +547,6 @@ class _BulkActionsBar extends StatelessWidget {
     );
   }
 
-  Future<void> _bulkRestore(BuildContext context) async {
-    final ok = await ConfirmDialog.show(
-      context,
-      title: 'استعادة جماعية للفواتير',
-      message:
-          'ستُستعاد الفواتير المحددة (${state.selectedIds.length}) من سلة المحذوفات ويُعاد احتساب أرصدة حساباتها.',
-      confirmLabel: 'استعادة',
-    );
-    if (!ok) return;
-    final result = await cubit.bulkRestore();
-    if (!context.mounted) return;
-    if (result == null) {
-      AppFeedback.error(
-        context,
-        state.errorMessage ?? 'تعذّرت الاستعادة الجماعية.',
-      );
-      return;
-    }
-    AppFeedback.success(
-      context,
-      'تمت استعادة ${result.processed} فاتورة بنجاح.',
-    );
-  }
-
   Future<void> _bulkDelete(BuildContext context) async {
     final ok = await ConfirmDialog.show(
       context,
@@ -629,24 +569,6 @@ class _BulkActionsBar extends StatelessWidget {
     AppFeedback.success(context, 'تم حذف ${result.processed} فاتورة.');
   }
 
-  Future<void> _bulkForceDelete(BuildContext context) async {
-    final ok = await ConfirmDialog.show(
-      context,
-      title: 'حذف نهائي جماعي للفواتير',
-      message:
-          'تحذير: سيُحذف ${state.selectedIds.length} فاتورة نهائياً من قاعدة البيانات ولا يمكن التراجع!',
-      confirmLabel: 'حذف نهائي',
-      destructive: true,
-    );
-    if (!ok) return;
-    final result = await cubit.bulkForceDelete();
-    if (!context.mounted) return;
-    if (result == null) {
-      AppFeedback.error(context, state.errorMessage ?? 'تعذّر الحذف النهائي.');
-      return;
-    }
-    AppFeedback.success(context, 'تم حذف ${result.processed} فاتورة نهائياً.');
-  }
 }
 
 /// قائمة بسيطة + لوحة تفاصيل على الشاشات الكبيرة (§3.3-3 Master-Detail).

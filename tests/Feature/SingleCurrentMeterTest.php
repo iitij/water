@@ -310,7 +310,7 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_old_meter_invoice_and_receipt_are_purged_at_replacement(): void
+    public function test_old_meter_invoice_and_receipt_survive_replacement(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'OLD-DEBT']);
@@ -337,9 +337,10 @@ class SingleCurrentMeterTest extends TestCase
         ])->assertCreated()->json('current_meter.id');
 
         $this->assertDatabaseMissing('meters', ['id' => $old->id]);
-        $this->assertDatabaseMissing('invoices', ['id' => $invoice]);
-        $this->assertDatabaseMissing('payments', ['id' => $receipt]);
-        $this->assertDatabaseCount('transactions', 0);
+        $this->assertDatabaseHas('invoices', ['id' => $invoice, 'meter_id' => null, 'retired_meter_id' => $old->id, 'total_amount' => 100, 'amount_paid' => 40]);
+        $this->assertDatabaseHas('payments', ['id' => $receipt, 'meter_id' => null, 'retired_meter_id' => $old->id, 'amount' => 40]);
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertSame(60.0, $subscriber->getAccountDebt());
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
         $this->assertSame('0.00', (string) Meter::findOrFail($new)->balance);
     }

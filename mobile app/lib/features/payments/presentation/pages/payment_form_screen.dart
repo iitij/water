@@ -344,33 +344,6 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
   Widget build(BuildContext context) {
     return SubPageScaffold(
       title: 'ملاحظات سند ${widget.payment.receiptNumber}',
-      actions: <Widget>[
-        AppIconButton(
-          tooltip: 'حذف',
-          size: 38,
-          color: AppColors.danger,
-          icon: Icons.delete_outline_rounded,
-          onPressed: () async {
-            final confirmed = await ConfirmDialog.show(
-              context,
-              title: 'حذف سند قبض',
-              message:
-                  'سيُحذف السند حذفًا ناعمًا وتُعاد احتساب الفواتير المرتبطة.',
-              confirmLabel: 'حذف',
-              destructive: true,
-            );
-            if (!confirmed) return;
-            try {
-              await sl<PaymentsRepository>().delete(widget.payment.id);
-              if (!context.mounted) return;
-              Navigator.of(context).pop(true);
-            } on AppFailure catch (failure) {
-              if (!context.mounted) return;
-              AppFeedback.error(context, failure.message);
-            }
-          },
-        ),
-      ],
       child: SafeArea(
         top: false,
         child: Form(
