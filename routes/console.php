@@ -25,3 +25,7 @@ Artisan::command('accounting:protect-allocations {--install : Install optional d
     $this->info('All four allocation history triggers are present.');
     return 0;
 })->purpose('Check or explicitly install optional allocation history database protection');
+
+// Time alone can make an unpaid invoice overdue.
+\Illuminate\Support\Facades\Schedule::command('accounting:refresh-invoice-statuses')
+    ->dailyAt('00:00')->withoutOverlapping();

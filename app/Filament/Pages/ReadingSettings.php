@@ -74,7 +74,9 @@ class ReadingSettings extends Page implements HasForms
                     ->helperText('يحدد متى تنتهي فترة القراءة للعداد في الدورة الشهرية.'),
                 \Filament\Forms\Components\TextInput::make('grace_period')
                     ->label('مدة السماح (أيام)')
-                    ->numeric()
+                    ->integer()
+                    ->minValue(0)
+                    ->maxValue(365)
                     ->default(14)
                     ->required()
                     ->helperText('عدد الأيام المسموح بها بعد إصدار الفاتورة قبل أن تتحول حالتها إلى "متأخرة". الافتراضي هو 14 يوماً.'),

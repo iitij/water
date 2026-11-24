@@ -194,7 +194,7 @@ void main() {
       );
     });
 
-    test('الفاتورة القديمة المدفوعة جزئياً ⇒ partially_paid', () {
+    test('الفاتورة القديمة المدفوعة جزئياً بعد السماح ⇒ overdue', () {
       final older = _invoice(
         id: 1,
         totalAmount: 1000,
@@ -215,8 +215,17 @@ void main() {
           siblings: <InvoiceModel>[older, latest],
           now: billDate.add(const Duration(days: 40)),
         ),
-        InvoiceStatus.partiallyPaid,
+        InvoiceStatus.overdue,
       );
+    });
+
+    test('آخر يوم سماح كامل ثم تصبح الفاتورة الجزئية متأخرة', () {
+      final invoice = _invoice(id: 1, totalAmount: 100, amountPaid: 40,
+          billDate: billDate, isLatest: true);
+      expect(InvoiceAccounting.computeStatus(invoice, siblings: [invoice],
+          now: DateTime(2026, 1, 15, 23, 59)), InvoiceStatus.partiallyPaid);
+      expect(InvoiceAccounting.computeStatus(invoice, siblings: [invoice],
+          now: DateTime(2026, 1, 16)), InvoiceStatus.overdue);
     });
 
     test('strict_overdue_on_new_invoice ⇒ الأقدم تعتبر متأخرة فوراً', () {

@@ -40,6 +40,7 @@
   }
  },
  "tasks": [
+  {"id": "ACC-11", "sprint": "accounting", "agent": "A6+A7+A10", "task": "تصحيح حالة التأخر للفاتورة المسددة جزئياً وحدود السماح والتحديث الزمني", "files": "app/Models/Invoice.php; app/Console/Commands/RefreshInvoiceStatuses.php; routes/console.php; app/Filament/Pages/ReadingSettings.php; mobile app/lib/features/invoices/domain/accounting/invoice_accounting.dart; tests/Feature/InvoiceOverduePolicyTest.php; mobile app/test/accounting/invoice_accounting_test.dart", "status": "partial", "verification_status": "focused_phpunit_and_flutter_passed_full_suite_inventory_failure_mysql_and_ci_pending", "owner_acceptance": "not_tested", "evidence": "docs/v2/qa/ACC_11_OVERDUE_POLICY_AR.md"},
   {
    "id": "MODULE-EQUAL-SIZE-20261104-01",
    "sprint": "S9",
