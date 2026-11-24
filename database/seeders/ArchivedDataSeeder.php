@@ -1894,7 +1894,7 @@ class ArchivedDataSeeder extends Seeder
   ],
 ];
         foreach (array_chunk($data_readings, 100) as $chunk) {
-            DB::table('readings')->insert($chunk);
+            DB::table('readings')->insert(array_map(fn (array $reading) => $reading + ['period_basis' => 'legacy_calendar'], $chunk));
         }
 
     }
