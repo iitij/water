@@ -1,0 +1,136 @@
+name: Water | Authorize restricted offsite backup reader
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-offsite-reader.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  authorize:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Install owner-authorized backup-only reader and encrypted recovery envelope
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = alweufti
+          ops="$HOME/.water-backup-ops"
+          root="$HOME/.water-backups"
+          key="$HOME/.water-backup-keys/recovery-v1.key"
+          test -d "$ops" && test ! -L "$ops" && test -O "$ops"
+          test -d "$root" && test ! -L "$root" && test -O "$root"
+          test -f "$key" && test ! -L "$key" && test -O "$key"
+          chmod 700 "$ops"
+          temp="$(mktemp -d "$ops/.offsite-XXXXXXXX")"
+          trap 'rm -rf -- "$temp"' EXIT
+          cat > "$temp/reader.sh" <<'READER'
+          #!/bin/bash
+          set -euo pipefail
+          export LC_ALL=C PATH=/usr/bin:/bin
+          umask 077
+          test "$(id -un)" = alweufti
+          root="$HOME/.water-backups"
+          ops="$HOME/.water-backup-ops"
+          test -d "$root" && test ! -L "$root" && test -O "$root"
+          cmd="${SSH_ORIGINAL_COMMAND:-}"
+          if [[ "$cmd" == list ]]; then
+            for dir in "$root"/water-*; do
+              [[ -d "$dir" && ! -L "$dir" && -O "$dir" ]] || continue
+              name="$(basename "$dir")"
+              [[ "$name" =~ ^water-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{6}$ ]] || continue
+              file="$dir/$name.tar.gz.gpg"
+              [[ -f "$file" && ! -L "$file" && -O "$file" && -f "$file.sha256" && ! -L "$file.sha256" && -O "$file.sha256" ]] || continue
+              printf '%s\n' "$name"
+            done
+          elif [[ "$cmd" == recovery-envelope ]]; then
+            file="$ops/recovery-v1.msi.oaep"
+            [[ -f "$file" && ! -L "$file" && -O "$file" && "$(stat -c %s "$file")" == 384 ]]
+            exec cat -- "$file"
+          elif [[ "$cmd" =~ ^(archive|checksum)\ (water-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{6})$ ]]; then
+            kind="${BASH_REMATCH[1]}"
+            name="${BASH_REMATCH[2]}"
+            dir="$root/$name"
+            file="$dir/$name.tar.gz.gpg"
+            [[ -d "$dir" && ! -L "$dir" && -O "$dir" ]]
+            if [[ "$kind" == checksum ]]; then file="$file.sha256"; fi
+            [[ -f "$file" && ! -L "$file" && -O "$file" ]]
+            exec cat -- "$file"
+          else
+            echo 'Only encrypted backup export commands are permitted.' >&2
+            exit 64
+          fi
+          READER
+          bash -n "$temp/reader.sh"
+          chmod 700 "$temp/reader.sh"
+          cat > "$temp/recipient.pem" <<'PUBLIC_KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAltNS9kNMp6IrEYPmjbOX
+          7QB7/rpEX8qKZi2X0vkECgXZl5DXJMTNouOFJQ0wvF6RVxwZz09qO850F/pXJMwZ
+          A8U+tDtCarRNq4ZrZXioij1L5EBHVGpuxdAzLqi2GHnkLldvH6WkveoCt2EGbNSd
+          q9c3agBn5zufGyxYnvlGl+hI58IhsgeQjel0aL6nyCjOKxWJ922HKb1eFOLy2vD9
+          AuPlOw4VNHXQwilTQsRppkEFslU/ILEVz9v2Fe/tFJxT78evrZ5rLjzFRUHyRZmY
+          4vUcRWD0mSC5n+B6FOnINiwIpDqjBRpMPVGSB2I7D6TiuWKjMW2nFyR3JoRhEWrD
+          bU7HGNYAMWRmiMkRH5/k2Q00Xh+YB1LjPDWBX7FiAJIdoFBxFagBYIJTWzLOaWkZ
+          aeIppZPFV1L9r+SfXt+dtLE2tak5jAIAhRt5U6pv/7l7JIkAOcQ413Jt2vTqbvqF
+          fmMNW5HsIY0CSqN4FcfwOvOGjhtmgc+tMM+Jc5K8dO81AgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBLIC_KEY
+          openssl pkey -pubin -in "$temp/recipient.pem" -noout
+          openssl pkeyutl -encrypt -pubin -inkey "$temp/recipient.pem" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 -in "$key" -out "$temp/recovery.oaep"
+          test "$(stat -c %s "$temp/recovery.oaep")" = 384
+          chmod 600 "$temp/recovery.oaep"
+          SSH_ORIGINAL_COMMAND=list bash "$temp/reader.sh" | grep -Fxq water-20261124T021342Z-412d1e
+          if SSH_ORIGINAL_COMMAND=id bash "$temp/reader.sh" >/dev/null 2>&1; then exit 1; fi
+          mv "$temp/reader.sh" "$ops/water-backup-export.sh"
+          mv "$temp/recovery.oaep" "$ops/recovery-v1.msi.oaep"
+          test ! -L "$HOME/.ssh"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          auth="$HOME/.ssh/authorized_keys"
+          test ! -L "$auth"
+          if [[ ! -e "$auth" ]]; then touch "$auth"; fi
+          test -f "$auth" && test -O "$auth"
+          chmod 600 "$auth"
+          pub='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDcF+DuMeX9KTuvAli3IiYrI5KNH+mTXNibv4QIoDhzm water-offsite-backup'
+          printf '%s\n' "$pub" > "$temp/client.pub"
+          test "$(ssh-keygen -lf "$temp/client.pub" -E sha256 | awk '{print $2}')" = 'SHA256:vD8Kk/iUCQxWNVC4O2Kt2gTJDRvke61QCZ70HWTmFKI'
+          entry="restrict,command=\"/bin/bash $ops/water-backup-export.sh\" $pub"
+          exec 9>"$ops/offsite-reader.lock"
+          flock -x 9
+          if grep -Fq 'AAAAC3NzaC1lZDI1NTE5AAAAIDcF+DuMeX9KTuvAli3IiYrI5KNH+mTXNibv4QIoDhzm' "$auth"; then
+            test "$(grep -Fc 'AAAAC3NzaC1lZDI1NTE5AAAAIDcF+DuMeX9KTuvAli3IiYrI5KNH+mTXNibv4QIoDhzm' "$auth")" = 1
+            grep -Fxq "$entry" "$auth"
+          else
+            printf '\n%s\n' "$entry" >> "$auth"
+          fi
+          echo 'OFFSITE_READER: RESTRICTED_BACKUP_ONLY'
+          echo 'RECOVERY_ENVELOPE: RSA-OAEP SHA-256, owner device public key'
+          echo 'AUTHORIZATION: INSTALLED'
+          REMOTE
