@@ -55,9 +55,14 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('observation', $reading->period_basis);
         $this->assertEqualsWithDelta(35, (float) $reading->consumption_units, 0.01);
 
+        \App\Models\Tariff::create(['name' => 'Synthetic observation tariff', 'unit_price' => 600,
+            'start_date' => '2026-01-10', 'is_active' => true]);
         $invoice = app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
         $this->assertSame('2026-01-10', $invoice->billing_period_start->toDateString());
         $this->assertSame('2026-02-12', $invoice->billing_period_end->toDateString());
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'period_start' => '2026-01-10', 'period_end' => '2026-02-12',
+            'units' => 35, 'unit_price' => 600, 'amount' => 21000]);
     }
 
     public function test_second_interval_begins_at_previous_observation_without_adding_a_day(): void
