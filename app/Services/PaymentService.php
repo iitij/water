@@ -24,7 +24,7 @@ class PaymentService
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
             $invoices = Invoice::where('subscriber_id', $subscriber->id)
-                ->where('status', '!=', 'draft')
+                ->whereNotIn('status', ['draft', 'cancelled'])
                 ->orderBy('bill_date')->orderBy('id')->lockForUpdate()->get();
             $payments = Payment::where('subscriber_id', $subscriber->id)
                 ->whereNull('voided_at')
@@ -98,12 +98,16 @@ class PaymentService
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
-            if ($payment->cash_session_id) {
-                \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id);
-            }
-
             if ($payment->voided_at !== null) {
                 return $payment;
+            }
+            if ($payment->cash_session_id) {
+                $session = \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id);
+                if (! $session->isOpen()) {
+                    throw ValidationException::withMessages([
+                        'cash_session' => 'لا يمكن إلغاء سند في صندوق مغلق؛ يلزم إجراء تسوية مالية مستقل.',
+                    ]);
+                }
             }
 
             $before = [
@@ -119,14 +123,11 @@ class PaymentService
                 'void_reason' => $reason,
                 'voided_by' => $userId,
                 'voided_via' => $source,
-            ])->save();
+            ])->saveQuietly();
 
-            // إزالة أثر السند من دفتر الأستاذ ثم إعادة احتساب الأرصدة.
-            \App\Models\Transaction::where('reference_type', Payment::class)
-                ->where('reference_id', $payment->id)
-                ->delete();
-
+            // Keep the original posting and append its opposite.
             $transactionService = new TransactionService();
+            $transactionService->reverseDocument($payment->subscriber, $payment, 'payment');
             if ($payment->meter_id) {
                 if ($meter = \App\Models\Meter::find($payment->meter_id)) {
                     $transactionService->updateMeterBalance($meter);
@@ -237,7 +238,7 @@ class PaymentService
     /**
      * قرار المشرف في طلب إلغاء معلّق.
      *
-     * الموافقة تستخدم نفس مسار `voidPayment` (حذف حركات الدفتر وإعادة الاحتساب)
+     * الموافقة تستخدم نفس مسار الإلغاء بالحركة العكسية وإعادة الاحتساب
      * فلا يوجد مساران مختلفان لإلغاء سند.
      */
     public function decideVoidRequest(
@@ -367,7 +368,7 @@ class PaymentService
             $meterId = $requestedMeterId;
             $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
             if ($invoiceId) {
-                $invoice = Invoice::where('subscriber_id', $subscriber->id)->where('status', '!=', 'draft')->findOrFail($invoiceId);
+                $invoice = Invoice::where('subscriber_id', $subscriber->id)->whereNotIn('status', ['draft', 'cancelled'])->findOrFail($invoiceId);
                 $meterId = $invoice->meter_id;
                 $meter = $invoice->meter;
             }
