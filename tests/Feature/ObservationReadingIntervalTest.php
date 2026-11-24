@@ -59,6 +59,21 @@ class ObservationReadingIntervalTest extends TestCase
         $this->assertSame('35.50', $reading->consumption_units);
     }
 
+    public function test_demo_seeder_uses_actual_observations_without_deleting_existing_rows(): void
+    {
+        $meter = $this->meter();
+        $original = Reading::create(['meter_id' => $meter->id,
+            'reading_date' => '2026-02-12', 'current_reading' => '135.25']);
+
+        $this->seed(\Database\Seeders\SyntheticObservationSeeder::class);
+        $this->seed(\Database\Seeders\ScreenshotReadingsSeeder::class);
+
+        $this->assertDatabaseCount('readings', 25);
+        $this->assertSame('35.25', $original->fresh()->consumption_units);
+        $this->assertSame(25, Reading::where('period_basis', 'observation')->count());
+        $this->artisan('water:audit-observation-intervals')->assertSuccessful();
+    }
+
     public function test_model_creates_only_actual_observations_without_client_periods(): void
     {
         $meter = $this->meter();
