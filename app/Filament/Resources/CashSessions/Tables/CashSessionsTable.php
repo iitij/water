@@ -69,6 +69,17 @@ class CashSessionsTable
                         abs((float) $state) < 0.01 => 'success',
                         default => 'danger',
                     }),
+                Tables\Columns\TextColumn::make('treasury_handover')
+                    ->label('التسليم للخزينة')
+                    ->getStateUsing(fn (CashSession $record): string => match (app(\App\Services\CashHandoverService::class)->summary($record)['status']) {
+                        'not_eligible' => 'غير قابل للتسوية',
+                        'not_required' => 'لا نقد معدود',
+                        'pending' => 'لم يوثق التسليم',
+                        'partial' => 'تسليم جزئي',
+                        'complete' => 'اكتمل التسليم',
+                        default => 'خلل يتطلب المراجعة',
+                    })
+                    ->badge(),
                 Tables\Columns\TextColumn::make('closing_notes')
                     ->label('ملاحظات الإغلاق')
                     ->limit(40)
@@ -101,6 +112,32 @@ class CashSessionsTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('record_treasury_handover')
+                    ->label('توثيق استلام الخزينة')
+                    ->icon('heroicon-o-banknotes')
+                    ->visible(function (CashSession $record): bool {
+                        $user = Auth::user();
+                        $service = app(\App\Services\CashHandoverService::class);
+                        return $user && $service->canRecord($user)
+                            && (int) $record->user_id !== (int) $user->id
+                            && in_array($service->summary($record)['status'], ['pending', 'partial'], true);
+                    })
+                    ->form([
+                        \Filament\Forms\Components\TextInput::make('amount')
+                            ->label('النقد المستلم فعلياً')->numeric()->minValue(0.01)->required()
+                            ->helperText(fn (CashSession $record): string => 'المتبقي للتسليم: '.(app(\App\Services\CashHandoverService::class)->summary($record)['remaining_amount'] ?? '—')),
+                        \Filament\Forms\Components\TextInput::make('reference')
+                            ->label('مرجع سند التسليم')->required()->maxLength(150),
+                        \Filament\Forms\Components\DatePicker::make('received_on')
+                            ->label('تاريخ الاستلام الفعلي')->default(now())->maxDate(now())->required(),
+                        Textarea::make('evidence')->label('دليل الاستلام الفعلي')->required()->minLength(10)->maxLength(2000),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (CashSession $record, array $data): void {
+                        app(\App\Services\CashHandoverService::class)->record($record, Auth::user(),
+                            (float) $data['amount'], $data['reference'], $data['received_on'], $data['evidence']);
+                        Notification::make()->title('تم توثيق الاستلام الفعلي')->success()->send();
+                    }),
                 Action::make('late_receipt_review')
                     ->label('مراجعة سند مؤجل')
                     ->color('warning')

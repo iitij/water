@@ -207,6 +207,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cash-sessions/{id}/close', [CashSessionController::class, 'close'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/correct-duplicate', [CashSessionController::class, 'correctDuplicate'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/handovers', [CashSessionController::class, 'recordHandover'])->whereNumber('id');
     Route::apiResource('cash-sessions', CashSessionController::class)
         ->only(['index', 'store', 'show'])
         ->parameters(['cash-sessions' => 'id']);

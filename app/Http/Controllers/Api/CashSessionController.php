@@ -229,6 +229,24 @@ class CashSessionController extends ApiController
         return response()->json(['correction' => $correction]);
     }
 
+    public function recordHandover(Request $request, int $id, \App\Services\CashHandoverService $service)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:999999999999.99'],
+            'reference' => ['required', 'string', 'max:150'],
+            'received_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        $session = CashSession::findOrFail($id);
+        $handover = $service->record($session, $request->user(), (float) $data['amount'],
+            $data['reference'], $data['received_on'], $data['evidence']);
+
+        return response()->json([
+            'handover' => $handover,
+            'treasury_handover' => $service->summary($session->fresh()),
+        ]);
+    }
+
     private function reportData(CashSession $session): array
     {
         $payments = Payment::query()

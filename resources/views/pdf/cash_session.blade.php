@@ -245,6 +245,19 @@
         </div>
     @endif
 
+    @if (isset($summary['treasury_handover']))
+        @php $handover = $summary['treasury_handover']; @endphp
+        <div class="section-title">التسليم الفعلي للخزينة (النقد المعدود فقط)</div>
+        <div class="meta">
+            <div>النقد الواجب تسليمه: {{ $handover['target_amount'] ?? 'غير قابل للتحقق' }}</div>
+            <div>التسليم الموثق: {{ $handover['received_amount'] }}</div>
+            <div>المتبقي للتسليم: {{ $handover['remaining_amount'] ?? 'غير قابل للتحقق' }}</div>
+        </div>
+        @if ($handover['status'] === 'not_eligible' || $handover['status'] === 'inconsistent')
+            <p class="muted">يلزم تدقيق التسوية الأصلية. اعتماد الصندوق وحده لا يثبت استلام الخزينة.</p>
+        @endif
+    @endif
+
     @if ($amountInWords)
         <div class="words">
             <strong>النقد المعدود كتابةً:</strong> {{ $amountInWords }}

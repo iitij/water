@@ -233,6 +233,7 @@ class CashSessionService
         $corrections = DB::table('closed_cash_corrections')->where('cash_session_id', $session->id)->orderBy('id')->get();
 
         $allocation = app(LateReceiptReviewService::class)->countedCashAllocation($session);
+        $handover = app(CashHandoverService::class)->summary($session);
 
         return [
             'id' => $session->id,
@@ -256,6 +257,7 @@ class CashSessionService
             'counted_cash_surplus_capacity' => number_format($allocation['capacity_minor'] / 100, 2, '.', ''),
             'counted_cash_surplus_allocated' => number_format($allocation['allocated_minor'] / 100, 2, '.', ''),
             'counted_cash_surplus_available' => number_format($allocation['available_minor'] / 100, 2, '.', ''),
+            'treasury_handover' => $handover,
             'receipts' => (clone $payments)->count(),
             'voided_receipts' => $voided,
             'post_close_corrections' => $corrections,
