@@ -104,7 +104,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertSame('2026-01-01', $invoice->billing_period_start->toDateString());
         $this->assertSame('2026-02-28', $invoice->billing_period_end->toDateString());
         $this->assertSame([$january->id, $february->id], $invoice->readings()->orderBy('period_start')->pluck('id')->all());
-        $this->assertSame(25, $invoice->readings->sum('consumption_units'));
+        $this->assertEqualsWithDelta(25, (float) $invoice->readings->sum('consumption_units'), 0.001);
         $this->assertEqualsWithDelta(15000, (float) $invoice->consumption_fee, 0.01);
     }
 
