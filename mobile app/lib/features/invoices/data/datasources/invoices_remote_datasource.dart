@@ -107,6 +107,12 @@ class InvoicesRemoteDataSource {
   Future<InvoiceModel> update(int id, Map<String, dynamic> payload) =>
       _mutate(() => _client.put(FinanceEndpoints.invoice(id), body: payload));
 
+  /// Online-only cancellation; the server requires an original posting.
+  Future<InvoiceModel> cancel(int id, String reason) => _mutate(
+    () => _client.post('${FinanceEndpoints.invoice(id)}/cancel',
+        body: <String, dynamic>{'reason': reason}),
+  );
+
   /// #42 `DELETE /api/invoices/{id}`
   Future<void> delete(int id) async {
     await _client.delete(FinanceEndpoints.invoice(id));

@@ -120,4 +120,41 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(5900.0, $subscriber->getAccountDebt());
         $this->assertSame(2, Transaction::count());
     }
+
+    public function test_missing_original_posting_cannot_create_a_reversal(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        $payment = Payment::create([
+            'subscriber_id' => $subscriber->id,
+            'receipt_number' => 'UNPOSTED-ACC05',
+            'amount' => 1000,
+            'payment_date' => now(),
+            'payment_method' => 'cash',
+        ]);
+        try {
+            app(PaymentService::class)->voidPayment($payment, 'Invalid missing ledger posting');
+            $this->fail('Reversal without original was allowed');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('transaction', $exception->errors());
+        }
+        $this->assertNull($payment->fresh()->voided_at);
+        $this->assertSame(1, Transaction::count());
+        $this->assertSame(6000.0, $subscriber->getAccountDebt());
+        $this->assertDatabaseMissing('audit_events', ['event' => 'payment.voided', 'entity_id' => (string) $payment->id]);
+    }
+
+    public function test_cancelled_invoice_cannot_receive_a_targeted_payment(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        app(InvoiceCancellationService::class)->cancel($invoice, 'Synthetic incorrect charge correction');
+        try {
+            app(PaymentService::class)->collectPayment($subscriber, 1000, $invoice->id);
+            $this->fail('Targeted payment to cancelled invoice was allowed');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $exception) {
+            $this->assertSame(Invoice::class, $exception->getModel());
+        }
+        $this->assertSame(0, Payment::count());
+        $this->assertSame(2, Transaction::count());
+    }
+
 }

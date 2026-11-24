@@ -64,16 +64,12 @@ class PaymentVoidApprovalTest extends TestCase
             'status' => 'issued',
         ]);
 
-        $this->payment = Payment::create([
-            'subscriber_id' => $subscriber->id,
-            'meter_id' => $meter->id,
-            'invoice_id' => $invoice->id,
-            'user_id' => $this->collector->id,
-            'receipt_number' => 'REC-TEST-0001',
-            'amount' => 1000,
-            'payment_date' => now(),
-            'payment_method' => 'cash',
-        ]);
+        app(\App\Services\TransactionService::class)->recordTransaction(
+            $subscriber, 'invoice', -4000, reference: $invoice, meter: $meter
+        );
+        $this->payment = app(\App\Services\PaymentService::class)->collectPayment(
+            $subscriber, 1000, $invoice->id, userId: $this->collector->id
+        );
     }
 
     private function threshold(float $amount): void
