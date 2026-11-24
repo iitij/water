@@ -7,7 +7,7 @@ ops="$HOME/.water-backup-ops"
 root="$HOME/.water-backups"
 [[ "$(id -un)" == alweufti && -d "$ops" && ! -L "$ops" && -O "$ops" ]] || exit 1
 exec 8>"$ops/daily.lock"
-flock -n 8 || exit 0
+flock -n 8 || exit 75
 log="$(mktemp "$ops/.daily-log-XXXXXXXX")"
 if timeout --kill-after=20s 1200s bash "$ops/water-backup.sh" >"$log" 2>&1; then
   printf 'DAILY_BACKUP_STATUS: SUCCESS %s\n' "$(date -u +%FT%TZ)" >>"$log"
