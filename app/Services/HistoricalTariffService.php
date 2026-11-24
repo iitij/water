@@ -17,6 +17,7 @@ final class HistoricalTariffService
      */
     public function quote(Collection $readings): array
     {
+        Tariff::lockCatalog();
         $lines = [];
         $total = 0;
         foreach ($readings as $reading) {
