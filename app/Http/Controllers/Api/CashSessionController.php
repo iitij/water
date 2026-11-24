@@ -212,6 +212,23 @@ class CashSessionController extends ApiController
     }
 
     /** @return array{cash_session: array, payments: array, generated_at: Carbon} */
+    public function correctDuplicate(Request $request, int $id)
+    {
+        $this->authorizeApprover($request->user());
+        $data = $request->validate([
+            'payment_id' => ['required', 'integer'],
+            'duplicate_of_id' => ['required', 'integer', 'different:payment_id'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'no_second_cash_receipt' => ['required', 'accepted'],
+        ]);
+        $payment = Payment::where('cash_session_id', $id)->findOrFail($data['payment_id']);
+        $correction = app(\App\Services\ClosedCashCorrectionService::class)->correctDuplicate(
+            $payment, $data['duplicate_of_id'], $request->user(), $data['reason'], $data['evidence']
+        );
+        return response()->json(['correction' => $correction]);
+    }
+
     private function reportData(CashSession $session): array
     {
         $payments = Payment::query()
@@ -226,8 +243,9 @@ class CashSessionController extends ApiController
                 'meter' => $payment->meter?->unique_code,
                 'amount' => number_format((float) $payment->amount, 2, '.', ''),
                 'payment_method' => $payment->payment_method,
-                'voided' => $payment->voided_at !== null,
-                'void_reason' => $payment->void_reason,
+                'voided' => $payment->voided_at !== null && $payment->voided_via !== 'closed_correction',
+                'corrected_after_close' => $payment->voided_via === 'closed_correction',
+                'void_reason' => $payment->voided_via === 'closed_correction' ? null : $payment->void_reason,
                 'time' => optional($payment->created_at)->format('H:i'),
             ])->values()->all();
 
