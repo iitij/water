@@ -164,7 +164,7 @@ Future<bool> collectInvoicePayment(
 
 /// Cancellation must be confirmed online; no optimistic ledger mutation.
 Future<InvoiceModel?> cancelInvoiceWithReason(BuildContext context, InvoiceModel invoice) async {
-  if (invoice.isDeleted || invoice.status.wire == 'draft' || invoice.status.wire == 'cancelled') return null;
+  if (invoice.isDeleted || invoice.retiredMeterId != null || invoice.status.wire == 'draft' || invoice.status.wire == 'cancelled') return null;
   var reason = '';
   final confirmed = await showDialog<bool>(
     context: context,
@@ -292,7 +292,7 @@ Future<void> showInvoiceActionSheet(
           }
         },
       ),
-    if (!invoice.isDeleted && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
+    if (!invoice.isDeleted && invoice.retiredMeterId == null && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
       _SheetAction(
         icon: Icons.block_outlined,
         label: 'إلغاء الفاتورة بحركة عكسية',

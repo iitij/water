@@ -95,6 +95,10 @@ class PaymentAllocator {
             p.subscriberId == subscriberId && !p.isDeleted && !p.isVoided && !p.isAccountTransferred)
         .toList();
 
+    final replacements = <int, int>{
+      for (final invoice in scoped)
+        if (invoice.originalInvoiceId != null) invoice.originalInvoiceId!: invoice.id,
+    };
     var current = scoped;
     var surplus = 0.0;
 
@@ -102,7 +106,7 @@ class PaymentAllocator {
       final result = allocate(
         invoices: current,
         amount: payment.effectiveAmount,
-        targetInvoiceId: payment.invoiceId,
+        targetInvoiceId: replacements[payment.invoiceId] ?? payment.invoiceId,
       );
       current = result.invoices;
       surplus = double.parse((surplus + result.surplusCredit).toStringAsFixed(2));

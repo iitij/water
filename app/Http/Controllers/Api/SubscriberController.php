@@ -81,11 +81,13 @@ class SubscriberController extends ApiController
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
             'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
-            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name'])->latest('payment_date')->latest('id'),
+            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id'),
             'transactions' => fn ($q) => $q->latest(),
         ])->findOrFail($id);
 
         $subscriber->setAttribute('financial_summary', $this->financialSummary($subscriber));
+        $subscriber->setAttribute('account_balance', $subscriber->getAccountBalance());
+        $subscriber->setAttribute('incoming_account_transfers', \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->orderBy('created_at')->orderBy('id')->get(['id', 'payment_id', 'to_subscriber_id', 'amount', 'created_at']));
         $subscriber->meters->each(function (Meter $meter) {
             $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
             $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));

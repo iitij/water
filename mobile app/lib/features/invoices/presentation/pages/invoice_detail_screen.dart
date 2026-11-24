@@ -636,7 +636,7 @@ class _ActionGrid extends StatelessWidget {
                   icon: Icons.edit_outlined,
                 ),
               ],
-              if (!invoice.isDeleted && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
+              if (!invoice.isDeleted && invoice.retiredMeterId == null && invoice.status.wire != 'draft' && invoice.status.wire != 'cancelled')
                 AppIconButton(
                   tooltip: 'إلغاء الفاتورة',
                   size: 38,
