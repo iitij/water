@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Tariffs\Tables;
 
+use App\Services\TariffBulkService;
+use Illuminate\Database\Eloquent\Collection;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -57,9 +59,18 @@ class TariffsTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
+                    DeleteBulkAction::make()->action(function (Collection $records): void {
+                        app(TariffBulkService::class)->apply($records->modelKeys(), 'delete');
+                        \Filament\Notifications\Notification::make()->title('تمت العملية الجماعية بنجاح')->success()->send();
+                    }),
+                    ForceDeleteBulkAction::make()->action(function (Collection $records): void {
+                        app(TariffBulkService::class)->apply($records->modelKeys(), 'forceDelete');
+                        \Filament\Notifications\Notification::make()->title('تمت العملية الجماعية بنجاح')->success()->send();
+                    }),
+                    RestoreBulkAction::make()->action(function (Collection $records): void {
+                        app(TariffBulkService::class)->apply($records->modelKeys(), 'restore');
+                        \Filament\Notifications\Notification::make()->title('تمت العملية الجماعية بنجاح')->success()->send();
+                    }),
                 ]),
             ]);
     }
