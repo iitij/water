@@ -184,9 +184,21 @@ class CashSessionApiTest extends TestCase
         $sessionId = $this->fundedSession($this->admin, '250.25')->id;
         $this->getJson('/api/cash-sessions/current')->assertOk()->assertJsonPath('cash_session.expected_amount', '250.25');
         $endpoint = "/api/invoices/{$this->invoice->id}/pay";
-        foreach (['cash' => '600.50', 'bank_transfer' => '300.00', 'check' => '99.50'] as $method => $amount) {
+        $this->postJson($endpoint, ['amount' => '600.50', 'payment_method' => 'cash',
+            'sync_uuid' => (string) Str::uuid()])->assertCreated();
+        foreach (['bank_transfer' => '300.00', 'check' => '99.50'] as $method => $amount) {
             $this->postJson($endpoint, ['amount' => $amount, 'payment_method' => $method,
-                'sync_uuid' => (string) Str::uuid()])->assertCreated();
+                'sync_uuid' => (string) Str::uuid()])->assertUnprocessable();
+            // Historical receipts remain in original session reporting, but cannot
+            // be issued through the old noncash path after the new guard.
+            $legacy = \App\Models\Payment::create(['subscriber_id' => $this->invoice->subscriber_id,
+                'meter_id' => $this->invoice->meter_id, 'invoice_id' => $this->invoice->id,
+                'user_id' => $this->admin->id, 'cash_session_id' => $sessionId,
+                'receipt_number' => 'LEGACY-'.$method, 'amount' => $amount, 'payment_date' => today(),
+                'payment_method' => $method, 'reference_number' => 'LEGACY-'.$method]);
+            app(\App\Services\TransactionService::class)->recordTransaction($this->invoice->subscriber, 'payment',
+                (float) $amount, 'Historical noncash receipt', $legacy, $this->invoice->meter);
+            app(\App\Services\PaymentService::class)->recalculateInvoices($this->invoice->subscriber);
         }
         $this->getJson('/api/cash-sessions/current')->assertOk()
             ->assertJsonPath('cash_session.settlement_basis', 'physical_cash')

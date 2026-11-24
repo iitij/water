@@ -390,11 +390,32 @@ class PaymentService
         bool $deferred = false,
         ?int $lateReviewId = null,
     ): Payment {
+        return $this->postPayment($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason,
+            $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId);
+    }
+
+    private function postPayment(
+        Subscriber $subscriber,
+        float $amount,
+        ?int $invoiceId = null,
+        string $paymentMethod = 'cash',
+        ?string $referenceNumber = null,
+        ?string $notes = null,
+        ?string $reason = null,
+        ?int $userId = null,
+        ?string $paymentDate = null,
+        ?int $requestedMeterId = null,
+        ?string $syncUuid = null,
+        ?int $requestedCashSessionId = null,
+        bool $deferred = false,
+        ?int $lateReviewId = null,
+        bool $clearedClaim = false,
+    ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
             throw ValidationException::withMessages(['sync_uuid' => 'معرّف المزامنة غير صالح.']);
         }
-        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId) {
+        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount) {
                 throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
@@ -446,6 +467,14 @@ class PaymentService
             }
             abort_if($review && $lateReviewId === null, 409, 'السند مرتبط بمراجعة مالية؛ لا يجوز ترحيله خارجها.');
 
+            if (! in_array($paymentMethod, ['cash', 'bank_transfer', 'check'], true)
+                || ($paymentMethod !== 'cash' && ! $clearedClaim)) {
+                throw ValidationException::withMessages(['payment_method' => 'التحصيل غير النقدي الجديد يتطلب طلب تحصيل معلق وإثبات وصول الأموال.']);
+            }
+            if ($syncUuid && ! $clearedClaim && DB::table('noncash_collection_claims')->where('sync_uuid', $syncUuid)->exists()) {
+                abort(409, 'معرّف المزامنة مرتبط بطلب تحصيل غير نقدي.');
+            }
+
             // A delayed operation must never be silently assigned to today's till.
             if ($deferred && ($requestedCashSessionId === null || ! $syncUuid || $paymentDate === null)) {
                 abort(409, 'سند مؤجل بلا هوية صندوق أو تاريخ قبض ثابت؛ يلزم مراجعة مالية.');
@@ -456,7 +485,7 @@ class PaymentService
 
             // Acquire collector/till locks before financial reads and number generation.
             $cashSessionId = null;
-            if ($userId && $lateReviewId === null) {
+            if ($userId && $lateReviewId === null && ! $clearedClaim) {
                 User::query()->lockForUpdate()->findOrFail($userId);
                 $cashSession = \App\Models\CashSession::query()
                     ->where('user_id', $userId)
@@ -522,6 +551,52 @@ class PaymentService
             }
 
             return $payment;
+        }, 3);
+    }
+
+    /** The only new noncash receipt issuance path; proof and both ledgers commit together. */
+    public function clearNonCashClaim(User $actor, int $id, int $statementId, int $lineId, string $reference, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $candidate = DB::table('noncash_collection_claims')->find($id);
+        abort_unless($candidate, 404);
+        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reference, $evidence, $candidate): array {
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Payment issuance lock missing.');
+            }
+            $claim = DB::table('noncash_collection_claims')->where('id', $id)->lockForUpdate()->first();
+            abort_unless((int) $claim->subscriber_id === (int) $subscriber->id, 409);
+            abort_if((int) $claim->submitted_by === (int) $actor->id, 403, 'لا يجوز اعتماد طلبك بنفسك.');
+            $bank = app(BankReconciliationService::class);
+            if ($claim->status === 'cleared') {
+                abort_unless((int) $claim->decided_by === (int) $actor->id, 409);
+                $result = $bank->confirmCollection($actor, $statementId, $lineId, (int) $claim->payment_id, $reference, $evidence);
+                return ['claim' => (array) $claim, 'payment_id' => (int) $claim->payment_id, 'bank' => $result];
+            }
+            abort_unless($claim->status === 'pending', 409, 'سبق رفض الطلب.');
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('id', $lineId)->lockForUpdate()->first();
+            abort_unless($line, 404);
+            if ((int) $line->amount_minor !== (int) $claim->amount_minor || $line->booked_on < $claim->instrument_on) {
+                throw ValidationException::withMessages(['line_id' => 'يجب مطابقة مبلغ الطلب وتاريخ تحقق التحصيل.']);
+            }
+            abort_if(Payment::withTrashed()->where('sync_uuid', $claim->sync_uuid)->exists()
+                || DB::table('late_receipt_reviews')->where('sync_uuid', $claim->sync_uuid)->exists(), 409, 'معرف الطلب مستخدم في سند آخر.');
+            // No till assignment. The actual clearance date, not the submission date,
+            // determines receipt date. The bank service independently verifies the statement.
+            $payment = $this->postPayment($subscriber, ((int) $claim->amount_minor) / 100,
+                $claim->invoice_id ? (int) $claim->invoice_id : null, $claim->payment_method,
+                $claim->instrument_reference, $claim->notes, null, (int) $claim->submitted_by,
+                $line->booked_on, null, $claim->sync_uuid, null, false, null, true);
+            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence);
+            $decision = ['status' => 'cleared', 'payment_id' => $payment->id, 'decided_by' => $actor->id,
+                'decision_evidence' => trim($evidence), 'decided_at' => now(), 'updated_at' => now()];
+            DB::table('noncash_collection_claims')->where('id', $id)->update($decision);
+            app(AuditLogger::class)->recordRequired('noncash_claim.cleared', [
+                'entity_type' => 'noncash_collection_claim', 'entity_id' => $id, 'actor_user_id' => $actor->id,
+                'after' => $decision + ['bank_collection_id' => $result['collection']['id']],
+            ]);
+            return ['claim' => (array) DB::table('noncash_collection_claims')->find($id), 'payment_id' => $payment->id, 'bank' => $result];
         }, 3);
     }
 }

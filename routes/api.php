@@ -198,6 +198,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);
 
     // صندوق المحصّل: فتح/إغلاق/اعتماد/تقرير (خطة 2.0 — الفصل 5.2).
+    Route::post('/noncash-claims', [\App\Http\Controllers\Api\NonCashClaimController::class, 'store']);
+    Route::get('/noncash-claims', [\App\Http\Controllers\Api\NonCashClaimController::class, 'index']);
+    Route::post('/noncash-claims/{id}/clear', [\App\Http\Controllers\Api\NonCashClaimController::class, 'clear'])->whereNumber('id');
+    Route::post('/noncash-claims/{id}/reject', [\App\Http\Controllers\Api\NonCashClaimController::class, 'reject'])->whereNumber('id');
     Route::post('/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'store']);
     Route::get('/cash-sessions/{id}/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'index'])->whereNumber('id');
     Route::post('/late-receipt-reviews/{id}/decide', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'decide'])->whereNumber('id');

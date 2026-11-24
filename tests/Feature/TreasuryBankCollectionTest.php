@@ -27,7 +27,12 @@ final class TreasuryBankCollectionTest extends TestCase
         $reviewer = User::factory()->create(['role' => 'admin']);
         $reviewer->assignRole($role);
         $subscriber = Subscriber::create(['name' => 'Synthetic bank collection', 'square_id' => Square::create(['name' => 'Bank collections'])->id, 'status' => 'active']);
-        $payment = app(PaymentService::class)->collectPayment($subscriber, 125.75, paymentMethod: $method, referenceNumber: 'BANK-REF', userId: $issuer->id);
+        // Seed a pre-existing legacy receipt, not a new noncash issuance.
+        $payment = \App\Models\Payment::create(['subscriber_id' => $subscriber->id, 'user_id' => $issuer->id,
+            'receipt_number' => 'LEGACY-BANK-01', 'amount' => '125.75', 'payment_date' => today(),
+            'payment_method' => $method, 'reference_number' => 'BANK-REF']);
+        app(\App\Services\TransactionService::class)->recordTransaction($subscriber, 'payment', 125.75, 'Legacy receipt', $payment);
+        app(PaymentService::class)->recalculateInvoices($subscriber);
         $date = today()->toDateString();
         $bank = app(TreasuryRegisterService::class)->open($issuer, [
             'code' => 'BANK-COLLECT', 'name' => 'Test bank', 'channel' => 'bank', 'opening_on' => $date,
