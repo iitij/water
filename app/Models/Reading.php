@@ -82,8 +82,8 @@ class Reading extends Model
     public function save(array $options = [])
     {
         if (! $this->exists) {
-            return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
-                $meter = Meter::findOrFail($this->meter_id);
+            $meter = Meter::findOrFail($this->meter_id);
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $meter) {
                 Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
                 $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
                 abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
@@ -118,7 +118,8 @@ class Reading extends Model
 
         return self::query()->where('meter_id', $this->getOriginal('meter_id'))
             ->whereKeyNot($this->id)
-            ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) > ?', [CarbonImmutable::parse($date)->toDateString()])->exists();
+            ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) > ?', [CarbonImmutable::parse($date)->toDateString()])
+            ->lockForUpdate()->first(['id']) !== null;
     }
 
     private function guardObservationUpdate(): void
@@ -182,6 +183,10 @@ class Reading extends Model
 
     protected static function booted(): void
     {
+        static::restoring(function (Reading $reading) {
+            throw ValidationException::withMessages(['reading_date' => 'لا يجوز استعادة قراءة محذوفة إلى التسلسل؛ سجّل قراءة فعلية جديدة.']);
+        });
+
         static::deleting(function (Reading $reading) {
             if ($reading->hasObservationSuccessor()) {
                 throw ValidationException::withMessages(['reading_date' => 'لا يمكن حذف قراءة أصبحت أساساً لقراءة لاحقة.']);
@@ -196,7 +201,7 @@ class Reading extends Model
             if ($reading->period_basis !== 'observation') {
                 throw ValidationException::withMessages(['period_basis' => 'لا يُسمح بإنشاء قراءة جديدة وفق الفترات التقويمية القديمة.']);
             }
-            $meter = $reading->meter()->firstOrFail();
+            $meter = $reading->meter()->lockForUpdate()->firstOrFail();
             if (! $reading->reading_date) {
                 throw ValidationException::withMessages(['reading_date' => 'يلزم تاريخ تسجيل القراءة.']);
             }
