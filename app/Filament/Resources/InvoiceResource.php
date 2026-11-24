@@ -49,7 +49,7 @@ class InvoiceResource extends Resource
                             if (!$subscriber) return;
 
                             // Auto-fill outstanding balance
-                            $set('previous_balance', $subscriber->getOutstandingBalance());
+                            $set('previous_balance', $subscriber->getAccountDebt());
 
                         }),
 

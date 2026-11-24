@@ -86,30 +86,24 @@ class SubscriberResource extends Resource
                 ->visible(fn ($record) => $record !== null)
                 ->schema([
                     Forms\Components\TextInput::make('credit_balance')
-                        ->label('إجمالي الرصيد الدائن (للمشترك والعداد)')
+                        ->label('الرصيد الدائن للحساب الموحد')
                         ->formatStateUsing(function ($record) {
                             if (! $record) {
                                 return 0;
                             }
-                            $subscriberCredit = $record->balance > 0 ? $record->balance : 0;
-                            $metersCredit = $record->meters->sum(fn ($meter) => $meter->balance > 0 ? $meter->balance : 0);
-
-                            return number_format($subscriberCredit + $metersCredit, 2);
+                            return number_format($record->getAccountCredit(), 2);
                         })
                         ->suffix('ريال')
                         ->disabled()
                         ->dehydrated(false),
 
                     Forms\Components\TextInput::make('debit_balance')
-                        ->label('إجمالي الرصيد المدين (للمشترك والعداد)')
+                        ->label('الرصيد المدين للحساب الموحد')
                         ->formatStateUsing(function ($record) {
                             if (! $record) {
                                 return 0;
                             }
-                            $subscriberDebit = $record->getOutstandingBalance();
-                            $metersDebit = $record->meters->sum(fn ($meter) => $meter->getOutstandingBalance());
-
-                            return number_format($subscriberDebit + $metersDebit, 2);
+                            return number_format($record->getAccountDebt(), 2);
                         })
                         ->suffix('ريال')
                         ->disabled()
@@ -117,23 +111,11 @@ class SubscriberResource extends Resource
 
                     Forms\Components\Repeater::make('meters')
                         ->relationship('meters')
-                        ->label('رصيد العداد المرتبط بالمشترك')
+                        ->label('بيانات العداد (مرجع الحركات)')
                         ->schema([
                             Forms\Components\TextInput::make('meter_number')
                                 ->label('رقم العداد')
                                 ->formatStateUsing(fn ($record) => $record ? 'عداد رقم: '.$record->id.' ('.$record->unique_code.')' : '-')
-                                ->disabled()
-                                ->dehydrated(false),
-                            Forms\Components\TextInput::make('meter_credit')
-                                ->label('رصيد دائن')
-                                ->formatStateUsing(fn ($record) => $record && $record->balance > 0 ? number_format($record->balance, 2) : 0)
-                                ->suffix('ريال')
-                                ->disabled()
-                                ->dehydrated(false),
-                            Forms\Components\TextInput::make('meter_debit')
-                                ->label('رصيد مدين')
-                                ->formatStateUsing(fn ($record) => $record ? number_format($record->getOutstandingBalance(), 2) : 0)
-                                ->suffix('ريال')
                                 ->disabled()
                                 ->dehydrated(false),
                         ])
@@ -182,10 +164,10 @@ class SubscriberResource extends Resource
                     ->searchable(['name', 'code'])
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('balance')
-                    ->label('الرصيد الدائن')
-                    ->numeric(2)->suffix(' ريال')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('account_balance')
+                    ->label('صافي الحساب')
+                    ->state(fn (Subscriber $record) => $record->getAccountBalance())
+                    ->numeric(2)->suffix(' ريال'),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('الحالة')

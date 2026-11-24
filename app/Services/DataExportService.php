@@ -72,15 +72,9 @@ class DataExportService
             $allMeterCodes = $primaryMeter?->unique_code ?? '-';
             $allPaths = $primaryMeter?->path_number !== null ? (string)$primaryMeter->path_number : '-';
 
-            $subscriberCredit = $sub->balance > 0 ? (float)$sub->balance : 0.0;
-            $metersCredit = (float)$sub->meters->sum(fn($m) => $m->balance > 0 ? (float)$m->balance : 0.0);
-            $totalCredit = $subscriberCredit + $metersCredit;
-
-            $subscriberDebit = (float)$sub->getOutstandingBalance();
-            $metersDebit = (float)$sub->meters->sum(fn($m) => (float)$m->getOutstandingBalance());
-            $totalDebit = $subscriberDebit + $metersDebit;
-
-            $netBalance = $totalCredit - $totalDebit;
+            $netBalance = $sub->getAccountBalance();
+            $totalCredit = max(0, $netBalance);
+            $totalDebit = max(0, -$netBalance);
 
             $meterStatus = match ($primaryMeter?->status) {
                 'active' => 'نشط',
