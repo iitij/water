@@ -304,8 +304,7 @@ class SubscriberController extends ApiController
         $subscriber = Subscriber::findOrFail($id);
         $invoices = $subscriber->invoices()
             ->with('meter:id,unique_code,path_number')
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->whereColumn('total_amount', '>', 'amount_paid')
+            ->withOwnDebt()
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
 
@@ -409,6 +408,9 @@ class SubscriberController extends ApiController
     private function decorateInvoice(Invoice $invoice): void
     {
         $invoice->setAttribute('true_remaining_amount', $invoice->getTrueRemainingAmount());
+        $invoice->setAttribute('remaining_amount', $invoice->getRemainingAmount());
+        $invoice->setAttribute('collectible_amount', $invoice->getCollectibleAmount());
+        $invoice->setAttribute('can_collect', $invoice->canCollect());
         $invoice->setAttribute('is_latest_invoice', $invoice->isLatestInvoice());
     }
 

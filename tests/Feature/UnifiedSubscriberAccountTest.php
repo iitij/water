@@ -113,4 +113,46 @@ class UnifiedSubscriberAccountTest extends TestCase
         $this->assertSame('0.00', $draft->fresh()->amount_paid);
         $this->assertSame(100.0, $meter->subscriber->getAccountCredit());
     }
+
+    public function test_latest_invoice_status_is_independent_of_older_arrears(): void
+    {
+        $meter = $this->meter();
+        $first = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 10);
+        app(PaymentService::class)->collectPayment($meter->subscriber, 2000, $first->id);
+        $second = $this->bill($meter, '2026-02-01', '2026-02-28', 10, 15);
+
+        $this->assertSame('partially_paid', $first->fresh()->status);
+        $this->assertSame('issued', $second->fresh()->status);
+        $this->assertSame(7000.0, $second->fresh()->getCollectibleAmount());
+
+        $payment = app(PaymentService::class)->collectPayment($meter->subscriber, 3000, $second->id);
+        $this->assertSame('paid', $second->fresh()->status);
+        $this->assertSame('3000.00', $second->fresh()->amount_paid);
+        $this->assertSame('partially_paid', $first->fresh()->status);
+        $this->assertSame(0.0, $second->fresh()->getRemainingAmount());
+        $this->assertSame(4000.0, $second->fresh()->getCollectibleAmount());
+        $this->assertSame(4000.0, $meter->subscriber->getAccountDebt());
+        $this->assertTrue($second->fresh()->canCollect());
+        $this->assertTrue($first->fresh()->canCollect());
+        $this->assertSame([$first->id], Invoice::where('subscriber_id', $meter->subscriber_id)->withOwnDebt()->pluck('id')->all());
+        $this->assertSame([$first->id, $second->id], Invoice::collectibleForSubscriber($meter->subscriber_id)->orderBy('id')->pluck('id')->all());
+
+        app(PaymentService::class)->voidPayment($payment, 'Synthetic targeted receipt correction');
+        $this->assertSame('issued', $second->fresh()->status);
+        $this->assertSame(7000.0, $meter->subscriber->getAccountDebt());
+    }
+
+    public function test_zero_consumption_invoice_is_paid_even_with_older_debt(): void
+    {
+        $meter = $this->meter();
+        $first = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 10);
+        $second = $this->bill($meter, '2026-02-01', '2026-02-28', 10, 10);
+        $this->assertSame('0.00', $second->total_amount);
+        $this->assertSame('paid', $second->status);
+        $this->assertSame(0.0, $second->getRemainingAmount());
+        $this->assertSame(6000.0, $second->getCollectibleAmount());
+        $this->assertSame(6000.0, $meter->subscriber->getAccountDebt());
+        $this->assertNotSame('paid', $first->fresh()->status);
+    }
+
 }

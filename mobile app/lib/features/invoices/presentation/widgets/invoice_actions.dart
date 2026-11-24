@@ -254,10 +254,10 @@ Future<void> showInvoiceActionSheet(
   if (!context.mounted) return;
 
   final actions = <_SheetAction>[
-    if (!invoice.isDeleted && invoice.status.isOpenForCollection)
+    if (invoice.canCollect)
       _SheetAction(
         icon: Icons.payments_outlined,
-        label: 'تحصيل دفعة',
+        label: invoice.ownRemaining == 0 ? 'تحصيل متأخرات الحساب' : 'تحصيل دفعة',
         color: Theme.of(context).colorScheme.primary,
         onTap: () => collectInvoicePayment(context, invoice, cubit: cubit),
       ),

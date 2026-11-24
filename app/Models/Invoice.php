@@ -140,6 +140,32 @@ class Invoice extends Model
         return max(0, (float) $this->total_amount - (float) $this->amount_paid);
     }
 
+    public function scopeWithOwnDebt(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereNotIn('status', ['draft', 'cancelled'])
+            ->whereNull('deleted_at')->whereColumn('total_amount', '>', 'amount_paid');
+    }
+
+    public function scopeCollectibleForSubscriber(\Illuminate\Database\Eloquent\Builder $query, ?int $subscriberId): \Illuminate\Database\Eloquent\Builder
+    {
+        $query->where('subscriber_id', $subscriberId)->whereNotIn('status', ['draft', 'cancelled']);
+        $latestId = null;
+        if ($subscriberId && self::where('subscriber_id', $subscriberId)->withOwnDebt()->exists()) {
+            $latestId = self::where('subscriber_id', $subscriberId)->whereNotIn('status', ['draft', 'cancelled'])->max('id');
+        }
+        return $query->where(function ($eligible) use ($latestId) {
+            $eligible->whereColumn('total_amount', '>', 'amount_paid');
+            if ($latestId !== null) {
+                $eligible->orWhere('id', $latestId);
+            }
+        });
+    }
+
+    public function canCollect(): bool
+    {
+        return $this->getCollectibleAmount() > 0;
+    }
+
     /**
      * Live collection suggestion, not the historical amount printed at issue.
      * Only the newest invoice represents cumulative outstanding debt.
@@ -189,7 +215,8 @@ class Invoice extends Model
     }
 
     /**
-     * تحديث الحالة بناءً على المدفوعات التراكمية
+     * Invoice payment status is independent of cumulative account debt.
+     * Retain the existing grace/strict policy until the overdue audit (ACC-11).
      */
     public function updateStatus(): void
     {
@@ -197,36 +224,23 @@ class Invoice extends Model
             return;
         }
 
-        $gracePeriod = (int) \App\Models\Setting::get('grace_period', '14');
-        $strictOverdue = \App\Models\Setting::get('strict_overdue_on_new_invoice', '0') === '1';
+        $remaining = round($this->getRemainingAmount(), 2);
+        $gracePeriod = (int) Setting::get('grace_period', '14');
+        $strictOverdue = Setting::get('strict_overdue_on_new_invoice', '0') === '1';
 
-        if ($this->isLatestInvoice()) {
-            // للفاتورة الأخيرة: نظهر الحالة التراكمية للحساب
-            $trueRemaining = $this->getTrueRemainingAmount();
-            $totalDebt = (float) $this->total_amount + (float) $this->previous_balance;
-
-            if ($trueRemaining <= 0) {
-                $this->updateQuietly(['status' => 'paid']);
-            } elseif ($trueRemaining < $totalDebt) {
-                $this->updateQuietly(['status' => 'partially_paid']);
-            } elseif (now()->isAfter($this->bill_date->addDays($gracePeriod))) {
-                $this->updateQuietly(['status' => 'overdue']);
-            } else {
-                $this->updateQuietly(['status' => 'issued']);
-            }
+        if ($remaining <= 0) {
+            $status = 'paid';
+        } elseif ((float) $this->amount_paid > 0) {
+            $status = 'partially_paid';
+        } elseif (($strictOverdue && ! $this->isLatestInvoice())
+            || ($this->bill_date && now()->isAfter($this->bill_date->copy()->addDays($gracePeriod)))) {
+            $status = 'overdue';
         } else {
-            // للفواتير القديمة: نظهر الحالة الفعلية للفاتورة نفسها
-            $remaining = $this->getRemainingAmount();
+            $status = 'issued';
+        }
 
-            if ($remaining <= 0) {
-                $this->updateQuietly(['status' => 'paid']);
-            } elseif ((float) $this->amount_paid > 0) {
-                $this->updateQuietly(['status' => 'partially_paid']);
-            } elseif ($strictOverdue || now()->isAfter($this->bill_date->addDays($gracePeriod))) {
-                $this->updateQuietly(['status' => 'overdue']);
-            } else {
-                $this->updateQuietly(['status' => 'issued']);
-            }
+        if ($this->status !== $status) {
+            $this->updateQuietly(['status' => $status]);
         }
     }
 

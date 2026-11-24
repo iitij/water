@@ -136,6 +136,36 @@ void main() {
       );
     });
 
+    test('paid newest invoice does not inherit older account debt', () {
+      final old = _invoice(id: 1, totalAmount: 6000, amountPaid: 2000, billDate: billDate);
+      final latest = _invoice(id: 2, totalAmount: 3000, previousBalance: 4000,
+        amountPaid: 3000, billDate: billDate, isLatest: true, serverTrueRemaining: 4000);
+      final siblings = [old, latest];
+      expect(InvoiceAccounting.computeStatus(latest, siblings: siblings, now: billDate), InvoiceStatus.paid);
+      expect(InvoiceAccounting.computeStatus(old, siblings: siblings, now: billDate), InvoiceStatus.partiallyPaid);
+      expect(InvoiceAccounting.ownRemaining(latest), 0);
+      expect(InvoiceAccounting.trueRemaining(latest, siblings), 4000);
+      expect(InvoiceAccounting.latestUnpaidOf(1, siblings)?.id, 1);
+      final settled = latest.copyWith(status: InvoiceStatus.paid);
+      expect(settled.canCollect, isTrue);
+      expect(settled.payableAmount, 4000);
+      expect(settled.copyWith(serverTrueRemaining: 0).canCollect, isFalse);
+      expect(settled.copyWith(status: InvoiceStatus.cancelled).canCollect, isFalse);
+      expect(old.copyWith(isLatestInvoice: false).canCollect, isTrue);
+    });
+
+    test('zero consumption is paid, draft and cancelled remain unchanged', () {
+      final old = _invoice(id: 1, totalAmount: 6000);
+      final zero = _invoice(id: 2, previousBalance: 6000, isLatest: true);
+      final draft = _invoice(id: 3, totalAmount: 100, status: InvoiceStatus.draft);
+      final cancelled = _invoice(id: 4, totalAmount: 100, status: InvoiceStatus.cancelled);
+      final siblings = [old, zero, draft, cancelled];
+      expect(InvoiceAccounting.computeStatus(zero, siblings: siblings), InvoiceStatus.paid);
+      expect(InvoiceAccounting.computeStatus(draft, siblings: siblings), InvoiceStatus.draft);
+      expect(InvoiceAccounting.computeStatus(cancelled, siblings: siblings), InvoiceStatus.cancelled);
+      expect(InvoiceAccounting.ownRemaining(cancelled), 0);
+    });
+
     test('تجاوز مدة السماح مع بقاء دين ⇒ overdue', () {
       final invoice = _invoice(id: 1, totalAmount: 1000, billDate: billDate, isLatest: true);
 

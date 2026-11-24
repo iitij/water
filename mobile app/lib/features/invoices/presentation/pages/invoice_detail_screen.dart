@@ -162,13 +162,13 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trueRemaining = invoice.serverTrueRemaining ?? invoice.ownRemaining;
+    final trueRemaining = invoice.payableAmount;
     return AppHeroPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'المتبقي الفعلي (تراكمي)',
+            invoice.isLatestInvoice != false ? 'المبلغ المتاح للتحصيل' : 'متبقي الفاتورة نفسها',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: AppColors.onPanelMuted,
                 ),
@@ -311,8 +311,9 @@ class _AmountsCard extends StatelessWidget {
       ('متأخرات سابقة', CurrencyFormatter.withLabel(invoice.previousBalance), AppColors.warning),
       ('خصم رصيد دائن', CurrencyFormatter.withLabel(invoice.creditApplied), AppColors.success),
       ('قيمة الفاتورة', CurrencyFormatter.withLabel(invoice.totalAmount), null),
-      ('إجمالي المطلوب', CurrencyFormatter.withLabel(invoice.totalDue), AppColors.danger),
-      ('المسدد', CurrencyFormatter.withLabel(invoice.amountPaid), AppColors.success),
+      ('إجمالي عند الإصدار (تاريخي)', CurrencyFormatter.withLabel(invoice.totalDue), AppColors.danger),
+      ('المسدد من الفاتورة', CurrencyFormatter.withLabel(invoice.amountPaid), AppColors.success),
+      ('متبقي الفاتورة نفسها', CurrencyFormatter.withLabel(invoice.ownRemaining), AppColors.danger),
     ];
 
     return AppCard(
@@ -545,7 +546,7 @@ class _ActionGrid extends StatelessWidget {
         children: <Widget>[
           if (state.canCollect) ...<Widget>[
             AppPrimaryButton(
-              label: 'تحصيل دفعة',
+              label: invoice.ownRemaining == 0 ? 'تحصيل متأخرات الحساب' : 'تحصيل دفعة',
               icon: Icons.payments_rounded,
               height: 48,
               onPressed: busy

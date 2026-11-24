@@ -171,7 +171,7 @@ class AdminController extends ApiController
     private function overview(): array
     {
         $monthStart = now()->startOfMonth();
-        $unpaid = Invoice::whereIn('status', ['issued', 'partially_paid', 'overdue']);
+        $unpaid = Invoice::withOwnDebt();
         $outstanding = app(\App\Services\FinancialReportingService::class)->outstandingDebt();
         $subscriberSparkline = [];
         $collectionSparkline = [];

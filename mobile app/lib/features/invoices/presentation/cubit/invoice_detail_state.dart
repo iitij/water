@@ -30,12 +30,8 @@ class InvoiceDetailState extends Equatable {
   bool get isLoading => status == FinanceLoadStatus.loading;
   bool get hasInvoice => invoice != null;
 
-  /// زر «تحصيل» يظهر فقط إذا كانت الفاتورة مفتوحة **و** الأحدث في حسابها
-  /// (قاعدة `collect_payment` في `InvoiceResource#L372` + `isLatestInvoice()`).
-  bool get canCollect =>
-      invoice != null &&
-      invoice!.status.isOpenForCollection &&
-      (invoice!.isLatestInvoice ?? true);
+  /// السداد الكامل للفاتورة الأحدث لا يمنع تحصيل متأخرات الحساب.
+  bool get canCollect => invoice?.canCollect ?? false;
 
   InvoiceDetailState copyWith({
     InvoiceModel? invoice,
