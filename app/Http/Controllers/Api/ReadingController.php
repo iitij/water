@@ -281,7 +281,9 @@ class ReadingController extends ApiController
         $deleted = 0;
         $skipped = 0;
         DB::transaction(function () use ($data, &$deleted, &$skipped) {
-            foreach (Reading::whereIn('id', $data['ids'])->lockForUpdate()->get() as $reading) {
+            $meterIds = Reading::whereIn('id', $data['ids'])->whereNotNull('meter_id')->pluck('meter_id')->unique()->sort()->values();
+            Meter::query()->whereIn('id', $meterIds)->orderBy('id')->lockForUpdate()->get();
+            foreach (Reading::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $reading) {
                 if ($reading->is_invoiced) {
                     $skipped++;
 
@@ -435,7 +437,9 @@ class ReadingController extends ApiController
                 $sameOwner = (int) ($existing->created_by ?? 0) === (int) ($request->user()?->id ?? 0);
                 $sameReading = (int) $existing->meter_id === $meter->id
                     && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
-                    && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
+                    && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString()
+                    && Carbon::parse($existing->actual_reading_date ?? $existing->reading_date)->toDateString()
+                        === Carbon::parse($data['actual_reading_date'] ?? $data['reading_date'])->toDateString();
                 $samePeriod = true;
                 foreach (['period_start', 'period_end'] as $field) {
                     $originalField = 'submitted_'.$field;
@@ -457,7 +461,9 @@ class ReadingController extends ApiController
         // period calculation and insertion inside that SAME row lock so a
         // reading cannot slip between the preflight guard and meter deletion.
         $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
+            \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
+            abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
             $lastReading = $this->readingService->latestReading($locked->id);
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
