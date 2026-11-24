@@ -143,17 +143,14 @@ class InvoiceModel extends Equatable {
   /// `Invoice::updateStatus()` مع `grace_period`) — العرض فقط، لا إعادة احتساب.
   bool get isOverdue => status == InvoiceStatus.overdue;
 
-  double get consumptionUnits =>
-      correctedUnits ?? readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
+  double get consumptionUnits => tariffLines?.isNotEmpty == true
+      ? tariffLines!.fold<double>(0, (sum, line) => sum + line.units)
+      : correctedUnits ?? readings.fold<double>(0, (sum, r) => sum + r.consumptionUnits);
 
-  /// سعر الوحدة الضمني (مطابق لمنطق `WhatsAppService#L120`).
+  /// Only one uniquely evidenced price may be displayed as a unit price.
   double? get impliedUnitPrice {
-    if (historicalUnitPrice != null) return historicalUnitPrice;
-    final units = consumptionUnits;
-    if (units > 0 && consumptionFee > 0) {
-      return double.parse((consumptionFee / units).toStringAsFixed(2));
-    }
-    return null;
+    final prices = tariffLines?.map((line) => line.unitPrice).toSet();
+    return prices?.length == 1 ? prices!.single : null;
   }
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
