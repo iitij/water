@@ -132,12 +132,38 @@ class Payment extends Model
         return $this->void_requested_at !== null && $this->voided_at === null;
     }
 
+    public function assertFinancialFieldsUnchanged(): void
+    {
+        $errors = [];
+        foreach ([
+            'subscriber_id', 'meter_id', 'invoice_id', 'user_id', 'receipt_number',
+            'amount', 'payment_date', 'payment_method', 'reference_number',
+            'reason', 'sync_uuid', 'cash_session_id',
+        ] as $field) {
+            if ($this->isDirty($field)) {
+                $errors[$field] = 'لا يجوز تعديل بيانات سند قبض معتمد؛ استخدم إجراء إلغاء السند المعتمد ثم سجل سنداً صحيحاً.';
+            }
+        }
+        if ($errors !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+        }
+    }
+
     protected static function booted()
     {
+        static::updating(function (Payment $payment): void {
+            $payment->assertFinancialFieldsUnchanged();
+        });
+
         // ملاحظة: منطق الإنشاء يُعالَج بالكامل في PaymentService
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
 
         static::updated(function (Payment $payment) {
+            // Administrative notes and delivery metadata must not rewrite money.
+            // The explicit void service handles financial reversal and allocation.
+            if (! $payment->wasChanged(['amount', 'subscriber_id', 'meter_id', 'invoice_id'])) {
+                return;
+            }
             $transactionService = new TransactionService;
             $paymentService = new PaymentService;
             $oldSubscriberId = (int) $payment->getOriginal('subscriber_id');

@@ -142,18 +142,9 @@ class PaymentController extends ApiController
             'reason' => ['sometimes', 'nullable', 'string', 'max:255'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
-        $invoiceId = array_key_exists('invoice_id', $data) ? $data['invoice_id'] : $payment->invoice_id;
-        if ($invoiceId) {
-            $invoice = Invoice::where('subscriber_id', $payment->subscriber_id)->findOrFail($invoiceId);
-            if (array_key_exists('meter_id', $data) && (int) ($data['meter_id'] ?? 0) !== (int) ($invoice->meter_id ?? 0)) {
-                return response()->json(['message' => 'العداد المحدد لا يطابق حساب الفاتورة.'], 422);
-            }
-            $data['meter_id'] = $invoice->meter_id;
-        } elseif (array_key_exists('meter_id', $data) && $data['meter_id'] !== null) {
-            Meter::where('subscriber_id', $payment->subscriber_id)->findOrFail($data['meter_id']);
-        }
-
-        DB::transaction(fn () => $payment->update($data));
+        $payment->fill($data);
+        $payment->assertFinancialFieldsUnchanged();
+        DB::transaction(fn () => $payment->save());
         $payment->refresh()->load(['subscriber.square', 'meter', 'invoice', 'user']);
 
         return response()->json(['message' => 'تم تحديث سند القبض بنجاح.', 'payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);

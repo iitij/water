@@ -39,10 +39,47 @@ class Invoice extends Model
         'amount_paid' => 'decimal:2',
     ];
 
+    public function isFinanciallyLocked(): bool
+    {
+        return $this->exists && ($this->getOriginal('status') !== 'draft'
+            || Transaction::withTrashed()->where('reference_type', self::class)
+                ->where('reference_id', $this->id)->exists());
+    }
+
+    public function assertFinancialFieldsUnchanged(): void
+    {
+        if (! $this->isFinanciallyLocked()) {
+            return;
+        }
+
+        $errors = [];
+        foreach ([
+            'subscriber_id', 'meter_id', 'invoice_type', 'bill_number', 'bill_date',
+            'billing_period_start', 'billing_period_end', 'consumption_fee',
+            'previous_balance', 'credit_applied', 'total_amount', 'amount_paid', 'status',
+        ] as $field) {
+            if ($this->isDirty($field)) {
+                $errors[$field] = 'لا يجوز تعديل بيانات فاتورة معتمدة؛ يجب استخدام إجراء تصحيح محاسبي موثق.';
+            }
+        }
+        if ($errors !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+        }
+    }
+
     // ─── Relationships ───
 
     protected static function booted(): void
     {
+        static::updating(function (Invoice $invoice): void {
+            $invoice->assertFinancialFieldsUnchanged();
+            if ($invoice->getOriginal('status') === 'draft' && $invoice->isDirty('status')) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'status' => 'اعتماد المسودة يتطلب مسار ترحيل مالي صريح.',
+                ]);
+            }
+        });
+
         static::created(function (Invoice $invoice) {
             if ($invoice->subscriber) {
                 $paymentService = new \App\Services\PaymentService();
@@ -99,8 +136,9 @@ class Invoice extends Model
             // Unlink payments attached to this invoice
             $payments = \App\Models\Payment::where('invoice_id', $invoice->id)->get();
             foreach ($payments as $payment) {
-                $payment->invoice_id = null;
-                $payment->save();
+                // Legacy invoice deletion detaches references internally.
+                // ACC-05 will replace deletion with a documented reversal.
+                $payment->updateQuietly(['invoice_id' => null]);
             }
 
             // Update balance after transaction is deleted
