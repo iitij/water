@@ -121,20 +121,15 @@ class Tariff extends Model
         });
     }
 
-    public static function getActivePrice(): float
+    /** Current-day display only; never a historical invoice pricing source. */
+    public static function getActivePrice(): ?float
     {
-        $activeTariff = self::where('is_active', true)
-            ->where(function ($query) {
-                $query->whereNull('start_date')
-                      ->orWhere('start_date', '<=', now());
-            })
-            ->where(function ($query) {
-                $query->whereNull('end_date')
-                      ->orWhere('end_date', '>=', now());
-            })
-            ->orderByDesc('id')
-            ->first();
+        $today = now()->toDateString();
+        $tariffs = self::query()->where('is_active', true)
+            ->where(fn ($query) => $query->whereNull('start_date')->orWhereDate('start_date', '<=', $today))
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $today))
+            ->limit(2)->get();
 
-        return $activeTariff ? (float) $activeTariff->unit_price : 600; // Default fallback to 600
+        return $tariffs->count() === 1 ? (float) $tariffs->first()->unit_price : null;
     }
 }
