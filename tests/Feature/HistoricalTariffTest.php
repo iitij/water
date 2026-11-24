@@ -265,6 +265,35 @@ class HistoricalTariffTest extends TestCase
         $this->assertTrue(Tariff::withTrashed()->findOrFail($old->id)->trashed());
     }
 
+    public function test_read_only_tariff_audit_detects_unpriceable_readings_and_legacy_overlap(): void
+    {
+        $meter = $this->meter();
+        $reading = $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
+        $this->artisan('water:audit-historical-tariffs')->expectsOutputToContain('UNPRICEABLE reading #'.$reading->id)->assertFailed();
+        $this->assertDatabaseCount('invoices', 0);
+        $this->tariff('600.00', '2026-01-01', '2026-01-31');
+        $this->artisan('water:audit-historical-tariffs')->assertSuccessful();
+        DB::table('tariffs')->insert(['name' => 'Legacy overlap', 'unit_price' => 800,
+            'is_active' => true, 'start_date' => '2026-01-10', 'end_date' => '2026-01-20']);
+        $before = DB::table('tariffs')->orderBy('id')->get()->toJson();
+        $this->artisan('water:audit-historical-tariffs')->expectsOutputToContain('OVERLAP')->assertFailed();
+        $this->assertSame($before, DB::table('tariffs')->orderBy('id')->get()->toJson());
+        $this->assertFalse($reading->fresh()->is_invoiced);
+    }
+
+    public function test_pdf_uses_mixed_tariff_label_instead_of_invented_average_price(): void
+    {
+        $meter = $this->meter();
+        $this->tariff('600.00', '2026-01-01', '2026-01-31');
+        $this->tariff('800.00', '2026-02-01', null);
+        $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
+        $this->read($meter, '2026-02-01', '2026-03-01', 10, 15);
+        $invoice = app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+        $html = view('pdf.invoice', ['invoice' => $invoice->fresh()])->render();
+        $this->assertStringContainsString('تعرفات متعددة', $html);
+        $this->assertStringNotContainsString('666.67', $html);
+    }
+
     private function assertRejected(Meter $meter, Reading $reading): void
     {
         try {
