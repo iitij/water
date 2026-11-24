@@ -138,6 +138,7 @@ class PaymentService
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
+                || DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
@@ -235,6 +236,7 @@ class PaymentService
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
+                || DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
@@ -303,6 +305,7 @@ class PaymentService
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
+                || DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->exists()
                 || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }

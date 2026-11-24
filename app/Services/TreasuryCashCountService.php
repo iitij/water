@@ -43,6 +43,7 @@ final class TreasuryCashCountService
         // Preserve existing hashes for rows preceding this migration.
         foreach ($rows as $row) {
             if ($row->treasury_cash_adjustment_id === null) unset($row->treasury_cash_adjustment_id);
+            if ($row->treasury_bank_collection_id === null) unset($row->treasury_bank_collection_id);
         }
         $balance = (int) $account->opening_minor;
         foreach ($rows as $row) {
@@ -238,7 +239,7 @@ final class TreasuryCashCountService
     {
         if ($posting->kind !== 'cash_count_adjustment' || ! $posting->treasury_cash_adjustment_id
             || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
-            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id) return false;
+            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id || $posting->treasury_bank_collection_id) return false;
         $adjustment = DB::table('treasury_cash_adjustments')->find($posting->treasury_cash_adjustment_id);
         $count = $adjustment ? DB::table('treasury_cash_counts')->find($adjustment->treasury_cash_count_id) : null;
         $review = $adjustment ? DB::table('treasury_cash_count_reviews')->find($adjustment->treasury_cash_count_review_id) : null;

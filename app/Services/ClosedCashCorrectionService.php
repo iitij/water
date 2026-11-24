@@ -44,6 +44,7 @@ final class ClosedCashCorrectionService
             if (\App\Models\PaymentAccountTransfer::whereIn('payment_id', [$payment->id, $original->id])->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || $payment->hasPendingVoidRequest() || $original->hasPendingVoidRequest()
+                || DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->exists()
                 || \App\Models\PaymentRefund::whereIn('payment_id', [$payment->id, $original->id])->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرتبط بتصحيح مالي آخر.']);
             }

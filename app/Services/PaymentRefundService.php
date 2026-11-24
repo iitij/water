@@ -70,6 +70,14 @@ final class PaymentRefundService
                 throw ValidationException::withMessages(['payment' => 'السند غير مؤهل لهذا الاسترداد.']);
             }
 
+            if (in_array($payment->payment_method, ['bank_transfer', 'check'], true)) {
+                $proof = DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->first();
+                $posting = $proof ? DB::table('treasury_postings')->where('treasury_bank_collection_id', $proof->id)->first() : null;
+                if (! $posting || ! app(BankReconciliationService::class)->checkCollectionPosting($posting)) {
+                    throw ValidationException::withMessages(['payment' => 'يلزم إثبات وصول التحصيل غير النقدي قبل الاسترداد.']);
+                }
+            }
+
             $originals = Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
                 ->where('type', 'payment')->lockForUpdate()->get();
             if ($originals->count() !== 1 || (int) $originals->first()->subscriber_id !== (int) $subscriber->id

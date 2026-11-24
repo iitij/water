@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\Payment;
+use App\Models\Subscriber;
+use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -162,6 +165,11 @@ final class BankReconciliationService
             if (! $fee || (int) $fee->bank_statement_line_id !== (int) $line->id
                 || ! $this->validFeePosting($posting, $statement, $line, $match, $fee)) return false;
         }
+        if ($posting && ($posting->kind === 'bank_collection' || $posting->treasury_bank_collection_id)) {
+            $collection = $posting->treasury_bank_collection_id ? DB::table('treasury_bank_collections')->find($posting->treasury_bank_collection_id) : null;
+            if (! $collection || (int) $collection->bank_statement_line_id !== (int) $line->id
+                || ! $this->checkCollectionPosting($posting)) return false;
+        }
         return $posting && (int) $line->bank_statement_id === (int) $statement->id
             && (int) $line->treasury_account_id === (int) $statement->treasury_account_id
             && (int) $posting->treasury_account_id === (int) $statement->treasury_account_id
@@ -216,7 +224,7 @@ final class BankReconciliationService
     {
         return $posting->kind === 'bank_fee'
             && ! $posting->cash_handover_id && ! $posting->payment_refund_id && ! $posting->cash_session_funding_id
-            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id && ! $posting->treasury_cash_adjustment_id
+            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id && ! $posting->treasury_cash_adjustment_id && ! $posting->treasury_bank_collection_id
             && (int) $posting->treasury_bank_fee_id === (int) $fee->id
             && (int) $fee->bank_statement_line_id === (int) $line->id
             && (int) $line->bank_statement_id === (int) $statement->id
@@ -326,6 +334,145 @@ final class BankReconciliationService
             ]);
             return ['fee' => (array) DB::table('treasury_bank_fees')->find($feeId), 'posting' => (array) $posting,
                 'reconciliation' => $this->report($statement, $account)];
+        }, 3);
+    }
+
+    private function eligibleCollection(Payment $payment): bool
+    {
+        if (! in_array($payment->payment_method, ['bank_transfer', 'check'], true)
+            || $payment->isVoided() || $payment->hasPendingVoidRequest()
+            || $this->minor((string) $payment->amount) <= 0
+            || trim((string) $payment->reference_number) === ''
+            || DB::table('closed_cash_corrections')->where('payment_id', $payment->id)->exists()
+            || \App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()) return false;
+        $late = DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->first();
+        if ($late && ($late->status !== 'approved' || $late->settlement_method !== 'verified_non_cash'
+            || (int) $late->subscriber_id !== (int) $payment->subscriber_id
+            || $this->minor(number_format((float) $late->amount, 2, '.', '')) !== $this->minor((string) $payment->amount)
+            || $late->payment_method !== $payment->payment_method)) return false;
+        $entries = Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            ->where('type', 'payment')->get();
+        return $entries->count() === 1
+            && (int) $entries->first()->subscriber_id === (int) $payment->subscriber_id
+            && $this->minor((string) $entries->first()->amount) === $this->minor((string) $payment->amount)
+            && (int) ($entries->first()->meter_id ?? 0) === (int) ($payment->meter_id ?? 0)
+            && ! Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
+                ->where('type', 'payment_reversal')->exists();
+    }
+
+    /** Audit the bank leg independently of the original subscriber credit. */
+    public function checkCollectionPosting(object $posting): bool
+    {
+        if ($posting->kind !== 'bank_collection' || ! $posting->treasury_bank_collection_id
+            || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
+            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id
+            || $posting->treasury_bank_fee_id || $posting->treasury_cash_adjustment_id) return false;
+        $doc = DB::table('treasury_bank_collections')->find($posting->treasury_bank_collection_id);
+        $payment = $doc ? Payment::find($doc->payment_id) : null;
+        $line = $doc ? DB::table('bank_statement_lines')->find($doc->bank_statement_line_id) : null;
+        $statement = $line ? DB::table('bank_statements')->find($line->bank_statement_id) : null;
+        $account = $doc ? DB::table('treasury_accounts')->find($doc->treasury_account_id) : null;
+        $match = $line ? DB::table('bank_statement_matches')->where('bank_statement_line_id', $line->id)->first() : null;
+        return $doc && $payment && $line && $statement && $account && $match && $account->channel === 'bank'
+            && $this->eligibleCollection($payment)
+            && $this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $statement->id)->get())
+            && (int) $statement->treasury_account_id === (int) $account->id
+            && (int) $line->treasury_account_id === (int) $account->id
+            && (int) $posting->treasury_account_id === (int) $account->id
+            && (int) $doc->subscriber_id === (int) $payment->subscriber_id
+            && $doc->payment_method === $payment->payment_method && $doc->receipt_number === $payment->receipt_number
+            && $doc->payment_reference === $payment->reference_number
+            && (int) $doc->amount_minor > 0 && (int) $doc->amount_minor === $this->minor((string) $payment->amount)
+            && (int) $line->amount_minor === (int) $doc->amount_minor && (int) $posting->amount_minor === (int) $doc->amount_minor
+            && $doc->cleared_on === $line->booked_on && $posting->effective_on === $line->booked_on
+            && $line->booked_on >= $account->opening_on && $line->booked_on <= today()->toDateString()
+            && (int) $doc->approved_by !== (int) $statement->imported_by
+            && (int) $doc->approved_by !== (int) $payment->user_id
+            && (int) $posting->posted_by === (int) $doc->approved_by && (int) $match->matched_by === (int) $doc->approved_by
+            && (int) $match->treasury_posting_id === (int) $posting->id
+            && $posting->evidence_reference === $doc->reference && $match->evidence === $doc->evidence
+            && mb_strlen(trim($doc->evidence)) >= 10;
+    }
+
+    /** Records full bank clearance of a previously posted receipt, never another subscriber credit. */
+    public function confirmCollection(User $actor, int $id, int $lineId, int $paymentId, string $reference, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $reference = mb_strtoupper(trim($reference));
+        $evidence = trim($evidence);
+        if (mb_strlen($reference) < 3 || mb_strlen($reference) > 150 || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
+            $this->reject('collection', 'يلزم مرجع فريد وإثبات مستقل لوصول المبلغ.');
+        }
+        $candidate = Payment::findOrFail($paymentId);
+        return DB::transaction(function () use ($actor, $id, $lineId, $paymentId, $reference, $evidence, $candidate): array {
+            // Subscriber -> issuance -> payment -> statement/account, consistent with collection.
+            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
+            $this->lock();
+            $payment = Payment::query()->lockForUpdate()->findOrFail($paymentId);
+            abort_unless((int) $payment->subscriber_id === (int) $candidate->subscriber_id, 409);
+            $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($statement, 404);
+            $account = $this->account((int) $statement->treasury_account_id);
+            abort_if((int) $statement->imported_by === (int) $actor->id || (int) $payment->user_id === (int) $actor->id,
+                403, 'يلزم اعتماد مستقل عن مسجل السند ومدخل الكشف.');
+            abort_unless($this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $id)->get()),
+                409, 'بيانات الكشف لا تطابق بصمتها الأصلية.');
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $id)->where('id', $lineId)->lockForUpdate()->first();
+            abort_unless($line, 404);
+            if (! $this->eligibleCollection($payment) || (int) $line->amount_minor <= 0
+                || (int) $line->amount_minor !== $this->minor((string) $payment->amount)
+                || $line->booked_on < $account->opening_on) {
+                $this->reject('payment_id', 'يلزم سند غير نقدي سارٍ بمرجع وقيد مطابق ومبلغ إيداع كامل مثبت.');
+            }
+            $this->date($line->booked_on);
+            $record = [
+                'treasury_account_id' => (int) $account->id, 'bank_statement_line_id' => $lineId,
+                'payment_id' => $paymentId, 'subscriber_id' => $payment->subscriber_id,
+                'receipt_number' => $payment->receipt_number, 'payment_reference' => $payment->reference_number,
+                'payment_method' => $payment->payment_method, 'amount_minor' => (int) $line->amount_minor,
+                'cleared_on' => $line->booked_on, 'reference' => $reference, 'evidence' => $evidence, 'approved_by' => $actor->id,
+            ];
+            $existing = DB::table('treasury_bank_collections')->where('payment_id', $paymentId)->lockForUpdate()->first();
+            if ($existing) {
+                foreach ($record as $field => $value) {
+                    abort_unless((string) $existing->$field === (string) $value, 409, 'سبق إثبات وصول هذا السند بصورة مختلفة.');
+                }
+                $posting = DB::table('treasury_postings')->where('treasury_bank_collection_id', $existing->id)->first();
+                abort_unless($posting && $this->checkCollectionPosting($posting), 409, 'إثبات التحصيل السابق غير متطابق.');
+                return ['collection' => (array) $existing, 'posting' => (array) $posting, 'reconciliation' => $this->report($statement, $account)];
+            }
+            abort_if(DB::table('treasury_bank_collections')->where('bank_statement_line_id', $lineId)->exists()
+                || DB::table('bank_statement_matches')->where('bank_statement_line_id', $lineId)->exists(),
+                409, 'حركة البنك مستخدمة بالفعل.');
+            abort_if(DB::table('treasury_bank_collections')->where('reference', $reference)->exists()
+                || DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                || DB::table('cash_handovers')->where('reference', $reference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists()
+                || DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists(),
+                409, 'مرجع الإثبات مستخدم مسبقاً.');
+            abort_if(DB::table('treasury_postings')->where('treasury_account_id', $account->id)
+                ->where('amount_minor', $line->amount_minor)
+                ->whereNotIn('id', DB::table('bank_statement_matches')->select('treasury_posting_id'))->exists(),
+                409, 'يوجد إيداع غير مطابق بالقيمة نفسها؛ يلزم مراجعة احتمال الازدواجية.');
+            $collectionId = DB::table('treasury_bank_collections')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
+            $postingId = DB::table('treasury_postings')->insertGetId([
+                'treasury_account_id' => $account->id, 'treasury_bank_collection_id' => $collectionId,
+                'kind' => 'bank_collection', 'amount_minor' => (int) $line->amount_minor, 'effective_on' => $line->booked_on,
+                'evidence_reference' => $reference, 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $matchId = DB::table('bank_statement_matches')->insertGetId([
+                'bank_statement_line_id' => $lineId, 'treasury_posting_id' => $postingId,
+                'matched_by' => $actor->id, 'evidence' => $evidence, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $posting = DB::table('treasury_postings')->find($postingId);
+            if (! $this->checkCollectionPosting($posting)) throw new \LogicException('Bank collection proof inconsistent.');
+            app(AuditLogger::class)->recordRequired('treasury.bank_collection_confirmed', [
+                'entity_type' => 'treasury_bank_collection', 'entity_id' => $collectionId, 'actor_user_id' => $actor->id,
+                'after' => $record + ['posting_id' => $postingId, 'match_id' => $matchId, 'subscriber_posting_created' => false],
+            ]);
+            return ['collection' => (array) DB::table('treasury_bank_collections')->find($collectionId),
+                'posting' => (array) $posting, 'reconciliation' => $this->report($statement, $account)];
         }, 3);
     }
 

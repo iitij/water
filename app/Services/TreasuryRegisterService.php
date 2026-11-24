@@ -180,6 +180,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'bank_collection') {
+                    if (! app(BankReconciliationService::class)->checkCollectionPosting($row)) {
+                        $issues[] = ['code' => 'bank_collection_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->treasury_bank_collection_id) {
+                    $issues[] = ['code' => 'unexpected_bank_collection_source', 'posting_id' => $row->id];
+                }
                 if ($row->kind === 'cash_count_adjustment') {
                     if (! app(TreasuryCashCountService::class)->checkAdjustmentPosting($row)) {
                         $issues[] = ['code' => 'cash_adjustment_source_mismatch', 'posting_id' => $row->id];
@@ -259,6 +268,13 @@ final class TreasuryRegisterService
             if ($unpostedAdjustments) $issues[] = ['code' => 'unposted_cash_adjustment', 'count' => $unpostedAdjustments];
             $held = (int) DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
                 ->where('classification', 'unattributed_cash_held')->sum('amount_minor');
+            $unpostedCollections = DB::table('treasury_bank_collections')->where('treasury_account_id', $accountId)
+                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_collection_id')->select('treasury_bank_collection_id'))->count();
+            if ($unpostedCollections) $issues[] = ['code' => 'unposted_bank_collection', 'count' => $unpostedCollections];
+            // Channel-wide, not an amount attributable to this particular account.
+            $unconfirmed = $account->channel === 'bank' ? DB::table('payments')->whereNull('deleted_at')->whereNull('voided_at')
+                ->whereIn('payment_method', ['bank_transfer', 'check'])
+                ->whereNotIn('id', DB::table('treasury_bank_collections')->select('payment_id'))->count() : 0;
             $transfers = app(TreasuryTransferService::class)->inspectAccount($accountId);
             $issues = array_merge($issues, $transfers['issues']);
             return [
@@ -266,7 +282,9 @@ final class TreasuryRegisterService
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees_cash_adjustments',
+                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees_cash_adjustments_bank_collections',
+                'channel_unconfirmed_non_cash_count' => $unconfirmed,
+                'unposted_bank_collection_count' => $unpostedCollections,
                 'unposted_cash_adjustment_count' => $unpostedAdjustments,
                 'unattributed_cash_held_minor' => $held,
                 'unposted_bank_fee_count' => $unpostedFees,
