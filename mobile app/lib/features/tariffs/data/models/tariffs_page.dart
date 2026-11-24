@@ -15,7 +15,7 @@ class TariffsPage {
   final int currentPage;
   final int lastPage;
   final int total;
-  final double activePrice;
+  final double? activePrice;
 
   factory TariffsPage.fromJson(Object? raw) {
     if (raw is! Map || raw['data'] is! List) {
@@ -31,9 +31,8 @@ class TariffsPage {
         last < 1 ||
         total == null ||
         total < 0 ||
-        price == null ||
-        !price.isFinite ||
-        price < 0) {
+        !raw.containsKey('active_price') ||
+        (raw['active_price'] != null && (price == null || !price.isFinite || price < 0))) {
       throw const ServerFailure(AppStringsDefaults.serverError);
     }
     final rows = raw['data'] as List;
