@@ -132,6 +132,10 @@ class UnifiedSubscriberAccountTest extends TestCase
         $this->assertSame(0.0, $second->fresh()->getRemainingAmount());
         $this->assertSame(4000.0, $second->fresh()->getCollectibleAmount());
         $this->assertSame(4000.0, $meter->subscriber->getAccountDebt());
+        $this->assertTrue($second->fresh()->canCollect());
+        $this->assertTrue($first->fresh()->canCollect());
+        $this->assertSame([$first->id], Invoice::where('subscriber_id', $meter->subscriber_id)->withOwnDebt()->pluck('id')->all());
+        $this->assertSame([$first->id, $second->id], Invoice::collectibleForSubscriber($meter->subscriber_id)->orderBy('id')->pluck('id')->all());
 
         app(PaymentService::class)->voidPayment($payment, 'Synthetic targeted receipt correction');
         $this->assertSame('issued', $second->fresh()->status);

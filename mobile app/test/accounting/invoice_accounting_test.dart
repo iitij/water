@@ -146,6 +146,12 @@ void main() {
       expect(InvoiceAccounting.ownRemaining(latest), 0);
       expect(InvoiceAccounting.trueRemaining(latest, siblings), 4000);
       expect(InvoiceAccounting.latestUnpaidOf(1, siblings)?.id, 1);
+      final settled = latest.copyWith(status: InvoiceStatus.paid);
+      expect(settled.canCollect, isTrue);
+      expect(settled.payableAmount, 4000);
+      expect(settled.copyWith(serverTrueRemaining: 0).canCollect, isFalse);
+      expect(settled.copyWith(status: InvoiceStatus.cancelled).canCollect, isFalse);
+      expect(old.copyWith(isLatestInvoice: false).canCollect, isTrue);
     });
 
     test('zero consumption is paid, draft and cancelled remain unchanged', () {

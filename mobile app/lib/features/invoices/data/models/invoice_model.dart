@@ -112,6 +112,7 @@ class InvoiceModel extends Equatable {
 
   /// متبقي الفاتورة نفسها فقط — `Invoice::getRemainingAmount()`.
   double get ownRemaining {
+    if (isDeleted || status == InvoiceStatus.draft || status == InvoiceStatus.cancelled) return 0;
     final value = totalAmount - amountPaid;
     return value < 0 ? 0 : value;
   }
@@ -129,6 +130,8 @@ class InvoiceModel extends Equatable {
         : ownRemaining;
     return value < 0 ? 0 : value;
   }
+
+  bool get canCollect => payableAmount > 0;
 
   /// `true` عندما يقرر الخادم أن الفاتورة متأخرة (يُحدَّث عبر
   /// `Invoice::updateStatus()` مع `grace_period`) — العرض فقط، لا إعادة احتساب.
