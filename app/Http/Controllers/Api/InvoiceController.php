@@ -265,15 +265,21 @@ class InvoiceController extends ApiController
     public function correctHistorical(Request $request, int $id)
     {
         $data = $request->validate([
-            'corrected_units' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
-            'historical_unit_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'readings' => ['sometimes', 'required', 'array', 'min:1', 'max:1000'],
+            'readings.*' => ['required', 'array:reading_id,corrected_units'],
+            'readings.*.reading_id' => ['required', 'integer', 'min:1', 'distinct'],
+            'readings.*.corrected_units' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
+            'corrected_units' => ['required_without:readings', 'prohibited_with:readings', 'numeric', 'min:0', 'decimal:0,2'],
+            'historical_unit_price' => ['required_without:readings', 'prohibited_with:readings', 'numeric', 'min:0', 'decimal:0,2'],
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        $correction = app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
-            Invoice::findOrFail($id), $request->user(), (string) $data['corrected_units'],
-            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
-        );
+        $invoice = Invoice::findOrFail($id);
+        $service = app(\App\Services\HistoricalInvoiceCorrectionService::class);
+        $correction = isset($data['readings'])
+            ? $service->correctReadings($invoice, $request->user(), $data['readings'], $data['reason'], $data['evidence'])
+            : $service->correct($invoice, $request->user(), (string) $data['corrected_units'],
+                (string) $data['historical_unit_price'], $data['reason'], $data['evidence']);
         $replacement = Invoice::findOrFail($correction->replacement_invoice_id);
         $data = $this->decorate($replacement);
         $data['tariff_lines'] = DB::table('invoice_tariff_lines')->where('invoice_id', $replacement->id)->orderBy('period_start')->orderBy('id')->get();
