@@ -390,6 +390,8 @@ class SubscriberController extends ApiController
             'total_credit_balance' => round($totalCredit, 2),
             'total_debit_balance' => round($totalDebit, 2),
             'account_balance' => round($totalCredit - $totalDebit, 2),
+            'transferred_in' => (float) \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->sum('amount'),
+            'transferred_out' => (float) \App\Models\PaymentAccountTransfer::where('from_subscriber_id', $subscriber->id)->sum('amount'),
             'general_balance' => round($generalBalance, 2),
             'general_credit_balance' => round(max(0, $generalBalance), 2),
             'general_debit_balance' => round(max(0, -$generalBalance), 2),

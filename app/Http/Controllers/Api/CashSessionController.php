@@ -232,7 +232,7 @@ class CashSessionController extends ApiController
     private function reportData(CashSession $session): array
     {
         $payments = Payment::query()
-            ->with(['subscriber:id,name', 'meter:id,unique_code'])
+            ->with(['subscriber:id,name', 'meter:id,unique_code', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])
             ->where('cash_session_id', $session->id)
             ->orderBy('id')
             ->get()
@@ -240,7 +240,8 @@ class CashSessionController extends ApiController
                 'id' => $payment->id,
                 'receipt_number' => $payment->receipt_number,
                 'subscriber' => $payment->subscriber?->name,
-                'meter' => $payment->meter?->unique_code,
+                'meter' => $payment->meter?->unique_code ?? $payment->retired_meter_code,
+                'account_transfer' => $payment->accountTransfer,
                 'amount' => number_format((float) $payment->amount, 2, '.', ''),
                 'payment_method' => $payment->payment_method,
                 'voided' => $payment->voided_at !== null && $payment->voided_via !== 'closed_correction',

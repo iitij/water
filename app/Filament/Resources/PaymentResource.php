@@ -180,6 +180,9 @@ class PaymentResource extends Resource
                     })
                     ->badge(),
 
+                Tables\Columns\TextColumn::make('accountTransfer.to_subscriber_id')
+                    ->label('محول إلى حساب')
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('invoice.bill_number')
                     ->label('رقم الفاتورة')
                     ->placeholder('غير محدد'),
@@ -195,6 +198,31 @@ class PaymentResource extends Resource
                     ]),
             ])
             ->actions([
+                \Filament\Actions\Action::make('transfer_account')
+                    ->label('تصحيح حساب المشترك')
+                    ->color('warning')
+                    ->visible(function (Payment $record): bool {
+                        $user = auth()->user();
+                        return $user && ! $record->isVoided() && ! $record->accountTransfer()->exists()
+                            && ($user->hasRole('super_admin') || ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
+                    })
+                    ->form([
+                        Forms\Components\Select::make('to_subscriber_id')
+                            ->label('المشترك الصحيح')->searchable()->required()
+                            ->getSearchResultsUsing(fn (string $search) => \App\Models\Subscriber::where('name', 'like', '%'.$search.'%')->limit(50)->pluck('name', 'id')->all())
+                            ->getOptionLabelUsing(fn ($value) => \App\Models\Subscriber::find($value)?->name),
+                        Forms\Components\Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
+                        Forms\Components\Textarea::make('evidence')->label('دليل هوية صاحب الدفعة')->required()->minLength(10)->maxLength(2000),
+                        Forms\Components\Checkbox::make('no_new_cash_movement')->label('لا توجد حركة نقدية جديدة')->accepted()->required(),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (Payment $record, array $data): void {
+                        abort_unless($data['no_new_cash_movement'] ?? false, 422);
+                        app(\App\Services\PaymentAccountTransferService::class)->transfer(
+                            $record, (int) $data['to_subscriber_id'], auth()->user(), $data['reason'], $data['evidence']
+                        );
+                        \Filament\Notifications\Notification::make()->title('تم تصحيح تخصيص المبلغ دون قبض جديد')->success()->send();
+                    }),
                 \Filament\Actions\Action::make('generate_pdf')
                     ->label('PDF')
                     ->icon('heroicon-o-document-arrow-down')

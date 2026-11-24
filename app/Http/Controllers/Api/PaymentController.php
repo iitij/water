@@ -25,6 +25,7 @@ class PaymentController extends ApiController
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number',
             'invoice:id,bill_number,status,total_amount', 'user:id,name',
+            'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
         ])->latest('payment_date')->latest('id');
 
         if ($request->filled('cash_session_id')) {
@@ -76,6 +77,7 @@ class PaymentController extends ApiController
         $this->authorizeApi(Payment::class, 'view');
         $payment = Payment::with([
             'subscriber.square', 'meter', 'invoice', 'user',
+            'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
         ])->findOrFail($id);
 
         return response()->json(['payment' => $payment, 'receipt_data' => $this->receiptData($payment)]);

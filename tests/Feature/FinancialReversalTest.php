@@ -258,4 +258,65 @@ class FinancialReversalTest extends TestCase
             'type' => 'payment_reversal', 'amount' => -2000, 'retired_meter_id' => $old->id]);
     }
 
+
+    public function test_wrong_subscriber_transfer_keeps_original_cash_and_moves_allocation_once(): void
+    {
+        [$from, , , $fromInvoice] = $this->fixture();
+        $to = Subscriber::create([
+            'name' => 'Correct synthetic account', 'square_id' => $from->square_id, 'status' => 'active',
+        ]);
+        $toMeter = Meter::create(['subscriber_id' => $to->id, 'unique_code' => 'ACC05-TRANSFER-TO']);
+        Reading::create([
+            'meter_id' => $toMeter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
+            'previous_reading' => 0, 'current_reading' => 5,
+        ]);
+        $toInvoice = app(InvoiceService::class)->generateInvoice($to, $toMeter);
+        $collector = User::factory()->create(['role' => 'collector']);
+        $supervisor = User::factory()->create(['role' => 'admin']);
+        $supervisor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $cash = app(CashSessionService::class);
+        $session = $cash->open($collector);
+        $payment = app(PaymentService::class)->collectPayment($from, 1500.25, $fromInvoice->id, userId: $collector->id);
+        $session = $cash->decide($cash->close($session, 1500.25), true, $supervisor);
+        $before = $cash->summary($session);
+        $this->assertSame(4499.75, $from->getAccountDebt());
+        $this->assertSame(3000.0, $to->getAccountDebt());
+        $payload = [
+            'to_subscriber_id' => $to->id,
+            'reason' => 'Synthetic incorrect subscriber allocation',
+            'evidence' => 'Synthetic verified identity of actual payer',
+            'no_new_cash_movement' => true,
+        ];
+        $url = '/api/payments/'.$payment->id.'/transfer-account';
+        $this->actingAs($collector, 'sanctum')->postJson($url, $payload)->assertForbidden();
+        $this->actingAs($supervisor, 'sanctum');
+        $this->postJson($url, array_replace($payload, ['no_new_cash_movement' => false]))->assertUnprocessable();
+        $id = $this->postJson($url, $payload)->assertOk()->json('transfer.id');
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('transfer.id', $id);
+        $this->assertDatabaseCount('payment_account_transfers', 1);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('transactions', 5);
+        $this->assertNull($payment->fresh()->voided_at);
+        $this->assertSame($from->id, $payment->fresh()->subscriber_id);
+        $this->assertSame('0.00', $fromInvoice->fresh()->amount_paid);
+        $this->assertSame('1500.25', $toInvoice->fresh()->amount_paid);
+        $this->assertSame(6000.0, $from->getAccountDebt());
+        $this->assertSame(1499.75, $to->getAccountDebt());
+        $this->assertSame(7499.75, $from->getAccountDebt() + $to->getAccountDebt());
+        $this->assertSame($before, $cash->summary($session->fresh()));
+        $this->assertDatabaseHas('audit_events', ['event' => 'payment.account_transferred', 'entity_id' => (string) $id]);
+        try {
+            app(PaymentService::class)->voidPayment($payment, 'Synthetic disallowed double reversal');
+            $this->fail('Transferred receipt was reversed twice.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('payment', $exception->errors());
+        }
+        $this->assertDatabaseCount('transactions', 5);
+        app(PaymentService::class)->recalculateInvoices($from);
+        app(PaymentService::class)->recalculateInvoices($to);
+        $this->assertSame('0.00', $fromInvoice->fresh()->amount_paid);
+        $this->assertSame('1500.25', $toInvoice->fresh()->amount_paid);
+    }
+
 }

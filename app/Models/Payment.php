@@ -76,6 +76,11 @@ class Payment extends Model
         return $this->belongsTo(Invoice::class);
     }
 
+    public function accountTransfer(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(PaymentAccountTransfer::class);
+    }
+
     public function cashSession(): BelongsTo
     {
         return $this->belongsTo(CashSession::class);
