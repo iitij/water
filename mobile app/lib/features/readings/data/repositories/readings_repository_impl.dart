@@ -311,7 +311,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       'period_end': _dateOnly(effectiveEnd),
       'previous_reading': reading.previousReading,
       'current_reading': newCurrentReading,
-      'consumption_units': newCurrentReading - reading.previousReading,
+      'consumption_units': ((newCurrentReading * 100).round() - (reading.previousReading * 100).round()) / 100,
     };
     if (reading.id == null) {
       final localId = reading.localId;
@@ -352,7 +352,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         periodEnd: effectiveEnd,
         previousReading: reading.previousReading,
         currentReading: newCurrentReading,
-        consumptionUnits: newCurrentReading - reading.previousReading,
+        consumptionUnits: ((newCurrentReading * 100).round() - (reading.previousReading * 100).round()) / 100,
         isInvoiced: false,
         meterCode: reading.meterCode,
         pathNumber: reading.pathNumber,
