@@ -437,4 +437,16 @@ class FinancialReversalTest extends TestCase
         $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
     }
 
+
+    public function test_field_pack_contains_unified_balance_after_meter_billing_and_payment(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        app(PaymentService::class)->collectPayment($subscriber, 1250.25, $invoice->id);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/squares/'.$subscriber->square_id.'/offline-pack')
+            ->assertOk()->assertJsonPath('subscribers.0.account_balance', -4749.75);
+    }
+
 }
