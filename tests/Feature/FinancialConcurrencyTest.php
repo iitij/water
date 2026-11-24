@@ -374,11 +374,25 @@ class FinancialConcurrencyTest extends TestCase
             \App\Models\Tariff::findOrFail($tariffId)->unit_price);
     }
 
+    private function fundedSession(\App\Models\User $collector, string $amount): \App\Models\CashSession
+    {
+        $issuer = \App\Models\User::factory()->create(['role' => 'admin']);
+        $issuer->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $key = substr((string) \Illuminate\Support\Str::uuid(), 0, 12);
+        $account = app(\App\Services\TreasuryRegisterService::class)->open($issuer, [
+            'code' => 'CASH-'.$key, 'name' => 'Synthetic cash funding', 'channel' => 'cash',
+            'opening_on' => today()->toDateString(), 'opening_amount' => '10000',
+            'opening_reference' => 'OPEN-'.$key, 'opening_evidence' => 'Synthetic independently counted opening',
+        ]);
+        return app(\App\Services\CashSessionService::class)->openFunded($collector, $issuer, (int) $account['id'],
+            $amount, 'FUND-'.$key, 'Synthetic actual handover to collector');
+    }
+
     public function test_parallel_cash_collection_and_close_preserve_finalized_cash_snapshot(): void
     {
         $meter = $this->fixture();
         $user = User::factory()->create();
-        $session = app(CashSessionService::class)->open($user, 100.25);
+        $session = $this->fundedSession($user, '100.25');
         $results = $this->race(
             fn () => app(PaymentService::class)->collectPayment(
                 Subscriber::findOrFail($meter->subscriber_id), 500.25, userId: $user->id)->id,
@@ -409,7 +423,7 @@ class FinancialConcurrencyTest extends TestCase
         $role = \Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web');
         $supervisor->assignRole($role);
         $sessions = app(CashSessionService::class);
-        $session = $sessions->open($collector, 100);
+        $session = $this->fundedSession($collector, '100.00');
         $sessions->decide($sessions->close($session, 200), true, $supervisor);
         $reviews = app(\App\Services\LateReceiptReviewService::class);
         $payload = ['cash_session_id' => $session->id, 'amount' => '75.25',

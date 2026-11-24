@@ -77,6 +77,20 @@ class CashSessionApiTest extends TestCase
         ]);
     }
 
+    private function fundedSession(\App\Models\User $collector, string $amount): \App\Models\CashSession
+    {
+        $issuer = \App\Models\User::factory()->create(['role' => 'admin']);
+        $issuer->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $key = substr((string) \Illuminate\Support\Str::uuid(), 0, 12);
+        $account = app(\App\Services\TreasuryRegisterService::class)->open($issuer, [
+            'code' => 'CASH-'.$key, 'name' => 'Synthetic cash funding', 'channel' => 'cash',
+            'opening_on' => today()->toDateString(), 'opening_amount' => '10000',
+            'opening_reference' => 'OPEN-'.$key, 'opening_evidence' => 'Synthetic independently counted opening',
+        ]);
+        return app(\App\Services\CashSessionService::class)->openFunded($collector, $issuer, (int) $account['id'],
+            $amount, 'FUND-'.$key, 'Synthetic actual handover to collector');
+    }
+
     public function test_cash_session_lifecycle_with_payments_and_variance(): void
     {
         $open = $this->actingAs($this->admin, 'sanctum')
@@ -167,8 +181,8 @@ class CashSessionApiTest extends TestCase
     public function test_physical_cash_settlement_includes_opening_and_excludes_non_cash_methods(): void
     {
         $this->actingAs($this->admin, 'sanctum');
-        $sessionId = $this->postJson('/api/cash-sessions', ['opening_amount' => '250.25'])
-            ->assertCreated()->assertJsonPath('cash_session.expected_amount', '250.25')->json('cash_session.id');
+        $sessionId = $this->fundedSession($this->admin, '250.25')->id;
+        $this->getJson('/api/cash-sessions/current')->assertOk()->assertJsonPath('cash_session.expected_amount', '250.25');
         $endpoint = "/api/invoices/{$this->invoice->id}/pay";
         foreach (['cash' => '600.50', 'bank_transfer' => '300.00', 'check' => '99.50'] as $method => $amount) {
             $this->postJson($endpoint, ['amount' => $amount, 'payment_method' => $method,
@@ -260,7 +274,7 @@ class CashSessionApiTest extends TestCase
     public function test_counted_surplus_is_allocated_once_without_rewriting_closed_snapshot(): void
     {
         $this->actingAs($this->admin, 'sanctum');
-        $old = $this->postJson('/api/cash-sessions', ['opening_amount' => '100.25'])->assertCreated()->json('cash_session.id');
+        $old = $this->fundedSession($this->admin, '100.25')->id;
         $this->postJson("/api/cash-sessions/{$old}/close", ['counted_amount' => '350.75'])->assertOk()
             ->assertJsonPath('cash_session.variance_amount', '250.50');
         $supervisor = User::factory()->create(['role' => 'admin']);

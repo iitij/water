@@ -212,6 +212,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'store']);
     Route::get('/treasury/accounts/{id}', [\App\Http\Controllers\Api\TreasuryController::class, 'show'])->whereNumber('id');
     Route::post('/treasury/accounts/{id}/postings', [\App\Http\Controllers\Api\TreasuryController::class, 'post'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/fund-collector', [\App\Http\Controllers\Api\TreasuryController::class, 'fundCollector'])->whereNumber('id');
     Route::apiResource('cash-sessions', CashSessionController::class)
         ->only(['index', 'store', 'show'])
         ->parameters(['cash-sessions' => 'id']);

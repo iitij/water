@@ -36,6 +36,23 @@ final class TreasuryController extends ApiController
         return response()->json($service->inspect($request->user(), $id));
     }
 
+    public function fundCollector(Request $request, int $id, TreasuryRegisterService $service, \App\Services\CashSessionService $sessions)
+    {
+        $service->authorize($request->user());
+        $data = $request->validate([
+            'collector_id' => ['required', 'integer', 'exists:users,id'],
+            'amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
+            'reference' => ['required', 'string', 'max:150'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'square_id' => ['nullable', 'integer', 'exists:squares,id'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $collector = \App\Models\User::findOrFail($data['collector_id']);
+        $session = $sessions->openFunded($collector, $request->user(), $id, (string) $data['amount'],
+            $data['reference'], $data['evidence'], $data['square_id'] ?? null, $data['notes'] ?? null);
+        return response()->json(['cash_session' => $sessions->summary($session), 'certified_balance' => false]);
+    }
+
     public function post(Request $request, int $id, TreasuryRegisterService $service)
     {
         $service->authorize($request->user());

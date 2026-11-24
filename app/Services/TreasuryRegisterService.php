@@ -179,6 +179,21 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'collector_funding') {
+                    $funding = $row->cash_session_funding_id ? DB::table('cash_session_fundings')->find($row->cash_session_funding_id) : null;
+                    $session = $funding ? CashSession::find($funding->cash_session_id) : null;
+                    if (! $funding || ! $session || $row->cash_handover_id || $row->payment_refund_id
+                        || $account->channel !== 'cash' || (int) $funding->treasury_account_id !== $accountId
+                        || $amount !== -(int) $funding->amount_minor || $row->effective_on !== $funding->issued_on
+                        || $row->effective_on < $account->opening_on || $row->evidence_reference !== $funding->reference
+                        || app(CashSessionService::class)->fundingSummary($session)['status'] !== 'documented') {
+                        $issues[] = ['code' => 'funding_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->cash_session_funding_id) {
+                    $issues[] = ['code' => 'unexpected_funding_source', 'posting_id' => $row->id];
+                }
                 $source = $row->kind === 'cash_handover' && $row->cash_handover_id && ! $row->payment_refund_id
                     ? CashHandover::find($row->cash_handover_id)
                     : ($row->kind === 'payment_refund' && $row->payment_refund_id && ! $row->cash_handover_id
@@ -205,12 +220,16 @@ final class TreasuryRegisterService
                 ->where('method', $account->channel === 'cash' ? 'treasury_cash' : 'bank_transfer')
                 ->where('disbursed_on', '>=', $account->opening_on)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('payment_refund_id')->select('payment_refund_id'))->count();
+            $unpostedFunding = DB::table('cash_session_fundings')->where('treasury_account_id', $accountId)
+                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('cash_session_funding_id')->select('cash_session_funding_id'))->count();
+            if ($unpostedFunding) $issues[] = ['code' => 'unposted_funding', 'count' => $unpostedFunding];
             return [
                 'account' => (array) $account,
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_only',
+                'coverage' => 'opening_handover_refund_funding_only',
+                'unposted_funding_count' => $unpostedFunding,
                 'channel_unposted_handover_count' => $unpostedHandover,
                 'channel_unposted_refund_count' => $unpostedRefund,
                 'issues' => $issues, 'entries' => $entries,

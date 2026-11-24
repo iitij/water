@@ -33,7 +33,6 @@ class CashSessionScreen extends StatefulWidget {
 class _CashSessionScreenState extends State<CashSessionScreen> {
   final _countedController = TextEditingController();
   final _notesController = TextEditingController();
-  final _openingController = TextEditingController(text: '0');
   bool _busy = false;
   String? _error;
 
@@ -51,7 +50,6 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
     _service.removeListener(_onServiceChanged);
     _countedController.dispose();
     _notesController.dispose();
-    _openingController.dispose();
     super.dispose();
   }
 
@@ -87,13 +85,7 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
   }
 
   Future<void> _openSession() async {
-    final opening =
-        double.tryParse(_openingController.text.replaceAll(',', '')) ?? 0;
-    if (opening < 0) {
-      setState(() => _error = 'مبلغ الافتتاح لا يكون سالباً.');
-      return;
-    }
-    await _run(() => _service.open(openingAmount: opening));
+    await _run(() => _service.open());
     if (!mounted || _service.isOpen == false) return;
     AppFeedback.success(
       context,
@@ -209,7 +201,6 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
           ],
           if (session == null)
             _OpenForm(
-              controller: _openingController,
               busy: _busy,
               onOpen: _openSession,
             )
@@ -231,12 +222,10 @@ class _CashSessionScreenState extends State<CashSessionScreen> {
 
 class _OpenForm extends StatelessWidget {
   const _OpenForm({
-    required this.controller,
     required this.busy,
     required this.onOpen,
   });
 
-  final TextEditingController controller;
   final bool busy;
   final VoidCallback onOpen;
 
@@ -252,17 +241,11 @@ class _OpenForm extends StatelessWidget {
           ),
           const Gap(4),
           const Text(
-            'المبلغ الافتتاحي هو النقد الموجود معك قبل أول سند (عهدة فكّة).',
-          ),
-          const Gap(AppSpacing.md),
-          AppNumericField(
-            controller: controller,
-            label: 'المبلغ الافتتاحي',
-            prefixText: 'ريال',
+            'يمكنك فتح صندوق دون عهدة نقدية. إذا استلمت عهدة من الخزينة، يوثق مسؤول الخزينة التمويل ويفتح الصندوق لك. حدّث الشاشة بعد التسليم.',
           ),
           const Gap(AppSpacing.md),
           AppPrimaryButton(
-            label: busy ? 'جارٍ الفتح…' : 'فتح الصندوق',
+            label: busy ? 'جارٍ الفتح…' : 'فتح صندوق دون عهدة',
             icon: Icons.lock_open_rounded,
             loading: busy,
             onPressed: busy ? null : onOpen,

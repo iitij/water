@@ -47,34 +47,141 @@ class CashSessionService
         ?string $notes = null,
     ): CashSession {
         $this->assertMoney($openingAmount, 'opening_amount');
-        $session = DB::transaction(function () use ($user, $openingAmount, $squareId, $notes) {
-            User::query()->lockForUpdate()->findOrFail($user->id);
-            if ($this->openSessionFor($user)) {
-                throw ValidationException::withMessages([
-                    'cash_session' => ['لديك صندوق مفتوح بالفعل. أغلقه قبل فتح صندوق جديد.'],
-                ]);
+        if ($openingAmount !== 0.0) {
+            throw ValidationException::withMessages(['opening_amount' => 'الافتتاح بمبلغ موجب يتطلب سند تمويل مثبتاً من الخزينة.']);
+        }
+        return DB::transaction(function () use ($user, $squareId, $notes): CashSession {
+            $session = $this->createOpenSession($user, 0, $squareId, $notes);
+            $this->auditOpening($session, $user);
+            return $session->fresh();
+        }, 3);
+    }
+
+    private function createOpenSession(User $user, float $openingAmount, ?int $squareId, ?string $notes): CashSession
+    {
+        User::query()->lockForUpdate()->findOrFail($user->id);
+        if ($this->openSessionFor($user)) {
+            throw ValidationException::withMessages([
+                'cash_session' => ['لديك صندوق مفتوح بالفعل. أغلقه قبل فتح صندوق جديد.'],
+            ]);
+        }
+        return CashSession::create([
+            'user_id' => $user->id,
+            'square_id' => $squareId,
+            'session_date' => now()->toDateString(),
+            'opening_amount' => $openingAmount,
+            'settlement_basis' => 'physical_cash',
+            'state' => CashSession::STATE_OPEN,
+            'opened_at' => now(),
+            'opening_notes' => $notes,
+        ]);
+    }
+
+    private function auditOpening(CashSession $session, User $actor): void
+    {
+        $this->audit->recordRequired('cash_session.opened', [
+            'entity_type' => CashSession::class,
+            'entity_id' => $session->id,
+            'actor_user_id' => $actor->id,
+            'after' => $this->summary($session->fresh()),
+        ]);
+    }
+
+    /** Records cash already delivered, not authorization to disburse it. */
+    public function openFunded(User $collector, User $issuer, int $accountId, string $amount,
+        string $reference, string $evidence, ?int $squareId = null, ?string $notes = null): CashSession
+    {
+        app(TreasuryRegisterService::class)->authorize($issuer);
+        abort_if((int) $collector->id === (int) $issuer->id, 403, 'يلزم مسؤول خزينة مستقل عن المحصّل.');
+        $reference = mb_strtoupper(trim($reference));
+        $evidence = trim($evidence);
+        if (! preg_match('/^(\d{1,12})(?:\.(\d{1,2}))?$/D', $amount, $parts)
+            || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+            || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
+            throw ValidationException::withMessages(['funding' => 'يلزم مبلغ نقدي صحيح ومرجع ودليل تسليم مستقل.']);
+        }
+        $minor = (int) $parts[1] * 100 + (int) str_pad($parts[2] ?? '', 2, '0');
+        if ($minor <= 0) {
+            throw ValidationException::withMessages(['amount' => 'مبلغ التمويل يجب أن يكون موجباً.']);
+        }
+
+        return DB::transaction(function () use ($collector, $issuer, $accountId, $minor, $reference, $evidence, $squareId, $notes): CashSession {
+            // Same lock order as treasury posting and payment issuance: global register,
+            // treasury account, then collector and new till. No subscriber lock is needed.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
             }
-            $session = CashSession::create([
-                'user_id' => $user->id,
-                'square_id' => $squareId,
-                'session_date' => now()->toDateString(),
-                'opening_amount' => $openingAmount,
-                'settlement_basis' => 'physical_cash',
-                'state' => CashSession::STATE_OPEN,
-                'opened_at' => now(),
-                'opening_notes' => $notes,
+            $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
+            abort_unless($account, 404);
+            $existing = DB::table('cash_session_fundings')->where('reference', $reference)->lockForUpdate()->first();
+            if ($existing) {
+                $session = CashSession::query()->findOrFail($existing->cash_session_id);
+                abort_unless((int) $existing->treasury_account_id === $accountId
+                    && (int) $existing->issued_by === (int) $issuer->id
+                    && (int) $session->user_id === (int) $collector->id
+                    && (int) $existing->amount_minor === $minor
+                    && $existing->evidence === $evidence
+                    && (int) ($session->square_id ?? 0) === (int) ($squareId ?? 0)
+                    && ($session->opening_notes ?? '') === ($notes ?? ''), 409, 'مرجع التمويل مرتبط بعملية مختلفة.');
+                $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $existing->id)->first();
+                abort_unless($posting && (int) $posting->amount_minor === -$minor
+                    && (int) $posting->treasury_account_id === $accountId
+                    && $posting->kind === 'collector_funding'
+                    && $posting->evidence_reference === $reference
+                    && $posting->effective_on === $existing->issued_on
+                    && (int) round((float) $session->opening_amount * 100) === $minor, 409, 'سجل التمويل غير متطابق؛ يلزم التدقيق.');
+                return $session;
+            }
+            $today = now()->toDateString();
+            if ($account->channel !== 'cash' || $account->opening_on > $today) {
+                throw ValidationException::withMessages(['treasury_account_id' => 'يلزم حساب خزينة نقدية مفتوح.']);
+            }
+            abort_if(DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                || DB::table('cash_handovers')->where('reference', $reference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists()
+                || DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists(),
+                409, 'مرجع الإثبات مستخدم مسبقاً.');
+            $session = $this->createOpenSession($collector, $minor / 100, $squareId, $notes);
+            $funding = [
+                'cash_session_id' => $session->id, 'treasury_account_id' => $accountId,
+                'amount_minor' => $minor, 'reference' => $reference, 'evidence' => $evidence,
+                'issued_by' => $issuer->id, 'issued_on' => $today,
+            ];
+            $fundingId = DB::table('cash_session_fundings')->insertGetId($funding + ['created_at' => now(), 'updated_at' => now()]);
+            $postingId = DB::table('treasury_postings')->insertGetId([
+                'treasury_account_id' => $accountId, 'cash_session_funding_id' => $fundingId,
+                'kind' => 'collector_funding', 'amount_minor' => -$minor,
+                'effective_on' => $today, 'evidence_reference' => $reference, 'posted_by' => $issuer->id,
+                'created_at' => now(), 'updated_at' => now(),
             ]);
-
-            $this->audit->record('cash_session.opened', [
-                'entity_type' => CashSession::class,
-                'entity_id' => $session->id,
-                'after' => $this->summary($session->fresh()),
+            $this->audit->recordRequired('treasury.collector_funded', [
+                'entity_type' => 'cash_session_funding', 'entity_id' => $fundingId,
+                'actor_user_id' => $issuer->id,
+                'after' => $funding + ['posting_id' => $postingId, 'subscriber_receipt_created' => false],
             ]);
+            $this->auditOpening($session, $issuer);
+            return $session->fresh();
+        }, 3);
+    }
 
-            return $session;
-        });
-
-        return $session->fresh();
+    public function fundingSummary(CashSession $session): array
+    {
+        $opening = (int) round((float) $session->opening_amount * 100);
+        $funding = DB::table('cash_session_fundings')->where('cash_session_id', $session->id)->first();
+        if (! $funding) {
+            return ['status' => $opening === 0 ? 'not_required' : 'legacy_unverified', 'reference' => null, 'amount_minor' => null];
+        }
+        $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->first();
+        $verified = $opening > 0 && (int) $funding->amount_minor === $opening
+            && (int) $funding->issued_by !== (int) $session->user_id
+            && $funding->issued_on === $session->session_date->toDateString()
+            && $posting && $posting->kind === 'collector_funding'
+            && (int) $posting->amount_minor === -$opening
+            && (int) $posting->treasury_account_id === (int) $funding->treasury_account_id
+            && $posting->effective_on === $funding->issued_on && $posting->evidence_reference === $funding->reference;
+        return ['status' => $verified ? 'documented' : 'inconsistent',
+            'reference' => $funding->reference, 'amount_minor' => (int) $funding->amount_minor];
     }
 
     private function assertMoney(float $amount, string $field): void
@@ -242,6 +349,7 @@ class CashSessionService
             'collector' => $session->user?->name,
             'square' => $session->square?->name,
             'opening_amount' => number_format((float) $session->opening_amount, 2, '.', ''),
+            'opening_funding' => $this->fundingSummary($session),
             'settlement_basis' => $session->isOpen() ? 'physical_cash' : ($session->settlement_basis ?? 'legacy_recorded'),
             'expected_amount' => number_format($this->expectedAmount($session), 2, '.', ''),
             'cash_collections' => number_format($cashMinor / 100, 2, '.', ''),

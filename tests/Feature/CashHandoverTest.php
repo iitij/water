@@ -12,6 +12,20 @@ final class CashHandoverTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function fundedSession(\App\Models\User $collector, string $amount): \App\Models\CashSession
+    {
+        $issuer = \App\Models\User::factory()->create(['role' => 'admin']);
+        $issuer->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $key = substr((string) \Illuminate\Support\Str::uuid(), 0, 12);
+        $account = app(\App\Services\TreasuryRegisterService::class)->open($issuer, [
+            'code' => 'CASH-'.$key, 'name' => 'Synthetic cash funding', 'channel' => 'cash',
+            'opening_on' => today()->toDateString(), 'opening_amount' => '10000',
+            'opening_reference' => 'OPEN-'.$key, 'opening_evidence' => 'Synthetic independently counted opening',
+        ]);
+        return app(\App\Services\CashSessionService::class)->openFunded($collector, $issuer, (int) $account['id'],
+            $amount, 'FUND-'.$key, 'Synthetic actual handover to collector');
+    }
+
     public function test_approved_count_is_not_a_handover_and_partial_receipts_are_bounded_and_idempotent(): void
     {
         $role = Role::findOrCreate('super_admin', 'web');
@@ -20,7 +34,7 @@ final class CashHandoverTest extends TestCase
         $receiver = User::factory()->create(['role' => 'admin']);
         $receiver->assignRole($role);
         $sessions = app(CashSessionService::class);
-        $session = $sessions->open($collector, 100.25);
+        $session = $this->fundedSession($collector, '100.25');
         $session = $sessions->close($session, 150.75);
         $endpoint = '/api/cash-sessions/'.$session->id.'/handovers';
         $payload = ['amount' => '100.25', 'reference' => 'HANDOVER-001',
