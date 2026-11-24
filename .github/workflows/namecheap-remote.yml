@@ -27,6 +27,7 @@ on:
           - sync-web-preflight
           - publish-web-initial
           - diagnose-public-web
+          - verify-public-web
           - migrate-empty
           - sync
 
@@ -92,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -1038,6 +1039,17 @@ jobs:
               '
               echo 'WEB_HOST_DIAGNOSTICS: COMPLETE; NO FILE OR DATABASE CHANGES'
               ;;
+            verify-public-web)
+              echo '=== VERIFY INSTALLED PUBLIC FILES WITHOUT MODIFICATION ==='
+              docroot="$HOME/public_html"
+              test "$(realpath "$docroot")" = "/home/alweufti/public_html"
+              test -f "$docroot/index.php" && test -f "$docroot/.htaccess"
+              test -s "$docroot/build/manifest.json"
+              for entry in .env .git composer.json test_upload.php test.pdf; do
+                test ! -e "$docroot/$entry" && test ! -L "$docroot/$entry"
+              done
+              echo 'PUBLIC_FILE_LAYOUT: PASSED'
+              ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
               php84='/opt/alt/php84/usr/bin/php'
@@ -1139,7 +1151,7 @@ jobs:
           REMOTE_SCRIPT
 
       - name: Verify the public website without signing in
-        if: ${{ inputs.operation == 'publish-web-initial' }}
+        if: ${{ inputs.operation == 'publish-web-initial' || inputs.operation == 'verify-public-web' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1153,20 +1165,54 @@ jobs:
           }
           check 200 /up
           check 200 /admin/login
-          check 302 /admin
-          check 302 /invoices/1/print
-          check 302 /payments/1/print
-          check 302 /admin/export/subscribers
           check 200 /build/manifest.json
+          for path in /admin /invoices/1/print /payments/1/print /admin/export/subscribers /admin/export/invoices /admin/export/readings; do
+            result="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' "$base$path")"
+            echo "PUBLIC_GUEST $path: ${result%% *}"
+            test "$result" = "302 $base/admin/login"
+          done
           for path in /.env /.git/config /composer.json /vendor/autoload.php /test_upload.php /test.pdf; do
             check '403|404' "$path"
           done
-          status="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$base/invoices/1/print")"
-          echo "PUBLIC_JSON /invoices/1/print: $status"
-          test "$status" = 401
+          for path in /invoices/1/print /payments/1/print /admin/export/subscribers /admin/export/invoices /admin/export/readings /api/subscribers; do
+            status="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$base$path")"
+            echo "PUBLIC_JSON $path: $status"
+            test "$status" = 401
+          done
           redirect="$(curl -sS --connect-timeout 15 --max-time 30 -o /dev/null -w '%{redirect_url}' http://alweshah.online/admin/login)"
           test "$redirect" = "$base/admin/login"
           echo 'PUBLIC_HTTPS_AND_SECURITY_SMOKE: PASSED'
+          curl -fsS --connect-timeout 15 --max-time 30 "$base/admin/login" -o "$RUNNER_TEMP/water-login.html"
+          python3 - "$RUNNER_TEMP/water-login.html" <<'PY'
+          import sys
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import urlopen
+          class Assets(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.urls = set()
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  value = attrs.get("src") if tag == "script" else attrs.get("href") if tag == "link" and "stylesheet" in attrs.get("rel", "").lower().split() else None
+                  if not value:
+                      return
+                  url = urljoin("https://alweshah.online/admin/login", value)
+                  parts = urlsplit(url)
+                  if parts.scheme == "https" and parts.netloc == "alweshah.online":
+                      self.urls.add(url)
+          parser = Assets()
+          with open(sys.argv[1], encoding="utf-8") as f:
+              parser.feed(f.read())
+          if not parser.urls:
+              raise SystemExit("No local CSS/JS references found")
+          for url in sorted(parser.urls):
+              with urlopen(url, timeout=20) as response:
+                  if response.status != 200 or response.headers.get_content_type() == "text/html":
+                      raise SystemExit("Invalid public asset response")
+              print("PUBLIC_ASSET OK:", urlsplit(url).path)
+          print("PUBLIC_ASSETS_VERIFIED:", len(parser.urls))
+          PY
 
       - name: Compare DNS-routed and direct-origin public requests
         if: ${{ inputs.operation == 'diagnose-public-web' }}
