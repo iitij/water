@@ -412,19 +412,41 @@ class InvoiceResource extends Resource
                     ->visible(fn (Invoice $record) => $record->retired_meter_id && ! in_array($record->status, ['draft', 'cancelled'], true)
                         && ! \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $record->id)->exists()
                         && auth()->user()?->can('delete', $record) && auth()->user()?->can('create', Invoice::class))
+                    ->fillForm(function (Invoice $record): array {
+                        $lines = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')
+                            ->where('invoice_id', $record->id)->get()->keyBy('reading_id');
+
+                        return ['readings' => $record->readings()->orderBy('period_start')->orderBy('id')->get()
+                            ->map(function ($reading) use ($lines): array {
+                                $line = $lines->get($reading->id);
+
+                                return [
+                                    'reading_id' => $reading->id,
+                                    'period' => $reading->period_start.' — '.$reading->period_end,
+                                    'original_units' => $line?->units ?? $reading->consumption_units,
+                                    'price_display' => $line?->unit_price ?? 'يُتحقق من التعرفة المعتمدة للفترة على الخادم',
+                                    'corrected_units' => $line?->units ?? $reading->consumption_units,
+                                ];
+                            })->all()];
+                    })
                     ->form([
-                        Forms\Components\TextInput::make('corrected_units')->label('الوحدات التاريخية المصححة')->numeric()->minValue(0)->required()
-                            ->helperText('هذا الإجراء يدعم فاتورة ذات قراءة واحدة فقط؛ لا يوزع الاستهلاك على قراءات متعددة.'),
-                        Forms\Components\TextInput::make('historical_unit_price')->label('تأكيد سعر الوحدة التاريخي الموثق')->numeric()->minValue(0)->required()
-                            ->helperText('يتحقق الخادم من السعر التاريخي المحفوظ؛ لا يسمح بتغييره في هذا الإجراء.'),
+                        Forms\Components\Repeater::make('readings')->label('تفاصيل القراءات التاريخية')
+                            ->schema([
+                                Forms\Components\Hidden::make('reading_id')->required(),
+                                Forms\Components\TextInput::make('period')->label('الفترة')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('original_units')->label('الوحدات الأصلية')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('price_display')->label('التعرفة التاريخية')->disabled()->dehydrated(false),
+                                Forms\Components\TextInput::make('corrected_units')->label('الوحدات المصححة')->numeric()
+                                    ->minValue(0)->maxValue(99999999.99)->step(0.01)->required(),
+                            ])->columns(2)->addable(false)->deletable(false)->reorderable(false)->minItems(1)
+                            ->helperText('صحح كل قراءة بصورة مستقلة. يحدد الخادم السعر من الدليل التاريخي، ولا يسمح بتعديل التعرفة هنا.'),
                         Forms\Components\Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
                         Forms\Components\Textarea::make('evidence')->label('دليل القراءة والتعرفة التاريخية')->required()->minLength(10)->maxLength(2000),
                     ])
                     ->requiresConfirmation()
                     ->action(function (Invoice $record, array $data): void {
-                        app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
-                            $record, auth()->user(), (string) $data['corrected_units'],
-                            (string) $data['historical_unit_price'], $data['reason'], $data['evidence']
+                        app(\App\Services\HistoricalInvoiceCorrectionService::class)->correctReadings(
+                            $record, auth()->user(), $data['readings'], $data['reason'], $data['evidence']
                         );
                         \Filament\Notifications\Notification::make()->title('تم إصدار فاتورة تاريخية مصححة')->success()->send();
                     }),
