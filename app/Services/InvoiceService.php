@@ -68,7 +68,7 @@ class InvoiceService
             // 2. المتأخرات السابقة (فقط فواتير سابقة غير مسددة من نفس النوع)
             $previousBalance = 0;
             $unpaidInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
-                ->where('status', '!=', 'draft')
+                ->whereNotIn('status', ['draft', 'cancelled'])
                 ->whereColumn('total_amount', '>', 'amount_paid');
 
             $unpaidInvoices = $unpaidInvoicesQuery->get();

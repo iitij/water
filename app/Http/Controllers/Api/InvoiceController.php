@@ -188,7 +188,7 @@ class InvoiceController extends ApiController
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             $meter = Meter::query()->where('subscriber_id', $subscriber->id)->lockForUpdate()->findOrFail($meter->id);
             $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-            $arrears = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
+            $arrears = $subscriber->invoices()->whereNotIn('status', ['draft', 'cancelled'])->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
@@ -300,6 +300,17 @@ class InvoiceController extends ApiController
         });
 
         return response()->json(['message' => 'تم تحديث الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->fresh(['subscriber.square', 'meter', 'items', 'readings', 'payments']))]);
+    }
+
+    public function cancel(Request $request, int $id)
+    {
+        $this->authorizeApi(Invoice::class, 'delete');
+        $data = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000']]);
+        $invoice = app(\App\Services\InvoiceCancellationService::class)->cancel(
+            Invoice::findOrFail($id), $data['reason'], $request->user()?->id,
+            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api'
+        );
+        return response()->json(['message' => 'تم إلغاء الفاتورة بحركة عكسية.', 'invoice' => $this->decorate($invoice)]);
     }
 
     public function destroy(int $id)
@@ -437,7 +448,7 @@ class InvoiceController extends ApiController
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
             ->where('id', '<', $invoice->id)
-            ->where('status', '!=', 'draft')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->get();
         $invoice->previous_balance = $older->sum(fn (Invoice $item) => $item->getRemainingAmount());
         $invoice->total_amount = (float) $invoice->consumption_fee;

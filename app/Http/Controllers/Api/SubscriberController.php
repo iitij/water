@@ -298,7 +298,7 @@ class SubscriberController extends ApiController
         $subscriber = Subscriber::findOrFail($id);
         $invoices = $subscriber->invoices()
             ->with('meter:id,unique_code,path_number')
-            ->where('status', '!=', 'draft')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->whereColumn('total_amount', '>', 'amount_paid')
             ->orderBy('bill_date')->orderBy('id')->get();
         $invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
