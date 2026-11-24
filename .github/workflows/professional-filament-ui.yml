@@ -1,0 +1,59 @@
+name: Water | Professional Filament UI acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/Filament/**'
+      - 'app/Providers/Filament/**'
+      - 'resources/views/filament/**'
+      - 'tests/Feature/ProfessionalFilamentUiTest.php'
+      - '.github/workflows/professional-filament-ui.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Install locked dependencies
+        run: |
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+      - name: Audit all resource classes and Blade views
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          resources=list(Path('app/Filament/Resources').rglob('*.php'))
+          views=list(Path('resources/views/filament').rglob('*.blade.php'))
+          print('RESOURCE_PHP_FILES:',len(resources))
+          print('ADMIN_BLADE_FILES:',len(views))
+          for path in resources+views:
+              source=path.read_text()
+              for i,line in enumerate(source.splitlines(),1):
+                  if re.search(r'HtmlString|->html\(|->view\(|View::make|ViewEntry::make|<style\b|style=|extraAttributes|extraInputAttributes|extraCellAttributes|extraHeaderAttributes',line):
+                      print(f'UI_REVIEW {path}:{i}: {line.strip()[:200]}')
+          PY
+      - name: Render all custom admin pages and verify downloads
+        run: php artisan test tests/Feature/ProfessionalFilamentUiTest.php
+      - name: Verify financial authorization and mobile navigation
+        run: php artisan test tests/Feature/WebFinancialAuthorizationTest.php tests/Feature/MobileDeveloperNavigationTest.php
