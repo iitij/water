@@ -63,6 +63,8 @@ class ObservationReadingIntervalTest extends TestCase
             'units' => 35.50, 'amount' => 21300,
         ]);
         $this->assertSame(21300.0, $meter->subscriber->fresh()->getAccountDebt());
+        $this->getJson('/api/admin/reports?from_date=2026-02-01&to_date=2026-02-28')
+            ->assertOk()->assertJsonPath('summary.consumption_units', 35.5);
     }
 
     public function test_hundredths_are_not_lost_when_meter_values_are_close(): void
