@@ -65,7 +65,7 @@ class LiveCollectionAmountTest extends TestCase
         $this->assertSame(0.0, $latest->fresh()->getCollectibleAmount());
     }
 
-    public function test_excludes_draft_deleted_and_other_accounts(): void
+    public function test_includes_general_items_but_excludes_drafts_deleted_and_other_subscribers(): void
     {
         $meter = $this->meter();
         $other = $this->meter();
@@ -77,7 +77,7 @@ class LiveCollectionAmountTest extends TestCase
         $latest = $this->invoice($meter, 600, 100);
         $draft = $this->invoice($meter, 7000, 0, 0, 'draft');
 
-        $this->assertSame(500.0, $latest->fresh()->getCollectibleAmount());
+        $this->assertSame(8500.0, $latest->fresh()->getCollectibleAmount());
         $this->assertSame(8000.0, $general->fresh()->getCollectibleAmount());
         $this->assertSame(0.0, $draft->getCollectibleAmount());
         $this->assertSame(0.0, $deleted->getCollectibleAmount());
