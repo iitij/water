@@ -25,6 +25,17 @@ class Square extends Model
         return $this->code === null ? $this->name : $this->code.' — '.$this->name;
     }
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Square $square): void {
+            if ($square->subscribers()->withTrashed()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'square' => 'لا يجوز حذف مربع مرتبط بمشتركين، بما فيهم المحذوفون سابقاً.',
+                ]);
+            }
+        });
+    }
+
     public function subscribers(): HasMany
     {
         return $this->hasMany(Subscriber::class);

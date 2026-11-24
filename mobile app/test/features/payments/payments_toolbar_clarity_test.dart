@@ -74,7 +74,7 @@ void main() {
         await tester.tap(find.byTooltip(ListClarityStrings.moreActions));
         await tester.pumpAndSettle();
         expect(find.text(ListClarityStrings.selectAll), findsOneWidget);
-        expect(find.text(ListClarityStrings.deleteSelected), findsOneWidget);
+        expect(find.text(ListClarityStrings.deleteSelected), findsNothing);
         await tester.tap(find.text(ListClarityStrings.selectAll));
         await tester.pumpAndSettle();
         await tester.tap(find.byIcon(Icons.close));

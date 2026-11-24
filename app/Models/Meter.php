@@ -30,6 +30,19 @@ class Meter extends Model
         'path_number' => 'integer',
     ];
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Meter $meter): void {
+            if ($meter->invoices()->withTrashed()->exists()
+                || $meter->payments()->withTrashed()->exists()
+                || $meter->transactions()->withTrashed()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'meter_id' => 'لا يجوز حذف عداد مرتبط بسجل مالي.',
+                ]);
+            }
+        });
+    }
+
     public function subscriber(): BelongsTo
     {
         return $this->belongsTo(Subscriber::class);

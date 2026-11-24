@@ -22,6 +22,23 @@ final class MeterDataPurger
 {
     public function purge(int $meterId): void
     {
+        DB::transaction(function () use ($meterId): void {
+            $candidate = DB::table('meters')->where('id', $meterId)->first();
+            if (! $candidate) {
+                return;
+            }
+            DB::table('subscribers')->where('id', $candidate->subscriber_id)->lockForUpdate()->first();
+            $locked = DB::table('meters')->where('id', $meterId)->lockForUpdate()->first();
+            if (! $locked) {
+                return;
+            }
+            abort_unless((int) $locked->subscriber_id === (int) $candidate->subscriber_id, 409, 'تغير مالك العداد.');
+            $this->purgeLocked($meterId);
+        }, 3);
+    }
+
+    private function purgeLocked(int $meterId): void
+    {
         $meter = DB::table('meters')->where('id', $meterId)->first();
         if (! $meter) {
             return;
@@ -42,6 +59,14 @@ final class MeterDataPurger
                 $q->where('meter_id', $meterId)->orWhereIn('invoice_id', $invoiceIds);
             })
             ->pluck('id')->all();
+
+        $hasFinancialHistory = $invoiceIds !== [] || $paymentIds !== []
+            || DB::table('transactions')->where('meter_id', $meterId)->exists();
+        if ($hasFinancialHistory) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => 'لا يجوز حذف عداد مرتبط بمستندات أو حركات مالية. يلزم استبدال يحفظ السجل المحاسبي.',
+            ]);
+        }
 
         $affectedCashSessionIds = DB::table('payments')
             ->whereIn('id', $paymentIds)
