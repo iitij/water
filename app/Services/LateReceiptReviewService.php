@@ -84,7 +84,7 @@ final class LateReceiptReviewService
      * Never infer available cash from legacy totals or later bookkeeping corrections.
      * Approval holds the issuance and session locks when calling this method.
      */
-    public function countedCashAllocation(CashSession $session): array
+    public function countedCashAllocation(CashSession $session, bool $forApproval = false): array
     {
         $eligible = $session->isApproved() && $session->settlement_basis === 'physical_cash'
             && $session->expected_amount !== null && $session->counted_amount !== null
@@ -96,7 +96,7 @@ final class LateReceiptReviewService
         // Use a locking read when approving inside a transaction, not a stale MVCC snapshot.
         $query = DB::table('late_receipt_reviews')->where('cash_session_id', $session->id)
             ->where('status', 'approved')->where('settlement_method', 'already_counted');
-        if (DB::transactionLevel() > 0) {
+        if ($forApproval) {
             $query->lockForUpdate();
         }
         $allocated = $query->get(['amount'])->sum(fn ($row) => $minor($row->amount));
@@ -144,7 +144,7 @@ final class LateReceiptReviewService
                     throw ValidationException::withMessages(['settlement_method' => 'طريقة التسوية لا تتوافق مع وسيلة التحصيل.']);
                 }
                 if ($method === 'already_counted') {
-                    $allocation = $this->countedCashAllocation($session);
+                    $allocation = $this->countedCashAllocation($session, true);
                     if (! $allocation['eligible'] || (int) round((float) $review->amount * 100) > $allocation['available_minor']) {
                         throw ValidationException::withMessages(['amount' => 'لا يوجد فائض نقدي أصلي مثبت وكافٍ لهذه التسوية.']);
                     }
