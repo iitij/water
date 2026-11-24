@@ -73,6 +73,14 @@ final class MeterDataPurger
                 'meter_id' => 'لا يجوز حذف قراءة مرتبطة بمستند مالي.',
             ]);
         }
+        // A recorded but unbilled observation is still measured consumption.
+        // Replacing a physical meter must never silently discard it, even
+        // when the subscriber has not yet received a financial document.
+        if (DB::table('readings')->where('meter_id', $meterId)->whereNull('deleted_at')->exists()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => 'يجب فوترة القراءات المعلقة أو تصحيحها صراحةً قبل حذف العداد أو استبداله.',
+            ]);
+        }
         DB::table('reading_faults')->where('meter_id', $meterId)->delete();
         DB::table('route_visits')->where('meter_id', $meterId)->delete();
         DB::table('readings')->where('meter_id', $meterId)->delete();

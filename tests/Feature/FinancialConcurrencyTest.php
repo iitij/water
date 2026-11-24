@@ -210,6 +210,36 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(0, Transaction::count());
     }
 
+    public function test_parallel_first_observation_and_replacement_never_erase_committed_usage(): void
+    {
+        $subscriber = Subscriber::create([
+            'name' => 'Replacement race',
+            'square_id' => Square::create(['name' => 'Replacement race'])->id,
+            'status' => 'active',
+        ]);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'RACE-REPLACE',
+            'installed_at' => '2026-01-01', 'initial_reading' => 0]);
+        $results = $this->race(
+            fn () => Reading::create(['meter_id' => $meter->id,
+                'reading_date' => '2026-02-01', 'current_reading' => '7.25'])->id,
+            fn () => app(\App\Services\SingleMeterService::class)->replace($meter,
+                ['unique_code' => 'RACE-REPLACE-NEW'], '2026-02-02', 'Synthetic concurrent replacement')['current_meter']->id,
+        );
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(1, Meter::where('subscriber_id', $subscriber->id)->count());
+        if ($results[0]['ok']) {
+            $this->assertSame(ValidationException::class, $results[1]['error']);
+            $this->assertSame($meter->id, $subscriber->fresh()->currentMeter->id);
+            $this->assertSame('7.25', Reading::findOrFail($results[0]['value'])->consumption_units);
+        } else {
+            $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+            $this->assertSame($results[1]['value'], $subscriber->fresh()->currentMeter->id);
+            $this->assertSame(0, Reading::count());
+        }
+        $this->assertSame(0, Invoice::count());
+        $this->assertSame(0, Transaction::count());
+    }
+
     public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void
     {
         $meter = $this->fixture();

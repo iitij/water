@@ -392,24 +392,41 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_replacement_purges_pending_readings_instead_of_keeping_history(): void
+    public function test_replacement_requires_posting_pending_consumption_without_retaining_old_meter(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'PENDING-SWAP']);
-        $this->postJson('/api/readings', [
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        \App\Models\Tariff::create(['name' => 'Replacement tariff', 'unit_price' => 600, 'is_active' => true]);
+        $readingId = $this->postJson('/api/readings', [
             'meter_id' => $old->id,
-            'current_reading' => 7,
-            'reading_date' => now()->toDateString(),
-        ])->assertCreated();
+            'current_reading' => '7.25',
+            'reading_date' => '2026-02-01',
+        ])->assertCreated()->json('reading.id');
 
-        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
+        $replacement = [
             'removed_at' => now()->toDateString(),
-            'reason' => 'حذف سجل قراءات قديم',
+            'reason' => 'استبدال العداد مع حماية الاستهلاك',
             'new_meter' => ['unique_code' => 'NEW-PENDING'],
-        ])->assertCreated()->json('current_meter.id');
+        ];
+        $this->postJson('/api/meters/'.$old->id.'/replace', $replacement)
+            ->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        $this->assertDatabaseHas('meters', ['id' => $old->id]);
+        $this->assertDatabaseHas('readings', ['id' => $readingId, 'meter_id' => $old->id, 'is_invoiced' => false]);
+        $this->assertDatabaseCount('meters', 1);
+        $this->assertDatabaseCount('invoices', 0);
+
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
+        $this->assertSame(4350.0, $subscriber->getAccountDebt());
+        $new = $this->postJson('/api/meters/'.$old->id.'/replace', $replacement)
+            ->assertCreated()->json('current_meter.id');
 
         $this->assertDatabaseMissing('meters', ['id' => $old->id]);
-        $this->assertDatabaseCount('readings', 0);
+        $this->assertDatabaseCount('meters', 1);
+        $this->assertDatabaseHas('readings', ['id' => $readingId, 'meter_id' => null,
+            'retired_meter_id' => $old->id, 'invoice_id' => $invoice->id]);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertSame(4350.0, $subscriber->getAccountDebt());
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
     }
 
