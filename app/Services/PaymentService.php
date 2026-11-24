@@ -52,14 +52,27 @@ class PaymentService
 
             $replacements = \App\Models\HistoricalInvoiceCorrection::whereIn('replacement_invoice_id', $invoices->modelKeys())
                 ->pluck('replacement_invoice_id', 'original_invoice_id');
+            $allocationRows = [];
+            $availableMinor = 0;
             foreach ($credits as $credit) {
                 $remaining = max(0, (int) round((float) $credit['amount'] * 100));
+                $availableMinor += $remaining;
+                $source = [
+                    'payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
+                    'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null,
+                ];
+                $record = function (?int $invoiceId, int $amount) use (&$allocationRows, $source): void {
+                    if ($amount > 0) {
+                        $allocationRows[] = $source + ['invoice_id' => $invoiceId, 'amount_minor' => $amount];
+                    }
+                };
                 $target = $credit['target'];
                 $target = $target === null ? null : ($replacements[$target] ?? $target);
                 if ($target !== null && isset($caps[$target])) {
                     $applied = min($remaining, $caps[$target] - $paid[$target]);
                     $paid[$target] += $applied;
                     $remaining -= $applied;
+                    $record((int) $target, $applied);
                 }
                 foreach ($invoices as $invoice) {
                     if ($remaining === 0) {
@@ -69,8 +82,11 @@ class PaymentService
                     $applied = min($remaining, $caps[$id] - $paid[$id]);
                     $paid[$id] += $applied;
                     $remaining -= $applied;
+                    $record((int) $id, $applied);
                 }
+                $record(null, $remaining);
             }
+            app(PaymentAllocationHistory::class)->append($subscriber, $allocationRows, $paid, $availableMinor);
 
             // Persist all allocations before deriving any cumulative status.
             foreach ($invoices as $invoice) {
