@@ -23,10 +23,10 @@ class TariffsTable
                     ->searchable(),
                 TextColumn::make('unit_price')
                     ->label('سعر الوحدة')
-                    ->money('SAR')
+                    ->numeric(2)->suffix(' ريال')
                     ->sortable(),
                 IconColumn::make('is_active')
-                    ->label('نشط')
+                    ->label('معتمدة لفترتها')
                     ->boolean(),
                 TextColumn::make('start_date')
                     ->label('تاريخ البدء')

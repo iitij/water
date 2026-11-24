@@ -19,10 +19,11 @@ class TariffForm
                 TextInput::make('unit_price')
                     ->label('سعر الوحدة')
                     ->required()
-                    ->numeric()
+                    ->numeric()->minValue(0)->maxValue(99999999.99)->step(0.01)
                     ->prefix('ريال'),
                 Toggle::make('is_active')
-                    ->label('نشط')
+                    ->label('معتمدة لفترتها')
+                    ->helperText('اعتماد تعرفة جديدة لا يلغي التعرفات التاريخية.')
                     ->default(true)
                     ->required(),
                 DatePicker::make('start_date')

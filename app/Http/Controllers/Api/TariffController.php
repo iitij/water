@@ -43,16 +43,13 @@ class TariffController extends ApiController
         $this->authorizeApi(Tariff::class, 'create');
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'unit_price' => ['required', 'numeric', 'min:0'],
+            'unit_price' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'is_active' => ['sometimes', 'boolean'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
         $tariff = DB::transaction(function () use ($data) {
-            if (! empty($data['is_active'])) {
-                Tariff::where('is_active', true)->update(['is_active' => false]);
-            }
-
+            // Active means approved for its dated interval, not today's sole tariff.
             return Tariff::create($data + ['is_active' => false]);
         });
 
@@ -72,15 +69,12 @@ class TariffController extends ApiController
         $tariff = Tariff::findOrFail($id);
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'unit_price' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'unit_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'is_active' => ['sometimes', 'boolean'],
             'start_date' => ['sometimes', 'nullable', 'date'],
             'end_date' => ['sometimes', 'nullable', 'date'],
         ]);
         DB::transaction(function () use ($tariff, $data) {
-            if (! empty($data['is_active'])) {
-                Tariff::where('is_active', true)->where('id', '!=', $tariff->id)->update(['is_active' => false]);
-            }
             $tariff->update($data);
         });
 
