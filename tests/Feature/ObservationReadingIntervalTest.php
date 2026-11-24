@@ -188,7 +188,7 @@ class ObservationReadingIntervalTest extends TestCase
     public function test_existing_calendar_readings_remain_unchanged_and_next_real_date_is_used(): void
     {
         $meter = $this->meter();
-        $legacy = Reading::create([
+        $legacy = $this->insertLegacyReading([
             'meter_id' => $meter->id,
             'reading_date' => '2026-02-12',
             'actual_reading_date' => '2026-02-12',
@@ -239,7 +239,7 @@ class ObservationReadingIntervalTest extends TestCase
     public function test_calendar_record_cannot_reenable_the_old_edit_algorithm(): void
     {
         $meter = $this->meter();
-        $reading = Reading::create([
+        $reading = $this->insertLegacyReading([
             'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
             'period_start' => '2026-02-01', 'period_end' => '2026-02-28',
             'previous_reading' => 100, 'current_reading' => 135,
@@ -313,7 +313,7 @@ class ObservationReadingIntervalTest extends TestCase
     public function test_observation_audit_reports_legacy_exception_without_rewriting_it(): void
     {
         $meter = $this->meter();
-        $legacy = Reading::create([
+        $legacy = $this->insertLegacyReading([
             'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
             'period_start' => '2026-03-01', 'period_end' => '2026-03-31',
             'previous_reading' => 100, 'current_reading' => 135,
