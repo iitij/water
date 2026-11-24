@@ -115,7 +115,7 @@ class MobileApiIntegrationTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', false)
-            ->assertJsonPath('reading.consumption_units', 15);
+            ->assertJsonPath('reading.consumption_units', '15.00');
 
         // Duplicate sync_uuid returns 200 with duplicate=true
         $this->actingAs($this->admin, 'sanctum')
