@@ -131,6 +131,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/send-whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
+    Route::post('/payments/{id}/refund', [PaymentController::class, 'recordRefund'])->whereNumber('id');
     Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 

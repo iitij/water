@@ -261,6 +261,25 @@ class PaymentController extends ApiController
         ]);
     }
 
+    public function recordRefund(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+            'disbursement_reference' => ['required', 'string', 'min:3', 'max:150'],
+            'method' => ['required', 'in:treasury_cash,bank_transfer'],
+            'disbursed_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'disbursement_confirmed' => ['required', 'accepted'],
+        ]);
+        $refund = app(\App\Services\PaymentRefundService::class)->record(
+            Payment::findOrFail($id), $request->user(), (string) $data['amount'],
+            $data['disbursement_reference'], $data['method'], $data['disbursed_on'],
+            $data['reason'], $data['evidence']
+        );
+        return response()->json(['refund' => $refund]);
+    }
+
     public function transferAccount(Request $request, int $id)
     {
         $data = $request->validate([

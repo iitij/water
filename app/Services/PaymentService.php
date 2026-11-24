@@ -30,8 +30,10 @@ class PaymentService
                 ->whereNull('voided_at')
                 ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
                 ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
+            $refunds = \App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)
+                ->selectRaw('payment_id, SUM(amount) as amount')->groupBy('payment_id')->pluck('amount', 'payment_id');
             $credits = $payments->map(fn ($payment) => [
-                'amount' => $payment->amount, 'target' => $payment->invoice_id,
+                'amount' => (float) $payment->amount - (float) ($refunds[$payment->id] ?? 0), 'target' => $payment->invoice_id,
                 'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id,
             ])->all();
             foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
@@ -109,7 +111,8 @@ class PaymentService
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
-                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
             if ($payment->voided_at !== null) {
@@ -204,7 +207,8 @@ class PaymentService
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
-                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
             $reason = trim($reason);
@@ -270,7 +274,8 @@ class PaymentService
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
-                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()) {
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
+                || \App\Models\PaymentRefund::where('payment_id', $payment->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرجع لتصحيح مالي مستقل، ولا يجوز إلغاؤه بالطريقة العادية.']);
             }
 

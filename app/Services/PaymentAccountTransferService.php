@@ -51,7 +51,8 @@ final class PaymentAccountTransferService
             }
             if ($receipt->isVoided() || $receipt->hasPendingVoidRequest()
                 || ($session && ! $session->isApproved())
-                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $receipt->id)->exists()) {
+                || DB::table('closed_cash_corrections')->where('duplicate_of_id', $receipt->id)->exists()
+                || \App\Models\PaymentRefund::where('payment_id', $receipt->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند ملغى أو قيد تصحيح، أو صندوقه غير معتمد.']);
             }
             $amount = (float) $receipt->amount;

@@ -43,7 +43,8 @@ final class ClosedCashCorrectionService
             }
             if (\App\Models\PaymentAccountTransfer::whereIn('payment_id', [$payment->id, $original->id])->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
-                || $payment->hasPendingVoidRequest() || $original->hasPendingVoidRequest()) {
+                || $payment->hasPendingVoidRequest() || $original->hasPendingVoidRequest()
+                || \App\Models\PaymentRefund::whereIn('payment_id', [$payment->id, $original->id])->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرتبط بتصحيح مالي آخر.']);
             }
             if (! $session->isApproved() || $payment->isVoided() || $original->isVoided()
