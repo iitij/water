@@ -282,23 +282,6 @@ Future<void> showPaymentActionSheet(
           if (cancelled) await onDeleted?.call();
         },
       ),
-    if (onDeleted != null)
-      _PaymentSheetAction(
-        icon: Icons.delete_outline,
-        label: 'حذف السند',
-        destructive: true,
-        run: () async {
-          final confirmed = await ConfirmDialog.show(
-            context,
-            title: 'حذف سند قبض',
-            message: 'سيُحذف السند حذفًا ناعمًا ويُعاد احتساب الفواتير المرتبطة به.',
-            confirmLabel: 'حذف',
-            destructive: true,
-          );
-          if (!confirmed) return;
-          await onDeleted();
-        },
-      ),
   ];
 
   if (!context.mounted) return;
