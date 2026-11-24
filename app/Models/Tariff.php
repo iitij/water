@@ -41,14 +41,14 @@ class Tariff extends Model
             static::withTrashed()->whereKey($this->getKey())->lockForUpdate()->firstOrFail();
             $evidence = $this->getConnection()->table('invoice_tariff_lines')
                 ->where('tariff_id', $this->getKey());
-            if ((clone $evidence)->exists()) {
+            if ((clone $evidence)->lockForUpdate()->first(['id'])) {
                 if ($this->isDirty(['name', 'unit_price', 'start_date', 'is_active', 'deleted_at'])) {
                     throw ValidationException::withMessages(['tariff' => 'لا يمكن تعديل تعرفة مرتبطة بفواتير تاريخية.']);
                 }
 
                 if ($this->isDirty('end_date') && $this->end_date) {
                     $lastCoveredDay = CarbonImmutable::parse($this->end_date)->addDay()->toDateString();
-                    if ((clone $evidence)->where('period_end', '>', $lastCoveredDay)->exists()) {
+                    if ((clone $evidence)->where('period_end', '>', $lastCoveredDay)->lockForUpdate()->first(['id'])) {
                         throw ValidationException::withMessages(['end_date' => 'تاريخ الانتهاء لا يغطي فترات الاستهلاك المفوترة.']);
                     }
                 }
@@ -66,7 +66,7 @@ class Tariff extends Model
 
         return $this->getConnection()->transaction(function () {
             static::withTrashed()->whereKey($this->getKey())->lockForUpdate()->firstOrFail();
-            if ($this->getConnection()->table('invoice_tariff_lines')->where('tariff_id', $this->getKey())->exists()) {
+            if ($this->getConnection()->table('invoice_tariff_lines')->where('tariff_id', $this->getKey())->lockForUpdate()->first(['id'])) {
                 throw ValidationException::withMessages(['tariff' => 'لا يمكن حذف تعرفة مرتبطة بفواتير تاريخية.']);
             }
 
