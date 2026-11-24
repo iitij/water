@@ -129,6 +129,59 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame('5.25', $next->consumption_units);
     }
 
+    public function test_concurrent_identical_mobile_reading_retries_return_one_observation(): void
+    {
+        $meter = $this->fixture();
+        $user = User::factory()->create(['role' => 'admin']);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $payload = [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-01',
+            'current_reading' => '15.25',
+            'sync_uuid' => (string) Str::uuid(),
+        ];
+        $submit = function () use ($user, $payload): array {
+            $response = $this->actingAs(User::findOrFail($user->id), 'sanctum')
+                ->postJson('/api/readings', $payload);
+
+            return ['status' => $response->status(), 'id' => $response->json('reading.id'),
+                'duplicate' => $response->json('duplicate')];
+        };
+        $results = $this->race($submit, $submit);
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $statuses = array_column(array_column($results, 'value'), 'status');
+        sort($statuses);
+        $this->assertSame([200, 201], $statuses, json_encode($results));
+        $this->assertSame($results[0]['value']['id'], $results[1]['value']['id']);
+        $this->assertNotSame($results[0]['value']['duplicate'], $results[1]['value']['duplicate']);
+        $this->assertSame(1, Reading::where('sync_uuid', $payload['sync_uuid'])->count());
+        $this->assertSame(2, Reading::count());
+        $this->assertSame('5.25', Reading::where('sync_uuid', $payload['sync_uuid'])->firstOrFail()->consumption_units);
+        $this->assertSame(0, Invoice::count());
+    }
+
+    public function test_concurrent_mobile_readings_with_same_uuid_and_different_values_conflict(): void
+    {
+        $meter = $this->fixture();
+        $user = User::factory()->create(['role' => 'admin']);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $payload = [
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-01',
+            'sync_uuid' => (string) Str::uuid(),
+        ];
+        $submit = fn (string $value) => $this->actingAs(User::findOrFail($user->id), 'sanctum')
+            ->postJson('/api/readings', $payload + ['current_reading' => $value])->status();
+        $results = $this->race(fn () => $submit('15.25'), fn () => $submit('16.25'));
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $statuses = array_column($results, 'value');
+        sort($statuses);
+        $this->assertSame([201, 409], $statuses, json_encode($results));
+        $this->assertSame(1, Reading::where('sync_uuid', $payload['sync_uuid'])->count());
+        $this->assertSame(2, Reading::count());
+        $this->assertSame(0, Invoice::count());
+    }
+
     public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void
     {
         $meter = $this->fixture();

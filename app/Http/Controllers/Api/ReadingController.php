@@ -364,6 +364,38 @@ class ReadingController extends ApiController
         ];
     }
 
+    private function existingReadingReplay(Meter $meter, array $data, Request $request): ?array
+    {
+        if (empty($data['sync_uuid'])) {
+            return null;
+        }
+        $existing = Reading::withTrashed()->where('sync_uuid', $data['sync_uuid'])->first();
+        if (! $existing) {
+            return null;
+        }
+        abort_if($existing->trashed(), 409, 'عملية القراءة المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
+        $sameOwner = (int) ($existing->created_by ?? 0) === (int) ($request->user()?->id ?? 0);
+        $sameReading = (int) $existing->meter_id === $meter->id
+            && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
+            && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString()
+            && Carbon::parse($existing->actual_reading_date ?? $existing->reading_date)->toDateString()
+                === Carbon::parse($data['actual_reading_date'] ?? $data['reading_date'])->toDateString();
+        $samePeriod = true;
+        foreach (['period_start', 'period_end'] as $field) {
+            $originalField = 'submitted_'.$field;
+            $expected = $existing->{$originalField} ?? $existing->{$field};
+            if (isset($data[$field])
+                && Carbon::parse($data[$field])->toDateString()
+                    !== Carbon::parse($expected)->toDateString()) {
+                $samePeriod = false;
+                break;
+            }
+        }
+        abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+
+        return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
+    }
+
     private function createReading(array $data, Request $request, ?int $batchIndex = null): array
     {
         if (empty($data['sync_uuid'])) {
@@ -373,31 +405,8 @@ class ReadingController extends ApiController
             }
         }
         $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
-        if (! empty($data['sync_uuid'])) {
-            $existing = Reading::withTrashed()->where('sync_uuid', $data['sync_uuid'])->first();
-            if ($existing) {
-                abort_if($existing->trashed(), 409, 'عملية القراءة المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
-                $sameOwner = (int) ($existing->created_by ?? 0) === (int) ($request->user()?->id ?? 0);
-                $sameReading = (int) $existing->meter_id === $meter->id
-                    && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
-                    && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString()
-                    && Carbon::parse($existing->actual_reading_date ?? $existing->reading_date)->toDateString()
-                        === Carbon::parse($data['actual_reading_date'] ?? $data['reading_date'])->toDateString();
-                $samePeriod = true;
-                foreach (['period_start', 'period_end'] as $field) {
-                    $originalField = 'submitted_'.$field;
-                    $expected = $existing->{$originalField} ?? $existing->{$field};
-                    if (isset($data[$field])
-                        && Carbon::parse($data[$field])->toDateString()
-                            !== Carbon::parse($expected)->toDateString()) {
-                        $samePeriod = false;
-                        break;
-                    }
-                }
-                abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
-
-                return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
-            }
+        if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
+            return $replay;
         }
 
         // Replacement also locks the physical meter row. Keep validation,
@@ -407,6 +416,11 @@ class ReadingController extends ApiController
             \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
             $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
             abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
+            // A simultaneous retry may have committed while this request waited for the meter lock.
+            // Check identity again before rejecting a repeated observation date or writing an image.
+            if ($replay = $this->existingReadingReplay($locked, $data, $request)) {
+                return $replay;
+            }
             $lastReading = $this->readingService->latestReading($locked->id);
             $previous = $lastReading
                 ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
@@ -468,6 +482,10 @@ class ReadingController extends ApiController
                 'image_path' => $imagePath,
             ]);
         });
+
+        if (is_array($reading)) {
+            return $reading;
+        }
 
         $invoice = null;
         $invoiceError = null;
