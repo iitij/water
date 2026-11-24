@@ -87,33 +87,6 @@ class Invoice extends Model
             }
         });
 
-        static::updated(function (Invoice $invoice) {
-            if ($invoice->isDirty('total_amount')) {
-                $transaction = \App\Models\Transaction::where('reference_type', Invoice::class)
-                    ->where('reference_id', $invoice->id)
-                    ->first();
-
-                if ($transaction) {
-                    $transaction->update([
-                        'subscriber_id' => $invoice->subscriber_id,
-                        'amount' => -$invoice->total_amount,
-                    ]);
-                }
-
-                $transactionService = new \App\Services\TransactionService();
-                if ($invoice->meter) {
-                    $transactionService->updateMeterBalance($invoice->meter);
-                } else {
-                    $transactionService->updateSubscriberBalance($invoice->subscriber);
-                }
-
-                if ($invoice->subscriber) {
-                    $paymentService = new \App\Services\PaymentService();
-                    $paymentService->recalculateInvoices($invoice->subscriber, $invoice->meter_id);
-                }
-            }
-        });
-
         static::deleting(function (Invoice $invoice) {
             // عند حذف الفاتورة، نقوم بإرجاع القراءات المرتبطة بها لتصبح غير مفوترة
             \App\Models\Reading::where('invoice_id', $invoice->id)->update([

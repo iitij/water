@@ -10,18 +10,14 @@ import '../../../../core/finance/finance_locator.dart';
 import '../../../../core/navigation/sub_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/ui/app_controls.dart';
-import '../../../../core/ui/app_filters.dart';
 import '../../../../core/ui/app_surfaces.dart';
-import '../../../../core/ui/app_tiles.dart';
 import '../../../../core/ui/app_tokens.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/utils/json_utils.dart';
 import '../../../../core/widgets/info_notice.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
-import '../../../invoices/domain/accounting/finance_enums.dart';
 import '../../data/models/payment_model.dart';
 import '../../domain/repositories/payments_repository.dart';
 import '../cubit/collect_payment_cubit.dart';
@@ -35,8 +31,7 @@ import '../widgets/collect_payment_form.dart';
 /// [CollectPaymentForm] — بما فيه الحقل المشروط `reference_number` و`reason`
 /// («وذلك مقابل»).
 ///
-/// وضع التعديل: تعديل سند قائم عبر `PUT /api/payments/{id}`؛ التوزيع نفسه يُعاد
-/// حسابه على الخادم في `PaymentService::recalculateInvoices`.
+/// وضع التعديل: الملاحظات الإدارية فقط؛ تصحيح المبلغ يتم بإلغاء موثق.
 class PaymentFormScreen extends StatelessWidget {
   const PaymentFormScreen({
     super.key,
@@ -442,7 +437,7 @@ class _PaymentEditScreenState extends State<_PaymentEditScreen> {
                       icon: Icons.payments_rounded,
                     ),
                     const SizedBox(height: 10),
-                    AppField(label: 'طريقة الدفع', value: widget.payment.method.label),
+                    AppField(label: 'طريقة الدفع', value: widget.payment.method.label, icon: Icons.payments_outlined),
                     const SizedBox(height: 12),
                     AppTextField(controller: _notes, label: 'ملاحظات إدارية', maxLines: 2),
                   ],

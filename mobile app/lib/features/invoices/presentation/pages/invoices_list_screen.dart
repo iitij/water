@@ -458,6 +458,9 @@ class _BulkActionsBar extends StatelessWidget {
         selectedInvoices.any((i) => i.isDeleted) ||
         state.query.trashed == 'only';
     final hasActive = selectedInvoices.any((i) => !i.isDeleted);
+    final onlyDrafts = selectedInvoices.isNotEmpty &&
+        selectedInvoices.length == state.selectedIds.length &&
+        selectedInvoices.every((i) => !i.isDeleted && i.status.wire == 'draft');
 
     return Material(
       color: AppColors.primaryDark,
@@ -496,7 +499,7 @@ class _BulkActionsBar extends StatelessWidget {
                   ),
                 )
               else ...<Widget>[
-                if (hasActive)
+                if (onlyDrafts)
                   TextButton.icon(
                     onPressed: () => _bulkRecalculate(context),
                     icon: const Icon(
@@ -560,8 +563,7 @@ class _BulkActionsBar extends StatelessWidget {
       context,
       title: 'إعادة احتساب جماعية',
       message:
-          'سيُعاد توزيع الدفعات على ${state.selectedIds.length} فاتورة '
-          'داخل نفس الحسابات المعزولة (FIFO).',
+          'سيُعاد احتساب ${state.selectedIds.length} مسودة دون ترحيل أي حركة مالية.',
       confirmLabel: 'إعادة الاحتساب',
     );
     if (!ok) return;

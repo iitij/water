@@ -158,50 +158,6 @@ class Payment extends Model
         // ملاحظة: منطق الإنشاء يُعالَج بالكامل في PaymentService
         // هذا يضمن التوزيع الصحيح للمبالغ والرصيد الدائن
 
-        static::updated(function (Payment $payment) {
-            // Administrative notes and delivery metadata must not rewrite money.
-            // The explicit void service handles financial reversal and allocation.
-            if (! $payment->wasChanged(['amount', 'subscriber_id', 'meter_id', 'invoice_id'])) {
-                return;
-            }
-            $transactionService = new TransactionService;
-            $paymentService = new PaymentService;
-            $oldSubscriberId = (int) $payment->getOriginal('subscriber_id');
-            $oldMeterId = $payment->getOriginal('meter_id') ? (int) $payment->getOriginal('meter_id') : null;
-
-            $transaction = Transaction::where('reference_type', Payment::class)
-                ->where('reference_id', $payment->id)
-                ->first();
-            if ($transaction) {
-                $transaction->update([
-                    'subscriber_id' => $payment->subscriber_id,
-                    'meter_id' => $payment->meter_id,
-                    'amount' => $payment->amount,
-                ]);
-            }
-
-            if ($oldMeterId) {
-                if ($oldMeter = Meter::find($oldMeterId)) {
-                    $transactionService->updateMeterBalance($oldMeter);
-                }
-            } elseif ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
-                $transactionService->updateSubscriberBalance($oldSubscriber);
-            }
-
-            if ($payment->meter_id && $payment->meter) {
-                $transactionService->updateMeterBalance($payment->meter);
-            } elseif ($payment->subscriber) {
-                $transactionService->updateSubscriberBalance($payment->subscriber);
-            }
-
-            if ($oldSubscriber = Subscriber::find($oldSubscriberId)) {
-                $paymentService->recalculateInvoices($oldSubscriber, $oldMeterId);
-            }
-            if ($payment->subscriber) {
-                $paymentService->recalculateInvoices($payment->subscriber, $payment->meter_id);
-            }
-        });
-
         static::deleted(function (Payment $payment) {
             Transaction::where('reference_type', Payment::class)
                 ->where('reference_id', $payment->id)
