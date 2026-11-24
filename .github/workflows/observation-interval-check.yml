@@ -99,6 +99,12 @@ jobs:
       - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: php artisan migrate:fresh --force --no-interaction
-      - run: php artisan test --filter='ObservationReadingIntervalTest|ReadingPeriodInvoiceConsistencyTest|HistoricalTariffTest|SingleCurrentMeterTest|FinancialReversalTest'
+      - run: php artisan test --filter='ObservationReadingIntervalTest|ReadingPeriodInvoiceConsistencyTest|HistoricalTariffTest|SingleCurrentMeterTest|FinancialReversalTest|LedgerDatabaseProtectionTest'
       - name: Real parallel observation and accounting writes
         run: php artisan test tests/Feature/FinancialConcurrencyTest.php
+      - name: Verify MySQL ledger trigger installation and raw SQL protection
+        env:
+          CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec "$CI_MYSQL_CONTAINER" mysql -uroot -pci_root_only -e 'SET GLOBAL log_bin_trust_function_creators = 1'
+          php artisan test tests/Feature/LedgerMysqlProtectionTest.php

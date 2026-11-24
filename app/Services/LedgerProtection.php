@@ -10,7 +10,7 @@ final class LedgerProtection
     private function names(): array
     {
         return DB::getDriverName() === 'sqlite'
-            ? ['ledger_reject_update', 'ledger_reject_delete', 'ledger_guard_subscriber_delete', 'ledger_guard_meter_delete']
+            ? ['ledger_reject_update', 'ledger_reject_delete', 'ledger_guard_subscriber_delete', 'ledger_guard_meter_delete', 'ledger_reject_replace']
             : ['ledger_reject_update', 'ledger_reject_delete'];
     }
 
@@ -74,6 +74,14 @@ final class LedgerProtection
                     BEGIN SELECT RAISE(ABORT, 'Ledger posting is immutable'); END",
                 'ledger_reject_delete' => "BEFORE DELETE ON transactions FOR EACH ROW
                     BEGIN SELECT RAISE(ABORT, 'Ledger posting is immutable'); END",
+                // SQLite REPLACE can implicitly delete without firing DELETE
+                // triggers when recursive_triggers is disabled. Stop it at INSERT.
+                'ledger_reject_replace' => "BEFORE INSERT ON transactions FOR EACH ROW
+                    WHEN EXISTS (SELECT 1 FROM transactions t WHERE t.id = NEW.id OR (
+                        NEW.reference_type IS NOT NULL AND NEW.reference_id IS NOT NULL
+                        AND t.reference_type = NEW.reference_type AND t.reference_id = NEW.reference_id AND t.type = NEW.type
+                    ))
+                    BEGIN SELECT RAISE(ABORT, 'Ledger posting already exists'); END",
                 'ledger_guard_subscriber_delete' => "BEFORE DELETE ON subscribers FOR EACH ROW
                     WHEN EXISTS (SELECT 1 FROM transactions WHERE subscriber_id = OLD.id)
                     BEGIN SELECT RAISE(ABORT, 'Subscriber has ledger postings'); END",

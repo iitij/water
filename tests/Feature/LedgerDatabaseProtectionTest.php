@@ -67,7 +67,14 @@ class LedgerDatabaseProtectionTest extends TestCase
             $this->rejects(fn () => DB::table('transactions')->where('id', $row->id)->update($change));
         }
         $this->rejects(fn () => DB::table('transactions')->where('id', $row->id)->delete());
-        app(\App\Services\FinancialMeterRetirementService::class)->retire($meter, $subscriber);
+        if (DB::getDriverName() === 'sqlite') {
+            $this->rejects(fn () => DB::statement('INSERT OR REPLACE INTO transactions
+                (id, subscriber_id, amount, type) VALUES (?, ?, ?, ?)', [$row->id, $subscriber->id, 1, 'adjustment']));
+            $this->rejects(fn () => DB::statement('INSERT OR REPLACE INTO transactions
+                (subscriber_id, amount, type, reference_type, reference_id) VALUES (?, ?, ?, ?, ?)',
+                [$subscriber->id, 1, $row->type, $row->reference_type, $row->reference_id]));
+        }
+        DB::transaction(fn () => app(\App\Services\FinancialMeterRetirementService::class)->retire($meter, $subscriber));
         $this->assertDatabaseHas('transactions', ['id' => $row->id, 'meter_id' => null,
             'retired_meter_id' => $meter->id, 'retired_meter_code' => $meter->unique_code, 'amount' => '100.25']);
         $this->assertSame(100.25, $subscriber->getAccountBalance());
