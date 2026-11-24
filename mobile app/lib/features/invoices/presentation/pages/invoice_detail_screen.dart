@@ -116,6 +116,10 @@ class _InvoiceDetailView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _AmountsCard(invoice: invoice),
+          const SizedBox(height: 16),
+          const SectionHeading(title: 'تفاصيل التسعير التاريخي', icon: Icons.calculate_outlined),
+          const SizedBox(height: 8),
+          InvoiceTariffLinesCard(invoice: invoice),
           if (invoice.items.isNotEmpty) ...<Widget>[
             const SizedBox(height: 16),
             const SectionHeading(title: 'بنود الفاتورة', icon: Icons.list_alt_rounded),
@@ -748,6 +752,8 @@ class InvoiceDetailPanel extends StatelessWidget {
         const SizedBox(height: 10),
         _AmountsCard(invoice: invoice),
         const SizedBox(height: 14),
+        if (invoice.tariffLines != null) InvoiceTariffLinesCard(invoice: invoice),
+        const SizedBox(height: 14),
         Row(
           children: <Widget>[
             Expanded(
@@ -781,6 +787,38 @@ class InvoiceDetailPanel extends StatelessWidget {
         ),
         if (context.useMasterDetail) const SizedBox(height: 8),
       ],
+    );
+  }
+}
+
+class InvoiceTariffLinesCard extends StatelessWidget {
+  const InvoiceTariffLinesCard({super.key, required this.invoice});
+  final InvoiceModel invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = invoice.tariffLines;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (lines == null)
+            const Text('لم تُحمّل تفاصيل التسعير التاريخي من الخادم.')
+          else if (lines.isEmpty)
+            const Text('لا تتوفر أدلة تسعير تاريخية محفوظة لهذه الفاتورة. لا يعني ذلك أن السعر صفر.')
+          else ...[
+            for (final line in lines) ...[
+              Text('${line.tariffName} — القراءة #${line.readingId}',
+                  style: Theme.of(context).textTheme.titleSmall),
+              Text('${line.periodStart} — ${line.periodEnd}'),
+              Text('${CurrencyFormatter.amount(line.units)} وحدة × ${CurrencyFormatter.withLabel(line.unitPrice)}'),
+              Text('المبلغ: ${CurrencyFormatter.withLabel(line.amount)}'),
+              const Divider(),
+            ],
+            Text('إجمالي الاستهلاك المفوتر: ${CurrencyFormatter.withLabel(lines.fold<double>(0, (total, line) => total + line.amount))}'),
+          ],
+        ],
+      ),
     );
   }
 }
