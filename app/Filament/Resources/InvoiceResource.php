@@ -413,8 +413,10 @@ class InvoiceResource extends Resource
                         && ! \App\Models\HistoricalInvoiceCorrection::where('replacement_invoice_id', $record->id)->exists()
                         && auth()->user()?->can('delete', $record) && auth()->user()?->can('create', Invoice::class))
                     ->form([
-                        Forms\Components\TextInput::make('corrected_units')->label('الوحدات التاريخية المصححة')->numeric()->minValue(0)->required(),
-                        Forms\Components\TextInput::make('historical_unit_price')->label('تعرفة الفترة الأصلية المثبتة')->numeric()->minValue(0)->required(),
+                        Forms\Components\TextInput::make('corrected_units')->label('الوحدات التاريخية المصححة')->numeric()->minValue(0)->required()
+                            ->helperText('هذا الإجراء يدعم فاتورة ذات قراءة واحدة فقط؛ لا يوزع الاستهلاك على قراءات متعددة.'),
+                        Forms\Components\TextInput::make('historical_unit_price')->label('تأكيد سعر الوحدة التاريخي الموثق')->numeric()->minValue(0)->required()
+                            ->helperText('يتحقق الخادم من السعر التاريخي المحفوظ؛ لا يسمح بتغييره في هذا الإجراء.'),
                         Forms\Components\Textarea::make('reason')->label('سبب التصحيح')->required()->minLength(10)->maxLength(1000),
                         Forms\Components\Textarea::make('evidence')->label('دليل القراءة والتعرفة التاريخية')->required()->minLength(10)->maxLength(2000),
                     ])
