@@ -92,4 +92,4 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze --no-pub --no-fatal-infos
-      - run: flutter test --no-pub test/features/payments/ test/features/invoices/ test/accounting/ test/features/offline_sync/ test/sync/
+      - run: flutter test --no-pub test/features/payments/ test/features/invoices/ test/accounting/ test/features/offline_sync/ test/sync/ test/features/tariffs/ test/features/readings/ test/services/
