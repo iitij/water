@@ -30,6 +30,28 @@ class Meter extends Model
         'path_number' => 'integer',
     ];
 
+    public function save(array $options = [])
+    {
+        if (! $this->exists || ! $this->isDirty(['installed_at', 'initial_reading'])) {
+            return parent::save($options);
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
+            $fresh = self::query()->lockForUpdate()->findOrFail($this->id);
+            if ($fresh->getRawOriginal('installed_at') != $this->getRawOriginal('installed_at')
+                || $fresh->getRawOriginal('initial_reading') != $this->getRawOriginal('initial_reading')) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['installed_at' => 'تغيرت بيانات العداد؛ حدّث البيانات أولاً.']);
+            }
+            if ($fresh->readings()->withTrashed()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'installed_at' => 'لا يمكن تغيير تاريخ تركيب العداد أو قراءته الابتدائية بعد تسجيل القراءات.',
+                ]);
+            }
+
+            return parent::save($options);
+        }, 3);
+    }
+
     protected static function booted(): void
     {
         static::deleting(function (Meter $meter): void {
