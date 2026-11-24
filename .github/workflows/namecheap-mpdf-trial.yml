@@ -1,0 +1,99 @@
+name: Water | Native PHP PDF trial
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+
+jobs:
+  stage-pdf:
+    name: Test mPDF in a private directory
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build isolated mPDF trial
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mpdf-trial"
+          mkdir -p "$work/fonts"
+          cp resources/fonts/tajawal/Tajawal-Regular.ttf resources/fonts/tajawal/Tajawal-Bold.ttf "$work/fonts/"
+          cd "$work"
+          printf '%s\n' '{"require":{"mpdf/mpdf":"8.3.1"},"config":{"platform":{"php":"8.4.28"},"allow-plugins":false}}' > composer.json
+          composer update --no-dev --prefer-dist --no-interaction --no-scripts --no-plugins --no-progress
+          composer audit --locked --no-dev
+          cat > smoke.php <<'PHP'
+          <?php
+          require __DIR__.'/vendor/autoload.php';
+          $start = microtime(true);
+          $dirs = (new \Mpdf\Config\ConfigVariables())->getDefaults()['fontDir'];
+          $fonts = (new \Mpdf\Config\FontVariables())->getDefaults()['fontdata'];
+          $pdf = new \Mpdf\Mpdf([
+              'mode' => 'utf-8', 'format' => 'A5-L',
+              'tempDir' => __DIR__.'/tmp',
+              'fontDir' => array_merge($dirs, [__DIR__.'/fonts']),
+              'fontdata' => $fonts + ['tajawal' => ['R' => 'Tajawal-Regular.ttf', 'B' => 'Tajawal-Bold.ttf', 'useOTL' => 255, 'useKashida' => 0]],
+              'default_font' => 'tajawal',
+          ]);
+          $pdf->SetDirectionality('rtl');
+          $pdf->WriteHTML('<html lang="ar" dir="rtl"><body><h1>فاتورة مياه تجريبية</h1><table border="1" cellpadding="6"><tr><td>المشترك</td><td>المبلغ</td></tr><tr><td>مشترك تجريبي</td><td dir="ltr">1250.00</td></tr></table><p>بيانات وهمية للاختبار فقط</p></body></html>');
+          $bytes = $pdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+          if (!str_starts_with($bytes, '%PDF-') || strlen($bytes) < 1000 || $pdf->page !== 1) {
+              throw new RuntimeException('Invalid synthetic PDF');
+          }
+          file_put_contents(__DIR__.'/sample.pdf', $bytes, LOCK_EX);
+          echo 'MPDF_VERSION: '.\Composer\InstalledVersions::getPrettyVersion('mpdf/mpdf').PHP_EOL;
+          echo 'PDF_BYTES: '.strlen($bytes).PHP_EOL;
+          echo 'PDF_PAGES: '.$pdf->page.PHP_EOL;
+          echo 'RENDER_MS: '.round((microtime(true)-$start)*1000).PHP_EOL;
+          echo 'PEAK_MEMORY_BYTES: '.memory_get_peak_usage(true).PHP_EOL;
+          echo 'NATIVE_PHP_PDF_TRIAL: PASSED'.PHP_EOL;
+          PHP
+          mkdir tmp
+          php smoke.php
+          rm sample.pdf
+          tar -czf "$RUNNER_TEMP/water-mpdf.tar.gz" composer.json composer.lock vendor fonts smoke.php
+
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Transfer isolated mPDF trial and render synthetic PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage=".water-mpdf-trial/${GITHUB_SHA}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            "set -eu; cd \"\$HOME\"; umask 077; mkdir -p '$(dirname "$stage")'; mkdir '$stage'; tar -xzf - -C '$stage'; cd '$stage'; mkdir tmp; timeout --kill-after=5s 30s /opt/alt/php84/usr/bin/php smoke.php; echo 'PRIVATE_MPDF_STAGE: $stage'" \
+            < "$RUNNER_TEMP/water-mpdf.tar.gz"
