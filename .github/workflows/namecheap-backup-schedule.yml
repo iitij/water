@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
       - name: Require successful isolated baseline restore
         env:
-          GH_${{ github.token }}: TOKEN
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(gh api repos/iitij/water/actions/runs/45310784495 --jq '.conclusion')" = success
