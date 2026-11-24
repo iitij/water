@@ -15,6 +15,12 @@ Correct business and accounting invariants take precedence over compatibility wi
 
 Meter values, installation baseline and derived consumption use DECIMAL(12,2). The model subtracts integer hundredths, rejects decreasing values, and never accepts client-supplied usage as authoritative. Posting does not recalculate stored quantities. API input permits at most two decimal places; Flutter offline subtraction, administrative reports and spreadsheet exports preserve the fractional units. Historical tariff line rounding remains per line. Tests cover 35.50 units at 600.00, a 0.01-unit difference, zero usage, edits and invalid precision. The baseline is captured during meter creation/replacement and the replacement has its own installation date, regardless of financial history. API and mobile cache select the latest reading by observed date rather than insertion order or calendar forecast. No historical quantity or financial backfill is part of these schema migrations.
 
+## Write-path and database safeguards
+
+Normal database setup never imports historical subscriber/reading rows. The old archive seeder is retired; optional demo initialization uses `SyntheticObservationSeeder` in local/testing environments only, without truncation. The former screenshot seeders delegate to that same path. Existing backups remain independent of application initialization.
+
+MySQL 8.0.16+ uses an enforced row CHECK for observed intervals and exact quantities, without SUPER or trigger privileges. SQLite uses insert/update triggers. The historical marker is excluded from that row constraint, so privileged raw MySQL writes can still assign it; normal model creation rejects that marker and updates cannot change it. Do not grant unrestricted SQL write access to clients. Row constraints do not prove cross-row continuity; subscriber/meter locks, current-reading locking queries and the model enforce that contract. Deleted observations cannot be restored into the chain through the model. MySQL CI additionally exercises independent-process races for same-date reading insertion and concurrent invoice issuance.
+
 ## Historical exceptions (#43)
 
 The previously supplied cleaned SQL snapshot contains four readings on meter 95, with recorded dates earlier than the stored period start:
