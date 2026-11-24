@@ -61,6 +61,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Subscribers: custom actions must precede the resource's /{id} route.
     Route::get('/subscribers/{id}/summary', [SubscriberController::class, 'summary']);
     Route::get('/subscribers/{id}/statement', [SubscriberController::class, 'statement']);
+    Route::get('/subscribers/{id}/ledger-statement', [\App\Http\Controllers\Api\LedgerStatementController::class, 'show'])->whereNumber('id');
+    Route::get('/subscribers/{id}/ledger-statement/xlsx', [\App\Http\Controllers\Api\LedgerStatementController::class, 'xlsx'])->whereNumber('id');
+    Route::get('/subscribers/{id}/ledger-statement/pdf', [\App\Http\Controllers\Api\LedgerStatementController::class, 'pdf'])->whereNumber('id');
     Route::get('/subscribers/{id}/transactions', [SubscriberController::class, 'transactions']);
     Route::get('/subscribers/{id}/unpaid-invoices-summary', [SubscriberController::class, 'unpaidInvoicesSummary']);
     Route::get('/subscribers/{id}/allocation-reconciliation', [SubscriberController::class, 'allocationReconciliation'])->whereNumber('id');
