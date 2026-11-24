@@ -87,6 +87,7 @@ final class PaymentAllocationReadService
             $ledger = $minor($subscriber->getAccountBalance());
             $expected = $revision ? (int) $revision->available_minor - $billed : null;
             $integrity = $revision ? app(AllocationSnapshotIntegrity::class)->valid($revision) : null;
+            $audit = app(FinancialReconciliationService::class)->inspect($subscriber);
             return [
                 'integrity_valid' => $integrity,
                 'available' => $revision !== null, 'revision' => $revision ? (int) $revision->revision : null,
@@ -95,7 +96,8 @@ final class PaymentAllocationReadService
                 'unallocated_minor' => $revision ? (int) $revision->unallocated_minor : null,
                 'expected_ledger_minor' => $expected,
                 'difference_minor' => $expected === null ? null : $ledger - $expected,
-                'matches' => $revision === null ? null : $integrity && $ledger === $expected && $paid === (int) $revision->allocated_minor,
+                'matches' => $revision === null ? null : $integrity && $ledger === $expected && $paid === (int) $revision->allocated_minor && $audit['matches'],
+                'document_reconciliation' => $audit,
             ];
         }, 3);
     }

@@ -57,3 +57,7 @@ For approved physical-cash settlements only, the positive original counted-minus
 ## Original ledger posting integrity
 
 The service validates persisted document type, owner, meter provenance, exact signed amount and valid original state before writing. Multiple or deleted original postings are rejected, never guessed. Reversals check the original reference including retired meter identity. `ledger:migrate` is now a read-only original-invoice/payment audit, not a rebuild; the old temporary destructive script is disabled. This limited audit does not yet certify all refunds, transfers, reversals or general ledger constraints; further reconciliation and database enforcement remain required.
+
+## Read-only document reconciliation
+
+`php artisan ledger:audit [--subscriber=ID] [--json]` inspects non-deleted subscriber accounts independently under their account lock. It checks original and required reversal postings, refund and transfer identities, unexpected postings, net ledger versus independently calculated document balances, and latest allocation revision hash, per-invoice and per-source totals. The existing allocation reconciliation endpoint exposes `document_reconciliation` and cannot report a match for offsetting posting errors. No repair/replay is performed. Unsupported legacy postings are reported, not silently accepted. This is a diagnostic account-subledger audit, not a complete treasury audit; cross-account checks are not a single global snapshot, and database-level posting uniqueness/immutability is a further step.\n
