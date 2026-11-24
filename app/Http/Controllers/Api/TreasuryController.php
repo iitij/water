@@ -1,0 +1,50 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Services\TreasuryRegisterService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+final class TreasuryController extends ApiController
+{
+    public function index(Request $request, TreasuryRegisterService $service)
+    {
+        $service->authorize($request->user());
+        return response()->json(['accounts' => DB::table('treasury_accounts')
+            ->orderBy('code')->get(['id', 'code', 'name', 'channel', 'opening_on']),
+            'certified_balance' => false]);
+    }
+
+    public function store(Request $request, TreasuryRegisterService $service)
+    {
+        $service->authorize($request->user());
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:150'],
+            'channel' => ['required', 'in:cash,bank'],
+            'opening_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'opening_amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
+            'opening_reference' => ['required', 'string', 'max:150'],
+            'opening_evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        return response()->json(['account' => $service->open($request->user(), $data), 'certified_balance' => false]);
+    }
+
+    public function show(Request $request, int $id, TreasuryRegisterService $service)
+    {
+        return response()->json($service->inspect($request->user(), $id));
+    }
+
+    public function post(Request $request, int $id, TreasuryRegisterService $service)
+    {
+        $service->authorize($request->user());
+        $data = $request->validate([
+            'kind' => ['required', 'in:cash_handover,payment_refund'],
+            'source_id' => ['required', 'integer', 'min:1'],
+            'amount' => ['prohibited'], 'effective_on' => ['prohibited'],
+        ]);
+        return response()->json(['posting' => $service->post($request->user(), $id, $data['kind'], (int) $data['source_id']),
+            'certified_balance' => false]);
+    }
+}
