@@ -16,7 +16,7 @@ import 'collect_payment_state.dart';
 /// القواعد المنفذة هنا:
 ///  1. عند اختيار المشترك: جلب أحدث فاتورة غير مسددة وتعبئة `amount` بالمستحق
 ///     (`PaymentResource::form` سطر 36-52).
-///  2. عند تغيير الفاتورة: المستحق = `total_amount + previous_balance - amount_paid`.
+///  2. عند تغيير الفاتورة: المستحق الحي من payableAmount، دون تكرار المتأخرات التاريخية.
 ///  3. `reference_number` إلزامي مع `bank_transfer`/`check`.
 ///  4. معاينة توزيع FIFO محلياً + الفائض كرصيد دائن.
 class CollectPaymentCubit extends Cubit<CollectPaymentState> {
@@ -63,6 +63,10 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
       state.copyWith(
         subscriberId: subscriberId,
         subscriberName: name,
+        clearInvoice: true,
+        openInvoices: const [],
+        dueAmount: 0,
+        amount: 0,
         loadingInvoices: true,
         clearValidation: true,
       ),
@@ -78,7 +82,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     try {
       final summary = await _references.dueSummary(subscriberId);
       final invoice = await _payments.latestUnpaidInvoice(subscriberId);
-      if (isClosed) return;
+      if (isClosed || state.subscriberId != subscriberId) return;
       // Refreshing account context must not replace the invoice the user opened.
       if (!autoSelectLatest) {
         final selected = state.openInvoices
@@ -134,17 +138,23 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
         state.copyWith(
           clearInvoice: true,
           dueAmount: 0,
+          amount: 0,
           openInvoices: state.openInvoices,
         ),
       );
       return;
     }
     final matches = state.openInvoices.where((i) => i.id == invoiceId).toList();
-    final invoice = matches.isEmpty ? null : matches.first;
+    if (matches.isEmpty) {
+      emit(state.copyWith(clearInvoice: true, dueAmount: 0, amount: 0));
+      return;
+    }
+    final invoice = matches.first;
     emit(
       state.copyWith(
         invoiceId: invoiceId,
-        dueAmount: invoice?.payableAmount ?? state.dueAmount,
+        dueAmount: invoice.payableAmount,
+        amount: invoice.payableAmount,
       ),
     );
   }
