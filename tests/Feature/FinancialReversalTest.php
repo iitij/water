@@ -304,6 +304,11 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(6000.0, $from->getAccountDebt());
         $this->assertSame(1499.75, $to->getAccountDebt());
         $this->assertSame(7499.75, $from->getAccountDebt() + $to->getAccountDebt());
+        $this->getJson('/api/admin/dashboard')->assertOk()->assertJsonPath('stats_overview.outstanding_amount', 7499.75);
+        $this->getJson('/api/admin/reports?from_date='.now()->toDateString().'&to_date='.now()->toDateString())
+            ->assertOk()->assertJsonPath('financial_movements.gross_valid_receipts', 1500.25)
+            ->assertJsonPath('financial_movements.account_transfers_in', 1500.25)
+            ->assertJsonPath('financial_movements.net_receipts_after_refunds', 1500.25);
         $this->assertSame(json_encode($before, JSON_THROW_ON_ERROR), json_encode($cash->summary($session->fresh()), JSON_THROW_ON_ERROR));
         $this->assertDatabaseHas('audit_events', ['event' => 'payment.account_transferred', 'entity_id' => (string) $id]);
         try {
@@ -355,6 +360,10 @@ class FinancialReversalTest extends TestCase
         $this->assertNull($payment->fresh()->voided_at);
         $this->assertSame('6000.00', $invoice->fresh()->amount_paid);
         $this->assertSame(749.75, $subscriber->getAccountCredit());
+        $this->getJson('/api/admin/reports?from_date='.now()->toDateString().'&to_date='.now()->toDateString())
+            ->assertOk()->assertJsonPath('financial_movements.gross_valid_receipts', 8000)
+            ->assertJsonPath('financial_movements.refunds_disbursed', 1250.25)
+            ->assertJsonPath('financial_movements.net_receipts_after_refunds', 6749.75);
         $this->assertSame($snapshot, json_encode($cash->summary($session->fresh()), JSON_THROW_ON_ERROR));
         $this->assertDatabaseHas('transactions', [
             'type' => 'payment_refund', 'reference_type' => \App\Models\PaymentRefund::class,

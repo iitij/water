@@ -86,7 +86,7 @@ class _ReportsView extends StatelessWidget {
                   message: ReportStrings.totalsOnly,
                   icon: Icons.info_outline_rounded,
                 )
-              else if (report.invoicesCount == 0 && report.totalCollected == 0)
+              else if (report.invoicesCount == 0 && report.totalCollected == 0 && (report.refundsDisbursed ?? 0) == 0)
                 const AppNotice(
                   title: ReportStrings.emptyPeriod,
                   message: ReportStrings.chooseAnotherPeriod,
@@ -240,6 +240,10 @@ class _ReportMetrics extends StatelessWidget {
         value: report.totalCollected,
         caption: ReportStrings.activeReceipts,
       ),
+      if (report.refundsDisbursed != null && report.netReceiptsAfterRefunds != null) ...[
+        _Metric(title: 'الاستردادات', value: report.refundsDisbursed!, caption: 'مبالغ الصرف المثبتة خلال الفترة'),
+        _Metric(title: 'صافي التحصيل', value: report.netReceiptsAfterRefunds!, caption: 'القبض الساري ناقص الاستردادات'),
+      ],
       if (report.hasDetailedData) ...[
         _Metric(
           title: ReportStrings.outstanding,
@@ -265,7 +269,7 @@ class _ReportMetrics extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 900
-            ? metrics.length
+            ? (metrics.length > 4 ? 3 : metrics.length)
             : MediaQuery.textScalerOf(context).scale(14) > 20
             ? 1
             : 2;

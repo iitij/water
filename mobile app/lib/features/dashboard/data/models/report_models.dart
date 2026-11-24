@@ -58,12 +58,17 @@ class FinancialReportModel extends FinancialReport {
     required super.statusBreakdown,
     required super.squareBreakdown,
     super.hasDetailedData,
+    super.refundsDisbursed,
+    super.netReceiptsAfterRefunds,
   });
 
   factory FinancialReportModel.fromJson(dynamic value) {
     final root = adminDataMap(value);
     final summary = root['summary'] is Map ? adminMap(root['summary']) : root;
+    final movements = adminMap(root['financial_movements']);
     return FinancialReportModel(
+      refundsDisbursed: movements['refunds_disbursed'] == null ? null : adminDouble(movements['refunds_disbursed']),
+      netReceiptsAfterRefunds: movements['net_receipts_after_refunds'] == null ? null : adminDouble(movements['net_receipts_after_refunds']),
       totalInvoiced: adminDouble(
         summary['total_invoiced'] ??
             summary['invoiced_amount'] ??
@@ -147,6 +152,8 @@ class FinancialReportModel extends FinancialReport {
 
   Map<String, dynamic> toJson() => {
     'has_detailed_data': hasDetailedData,
+    if (refundsDisbursed != null && netReceiptsAfterRefunds != null)
+      'financial_movements': {'refunds_disbursed': refundsDisbursed, 'net_receipts_after_refunds': netReceiptsAfterRefunds},
     'summary': {
       'total_invoiced': totalInvoiced,
       'total_collected': totalCollected,
