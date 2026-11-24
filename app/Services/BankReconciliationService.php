@@ -216,7 +216,7 @@ final class BankReconciliationService
     {
         return $posting->kind === 'bank_fee'
             && ! $posting->cash_handover_id && ! $posting->payment_refund_id && ! $posting->cash_session_funding_id
-            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id
+            && ! $posting->treasury_transfer_id && ! $posting->treasury_transfer_receipt_id && ! $posting->treasury_cash_adjustment_id
             && (int) $posting->treasury_bank_fee_id === (int) $fee->id
             && (int) $fee->bank_statement_line_id === (int) $line->id
             && (int) $line->bank_statement_id === (int) $statement->id

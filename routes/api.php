@@ -219,6 +219,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'index'])->whereNumber('id');
     Route::post('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'store'])->whereNumber('id');
     Route::get('/treasury/cash-counts/{id}', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/cash-counts/{id}/adjustment', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'adjust'])->whereNumber('id');
     Route::post('/treasury/cash-counts/{id}/review', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'review'])->whereNumber('id');
     Route::get('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'index']);
     Route::post('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'store']);

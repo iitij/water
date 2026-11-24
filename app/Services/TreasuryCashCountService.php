@@ -35,10 +35,15 @@ final class TreasuryCashCountService
         return $value;
     }
 
-    private function snapshot(object $account): array
+    private function snapshot(object $account, ?int $beforePostingId = null): array
     {
-        $rows = DB::table('treasury_postings')->where('treasury_account_id', $account->id)
-            ->orderBy('id')->get();
+        $query = DB::table('treasury_postings')->where('treasury_account_id', $account->id);
+        if ($beforePostingId !== null) $query->where('id', '<', $beforePostingId);
+        $rows = $query->orderBy('id')->get();
+        // Preserve existing hashes for rows preceding this migration.
+        foreach ($rows as $row) {
+            if ($row->treasury_cash_adjustment_id === null) unset($row->treasury_cash_adjustment_id);
+        }
         $balance = (int) $account->opening_minor;
         foreach ($rows as $row) {
             $balance += (int) $row->amount_minor;
@@ -96,7 +101,12 @@ final class TreasuryCashCountService
             && (! $review || (int) $review->reviewed_by !== (int) $count->counted_by);
         $same = hash_equals($count->ledger_hash, $snapshot['ledger_hash'])
             && (int) $count->recorded_minor === $snapshot['recorded_minor'];
+        $adjustment = DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $count->id)->first();
+        $posting = $adjustment ? DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $adjustment->id)->first() : null;
+        $adjusted = $posting && $this->checkAdjustmentPosting($posting);
         return [
+            'adjustment' => $adjustment ? (array) $adjustment : null,
+            'adjustment_status' => $adjustment ? ($adjusted ? 'posted' : 'inconsistent') : ((int) $count->variance_minor === 0 ? 'not_required' : 'unresolved'),
             'count' => (array) $count,
             'review' => $review ? (array) $review : null,
             'status' => ! $consistent ? 'inconsistent' : ($review ? ((bool) $review->accepted ? 'accepted_observation' : 'rejected_observation') : 'pending_review'),
@@ -139,6 +149,120 @@ final class TreasuryCashCountService
             ]);
             return $this->report($count, $account);
         }, 3);
+    }
+
+    /** Records a proven cause, not an arbitrary balancing plug or a complete GL journal. */
+    public function adjust(User $actor, int $id, string $reference, string $classification, string $reason, string $evidence): array
+    {
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $reference = mb_strtoupper(trim($reference));
+        $reason = trim($reason);
+        $evidence = $this->evidence($evidence);
+        if (mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+            || mb_strlen($reason) < 20 || mb_strlen($reason) > 500
+            || ! in_array($classification, ['confirmed_cash_loss', 'unattributed_cash_held'], true)) {
+            throw ValidationException::withMessages(['adjustment' => 'يلزم تصنيف محدد وسبب مثبت ومرجع مستقل.']);
+        }
+        return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence): array {
+            $this->lock();
+            $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($count, 404);
+            $account = $this->account((int) $count->treasury_account_id);
+            abort_if((int) $count->counted_by === (int) $actor->id, 403, 'يلزم اعتماد مستقل عن مسجل الجرد.');
+            $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $id)->first();
+            $variance = (int) $count->variance_minor;
+            if (($classification === 'confirmed_cash_loss' && $variance >= 0)
+                || ($classification === 'unattributed_cash_held' && $variance <= 0)) {
+                throw ValidationException::withMessages(['classification' => 'التصنيف لا يطابق اتجاه فرق الجرد غير الصفري.']);
+            }
+            $record = [
+                'treasury_account_id' => (int) $account->id, 'treasury_cash_count_id' => $id,
+                'treasury_cash_count_review_id' => $review?->id, 'amount_minor' => $variance,
+                'classification' => $classification, 'reference' => $reference, 'reason' => $reason,
+                'evidence' => $evidence, 'approved_by' => $actor->id,
+            ];
+            $existing = DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $id)->lockForUpdate()->first();
+            if ($existing) {
+                foreach ($record as $field => $value) {
+                    abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل تسوية مختلفة للجرد.');
+                }
+                $posting = DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $existing->id)->first();
+                abort_unless($posting && $this->checkAdjustmentPosting($posting), 409, 'مستند التسوية السابق غير متطابق.');
+                return ['adjustment' => (array) $existing, 'posting' => (array) $posting, 'observation' => $this->report($count, $account)];
+            }
+            $snapshot = $this->snapshot($account);
+            abort_unless($review && (bool) $review->accepted
+                && (int) $review->reviewed_by !== (int) $count->counted_by
+                && (int) $count->counted_minor >= 0
+                && $variance === (int) $count->counted_minor - (int) $count->recorded_minor
+                && (int) $count->recorded_minor === $snapshot['recorded_minor']
+                && hash_equals($count->ledger_hash, $snapshot['ledger_hash'])
+                && \Illuminate\Support\Carbon::parse($count->observed_at)->toDateString() === today()->toDateString(),
+                409, 'يلزم جرد مقبول وحديث لم تتغير قيوده.');
+            abort_if(DB::table('treasury_cash_counts')->where('treasury_account_id', $account->id)->where('id', '>', $id)->exists(),
+                409, 'يوجد جرد أحدث؛ يجب مراجعته أولاً.');
+            // Existing register is provisional: refuse known source gaps rather than
+            // convert missing cash documents into an apparent loss or surplus.
+            $register = app(TreasuryRegisterService::class)->inspect($actor, (int) $account->id);
+            abort_if($register['issues'] || $register['channel_unposted_handover_count'] || $register['channel_unposted_refund_count'],
+                409, 'توجد حركات غير مرحلة أو خلل في دفتر الخزينة؛ يلزم معالجتها أولاً.');
+            abort_if(DB::table('treasury_cash_adjustments')->where('reference', $reference)->exists()
+                || DB::table('treasury_cash_counts')->where('reference', $reference)->exists()
+                || DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
+                || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                || DB::table('cash_handovers')->where('reference', $reference)->exists()
+                || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists()
+                || DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists(),
+                409, 'مرجع التسوية مستخدم مسبقاً.');
+            $date = today()->toDateString();
+            $adjustmentId = DB::table('treasury_cash_adjustments')->insertGetId($record + [
+                'adjusted_on' => $date, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $postingId = DB::table('treasury_postings')->insertGetId([
+                'treasury_account_id' => $account->id, 'treasury_cash_adjustment_id' => $adjustmentId,
+                'kind' => 'cash_count_adjustment', 'amount_minor' => $variance, 'effective_on' => $date,
+                'evidence_reference' => $reference, 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $posting = DB::table('treasury_postings')->find($postingId);
+            if (! $this->checkAdjustmentPosting($posting)) throw new \LogicException('Cash adjustment source is inconsistent.');
+            app(AuditLogger::class)->recordRequired('treasury.cash_count_adjusted', [
+                'entity_type' => 'treasury_cash_adjustment', 'entity_id' => $adjustmentId, 'actor_user_id' => $actor->id,
+                'after' => $record + ['adjusted_on' => $date, 'posting_id' => $postingId, 'subscriber_posting_created' => false],
+            ]);
+            return ['adjustment' => (array) DB::table('treasury_cash_adjustments')->find($adjustmentId),
+                'posting' => (array) $posting, 'observation' => $this->report($count, $account)];
+        }, 3);
+    }
+
+    public function checkAdjustmentPosting(object $posting): bool
+    {
+        if ($posting->kind !== 'cash_count_adjustment' || ! $posting->treasury_cash_adjustment_id
+            || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
+            || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id) return false;
+        $adjustment = DB::table('treasury_cash_adjustments')->find($posting->treasury_cash_adjustment_id);
+        $count = $adjustment ? DB::table('treasury_cash_counts')->find($adjustment->treasury_cash_count_id) : null;
+        $review = $adjustment ? DB::table('treasury_cash_count_reviews')->find($adjustment->treasury_cash_count_review_id) : null;
+        $account = $adjustment ? DB::table('treasury_accounts')->find($adjustment->treasury_account_id) : null;
+        if (! $adjustment || ! $count || ! $review || ! $account || $account->channel !== 'cash') return false;
+        $prior = $this->snapshot($account, (int) $posting->id);
+        $variance = (int) $count->variance_minor;
+        return (int) $count->treasury_account_id === (int) $account->id
+            && (int) $posting->treasury_account_id === (int) $account->id
+            && (int) $review->treasury_cash_count_id === (int) $count->id
+            && (bool) $review->accepted && (int) $review->reviewed_by !== (int) $count->counted_by
+            && (int) $adjustment->approved_by !== (int) $count->counted_by
+            && (int) $posting->posted_by === (int) $adjustment->approved_by
+            && (int) $count->counted_minor >= 0
+            && $variance === (int) $count->counted_minor - (int) $count->recorded_minor
+            && (int) $count->recorded_minor === $prior['recorded_minor'] && hash_equals($count->ledger_hash, $prior['ledger_hash'])
+            && (($variance < 0 && $adjustment->classification === 'confirmed_cash_loss')
+                || ($variance > 0 && $adjustment->classification === 'unattributed_cash_held'))
+            && (int) $adjustment->amount_minor === $variance && (int) $posting->amount_minor === $variance
+            && $adjustment->adjusted_on === $posting->effective_on
+            && $adjustment->adjusted_on === \Illuminate\Support\Carbon::parse($count->observed_at)->toDateString()
+            && $posting->effective_on >= $account->opening_on && $posting->effective_on <= today()->toDateString()
+            && $posting->evidence_reference === $adjustment->reference
+            && mb_strlen(trim($adjustment->reason)) >= 20 && mb_strlen(trim($adjustment->evidence)) >= 10;
     }
 
     public function inspect(User $actor, int $id): array

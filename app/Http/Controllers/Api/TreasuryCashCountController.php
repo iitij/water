@@ -31,6 +31,20 @@ final class TreasuryCashCountController extends ApiController
             $data['reference'], $data['evidence']));
     }
 
+    public function adjust(Request $request, int $id, TreasuryCashCountService $service)
+    {
+        app(TreasuryRegisterService::class)->authorize($request->user());
+        $data = $request->validate([
+            'reference' => ['required', 'string', 'max:150'],
+            'classification' => ['required', 'in:confirmed_cash_loss,unattributed_cash_held'],
+            'reason' => ['required', 'string', 'min:20', 'max:500'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
+        ]);
+        return response()->json($service->adjust($request->user(), $id, $data['reference'],
+            $data['classification'], $data['reason'], $data['evidence']));
+    }
+
     public function review(Request $request, int $id, TreasuryCashCountService $service)
     {
         app(TreasuryRegisterService::class)->authorize($request->user());

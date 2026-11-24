@@ -180,6 +180,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'cash_count_adjustment') {
+                    if (! app(TreasuryCashCountService::class)->checkAdjustmentPosting($row)) {
+                        $issues[] = ['code' => 'cash_adjustment_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->treasury_cash_adjustment_id) {
+                    $issues[] = ['code' => 'unexpected_cash_adjustment_source', 'posting_id' => $row->id];
+                }
                 if ($row->kind === 'bank_fee') {
                     if (! app(BankReconciliationService::class)->checkFeePosting($row)) {
                         $issues[] = ['code' => 'bank_fee_source_mismatch', 'posting_id' => $row->id];
@@ -245,6 +254,11 @@ final class TreasuryRegisterService
             $unpostedFees = DB::table('treasury_bank_fees')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_fee_id')->select('treasury_bank_fee_id'))->count();
             if ($unpostedFees) $issues[] = ['code' => 'unposted_bank_fee', 'count' => $unpostedFees];
+            $unpostedAdjustments = DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
+                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_cash_adjustment_id')->select('treasury_cash_adjustment_id'))->count();
+            if ($unpostedAdjustments) $issues[] = ['code' => 'unposted_cash_adjustment', 'count' => $unpostedAdjustments];
+            $held = (int) DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
+                ->where('classification', 'unattributed_cash_held')->sum('amount_minor');
             $transfers = app(TreasuryTransferService::class)->inspectAccount($accountId);
             $issues = array_merge($issues, $transfers['issues']);
             return [
@@ -252,7 +266,9 @@ final class TreasuryRegisterService
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees',
+                'coverage' => 'opening_handover_refund_funding_internal_transfers_bank_fees_cash_adjustments',
+                'unposted_cash_adjustment_count' => $unpostedAdjustments,
+                'unattributed_cash_held_minor' => $held,
                 'unposted_bank_fee_count' => $unpostedFees,
                 'internal_transfers' => $transfers,
                 'unposted_funding_count' => $unpostedFunding,
