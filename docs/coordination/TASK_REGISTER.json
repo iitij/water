@@ -4,25 +4,134 @@
   "repository": "iitij/water",
   "supervisor": "main coordination conversation",
   "teams": {
-    "A": {"scope": "collections, bank reconciliation, treasury and closing", "branch_observed": "fix/observation-period-v2", "sha_observed": "b1168775d6d8f832cd70917e92bb623164e59c9a", "status": "IN_PROGRESS", "assignment_delivery": "pending_user_relay"},
-    "B": {"scope": "ACC-11 then ACC-09/14 gated", "branch": "fix/accounting-acc-11", "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585", "status": "REVIEW", "assignment_delivery": "pending_user_relay"},
-    "C": {"scope": "ACC-10 audit first, ACC-12/13 gated", "status": "ASSIGNED", "assignment_delivery": "pending_user_relay"},
-    "D": {"scope": "independent QA, CI, MySQL and Flutter", "status": "ASSIGNED", "assignment_delivery": "pending_user_relay"}
+    "A": {
+      "scope": "collections, bank reconciliation, treasury and closing",
+      "branch_observed": "fix/observation-period-v2",
+      "sha_observed": "a5f2cac67e0d6fd16428ed8267e0ffb863f3900f",
+      "status": "IN_PROGRESS",
+      "assignment_delivery": "confirmed_by_owner",
+      "activity_report": "owner_reports_work_started",
+      "latest_verified_change": "Atomic separate late cash delivery; one commit after b116877; 11 changed files. PR branch contains 138 commits and 177 files ahead of main at snapshot.",
+      "next": "Continue G1A issue 56; independently verify idempotency, rollback, original allocation, already-counted path and treasury reconciliation. No period close or merge yet."
+    },
+    "B": {
+      "scope": "ACC-11 then ACC-09/14 gated",
+      "branch": "fix/accounting-acc-11",
+      "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585",
+      "status": "REVIEW",
+      "assignment_delivery": "confirmed_by_owner",
+      "activity_report": "owner_reports_work_started",
+      "next": "Retest final SHA, MySQL isolated, scheduler, and CI; then submit ACC-09/14 plan. No change to shared ReadingSettings before coordination."
+    },
+    "C": {
+      "scope": "ACC-10 audit first, ACC-12/13 gated",
+      "status": "IN_PROGRESS",
+      "assignment_delivery": "confirmed_by_owner",
+      "activity_report": "owner_reports_work_started",
+      "evidence": "Owner confirms started; no new team-specific branch or audit report verified at snapshot. ACC-10 first; ACC-12 remains blocked on integration."
+    },
+    "D": {
+      "scope": "independent QA, CI, MySQL and Flutter",
+      "status": "IN_PROGRESS",
+      "assignment_delivery": "confirmed_by_owner",
+      "activity_report": "owner_reports_work_started",
+      "evidence": "Owner confirms started; no new independent test report verified. PR-triggered workflow run lookup returned no runs for A and B snapshot SHAs; does not prove no other CI runs."
+    }
   },
   "original_accounting_tasks": [
-    {"id":"ACC-01","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-02","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-03","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-04","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-05","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-06","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-07","status":"MERGED","acceptance":"previously_reported; independent regression pending"},
-    {"id":"ACC-08","status":"MERGED","evidence":"c877e9f / PR 52"},
-    {"id":"ACC-09","owner":"B","status":"OPEN","gate":"after ACC-11; file ownership review"},
-    {"id":"ACC-10","owner":"C","status":"ASSIGNED","next":"read-only audit and file reservation"},
-    {"id":"ACC-11","owner":"B","status":"REVIEW","evidence":"01fae90; earlier focused PHP 3 pass, Flutter 19 pass, full PHP 223 pass/1 fail/6 skip; final timezone change retest, MySQL, CI pending"},
-    {"id":"ACC-12","owner":"C","status":"BLOCKED","gate":"coordinate existing observation-period changes with A; verify instead of duplicate"},
-    {"id":"ACC-13","owner":"C","status":"OPEN","gate":"after ACC-10 scope review; coordinate reading changes"},
-    {"id":"ACC-14","owner":"B","status":"OPEN","gate":"after ACC-09 scope review; coordinate document generation"}
-  ]
+    {
+      "id": "ACC-01",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-02",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-03",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-04",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-05",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-06",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-07",
+      "status": "MERGED",
+      "acceptance": "previously_reported; independent regression pending"
+    },
+    {
+      "id": "ACC-08",
+      "status": "MERGED",
+      "evidence": "c877e9f / PR 52"
+    },
+    {
+      "id": "ACC-09",
+      "owner": "B",
+      "status": "OPEN",
+      "gate": "after ACC-11; file ownership review"
+    },
+    {
+      "id": "ACC-10",
+      "owner": "C",
+      "status": "IN_PROGRESS",
+      "next": "read-only audit and file reservation",
+      "evidence": "Owner reports team C started; implementation/QA evidence pending"
+    },
+    {
+      "id": "ACC-11",
+      "owner": "B",
+      "status": "REVIEW",
+      "evidence": "01fae90; earlier focused PHP 3 pass, Flutter 19 pass, full PHP 223 pass/1 fail/6 skip; final timezone change retest, MySQL, CI pending"
+    },
+    {
+      "id": "ACC-12",
+      "owner": "C",
+      "status": "BLOCKED",
+      "gate": "coordinate existing observation-period changes with A; verify instead of duplicate"
+    },
+    {
+      "id": "ACC-13",
+      "owner": "C",
+      "status": "OPEN",
+      "gate": "after ACC-10 scope review; coordinate reading changes"
+    },
+    {
+      "id": "ACC-14",
+      "owner": "B",
+      "status": "OPEN",
+      "gate": "after ACC-09 scope review; coordinate document generation"
+    }
+  ],
+  "supervisor_review": {
+    "decision": "HOLD_MERGE",
+    "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
+    "original_tasks_merged": 8,
+    "original_tasks_total": 14,
+    "observed_cross_team_file_overlap": [
+      "app/Filament/Pages/ReadingSettings.php"
+    ],
+    "integration_gate": "Preserve both A's period changes and B's grace validation; review both diffs before merge. C audit read-only in shared files. D independent tests at exact candidate SHA.",
+    "source_urls": [
+      "https://github.com/iitij/water/commit/a5f2cac67e0d6fd16428ed8267e0ffb863f3900f",
+      "https://github.com/iitij/water/commit/01fae90660fd88efd69f16f3a384e850b6f9a585",
+      "https://github.com/iitij/water/issues/56",
+      "https://github.com/iitij/water/issues/57"
+    ],
+    "limitations": "No live view of conversations; no new C/D evidence at this snapshot. No new test executed by supervisor."
+  }
 }
