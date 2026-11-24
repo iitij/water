@@ -22,6 +22,12 @@ final class AuditHistoricalTariffs extends Command
         }
 
         $tariffs = DB::table('tariffs')->whereNull('deleted_at')->orderBy('id')->get();
+        // SQLite may store Eloquent date casts with a midnight time suffix.
+        // Normalize calendar dates before comparing inclusive tariff bounds.
+        foreach ($tariffs as $tariff) {
+            $tariff->start_date = $tariff->start_date === null ? null : CarbonImmutable::parse($tariff->start_date)->toDateString();
+            $tariff->end_date = $tariff->end_date === null ? null : CarbonImmutable::parse($tariff->end_date)->toDateString();
+        }
         $approved = $tariffs->where('is_active', true)->values();
         $invalid = 0;
         $overlaps = 0;
@@ -49,8 +55,8 @@ final class AuditHistoricalTariffs extends Command
                 ->whereNull('meters.deleted_at')->whereNull('meters.removed_at'))
             ->chunkById(500, function ($readings) use ($approved, &$blocked): void {
                 foreach ($readings as $reading) {
-                    $start = $reading->period_start;
-                    $end = $reading->period_end;
+                    $start = $reading->period_start ? CarbonImmutable::parse($reading->period_start)->toDateString() : null;
+                    $end = $reading->period_end ? CarbonImmutable::parse($reading->period_end)->toDateString() : null;
                     if (! $start || ! $end || $start >= $end) {
                         $blocked++;
                         $this->error("INVALID_PERIOD reading #{$reading->id}");
