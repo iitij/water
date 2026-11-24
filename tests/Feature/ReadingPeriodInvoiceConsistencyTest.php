@@ -51,7 +51,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         float $previous = 0,
         ?int $invoiceId = null
     ): Reading {
-        return Reading::create([
+        return $this->insertLegacyReading([
             'meter_id' => $meter->id,
             'reading_date' => $entered,
             'actual_reading_date' => $entered,
