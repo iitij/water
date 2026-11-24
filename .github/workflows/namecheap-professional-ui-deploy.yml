@@ -1,0 +1,152 @@
+name: Water | Deploy verified native Filament UI
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-professional-ui-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require successful acceptance for the exact source revision
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          target='9a36e82d6035b5a83c90a668e42e7e19b2129f6f'
+          browser=45308122801
+          for i in {1..18}; do
+            result="$(gh api "repos/iitij/water/actions/runs/$browser" --jq '.head_sha+" "+.status+" "+(.conclusion // "pending")')"
+            read -r sha status conclusion <<< "$result"
+            test "$sha" = "$target"
+            if [[ "$status" == completed ]]; then
+              test "$conclusion" = success
+              break
+            fi
+            sleep 10
+          done
+          test "$status" = completed && test "$conclusion" = success
+          for run in 45307684406 45307684365 45307960320 45307960553; do
+            test "$(gh api "repos/iitij/water/actions/runs/$run" --jq '.conclusion')" = success
+          done
+          echo 'EXACT_BROWSER_AND_REGRESSION_GATE: PASSED'
+
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Apply only tested application and view changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 "bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/repositories/water"
+          test "$(id -un)" = alweufti
+          test "$(git branch --show-current)" = main
+          test -z "$(git status --porcelain)"
+          before="$(git rev-parse HEAD)"
+          target='9a36e82d6035b5a83c90a668e42e7e19b2129f6f'
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$target" FETCH_HEAD
+          git merge-base --is-ancestor "$before" "$target"
+          git diff --quiet 79bf4a5c803e6602ea17891347d7ac4ab73ec3cb "$target" -- app resources routes config database public composer.json composer.lock package.json package-lock.json
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              .github/workflows/*|tests/*|'mobile app/'*|app/Filament/Pages/ExportDataPage.php|app/Filament/Widgets/OverdueInvoicesWidget.php|app/Jobs/SendWhatsAppInvoiceJob.php|app/Services/WhatsAppService.php|resources/views/filament/pages/export-data.blade.php|resources/views/filament/pages/mobile-developer-settings.blade.php|resources/views/filament/settings/qr.blade.php|resources/views/filament/widgets/custom-account-widget.blade.php) ;;
+              *) echo "Unexpected changed path: $file"; exit 1 ;;
+            esac
+          done < <(git diff --name-only -z "$before" "$target")
+          php84=/opt/alt/php84/usr/bin/php
+          test -s vendor/autoload.php
+          test -s "$HOME/public_html/build/manifest.json"
+          test -s "$HOME/public_html/index.php"
+          echo "PREVIOUS_COMMIT: $before"
+          echo "VALIDATED_TARGET: $target"
+          rollback() {
+            code=$?
+            if [[ "$code" != 0 && "$(git rev-parse HEAD)" == "$target" && "$before" != "$target" ]]; then
+              echo 'UI_DEPLOYMENT_FAILED: rolling back tracked source to original clean commit'
+              git reset --hard "$before"
+              "$php84" artisan view:clear || true
+            fi
+            exit "$code"
+          }
+          trap rollback EXIT
+          git merge --ff-only "$target"
+          "$php84" -l app/Filament/Pages/ExportDataPage.php
+          "$php84" -l app/Filament/Widgets/OverdueInvoicesWidget.php
+          "$php84" -l app/Jobs/SendWhatsAppInvoiceJob.php
+          "$php84" -l app/Services/WhatsAppService.php
+          "$php84" artisan view:clear
+          "$php84" artisan view:cache
+          "$php84" -d display_errors=0 -r '
+            try {
+              require "vendor/autoload.php";
+              $app = require "bootstrap/app.php";
+              $app->usePublicPath(getenv("HOME")."/public_html");
+              $kernel = $app->make(\Illuminate\Contracts\Http\Kernel::class);
+              foreach (["/up"=>200,"/admin/login"=>200,"/admin/export-data"=>302,"/admin/mobile-developer-settings"=>302] as $path=>$expected) {
+                $request = \Illuminate\Http\Request::create("https://alweshah.online".$path,"GET");
+                $response = $kernel->handle($request);
+                echo "LOCAL_UI_HTTP ".$path.": ".$response->getStatusCode().PHP_EOL;
+                if ($response->getStatusCode() !== $expected) throw new RuntimeException("unexpected status");
+                $kernel->terminate($request,$response);
+              }
+              echo "LOCAL_UI_SMOKE: PASSED".PHP_EOL;
+            } catch (Throwable $e) {
+              fwrite(STDERR,"LOCAL_UI_SMOKE: FAILED\n");
+              exit(1);
+            }
+          '
+          test "$(git rev-parse HEAD)" = "$target"
+          test -z "$(git status --porcelain)"
+          trap - EXIT
+          echo "DEPLOYED_UI_COMMIT: $(git rev-parse HEAD)"
+          echo 'UI_DEPLOYMENT: PASSED (no database, migrations, dependency or public asset changes)'
+          REMOTE
+
+      - name: Verify live website after deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://alweshah.online
+          for path in /up /admin/login /build/manifest.json; do
+            code="$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' "$base$path")"
+            echo "PUBLIC_UI_HTTP $path: $code"
+            test "$code" = 200
+          done
+          for path in /admin /admin/export-data /admin/mobile-developer-settings /admin/export/subscribers /admin/export/invoices /admin/export/readings; do
+            result="$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' "$base$path")"
+            echo "PUBLIC_UI_GUEST $path: $result"
+            test "$result" = "302 $base/admin/login"
+          done
+          echo 'PUBLIC_UI_SMOKE: PASSED'
