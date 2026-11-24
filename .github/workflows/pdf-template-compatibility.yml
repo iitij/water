@@ -3,8 +3,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
 jobs:
   template-preview:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -127,12 +131,45 @@ jobs:
           grep -F '125.50' receipt.text.txt || result=1
           if [[ "$result" == 0 ]]; then echo 'TEMPLATE_STRUCTURAL_CHECK: PASSED'; else echo 'TEMPLATE_STRUCTURAL_CHECK: NEEDS_LAYOUT_OR_TEXT_FIX'; fi
           exit "$result"
-      - name: Upload synthetic previews for visual review
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: water-mpdf-template-preview
-          path: ${{ runner.temp }}/pdf-preview/
-          if-no-files-found: warn
-          retention-days: 7
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Stage only synthetic PDF previews privately on Namecheap
+        shell: bash
+        run: |
+          set -euo pipefail
+          preview="$RUNNER_TEMP/pdf-preview"
+          for file in invoice.pdf receipt.pdf invoice.png receipt.png; do
+            test -s "$preview/$file"
+          done
+          tar -czf "$RUNNER_TEMP/water-preview.tar.gz" -C "$preview" invoice.pdf receipt.pdf invoice.png receipt.png
+          digest="$(sha256sum "$RUNNER_TEMP/water-preview.tar.gz" | awk '{print $1}')"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          stage=".water-pdf-preview/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            "set -eu; umask 077; test \"\$(id -un)\" = alweufti; cd \"\$HOME\"; mkdir -p .water-pdf-preview; mkdir '$stage'; cd '$stage'; cat > preview.tar.gz; printf '%s  preview.tar.gz\n' '$digest' | sha256sum -c -; tar -xzf preview.tar.gz; rm preview.tar.gz; chmod 600 invoice.pdf receipt.pdf invoice.png receipt.png; echo 'PRIVATE_PREVIEW_DIR: $stage'; ls -l invoice.pdf receipt.pdf invoice.png receipt.png" \
+            < "$RUNNER_TEMP/water-preview.tar.gz"
+          echo '### Synthetic print previews (private, not published)' >> "$GITHUB_STEP_SUMMARY"
+          echo "cPanel File Manager: $stage" >> "$GITHUB_STEP_SUMMARY"
+          echo 'No production data, database changes or public files.' >> "$GITHUB_STEP_SUMMARY"
