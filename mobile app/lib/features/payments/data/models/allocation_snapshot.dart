@@ -23,7 +23,7 @@ class AllocationSnapshot extends Equatable {
     recordedAt: JsonUtils.asStringOrNull(json['recorded_at']),
     allocatedMinor: JsonUtils.asIntOrNull(json['allocated_minor']),
     unallocatedMinor: JsonUtils.asIntOrNull(json['unallocated_minor']),
-    rows: (json['rows'] is List ? json['rows'] as List : const [])
+    rows: (json['rows'] is List ? json['rows'] as List<dynamic> : const <dynamic>[])
         .whereType<Map>().map((r) => AllocationRow.fromJson(Map<String, dynamic>.from(r))).toList(),
   );
 

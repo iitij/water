@@ -128,9 +128,35 @@ class _InvoiceDetailView extends StatelessWidget {
             const SizedBox(height: 8),
             _ReadingsCard(invoice: invoice),
           ],
+          const SizedBox(height: 16),
+          const SectionHeading(title: 'التخصيصات المحاسبية', icon: Icons.list_alt_rounded),
+          const SizedBox(height: 8),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (invoice.allocationSnapshot?.available != true)
+                  const Text('لا يوجد إصدار تخصيص محفوظ متاح. لا يعني ذلك أن الفاتورة غير مسددة.')
+                else ...[
+                  Text('الإصدار ${invoice.allocationSnapshot!.revision} — ${invoice.allocationSnapshot!.recordedAt ?? "-"}'),
+                  if (invoice.allocationSnapshot!.rows.isEmpty)
+                    const Text('لا توجد تخصيصات سارية في هذا الإصدار.'),
+                  for (final row in invoice.allocationSnapshot!.rows)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(row.receiptNumber ?? 'مصدر محاسبي'),
+                      subtitle: Text(row.accountTransferId == null ? 'سند قبض' : 'تحويل محاسبي'),
+                      trailing: Text(CurrencyFormatter.withLabel(row.amountMinor / 100)),
+                    ),
+                  const Divider(),
+                  Text('إجمالي المخصص: ${CurrencyFormatter.withLabel((invoice.allocationSnapshot!.allocatedMinor ?? 0) / 100)}'),
+                ],
+              ],
+            ),
+          ),
           if (invoice.payments.isNotEmpty) ...<Widget>[
             const SizedBox(height: 16),
-            const SectionHeading(title: 'المدفوعات المرتبطة', icon: Icons.payments_rounded),
+            const SectionHeading(title: 'السندات المرتبطة أصلاً (ليست التخصيصات)', icon: Icons.payments_rounded),
             const SizedBox(height: 8),
             _PaymentsCard(invoice: invoice),
           ],

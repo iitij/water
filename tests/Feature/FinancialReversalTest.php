@@ -370,9 +370,9 @@ class FinancialReversalTest extends TestCase
         $this->assertSame('6000.00', $invoice->fresh()->amount_paid);
         $this->assertSame(749.75, $subscriber->getAccountCredit());
         $projection = app(\App\Services\PaymentAllocationReadService::class);
-        $snapshot = $projection->forPayment($payment->fresh());
-        $this->assertSame(600000, $snapshot['allocated_minor']);
-        $this->assertSame(74975, $snapshot['unallocated_minor']);
+        $allocationSnapshot = $projection->forPayment($payment->fresh());
+        $this->assertSame(600000, $allocationSnapshot['allocated_minor']);
+        $this->assertSame(74975, $allocationSnapshot['unallocated_minor']);
         $this->assertTrue($projection->reconcile($subscriber)['matches']);
         $this->getJson('/api/admin/reports?from_date='.now()->toDateString().'&to_date='.now()->toDateString())
             ->assertOk()->assertJsonPath('financial_movements.gross_valid_receipts', 8000)

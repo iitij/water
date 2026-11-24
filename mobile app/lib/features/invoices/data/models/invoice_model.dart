@@ -5,6 +5,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/models/record_location.dart';
 import '../../../../core/utils/json_utils.dart';
 import '../../domain/accounting/finance_enums.dart';
+import '../../../payments/data/models/allocation_snapshot.dart';
 
 /// نموذج الفاتورة — يعكس `App\Models\Invoice` + الحقول المحسوبة التي يرسلها
 /// `InvoiceController` (`true_remaining_amount`, `is_path_match`) و`is_latest_invoice`
@@ -44,6 +45,7 @@ class InvoiceModel extends Equatable {
     this.readings = const <InvoiceReadingModel>[],
     this.payments = const <InvoicePaymentRecord>[],
     this.serverTrueRemaining,
+    this.allocationSnapshot,
     this.isLatestInvoice,
     this.isPathMatch = false,
   });
@@ -84,6 +86,7 @@ class InvoiceModel extends Equatable {
 
   /// `true_remaining_amount` كما حسبه الخادم (الأدق). `null` = غير مُرسل.
   final double? serverTrueRemaining;
+  final AllocationSnapshot? allocationSnapshot;
 
   /// `is_latest_invoice` للحساب المعزول. `null` = غير مُرسل (يُحسب محلياً).
   final bool? isLatestInvoice;
@@ -200,6 +203,7 @@ class InvoiceModel extends Equatable {
       items: items,
       readings: readings,
       payments: payments,
+      allocationSnapshot: JsonUtils.asMap(json['allocation_snapshot']) == null ? null : AllocationSnapshot.fromJson(JsonUtils.asMap(json['allocation_snapshot'])!),
       serverTrueRemaining: JsonUtils.asDoubleOrNull(
         json['true_remaining_amount'],
       ),
@@ -235,6 +239,7 @@ class InvoiceModel extends Equatable {
     'status': status.wire,
     'notes': notes,
     'true_remaining_amount': serverTrueRemaining,
+    if (allocationSnapshot != null) 'allocation_snapshot': allocationSnapshot!.toJson(),
     'is_latest_invoice': isLatestInvoice,
   };
 
@@ -297,6 +302,7 @@ class InvoiceModel extends Equatable {
     readings: readings ?? this.readings,
     payments: payments ?? this.payments,
     serverTrueRemaining: serverTrueRemaining ?? this.serverTrueRemaining,
+    allocationSnapshot: amountPaid == null && status == null ? allocationSnapshot : null,
     isLatestInvoice: isLatestInvoice ?? this.isLatestInvoice,
     isPathMatch: isPathMatch,
   );
@@ -312,6 +318,7 @@ class InvoiceModel extends Equatable {
     previousBalance,
     creditApplied,
     serverTrueRemaining,
+    allocationSnapshot,
     isLatestInvoice,
     retiredMeterId,
     retiredMeterCode,
