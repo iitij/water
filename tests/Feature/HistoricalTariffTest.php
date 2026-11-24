@@ -79,7 +79,11 @@ class HistoricalTariffTest extends TestCase
         $this->tariff('600.00', '2026-01-15', '2026-01-31');
         $reading = $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
         $this->assertRejected($meter, $reading);
-        $this->tariff('700.00', '2026-01-01', null);
+        // Simulate overlapping legacy/imported data that predates the guard.
+        DB::table('tariffs')->insert([
+            'name' => 'Legacy overlapping tariff', 'unit_price' => 700,
+            'is_active' => true, 'start_date' => '2026-01-01',
+        ]);
         $this->assertRejected($meter, $reading);
     }
 
@@ -118,6 +122,54 @@ class HistoricalTariffTest extends TestCase
             'unit_price' => 600,
             'amount' => 6000,
         ]);
+    }
+
+    public function test_catalog_rejects_overlap_on_create_update_and_restore(): void
+    {
+        $old = $this->tariff('600.00', '2026-01-01', '2026-01-31');
+        $next = $this->tariff('800.00', '2026-02-01', null);
+        $draft = Tariff::create(['name' => 'Draft', 'unit_price' => 900,
+            'start_date' => '2026-01-15', 'end_date' => '2026-02-15', 'is_active' => false]);
+        foreach ([
+            fn () => $this->tariff('500.00', null, '2026-01-01'),
+            fn () => $draft->fresh()->update(['is_active' => true]),
+            fn () => $old->fresh()->update(['end_date' => '2026-02-01']),
+            fn () => $next->fresh()->update(['end_date' => '2026-01-31']),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Invalid tariff schedule accepted.');
+            } catch (ValidationException $exception) {
+                $this->assertNotEmpty($exception->errors());
+            }
+        }
+        $next->delete();
+        $replacement = $this->tariff('950.00', '2026-02-01', null);
+        try {
+            Tariff::withTrashed()->findOrFail($next->id)->restore();
+            $this->fail('Overlapping deleted tariff restored.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('is_active', $exception->errors());
+        }
+        $this->assertTrue(Tariff::withTrashed()->findOrFail($next->id)->trashed());
+        $this->assertTrue($replacement->fresh()->is_active);
+        $this->assertFalse($draft->fresh()->is_active);
+        $this->assertSame('2026-01-31', $old->fresh()->end_date->toDateString());
+    }
+
+    public function test_stale_tariff_instance_cannot_overwrite_schedule(): void
+    {
+        $tariff = $this->tariff('600.00', '2026-01-01', null);
+        $stale = $tariff->fresh();
+        $tariff->fresh()->update(['end_date' => '2026-01-31']);
+        try {
+            $stale->update(['unit_price' => 800]);
+            $this->fail('Stale tariff accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('tariff', $exception->errors());
+        }
+        $this->assertSame('600.00', $tariff->fresh()->unit_price);
+        $this->assertSame('2026-01-31', $tariff->fresh()->end_date->toDateString());
     }
 
     private function assertRejected(Meter $meter, Reading $reading): void
