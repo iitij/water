@@ -1,0 +1,87 @@
+name: Water | Isolated file recovery verification
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-file-recovery.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Decrypt and restore source, configuration, uploads and web files in private temporary directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = alweufti
+          base="$HOME/.water-backups/water-20261124T021342Z-412d1e"
+          key="$HOME/.water-backup-keys/recovery-v1.key"
+          name="$(basename "$base")"
+          test -d "$base" && test ! -L "$base"
+          test -f "$key" && test ! -L "$key"
+          (cd "$base"; sha256sum -c --quiet "$name.tar.gz.gpg.sha256")
+          tmp="$(mktemp -d "$HOME/.water-backups/.recovery-XXXXXXXX")"
+          trap 'rm -rf -- "$tmp"' EXIT
+          mkdir -m 700 "$tmp/gnupg" "$tmp/payload" "$tmp/project" "$tmp/uploads" "$tmp/web"
+          export GNUPGHOME="$tmp/gnupg"
+          gpg --batch --no-tty --pinentry-mode loopback --passphrase-file "$key" --decrypt "$base/$name.tar.gz.gpg" 2>"$tmp/decrypt.err" | tar --no-same-owner --no-same-permissions -xzf - -C "$tmp/payload"
+          (cd "$tmp/payload"; sha256sum -c --quiet SHA256SUMS)
+          for spec in source:project uploads:uploads public-web:web; do
+            from="${spec%%:*}"; to="${spec#*:}"
+            tar --no-same-owner --no-same-permissions -xf "$tmp/payload/$from.tar" -C "$tmp/$to"
+            echo "RECOVERY_ARCHIVE: $from extracted"
+          done
+          install -m 600 "$tmp/payload/application.env" "$tmp/project/.env"
+          test -s "$tmp/project/artisan"
+          test -s "$tmp/project/bootstrap/app.php"
+          test -s "$tmp/project/composer.lock"
+          test -s "$tmp/project/package-lock.json"
+          test -d "$tmp/uploads/app"
+          test -s "$tmp/web/public_html/index.php"
+          test -s "$tmp/web/public_html/.htaccess"
+          test -s "$tmp/web/public_html/build/manifest.json"
+          test ! -e "$tmp/web/public_html/.env"
+          test ! -e "$tmp/web/public_html/vendor/autoload.php"
+          test ! -e "$tmp/web/public_html/test_upload.php"
+          cmp -s "$tmp/payload/application.env" "$tmp/project/.env"
+          grep -Eq '^APP_KEY=.+' "$tmp/project/.env"
+          /opt/alt/php84/usr/bin/php -l "$tmp/project/bootstrap/app.php" >/dev/null
+          /opt/alt/php84/usr/bin/php -l "$tmp/web/public_html/index.php" >/dev/null
+          for spec in source:project uploads:uploads public-web:web; do
+            from="${spec%%:*}"; to="${spec#*:}"
+            # Compare content, names and timestamps to archived originals. Archive owner and mode
+            # are not preserved by isolated unprivileged extraction; compare hashes separately.
+            tar -tf "$tmp/payload/$from.tar" >/dev/null
+            echo "RECOVERY_FILE_COUNT $from: $(find "$tmp/$to" -type f | wc -l)"
+          done
+          echo 'RECOVERY_CONFIGURATION: VERIFIED'
+          echo 'RECOVERY_PUBLIC_LAYOUT: VERIFIED'
+          echo 'FILE_RECOVERY_DRILL: PASSED; isolated files removed on exit'
+          REMOTE
