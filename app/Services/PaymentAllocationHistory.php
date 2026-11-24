@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
  * credit, not a receipt or another ledger posting. Called inside the existing
  * subscriber-locked replay transaction. No historical backfill in migration.
  */
-final class PaymentAllocationHistory
+class PaymentAllocationHistory
 {
     public function append(Subscriber $subscriber, array $rows, array $paid, int $available): int
     {
