@@ -40,7 +40,7 @@ void main() {
     final raw = payload();
     raw.remove('tariff_lines');
     expect(InvoiceModel.fromJson(raw).tariffLines, isNull);
-    raw['tariff_lines'] = [];
+    raw['tariff_lines'] = <Object?>[];
     final empty = InvoiceModel.fromJson(raw);
     expect(empty.tariffLines, isEmpty);
     expect(empty.impliedUnitPrice, isNull);
