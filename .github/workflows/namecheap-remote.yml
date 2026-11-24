@@ -29,6 +29,7 @@ on:
           - diagnose-public-web
           - verify-public-web
           - pdf-runtime-audit
+          - pdf-browser-trial
           - migrate-empty
           - sync
 
@@ -94,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$OPERATION" in
-            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|pdf-runtime-audit|migrate-empty|sync) ;;
+            audit|diagnose|selector-status|php-readiness|composer-setup|composer-install|laravel-preflight|prepare-storage|init-env|database-audit|database-schema-audit|database-engine-audit|recover-empty-schema|prepare-frontend|web-publish-audit|sync-web-preflight|publish-web-initial|diagnose-public-web|verify-public-web|pdf-runtime-audit|pdf-browser-trial|migrate-empty|sync) ;;
             *) echo "::error::Unsupported operation"; exit 1 ;;
           esac
           ssh -T -p 21098 \
@@ -1114,6 +1115,76 @@ jobs:
               echo '=== DISK AVAILABILITY (KB) ==='
               df -Pk "$HOME" | tail -n 1
               echo 'PDF_RUNTIME_AUDIT: COMPLETE; NO INSTALLATION, BROWSER LAUNCH, OR PUBLIC CHANGES'
+              ;;
+            pdf-browser-trial)
+              echo '=== ISOLATED ON-DEMAND CHROME HEADLESS SHELL TRIAL ==='
+              umask 077
+              export PATH="/opt/alt/alt-nodejs24/root/usr/bin:$PATH"
+              stage="$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1"
+              test -d "$stage" && test ! -L "$stage"
+              cmp "$stage/package-lock.json" "$project/package-lock.json"
+              cmp "$stage/package.json" "$project/package.json"
+              cd "$stage"
+              node --version
+              node -e 'if(require("./node_modules/puppeteer/package.json").version!=="25.16.0")process.exit(1)'
+              export PUPPETEER_CACHE_DIR="$stage/browser-cache"
+              mkdir -p "$PUPPETEER_CACHE_DIR"
+              test ! -L "$PUPPETEER_CACHE_DIR"
+              echo '=== INSTALL PINNED HEADLESS SHELL IN PRIVATE CACHE ==='
+              timeout --kill-after=5s 180s ./node_modules/.bin/puppeteer browsers install chrome-headless-shell@156.0.8078.47
+              browser="$PUPPETEER_CACHE_DIR/chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell"
+              test -x "$browser" && test -f "$browser"
+              echo "BROWSER_BINARY: $browser"
+              if command -v ldd >/dev/null 2>&1; then
+                libs="$(ldd "$browser" 2>&1)" || { echo 'BROWSER_LIBRARY_CHECK: FAILED'; exit 1; }
+                if grep -F 'not found' <<< "$libs"; then
+                  echo 'BROWSER_LIBRARY_CHECK: MISSING DEPENDENCIES'
+                  exit 1
+                fi
+                echo 'BROWSER_LIBRARY_CHECK: PASSED'
+              fi
+              timeout --kill-after=2s 5s "$browser" --version
+              echo '=== ONE SYNTHETIC A5 PDF; NETWORK REQUESTS BLOCKED ==='
+              trial="$(mktemp -d "$stage/trial.XXXXXXXX")"
+              trap 'rm -rf -- "$trial"' EXIT
+              export WATER_TRIAL_BROWSER="$browser"
+              export WATER_TRIAL_DIR="$trial"
+              cat > "$trial/smoke.mjs" <<'PDF_JS'
+          import puppeteer from 'puppeteer';
+          import { readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const start = Date.now();
+          let browser;
+          try {
+            browser = await puppeteer.launch({
+              executablePath: process.env.WATER_TRIAL_BROWSER,
+              headless: 'shell',
+              pipe: true,
+              timeout: 10000,
+              userDataDir: join(process.env.WATER_TRIAL_DIR, 'profile'),
+              args: ['--disable-gpu', '--disable-dev-shm-usage', '--renderer-process-limit=1'],
+            });
+            const page = await browser.newPage();
+            page.setDefaultTimeout(5000);
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+              const url = request.url();
+              void (url.startsWith('data:') || url === 'about:blank' ? request.continue() : request.abort()).catch(() => {});
+            });
+            await page.setContent('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><body><h1>اختبار الطباعة</h1><p>Water PDF smoke test — 100.00</p></body></html>', {waitUntil:'domcontentloaded', timeout:5000});
+            const output = join(process.env.WATER_TRIAL_DIR, 'sample.pdf');
+            await page.pdf({path:output, format:'A5', landscape:true, printBackground:true, timeout:8000});
+            const bytes = await readFile(output);
+            if (bytes.length < 1000 || bytes.subarray(0,5).toString() !== '%PDF-') throw new Error('Invalid PDF');
+            console.log('SYNTHETIC_PDF_BYTES:', bytes.length);
+            console.log('PDF_RENDER_MS:', Date.now() - start);
+          } finally {
+            if (browser) await browser.close();
+          }
+          PDF_JS
+              timeout --signal=TERM --kill-after=5s 30s node "$trial/smoke.mjs"
+              echo 'PDF_BROWSER_TRIAL: PASSED'
+              echo 'No persistent browser process, no Laravel changes, no public deployment, no real data.'
               ;;
             migrate-empty)
               echo '=== INITIALIZE VERIFIED EMPTY WATER DATABASE ==='
