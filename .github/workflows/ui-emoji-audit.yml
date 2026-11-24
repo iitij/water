@@ -1,0 +1,51 @@
+name: Water | Professional UI icon audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ui-emoji-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inventory decorative emoji in application source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, subprocess, unicodedata
+          paths = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          roots = ('app/', 'resources/', 'lang/', 'mobile app/lib/', 'mobile app/assets/', 'config/', 'database/', 'public/')
+          suffixes = {'.php','.dart','.js','.ts','.css','.html','.json','.arb','.yaml','.yml','.svg','.xml'}
+          # A broad inventory, not an automatic deletion rule. Mathematical and functional
+          # symbols, comments, framework filenames and font data must be reviewed separately.
+          emoji = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F\u20E3]')
+          escaped = re.compile(r'\\u\{(?:1[fF][0-9a-fA-F]{3}|2[67][0-9a-fA-F]{2})\}|\\u[dD]8[0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|&#x(?:1[fF][0-9a-fA-F]{3}|2[67][0-9a-fA-F]{2});|&#(?:12[7-9]\d{3}|13[01]\d{3});', re.I)
+          celebration = re.compile(r'confetti|celebrat(?:ion|e|ory)|party[_-]?popper|Icons\.(?:celebration|emoji_events|emoji_emotions)|heroicon-[os]-sparkles', re.I)
+          scanned = hits = 0
+          for name in paths:
+              if not name.startswith(roots): continue
+              path = pathlib.Path(name)
+              if path.suffix.lower() not in suffixes: continue
+              if name.startswith(('public/vendor/', 'public/js/filament/', 'public/css/filament/')): continue
+              if any(p in path.parts for p in ('node_modules','vendor','build','.dart_tool')) and not name.startswith('lang/vendor/'): continue
+              if path.stat().st_size > 2_000_000: continue
+              scanned += 1
+              for number, line in enumerate(path.read_text(encoding='utf-8',errors='replace').splitlines(), 1):
+                  chars = sorted(set(emoji.findall(line)))
+                  codes = escaped.findall(line)
+                  terms = celebration.findall(line)
+                  if not (chars or codes or terms): continue
+                  hits += 1
+                  descriptions = ', '.join(f'U+{ord(c):04X} {unicodedata.name(c,"UNKNOWN")}' for c in chars)
+                  print(f'UI_CANDIDATE {name}:{number} | {descriptions} | {codes} | {terms} | {line.strip()[:240]}')
+          print(f'UI_AUDIT_FILES: {scanned}')
+          print(f'UI_AUDIT_CANDIDATES: {hits}')
+          print('UI_EMOJI_AUDIT: COMPLETE (review required; no application mutation)')
+          PY
