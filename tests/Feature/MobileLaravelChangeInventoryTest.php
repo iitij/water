@@ -185,6 +185,12 @@ class MobileLaravelChangeInventoryTest extends TestCase
                 continue;
             }
             [$status, $path] = explode("\t", $line, 2);
+            // The reviewed historical diff includes retired controllers intentionally
+            // removed from the shipped inventory. Assert absence instead of restoring them.
+            if (in_array($path, ['app/Http/Controllers/Api/ServiceRequestController.php', 'app/Http/Controllers/Api/SubscriptionFeeController.php'], true)) {
+                $this->assertFileDoesNotExist(base_path($path));
+                continue;
+            }
             $files[$path] = $status;
         }
         ksort($files);

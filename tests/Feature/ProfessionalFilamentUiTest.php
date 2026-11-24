@@ -125,7 +125,7 @@ class ProfessionalFilamentUiTest extends TestCase
         foreach ($resources as $resource) {
             foreach ($resource::getPages() as $name => $registration) {
                 $parameters = [];
-                if (in_array($name, ['edit', 'view'], true)) {
+                if (in_array($name, ['edit', 'view', 'ledger-statement'], true)) {
                     $record = $records->get($resource::getModel());
                     $this->assertNotNull($record, "Missing fixture for {$resource} {$name}");
                     $parameters['record'] = $record;

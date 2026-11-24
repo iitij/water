@@ -91,7 +91,7 @@ class TransactionService
         Subscriber $subscriber,
         string $type,
         float $amount,
-        string $description = null,
+        ?string $description = null,
         ?Model $reference = null,
         ?\App\Models\Meter $meter = null
     ): Transaction {

@@ -34,6 +34,7 @@ void main() {
       fixture()..['subscriber'] = {'id': 8},
       fixture()..['basis'] = 'payment_date',
       fixture()..remove('statement_hash'),
+      fixture()..['statement_hash'] = 'invalid',
     ]) {
       expect(() => parse(data), throwsFormatException);
     }
