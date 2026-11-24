@@ -253,6 +253,17 @@
             <div>التسليم الموثق: {{ $handover['received_amount'] }}</div>
             <div>المتبقي للتسليم: {{ $handover['remaining_amount'] ?? 'غير قابل للتحقق' }}</div>
         </div>
+        @if (! empty($handovers))
+            <table>
+                <thead><tr><th>مرجع التسليم</th><th>تاريخ الاستلام</th><th>معرّف المستلم</th><th>المبلغ</th></tr></thead>
+                <tbody>
+                    @foreach ($handovers as $receipt)
+                        <tr><td>{{ $receipt['reference'] }}</td><td>{{ $receipt['received_on'] }}</td>
+                            <td>{{ $receipt['received_by'] }}</td><td>{{ $receipt['amount'] }}</td></tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
         @if ($handover['status'] === 'not_eligible' || $handover['status'] === 'inconsistent')
             <p class="muted">يلزم تدقيق التسوية الأصلية. اعتماد الصندوق وحده لا يثبت استلام الخزينة.</p>
         @endif

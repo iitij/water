@@ -41,6 +41,12 @@ final class CashHandoverTest extends TestCase
         $this->postJson($endpoint, array_replace($payload, ['reference' => 'HANDOVER-003', 'amount' => '50.50']))
             ->assertOk()->assertJsonPath('treasury_handover.status', 'complete')
             ->assertJsonPath('treasury_handover.remaining_amount', '0.00');
+        $this->getJson('/api/cash-sessions/'.$session->id.'/report')->assertOk()
+            ->assertJsonPath('cash_session.treasury_handover.received_amount', '150.75')
+            ->assertJsonPath('handovers.0.reference', 'HANDOVER-001')
+            ->assertJsonPath('handovers.0.amount', '100.25')
+            ->assertJsonPath('handovers.1.reference', 'HANDOVER-003')
+            ->assertJsonPath('handovers.1.amount', '50.50');
         $this->assertDatabaseCount('cash_handovers', 2);
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('transactions', 0);
