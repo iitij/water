@@ -101,6 +101,49 @@ class CashSessionsTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('late_receipt_review')
+                    ->label('مراجعة سند مؤجل')
+                    ->color('warning')
+                    ->visible(function (CashSession $record): bool {
+                        $user = Auth::user();
+                        return ! $record->isOpen() && $user
+                            && (int) $record->user_id !== (int) $user->id
+                            && app(\App\Services\LateReceiptReviewService::class)->canDecide($user)
+                            && \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                                ->where('cash_session_id', $record->id)->where('status', 'pending')->exists();
+                    })
+                    ->form([
+                        \Filament\Forms\Components\Select::make('review_id')
+                            ->label('المطالبة المعلقة (المشترك، المبلغ، الطريقة، التاريخ)')
+                            ->options(fn (CashSession $record): array => \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                                ->join('subscribers', 'subscribers.id', '=', 'late_receipt_reviews.subscriber_id')
+                                ->where('cash_session_id', $record->id)->where('late_receipt_reviews.status', 'pending')
+                                ->select('late_receipt_reviews.*', 'subscribers.name as subscriber_name')
+                                ->orderBy('late_receipt_reviews.id')->get()
+                                ->mapWithKeys(fn ($row) => [$row->id => '#'.$row->id.' | '.$row->subscriber_name.' | '.$row->amount.' | '.$row->payment_method.' | '.$row->payment_date])->all())
+                            ->searchable()->required(),
+                        \Filament\Forms\Components\Radio::make('decision')
+                            ->label('القرار')->options(['approve' => 'اعتماد', 'reject' => 'رفض'])->required(),
+                        \Filament\Forms\Components\Select::make('settlement_method')
+                            ->label('طريقة الإثبات عند الاعتماد')
+                            ->options(['separate_handover' => 'تسليم نقدي مستقل خارج المبلغ المعدود', 'verified_non_cash' => 'إثبات تحصيل غير نقدي']),
+                        \Filament\Forms\Components\TextInput::make('evidence_reference')
+                            ->label('مرجع التسوية المستقل عند الاعتماد')->maxLength(150),
+                        Textarea::make('evidence')->label('الدليل وسبب القرار')->required()->minLength(10)->maxLength(2000),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (CashSession $record, array $data): void {
+                        $review = \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                            ->where('cash_session_id', $record->id)->find((int) $data['review_id']);
+                        abort_unless($review, 404);
+                        app(\App\Services\LateReceiptReviewService::class)->decide((int) $review->id, Auth::user(), [
+                            'approve' => $data['decision'] === 'approve',
+                            'evidence' => $data['evidence'],
+                            'evidence_reference' => $data['evidence_reference'] ?? null,
+                            'settlement_method' => $data['settlement_method'] ?? null,
+                        ]);
+                        Notification::make()->title('تم تسجيل قرار المراجعة')->success()->send();
+                    }),
                 Action::make('correct_duplicate')
                     ->label('تصحيح سند مكرر')
                     ->color('warning')

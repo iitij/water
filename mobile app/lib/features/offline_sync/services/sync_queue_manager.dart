@@ -608,11 +608,34 @@ class SyncQueueManager extends ChangeNotifier {
         ? ApiEndpoints.collectInvoicePayment
         : ApiEndpoints.payments;
 
-    final response = await _dio.post<dynamic>(
-      endpoint,
-      data: payload,
-      options: Options(headers: <String, dynamic>{'Idempotency-Key': syncUuid}),
-    );
+    late final Response<dynamic> response;
+    try {
+      response = await _dio.post<dynamic>(
+        endpoint,
+        data: payload,
+        options: Options(headers: <String, dynamic>{'Idempotency-Key': syncUuid}),
+      );
+    } on DioException catch (error) {
+      if (error.response?.statusCode != 409 ||
+          _toNullableInt(payload['cash_session_id']) == null) {
+        rethrow;
+      }
+      // The review endpoint independently verifies ownership, closure, dates
+      // and UUID. Register the claim, but never treat registration as payment.
+      final reviewResponse = await _dio.post<dynamic>(
+        ApiEndpoints.lateReceiptReviews,
+        data: payload,
+      );
+      final review = _asMap(_asMap(reviewResponse.data)?['review']);
+      final reviewId = review?['id'];
+      if (reviewId == null) {
+        throw StateError('استجابة مراجعة السند غير مكتملة.');
+      }
+      final status = review?['status']?.toString();
+      throw SyncBatchItemRejected(
+        'مراجعة السند رقم $reviewId: ${status == 'rejected' ? 'مرفوضة؛ راجع المشرف' : 'بانتظار الاعتماد أو إعادة المزامنة بعد الاعتماد'}. لم يُحذف السند المحلي.',
+      );
+    }
     if ((response.statusCode ?? 0) >= 400) {
       throw StateError('تعذر اعتماد عملية الدفع.');
     }
