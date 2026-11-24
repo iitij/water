@@ -164,64 +164,21 @@ class InvoiceController extends ApiController
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
             'invoice_type' => ['sometimes', 'in:meter'],
-            'bill_number' => ['nullable', 'string', 'max:50', 'unique:invoices,bill_number'],
-            'bill_date' => ['nullable', 'date'],
-            'billing_period_start' => ['nullable', 'date'],
-            'billing_period_end' => ['nullable', 'date', 'after_or_equal:billing_period_start'],
-            'consumption_fee' => ['sometimes', 'numeric', 'min:0'],
-            'previous_balance' => ['sometimes', 'numeric', 'min:0'],
-            'credit_applied' => ['sometimes', 'numeric', 'min:0'],
-            'total_amount' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
-        $meter = ! empty($data['meter_id']) ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']) : null;
-        $isConsumption = (float) ($data['consumption_fee'] ?? 0) > 0;
-        $invoiceType = 'meter';
-        if ($isConsumption && $invoiceType !== 'meter') {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'invoice_type' => ['لا يمكن إضافة رسوم استهلاك إلى فاتورة خدمات غير مخصصة للاستهلاك.'],
-            ]);
-        }
-        if ($invoiceType === 'meter') {
-            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-        }
-        $components = (float) ($data['consumption_fee'] ?? 0);
-        $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
-            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
-            $meter = Meter::query()->where('subscriber_id', $subscriber->id)->lockForUpdate()->findOrFail($meter->id);
-            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
-            $arrears = $subscriber->invoices()->whereNotIn('status', ['draft', 'cancelled'])->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
-            $invoice = Invoice::create([
-                'subscriber_id' => $subscriber->id,
-                'meter_id' => $meter?->id,
-                'invoice_type' => $invoiceType,
-                'bill_number' => $data['bill_number'] ?? Invoice::generateBillNumber(),
-                'bill_date' => $data['bill_date'] ?? now()->toDateString(),
-                'billing_period_start' => $data['billing_period_start'] ?? now()->startOfMonth()->toDateString(),
-                'billing_period_end' => $data['billing_period_end'] ?? now()->toDateString(),
-                'consumption_fee' => $data['consumption_fee'] ?? 0,
-                'previous_balance' => $arrears,
-                'credit_applied' => min($subscriber->getAccountCredit(), $components),
-                'total_amount' => $components,
-                'amount_paid' => 0,
-                'status' => 'issued',
-                'notes' => $data['notes'] ?? null,
-            ]);
-            $this->syncItems($invoice);
-            app(TransactionService::class)->recordTransaction(
-                subscriber: $subscriber,
-                type: 'invoice',
-                amount: -(float) $invoice->total_amount,
-                description: 'إصدار فاتورة رقم '.$invoice->bill_number,
-                reference: $invoice,
-                meter: $meter,
-            );
+        $meter = ! empty($data['meter_id'])
+            ? Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id'])
+            : null;
+        $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
 
-            return $invoice->refresh();
-        });
-
-        return response()->json(['message' => 'تم إنشاء الفاتورة بنجاح.', 'invoice' => $this->decorate($invoice->load(['subscriber.square', 'meter', 'items']))], 201);
+        // Legacy payloads may include financial fields; these are never used.
+        // The server issues from locked, unbilled readings and approved tariffs.
+        return $this->generateResponse(fn () => app(\App\Services\InvoiceService::class)->generateInvoice(
+            subscriber: $subscriber,
+            meter: $meter,
+            notes: $data['notes'] ?? null,
+        ));
     }
 
     public function update(Request $request, int $id)
