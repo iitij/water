@@ -127,7 +127,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
         ),
       );
     } catch (error) {
-      if (isClosed) return;
+      if (isClosed || state.subscriberId != subscriberId) return;
       emit(state.copyWith(loadingInvoices: false, validationMessage: '$error'));
     }
   }

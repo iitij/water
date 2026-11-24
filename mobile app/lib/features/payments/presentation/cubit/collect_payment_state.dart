@@ -32,7 +32,7 @@ class CollectPaymentState extends Equatable {
   /// فواتير الحساب المعزول المفتوحة (FIFO معاينة).
   final List<InvoiceModel> openInvoices;
 
-  /// `total_amount + previous_balance - amount_paid` للفاتورة المحددة.
+  /// المستحق الحي للفاتورة المحددة، دون تكرار المتأخرات التاريخية.
   final double dueAmount;
   final double amount;
   final PaymentMethod method;
