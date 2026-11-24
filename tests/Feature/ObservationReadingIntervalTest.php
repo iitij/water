@@ -88,12 +88,12 @@ class ObservationReadingIntervalTest extends TestCase
         $reading = Reading::create(['meter_id' => $meter->id,
             'reading_date' => '2026-02-12', 'current_reading' => '135.25']);
         foreach ([['consumption_units' => 1], ['period_end' => '2026-02-13'],
-            ['actual_reading_date' => null], ['period_basis' => 'legacy_calendar']] as $invalid) {
+            ['actual_reading_date' => null], ['period_basis' => 'unknown']] as $invalid) {
             try {
                 \Illuminate\Support\Facades\DB::table('readings')->where('id', $reading->id)->update($invalid);
                 $this->fail('Database accepted an inconsistent observation.');
             } catch (\Illuminate\Database\QueryException $e) {
-                $this->assertStringContainsString('Invalid observation', $e->getMessage());
+                $this->assertStringContainsString('readings_observation_valid', $e->getMessage());
             }
         }
         $this->assertSame('35.25', $reading->fresh()->consumption_units);
