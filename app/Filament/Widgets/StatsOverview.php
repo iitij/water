@@ -20,7 +20,7 @@ class StatsOverview extends BaseWidget
             ->selectRaw('COALESCE(SUM(total_amount - amount_paid), 0) as total')
             ->value('total');
 
-        $monthlyCollection = Payment::whereMonth('payment_date', now()->month)
+        $monthlyCollection = Payment::active()->whereMonth('payment_date', now()->month)
             ->whereYear('payment_date', now()->year)
             ->sum('amount');
 

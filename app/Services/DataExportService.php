@@ -193,6 +193,7 @@ class DataExportService
                 'partially_paid' => 'مسددة جزئياً',
                 'issued' => 'صادرة (مستحقة)',
                 'overdue' => 'متأخرة',
+                'cancelled' => 'ملغاة',
                 'draft' => 'مسودة',
                 default => $inv->status ?? 'صادرة',
             };

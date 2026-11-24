@@ -47,6 +47,12 @@ class AuditLogger
         }
     }
 
+    public function recordRequired(string $event, array $context = []): AuditEvent
+    {
+        return $this->record($event, $context)
+            ?? throw new \RuntimeException('Financial operation requires a durable audit record.');
+    }
+
     private function actorId(): ?int
     {
         $user = request()?->user();

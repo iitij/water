@@ -138,7 +138,7 @@ class PaymentService
                 $this->recalculateInvoices($payment->subscriber, $payment->meter_id);
             }
 
-            app(\App\Services\AuditLogger::class)->record('payment.voided', [
+            app(\App\Services\AuditLogger::class)->recordRequired('payment.voided', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'before' => $before,
@@ -218,7 +218,7 @@ class PaymentService
                 'void_decided_at' => null,
             ])->saveQuietly();
 
-            app(AuditLogger::class)->record('payment.void_requested', [
+            app(AuditLogger::class)->recordRequired('payment.void_requested', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'after' => [
@@ -274,7 +274,7 @@ class PaymentService
                     'void_decided_at' => now(),
                 ])->saveQuietly();
 
-                app(AuditLogger::class)->record('payment.void_approved', [
+                app(AuditLogger::class)->recordRequired('payment.void_approved', [
                     'entity_type' => Payment::class,
                     'entity_id' => $payment->id,
                     'after' => [
@@ -298,7 +298,7 @@ class PaymentService
                 'void_decided_at' => now(),
             ])->saveQuietly();
 
-            app(AuditLogger::class)->record('payment.void_rejected', [
+            app(AuditLogger::class)->recordRequired('payment.void_rejected', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'after' => [

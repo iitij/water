@@ -49,7 +49,7 @@ final class InvoiceCancellationService
             // cancelled invoices, freeing credit for other invoices or future use.
             $invoice->readings()->update(['invoice_id' => null, 'is_invoiced' => false]);
             app(PaymentService::class)->recalculateInvoices($subscriber);
-            app(AuditLogger::class)->record('invoice.cancelled', [
+            app(AuditLogger::class)->recordRequired('invoice.cancelled', [
                 'entity_type' => Invoice::class,
                 'entity_id' => $invoice->id,
                 'before' => $before,
