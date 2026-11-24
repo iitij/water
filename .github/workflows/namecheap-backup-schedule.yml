@@ -1,0 +1,95 @@
+name: Water | Install verified daily backup schedule
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/namecheap-backup-schedule.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+jobs:
+  schedule:
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require successful isolated baseline restore
+        env:
+          GH_${{ github.token }}: TOKEN
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/iitij/water/actions/runs/45310784495 --jq '.conclusion')" = success
+          bash -n scripts/hosting/water-backup-daily.sh
+          echo 'RESTORE_GATE: PASSED'
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Install and test daily backup runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum scripts/hosting/water-backup-daily.sh | awk '{print $1}')"
+          baseline_digest="$(sha256sum scripts/hosting/water-backup.sh | awk '{print $1}')"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ && "$baseline_digest" =~ ^[a-f0-9]{64}$ ]]
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 \
+            "set -eu; umask 077; test \"\$(id -un)\" = alweufti; cd \"\$HOME/.water-backup-ops\"; printf '%s  water-backup.sh\n' '$baseline_digest' | sha256sum -c --quiet -; tmp=\$(mktemp .daily-XXXXXXXX); trap 'rm -f \"\$tmp\"' EXIT; cat > \"\$tmp\"; printf '%s  %s\n' '$digest' \"\$tmp\" | sha256sum -c --quiet -; bash -n \"\$tmp\"; chmod 700 \"\$tmp\"; mv \"\$tmp\" water-backup-daily.sh; bash water-backup-daily.sh; grep -E '^(BACKUP_COMPLETE|DAILY_BACKUP_STATUS|RETENTION:)' latest-daily.log" \
+            < scripts/hosting/water-backup-daily.sh
+
+      - name: Protect baseline and install one cron entry without replacing other jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" -o ConnectTimeout=20 alweufti@66.29.146.205 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export LC_ALL=C
+          test "$(id -un)" = alweufti
+          ops="$HOME/.water-backup-ops"
+          base="$HOME/.water-backups/water-20261124T021342Z-412d1e"
+          test -d "$base" && test ! -L "$base"
+          (cd "$base"; sha256sum -c --quiet water-20261124T021342Z-412d1e.tar.gz.gpg.sha256)
+          touch "$base/.keep"
+          chmod 600 "$base/.keep"
+          grep -q '^DAILY_BACKUP_STATUS: SUCCESS' "$ops/latest-daily.log"
+          temp="$(mktemp -d "$ops/.cron-XXXXXXXX")"
+          trap 'rm -rf -- "$temp"' EXIT
+          if ! crontab -l >"$temp/original" 2>"$temp/error"; then
+            grep -qi 'no crontab' "$temp/error" || { echo 'Cannot safely read existing crontab'; exit 1; }
+            : > "$temp/original"
+          fi
+          entry='30 2 * * * /bin/bash /home/alweufti/.water-backup-ops/water-backup-daily.sh # water-backup-daily-v1'
+          if grep -q 'water-backup-daily' "$temp/original"; then
+            test "$(grep -c 'water-backup-daily' "$temp/original")" = 1
+            grep -Fxq "$entry" "$temp/original" || { echo 'Conflicting schedule; refusing modification'; exit 1; }
+          else
+            { cat "$temp/original"; printf '\n%s\n' "$entry"; } >"$temp/new"
+            crontab "$temp/new"
+          fi
+          test "$(crontab -l | grep -Fxc "$entry")" = 1
+          echo 'BASELINE_PROTECTED: YES'
+          echo 'BACKUP_CRON: 30 2 * * *'
+          echo "SERVER_TIMEZONE: $(date +%Z%z)"
+          echo 'RETENTION_ACTIVATION: pending verified offsite copy'
+          echo 'BACKUP_SCHEDULE: INSTALLED_AND_VERIFIED'
+          REMOTE
