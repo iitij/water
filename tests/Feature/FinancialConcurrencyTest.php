@@ -111,6 +111,43 @@ class FinancialConcurrencyTest extends TestCase
         }
     }
 
+    public function test_parallel_observations_on_same_date_commit_only_once(): void
+    {
+        $meter = $this->fixture();
+        $record = fn () => Reading::create([
+            'meter_id' => $meter->id,
+            'reading_date' => '2026-03-01',
+            'current_reading' => '15.25',
+        ])->id;
+        $results = $this->race($record, $record);
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(ValidationException::class, collect($results)->firstWhere('ok', false)['error']);
+        $this->assertSame(2, Reading::count());
+        $next = Reading::latest('id')->firstOrFail();
+        $this->assertSame('2026-02-01', $next->period_start);
+        $this->assertSame('2026-03-01', $next->period_end);
+        $this->assertSame('5.25', $next->consumption_units);
+    }
+
+    public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void
+    {
+        $meter = $this->fixture();
+        $results = $this->race(
+            fn () => Reading::create(['meter_id' => $meter->id,
+                'reading_date' => '2026-03-01', 'current_reading' => '15.25'])->id,
+            fn () => app(InvoiceService::class)->generateInvoice(
+                Subscriber::findOrFail($meter->subscriber_id), Meter::findOrFail($meter->id))->id,
+        );
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(2, Reading::count());
+        if (Reading::where('is_invoiced', false)->exists()) {
+            app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
+        }
+        $this->assertSame(9150.0, $meter->subscriber->getAccountDebt());
+        $this->assertEquals(15.25, DB::table('invoice_tariff_lines')->sum('units'));
+        $this->assertSame(2, DB::table('invoice_tariff_lines')->count());
+    }
+
     public function test_two_concurrent_invoice_requests_bill_the_reading_once(): void
     {
         $meter = $this->fixture();
