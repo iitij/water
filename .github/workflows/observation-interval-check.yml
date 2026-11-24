@@ -40,6 +40,16 @@ jobs:
         working-directory: 'mobile app'
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Install Laravel dependencies for translation parity tests
+        working-directory: .
+        run: |
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
