@@ -147,7 +147,7 @@ class PaymentVoidApprovalTest extends TestCase
         $this->actingAs($this->supervisor, 'sanctum')
             ->getJson('/api/payments/void-requests')
             ->assertOk()
-            ->assertJsonFragment(['receipt_number' => 'REC-TEST-0001']);
+            ->assertJsonFragment(['receipt_number' => $this->payment->receipt_number]);
 
         $this->actingAs($this->supervisor, 'sanctum')
             ->postJson("/api/payments/{$this->payment->id}/void-decision", [

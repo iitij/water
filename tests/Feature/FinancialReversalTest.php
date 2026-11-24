@@ -157,4 +157,25 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(2, Transaction::count());
     }
 
+
+    public function test_reversal_rolls_back_if_required_audit_cannot_be_written(): void
+    {
+        [$subscriber, , , $invoice] = $this->fixture();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 1000, $invoice->id);
+        $this->mock(\App\Services\AuditLogger::class, function ($mock) {
+            $mock->shouldReceive('recordRequired')->with('payment.voided', \Mockery::type('array'))
+                ->once()->andThrow(new \RuntimeException('Synthetic audit failure'));
+        });
+        try {
+            app(PaymentService::class)->voidPayment($payment, 'Synthetic audit rollback scenario');
+            $this->fail('Unaudited financial reversal was committed');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Synthetic audit failure', $exception->getMessage());
+        }
+        $this->assertNull($payment->fresh()->voided_at);
+        $this->assertSame('1000.00', $invoice->fresh()->amount_paid);
+        $this->assertSame(5000.0, $subscriber->getAccountDebt());
+        $this->assertSame(2, Transaction::count());
+    }
+
 }
