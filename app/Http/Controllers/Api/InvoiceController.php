@@ -186,6 +186,8 @@ class InvoiceController extends ApiController
         $components = (float) ($data['consumption_fee'] ?? 0);
         $invoice = DB::transaction(function () use ($data, $subscriber, $meter, $components, $invoiceType) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+            $meter = Meter::query()->where('subscriber_id', $subscriber->id)->lockForUpdate()->findOrFail($meter->id);
+            $meter = app(\App\Services\CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             $arrears = $subscriber->invoices()->where('status', '!=', 'draft')->get()->sum(fn (Invoice $item) => $item->getRemainingAmount());
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,

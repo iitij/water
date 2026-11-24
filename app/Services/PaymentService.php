@@ -25,10 +25,10 @@ class PaymentService
 
             $invoices = Invoice::where('subscriber_id', $subscriber->id)
                 ->where('status', '!=', 'draft')
-                ->orderBy('bill_date')->orderBy('id')->get();
+                ->orderBy('bill_date')->orderBy('id')->lockForUpdate()->get();
             $payments = Payment::where('subscriber_id', $subscriber->id)
                 ->whereNull('voided_at')
-                ->orderBy('payment_date')->orderBy('id')->get();
+                ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
 
             // Use integer minor units inside allocation so cents cannot disappear.
             $paid = [];
@@ -96,7 +96,11 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+            Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            if ($payment->cash_session_id) {
+                \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id);
+            }
 
             if ($payment->voided_at !== null) {
                 return $payment;
@@ -181,49 +185,53 @@ class PaymentService
         ?int $userId = null,
         string $source = 'api',
     ): array {
-        $reason = trim($reason);
-        if (\Illuminate\Support\Str::length($reason) < 10) {
-            throw ValidationException::withMessages([
-                'reason' => ['سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.'],
+        return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+            Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
+            $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $reason = trim($reason);
+            if (\Illuminate\Support\Str::length($reason) < 10) {
+                throw ValidationException::withMessages([
+                    'reason' => ['سبب الإلغاء مطلوب ولا يقل عن 10 أحرف.'],
+                ]);
+            }
+
+            if (! $this->requiresVoidApproval($payment)) {
+                return ['payment' => $this->voidPayment($payment, $reason, $userId, $source), 'pending' => false];
+            }
+
+            // طلب معلّق سابق: نُعيده كما هو (idempotent) بدل تكرار الطلب.
+            if ($payment->hasPendingVoidRequest()) {
+                return ['payment' => $payment, 'pending' => true];
+            }
+
+            if ($payment->isVoided()) {
+                return ['payment' => $payment, 'pending' => false];
+            }
+
+            $payment->forceFill([
+                'void_requested_at' => now(),
+                'void_requested_by' => $userId,
+                'void_request_reason' => $reason,
+                'void_decision_notes' => null,
+                'void_decided_by' => null,
+                'void_decided_at' => null,
+            ])->saveQuietly();
+
+            app(AuditLogger::class)->record('payment.void_requested', [
+                'entity_type' => Payment::class,
+                'entity_id' => $payment->id,
+                'after' => [
+                    'receipt_number' => $payment->receipt_number,
+                    'amount' => (float) $payment->amount,
+                    'reason' => $reason,
+                    'threshold' => $this->voidApprovalThreshold(),
+                ],
+                'actor_user_id' => $userId,
+                'source' => $source,
             ]);
-        }
 
-        if (! $this->requiresVoidApproval($payment)) {
-            return ['payment' => $this->voidPayment($payment, $reason, $userId, $source), 'pending' => false];
-        }
-
-        // طلب معلّق سابق: نُعيده كما هو (idempotent) بدل تكرار الطلب.
-        if ($payment->hasPendingVoidRequest()) {
-            return ['payment' => $payment, 'pending' => true];
-        }
-
-        if ($payment->isVoided()) {
-            return ['payment' => $payment, 'pending' => false];
-        }
-
-        $payment->forceFill([
-            'void_requested_at' => now(),
-            'void_requested_by' => $userId,
-            'void_request_reason' => $reason,
-            'void_decision_notes' => null,
-            'void_decided_by' => null,
-            'void_decided_at' => null,
-        ])->saveQuietly();
-
-        app(AuditLogger::class)->record('payment.void_requested', [
-            'entity_type' => Payment::class,
-            'entity_id' => $payment->id,
-            'after' => [
-                'receipt_number' => $payment->receipt_number,
-                'amount' => (float) $payment->amount,
-                'reason' => $reason,
-                'threshold' => $this->voidApprovalThreshold(),
-            ],
-            'actor_user_id' => $userId,
-            'source' => $source,
-        ]);
-
-        return ['payment' => $payment->fresh(), 'pending' => true];
+            return ['payment' => $payment->fresh(), 'pending' => true];
+        }, 3);
     }
 
     /**
@@ -239,36 +247,61 @@ class PaymentService
         ?string $notes = null,
         string $source = 'api',
     ): Payment {
-        $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+        return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source) {
+            Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
+            $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
 
-        if ($payment->isVoided()) {
-            return $payment;
-        }
+            if ($payment->isVoided()) {
+                return $payment;
+            }
 
-        if (! $payment->hasPendingVoidRequest()) {
-            throw ValidationException::withMessages([
-                'payment' => ['لا يوجد طلب إلغاء معلّق على هذا السند.'],
-            ]);
-        }
+            if (! $payment->hasPendingVoidRequest()) {
+                throw ValidationException::withMessages([
+                    'payment' => ['لا يوجد طلب إلغاء معلّق على هذا السند.'],
+                ]);
+            }
 
-        $reason = (string) ($payment->void_request_reason ?? '');
-        $notes = $notes === null ? null : trim($notes);
+            $reason = (string) ($payment->void_request_reason ?? '');
+            $notes = $notes === null ? null : trim($notes);
 
-        if ($approve) {
-            $voider = $actor;
-            $payment = $this->voidPayment($payment, $reason, $voider->id, 'approval');
+            if ($approve) {
+                $voider = $actor;
+                $payment = $this->voidPayment($payment, $reason, $voider->id, 'approval');
+                $payment->forceFill([
+                    'void_decision_notes' => $notes,
+                    'void_decided_by' => $actor->id,
+                    'void_decided_at' => now(),
+                ])->saveQuietly();
+
+                app(AuditLogger::class)->record('payment.void_approved', [
+                    'entity_type' => Payment::class,
+                    'entity_id' => $payment->id,
+                    'after' => [
+                        'receipt_number' => $payment->receipt_number,
+                        'reason' => $reason,
+                        'notes' => $notes,
+                    ],
+                    'actor_user_id' => $actor->id,
+                    'source' => $source,
+                ]);
+
+                return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
+            }
+
             $payment->forceFill([
+                'void_requested_at' => null,
+                'void_requested_by' => null,
+                'void_request_reason' => null,
                 'void_decision_notes' => $notes,
                 'void_decided_by' => $actor->id,
                 'void_decided_at' => now(),
             ])->saveQuietly();
 
-            app(AuditLogger::class)->record('payment.void_approved', [
+            app(AuditLogger::class)->record('payment.void_rejected', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'after' => [
                     'receipt_number' => $payment->receipt_number,
-                    'reason' => $reason,
                     'notes' => $notes,
                 ],
                 'actor_user_id' => $actor->id,
@@ -276,29 +309,7 @@ class PaymentService
             ]);
 
             return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
-        }
-
-        $payment->forceFill([
-            'void_requested_at' => null,
-            'void_requested_by' => null,
-            'void_request_reason' => null,
-            'void_decision_notes' => $notes,
-            'void_decided_by' => $actor->id,
-            'void_decided_at' => now(),
-        ])->saveQuietly();
-
-        app(AuditLogger::class)->record('payment.void_rejected', [
-            'entity_type' => Payment::class,
-            'entity_id' => $payment->id,
-            'after' => [
-                'receipt_number' => $payment->receipt_number,
-                'notes' => $notes,
-            ],
-            'actor_user_id' => $actor->id,
-            'source' => $source,
-        ]);
-
-        return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
+        }, 3);
     }
 
     /**
@@ -324,7 +335,7 @@ class PaymentService
             }
 
             if ($syncUuid) {
-                $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->first();
+                $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->lockForUpdate()->first();
                 if ($existing) {
                     if ($existing->trashed()) {
                         abort(409, 'عملية الدفع المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
@@ -341,6 +352,17 @@ class PaymentService
                 }
             }
 
+            // Acquire collector/till locks before financial reads and number generation.
+            $cashSessionId = null;
+            if ($userId) {
+                User::query()->lockForUpdate()->findOrFail($userId);
+                $cashSession = \App\Models\CashSession::query()
+                    ->where('user_id', $userId)
+                    ->where('state', \App\Models\CashSession::STATE_OPEN)
+                    ->latest('id')->lockForUpdate()->first();
+                $cashSessionId = $cashSession?->id;
+            }
+
             // العداد مرجع للحركة فقط؛ الحساب المالي هو المشترك.
             $meterId = $requestedMeterId;
             $meter = $meterId ? \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($meterId) : null;
@@ -348,17 +370,6 @@ class PaymentService
                 $invoice = Invoice::where('subscriber_id', $subscriber->id)->where('status', '!=', 'draft')->findOrFail($invoiceId);
                 $meterId = $invoice->meter_id;
                 $meter = $invoice->meter;
-            }
-
-            // ربط السند بالصندوق المفتوح للمحصّل نفسه، إن وُجد.
-            // السند بلا صندوق يبقى صالحاً (توافق خلفي) لكنه لا يدخل تسوية يومية.
-            $cashSessionId = null;
-            if ($userId) {
-                $cashSessionId = \App\Models\CashSession::query()
-                    ->where('user_id', $userId)
-                    ->where('state', \App\Models\CashSession::STATE_OPEN)
-                    ->latest('id')
-                    ->value('id');
             }
 
             // 1. إنشاء سجل الدفع
@@ -397,11 +408,11 @@ class PaymentService
 
             if (app(\App\Services\WhatsAppService::class)->isEnabled() && in_array(app(\App\Services\WhatsAppService::class)->getMethod(), ['meta_api', 'local_api'])) {
                 if (\App\Models\Setting::get('auto_send_whatsapp_payment', false)) {
-                    \App\Jobs\SendWhatsAppPaymentJob::dispatch($payment);
+                    \App\Jobs\SendWhatsAppPaymentJob::dispatch($payment)->afterCommit();
                 }
             }
 
             return $payment;
-        });
+        }, 3);
     }
 }

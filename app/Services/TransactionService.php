@@ -19,7 +19,27 @@ class TransactionService
         ?Model $reference = null,
         ?\App\Models\Meter $meter = null
     ): Transaction {
-        $transaction = Transaction::create([
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter) {
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+
+            if ($reference instanceof \App\Models\Invoice || $reference instanceof \App\Models\Payment) {
+                $existing = Transaction::withTrashed()
+                    ->where('reference_type', get_class($reference))
+                    ->where('reference_id', $reference->id)
+                    ->where('type', $type)->lockForUpdate()->first();
+                if ($existing) {
+                    if ($existing->trashed()
+                        || (int) $existing->subscriber_id !== (int) $subscriber->id
+                        || (int) ($existing->meter_id ?? 0) !== (int) ($meter?->id ?? 0)
+                        || round((float) $existing->amount, 2) !== round($amount, 2)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'transaction' => 'المستند المالي سبق ترحيله ببيانات مختلفة.',
+                        ]);
+                    }
+                    return $existing;
+                }
+            }
+            $transaction = Transaction::create([
             'subscriber_id' => $subscriber->id,
             'meter_id' => $meter ? $meter->id : null,
             'type' => $type,
@@ -35,7 +55,8 @@ class TransactionService
             $this->updateSubscriberBalance($subscriber);
         }
 
-        return $transaction;
+            return $transaction;
+        }, 3);
     }
 
     /**

@@ -26,29 +26,25 @@ class CreateInvoice extends CreateRecord
         return $data;
     }
 
-    protected function afterCreate(): void
+    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
     {
-        $invoice = $this->record;
-        
-        $transactionService = new \App\Services\TransactionService();
-        $transactionService->recordTransaction(
-            subscriber: $invoice->subscriber,
-            type: 'invoice',
-            amount: -$invoice->total_amount,
-            description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
-            reference: $invoice,
-            meter: $invoice->meter
-        );
-
-        if ($invoice->meter) {
-            $transactionService->updateMeterBalance($invoice->meter);
-        } else {
-            $transactionService->updateSubscriberBalance($invoice->subscriber);
-        }
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($data) {
+            \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($data['subscriber_id']);
+            $meter = \App\Models\Meter::query()->where('subscriber_id', $data['subscriber_id'])
+                ->lockForUpdate()->findOrFail($data['meter_id']);
+            $data = $this->mutateFormDataBeforeCreate($data);
+            abort_unless((int) $data['meter_id'] === (int) $meter->id, 409, 'تغير العداد؛ حدّث النموذج.');
+            $data['bill_number'] = \App\Models\Invoice::generateBillNumber();
+            $invoice = \App\Models\Invoice::create($data);
+            app(\App\Services\TransactionService::class)->recordTransaction(
+                subscriber: $invoice->subscriber,
+                type: 'invoice',
+                amount: -(float) $invoice->total_amount,
+                description: 'إصدار فاتورة رقم '.$invoice->bill_number,
+                reference: $invoice,
+                meter: $meter,
+            );
+            return $invoice->refresh();
+        }, 3);
     }
 }
-
-
-
-
-

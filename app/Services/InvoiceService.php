@@ -33,6 +33,9 @@ class InvoiceService
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if ($includeReadings) {
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
+                $meter = \App\Models\Meter::query()->where('subscriber_id', $subscriber->id)
+                    ->lockForUpdate()->findOrFail($meter->id);
+                $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             }
             $unitPrice = \App\Models\Tariff::getActivePrice();
 
@@ -46,7 +49,7 @@ class InvoiceService
                         $q->where('id', $meter->id);
                     }
                 })->where('is_invoiced', false)
-                    ->orderBy('period_start')->orderBy('period_end')->orderBy('id')->get();
+                    ->orderBy('period_start')->orderBy('period_end')->orderBy('id')->lockForUpdate()->get();
             }
 
             $currentConsumptionUnits = 0;
@@ -175,12 +178,12 @@ class InvoiceService
 
             if (app(\App\Services\WhatsAppService::class)->isEnabled() && in_array(app(\App\Services\WhatsAppService::class)->getMethod(), ['meta_api', 'local_api'])) {
                 if (\App\Models\Setting::get('auto_send_whatsapp_invoice', false)) {
-                    \App\Jobs\SendWhatsAppInvoiceJob::dispatch($invoice);
+                    \App\Jobs\SendWhatsAppInvoiceJob::dispatch($invoice)->afterCommit();
                 }
             }
 
             return $invoice->refresh();
-        });
+        }, 3);
     }
 
 
