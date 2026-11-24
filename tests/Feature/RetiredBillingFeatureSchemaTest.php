@@ -11,6 +11,18 @@ class RetiredBillingFeatureSchemaTest extends TestCase
 {
     use RefreshDatabase;
 
+    public const RETIRED_HISTORICAL_CONTROLLER_PATHS = [
+        'app/Http/Controllers/Api/ServiceRequestController.php',
+        'app/Http/Controllers/Api/SubscriptionFeeController.php',
+    ];
+
+    public function test_retired_historical_controllers_are_absent(): void
+    {
+        foreach (self::RETIRED_HISTORICAL_CONTROLLER_PATHS as $path) {
+            $this->assertFileDoesNotExist(base_path($path));
+        }
+    }
+
     public function test_fresh_install_has_no_removed_feature_schema(): void
     {
         $this->assertFalse(Schema::hasTable('service_requests'));
