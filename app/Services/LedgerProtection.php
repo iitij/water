@@ -33,11 +33,15 @@ final class LedgerProtection
         }
         if (DB::getDriverName() !== 'sqlite') {
             // InnoDB cascades do not invoke child triggers.
-            $restricted = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
-                ->whereRaw('CONSTRAINT_SCHEMA = DATABASE()')->where('TABLE_NAME', 'transactions')
-                ->whereIn('CONSTRAINT_NAME', ['transactions_subscriber_id_foreign', 'transactions_meter_id_foreign'])
-                ->whereIn('DELETE_RULE', ['RESTRICT', 'NO ACTION'])->count();
-            if ($restricted !== 2) return false;
+            foreach (['subscriber_id', 'meter_id'] as $column) {
+                $constraints = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')
+                    ->whereRaw('CONSTRAINT_SCHEMA = DATABASE()')->where('TABLE_NAME', 'transactions')
+                    ->whereIn('CONSTRAINT_NAME', ['transactions_'.$column.'_foreign', 'transactions_'.$column.'_ledger_restrict'])
+                    ->get();
+                if ($constraints->count() !== 1 || ! in_array($constraints->first()->DELETE_RULE, ['RESTRICT', 'NO ACTION'], true)) {
+                    return false;
+                }
+            }
         }
         return true;
     }

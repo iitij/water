@@ -33,10 +33,20 @@ return new class extends Migration
         // the hosting account lacks permission to install triggers.
         foreach (['subscriber_id' => 'subscribers', 'meter_id' => 'meters'] as $column => $parent) {
             $name = 'transactions_'.$column.'_foreign';
-            $rule = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')->whereRaw('CONSTRAINT_SCHEMA = DATABASE()')
-                ->where('TABLE_NAME', 'transactions')->where('CONSTRAINT_NAME', $name)->value('DELETE_RULE');
-            if (! in_array($rule, ['RESTRICT', 'NO ACTION'], true)) {
-                DB::statement("ALTER TABLE transactions DROP FOREIGN KEY $name, ADD CONSTRAINT $name FOREIGN KEY ($column) REFERENCES $parent(id) ON DELETE RESTRICT");
+            $restrictName = 'transactions_'.$column.'_ledger_restrict';
+            $constraints = DB::table('information_schema.REFERENTIAL_CONSTRAINTS')->whereRaw('CONSTRAINT_SCHEMA = DATABASE()')
+                ->where('TABLE_NAME', 'transactions')->whereIn('CONSTRAINT_NAME', [$name, $restrictName])->get();
+            if ($constraints->count() !== 1) {
+                throw new \RuntimeException("Expected exactly one ledger foreign key for $column.");
+            }
+            $constraint = $constraints->first();
+            if (! in_array($constraint->DELETE_RULE, ['RESTRICT', 'NO ACTION'], true)) {
+                if ($constraint->CONSTRAINT_NAME !== $name) {
+                    throw new \RuntimeException("Unexpected ledger foreign key rule for $column.");
+                }
+                // Use a distinct constraint symbol in the same atomic ALTER.
+                // MariaDB can reject DROP + ADD of the same symbol (errno 121).
+                DB::statement("ALTER TABLE transactions DROP FOREIGN KEY $name, ADD CONSTRAINT $restrictName FOREIGN KEY ($column) REFERENCES $parent(id) ON DELETE RESTRICT");
             }
         }
         // Explicit privileged install/check required before production acceptance.
