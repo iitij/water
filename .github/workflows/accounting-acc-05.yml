@@ -1,0 +1,95 @@
+name: Accounting ACC-05 acceptance
+on:
+  push:
+    branches:
+      - main
+      - 'fix/accounting-acc-05'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  php-sqlite:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: php -l app/Models/Invoice.php && php -l app/Models/Subscriber.php && php -l app/Services/PaymentService.php && php -l app/Services/InvoiceService.php
+      - name: Focused live collection regression
+        run: php artisan test --filter='FinancialReversalTest|CashSessionApiTest|PaymentVoidApprovalTest|PostedFinancialDocumentTest|UnifiedSubscriberAccountTest|LiveCollectionAmountTest|ReadingPeriodInvoiceConsistencyTest'
+      - name: Full Laravel regression
+        run: php artisan test
+  mysql-period:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_only
+          MYSQL_DATABASE: water_test
+          MYSQL_USER: water
+          MYSQL_PASSWORD: ci_water_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_root_only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: mysql
+      DB_URL: ''
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: water_test
+      DB_USERNAME: water
+      DB_PASSWORD: ci_water_only
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql, mysqli, dom, curl, fileinfo, gd, intl, zip, bcmath, pcntl, posix
+          coverage: none
+      - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: php artisan migrate:fresh --force --no-interaction
+      - name: MySQL live collection regression
+        run: php artisan test --filter='FinancialReversalTest|CashSessionApiTest|PaymentVoidApprovalTest|PostedFinancialDocumentTest|UnifiedSubscriberAccountTest|LiveCollectionAmountTest|ReadingPeriodInvoiceConsistencyTest'
+      - name: Real parallel MySQL financial writes
+        run: php artisan test tests/Feature/FinancialConcurrencyTest.php
+        timeout-minutes: 5
+  flutter-collection:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 'mobile app'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-pub --no-fatal-infos
+      - run: flutter test --no-pub test/features/payments/ test/features/invoices/ test/accounting/
