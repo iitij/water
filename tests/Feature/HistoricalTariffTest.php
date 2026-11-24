@@ -205,6 +205,26 @@ class HistoricalTariffTest extends TestCase
         $this->assertDatabaseCount('transactions', 1);
     }
 
+    public function test_current_price_is_unknown_without_unique_effective_approval(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-04-30 18:00:00'));
+        $admin = \App\Models\User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin, 'sanctum');
+        $this->assertNull(Tariff::getActivePrice());
+        $this->getJson('/api/tariffs')->assertOk()->assertJsonPath('active_price', null);
+        $this->tariff('800.00', '2026-05-01', null);
+        $this->assertNull(Tariff::getActivePrice());
+
+        $this->tariff('0.00', '2026-04-01', '2026-04-30');
+        $this->assertSame(0.0, Tariff::getActivePrice());
+        // Legacy imports may bypass the model guard; never choose a winner.
+        DB::table('tariffs')->insert(['name' => 'Legacy overlap', 'unit_price' => 900,
+            'is_active' => true, 'start_date' => '2026-04-01', 'end_date' => '2026-04-30']);
+        $this->assertNull(Tariff::getActivePrice());
+        $this->getJson('/api/tariffs')->assertOk()->assertJsonPath('active_price', null);
+        $this->travelBack();
+    }
+
     private function assertRejected(Meter $meter, Reading $reading): void
     {
         try {
