@@ -47,7 +47,10 @@ class CreateReading extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         return DB::transaction(function () use ($data): Model {
+            $subscriberId = Meter::findOrFail((int) $data['meter_id'])->subscriber_id;
+            \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
             $meter = Meter::query()->lockForUpdate()->findOrFail((int) $data['meter_id']);
+            abort_unless((int) $meter->subscriber_id === (int) $subscriberId, 409);
             if (! $meter->isCurrent()) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                         'meter_id' => ['لا يمكن تسجيل قراءة جديدة على عداد منزوع.'],
