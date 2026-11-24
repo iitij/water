@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\Meter;
-use App\Models\Reading;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Services\InvoiceService;
@@ -39,7 +38,7 @@ class UnifiedSubscriberAccountTest extends TestCase
 
     private function bill(Meter $meter, string $start, string $end, int $previous, int $current): Invoice
     {
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $meter->id,
             'reading_date' => $end,
             'actual_reading_date' => $end,
