@@ -52,6 +52,7 @@ jobs:
           }
           \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
           require getenv('RUNNER_TEMP').'/mpdf/vendor/autoload.php';
+          require getcwd().'/tests/scripts/mpdf_template_preview.php';
           $square = \App\Models\Square::create(['name' => 'مربع الاختبار']);
           $subscriber = \App\Models\Subscriber::create(['name' => 'مشترك تجريبي', 'status' => 'active', 'square_id' => $square->id]);
           $invoice = \App\Models\Invoice::create([
@@ -79,15 +80,14 @@ jobs:
                   throw new RuntimeException('External asset detected in '.$view);
               }
               // mPDF uses local font registration rather than embedded CSS font faces.
-              $html = preg_replace('~@font-face\s*\{[^}]*\}~is', '', $html);
-              $html = str_replace("'Tajawal', 'Segoe UI', sans-serif", 'tajawal', $html);
+              $html = waterMpdfPreviewHtml($html);
               $pdf = new \Mpdf\Mpdf([
                   'mode' => 'utf-8', 'format' => 'A5-L',
                   'tempDir' => getenv('RUNNER_TEMP').'/mpdf-tmp',
                   'fontDir' => array_merge($dirs, [resource_path('fonts/tajawal')]),
                   'fontdata' => $fonts + ['tajawal' => ['R'=>'Tajawal-Regular.ttf','B'=>'Tajawal-Bold.ttf','useOTL'=>255,'useKashida'=>0]],
                   'default_font' => 'tajawal',
-                  'margin_left' => 0, 'margin_right' => 0, 'margin_top' => 0, 'margin_bottom' => 0,
+                  'margin_left' => 4, 'margin_right' => 4, 'margin_top' => 4, 'margin_bottom' => 4,
               ]);
               $pdf->SetDirectionality('rtl');
               $start = hrtime(true);
@@ -129,6 +129,7 @@ jobs:
           exit "$result"
       - name: Upload synthetic previews for visual review
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: water-mpdf-template-preview
