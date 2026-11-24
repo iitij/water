@@ -163,7 +163,8 @@ class ReadingResource extends Resource
 
             Forms\Components\TextInput::make('current_reading')
                 ->label('القراءة الحالية')
-                ->numeric()
+                ->numeric()->minValue(0)->maxValue(9999999999.99)->step(0.01)
+                ->rule('decimal:0,2')
                 ->rules([
                     fn($get, ?\Illuminate\Database\Eloquent\Model $record) => function (string $attribute, $value, \Closure $fail) use ($get, $record) {
                         if (! $get('meter_id')) return;
