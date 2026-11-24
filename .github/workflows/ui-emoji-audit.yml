@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ui-emoji-audit.yml'
+      - 'app/**'
+      - 'resources/**'
+      - 'mobile app/lib/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,5 +50,17 @@ jobs:
                   print(f'UI_CANDIDATE {name}:{number} | {descriptions} | {codes} | {terms} | {line.strip()[:240]}')
           print(f'UI_AUDIT_FILES: {scanned}')
           print(f'UI_AUDIT_CANDIDATES: {hits}')
-          print('UI_EMOJI_AUDIT: COMPLETE (review required; no application mutation)')
+          # Enforce removal of decorative emoji from user-facing application strings.
+          # Comments, diagnostics internals and functional Unicode checkmarks are not UI decoration.
+          violations=[]
+          decoration=re.compile(r'[\U0001F300-\U0001FAFF\uFE0F]|Icons\.(?:celebration|emoji_events|emoji_emotions)|confetti',re.I)
+          for name in paths:
+              if not (name.startswith(('app/Filament/','resources/views/filament/','resources/views/pdf/','mobile app/lib/features/')) and name.endswith(('.php','.dart'))): continue
+              for number,line in enumerate(pathlib.Path(name).read_text(encoding='utf-8',errors='replace').splitlines(),1):
+                  if line.lstrip().startswith(('//','*','/*','{{--')): continue
+                  if decoration.search(line):
+                      violations.append(f'{name}:{number}: {line.strip()[:160]}')
+          for item in violations: print('DECORATIVE_UI_VIOLATION:',item)
+          if violations: raise SystemExit('Decorative UI symbols require review')
+          print('UI_EMOJI_AUDIT: PASSED')
           PY

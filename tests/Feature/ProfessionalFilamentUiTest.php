@@ -96,6 +96,67 @@ class ProfessionalFilamentUiTest extends TestCase
             ->assertFileDownloaded('قراءات_العدادات_'.$date.'.xlsx');
     }
 
+    public function test_all_registered_resource_pages_render_native_filament_layouts(): void
+    {
+        $square = Square::create(['name' => 'مربع فحص الواجهات']);
+        $subscriber = Subscriber::create(['name' => 'مشترك فحص الواجهات', 'status' => 'active', 'square_id' => $square->id]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'UI-TEST-METER']);
+        $reading = \App\Models\Reading::create([
+            'meter_id' => $meter->id, 'reading_date' => '2026-11-03',
+            'previous_reading' => 0, 'current_reading' => 12,
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-03',
+        ]);
+        $invoice = \App\Models\Invoice::create([
+            'subscriber_id' => $subscriber->id, 'meter_id' => $meter->id,
+            'bill_number' => 'INV-UI-001', 'bill_date' => '2026-11-03',
+            'total_amount' => 1200, 'status' => 'issued',
+        ]);
+        $payment = \App\Models\Payment::create([
+            'subscriber_id' => $subscriber->id, 'invoice_id' => $invoice->id,
+            'receipt_number' => 'REC-UI-001', 'amount' => 100,
+            'payment_date' => '2026-11-03', 'payment_method' => 'cash',
+        ]);
+        $tariff = \App\Models\Tariff::create(['name' => 'تعرفة اختبار', 'unit_price' => 100, 'is_active' => true]);
+        $role = Role::findOrCreate('ui-test-role', 'web');
+        $records = collect([$square, $subscriber, $meter, $reading, $invoice, $payment, $tariff, $role, User::factory()->create()])
+            ->keyBy(fn ($record) => $record::class);
+        $resources = Filament::getPanel('admin')->getResources();
+        $tested = 0;
+        foreach ($resources as $resource) {
+            foreach ($resource::getPages() as $name => $registration) {
+                $parameters = [];
+                if (in_array($name, ['edit', 'view'], true)) {
+                    $record = $records->get($resource::getModel());
+                    $this->assertNotNull($record, "Missing fixture for {$resource} {$name}");
+                    $parameters['record'] = $record;
+                }
+                $url = $resource::getUrl($name, $parameters);
+                $this->get($url)->assertOk()->assertSee('fi-page', false);
+                $tested++;
+                fwrite(STDOUT, "UI_RESOURCE_PAGE_OK {$resource} {$name}\n");
+            }
+        }
+        $this->assertGreaterThanOrEqual(25, $tested);
+        fwrite(STDOUT, "UI_RESOURCE_PAGES_VERIFIED: {$tested}\n");
+    }
+
+    public function test_whatsapp_local_server_section_renders_native_status_controls(): void
+    {
+        $page = Livewire::test(WhatsAppSettings::class)
+            ->set('data.whatsapp_enabled', true)
+            ->set('data.whatsapp_method', 'local_api')
+            ->set('localServerStatus', 'offline')
+            ->assertSee('غير متصل')
+            ->assertSee('تشغيل الخادم')
+            ->set('localServerStatus', 'waiting')
+            ->assertSee('جاري تجهيز الخادم')
+            ->set('localServerStatus', 'qr')
+            ->assertSee('بانتظار الربط')
+            ->set('localServerStatus', 'connected')
+            ->assertSee('إيقاف الخادم')
+            ->assertHasNoErrors();
+    }
+
     public function test_custom_admin_blades_do_not_reintroduce_manual_theme_styles_or_raw_controls(): void
     {
         $files = array_merge(

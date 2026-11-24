@@ -37,6 +37,7 @@ jobs:
       - name: Install locked dependencies
         run: |
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          touch .env
           composer install --no-interaction --no-progress --prefer-dist
       - name: Audit all resource classes and Blade views
         run: |

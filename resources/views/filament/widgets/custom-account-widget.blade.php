@@ -2,8 +2,10 @@
 $user = filament()->auth()->user();
 @endphp
 
-<x-filament-widgets::widget class="fi-account-widget">
-    <x-filament::section>
+<x-filament-widgets::widget>
+    <div class="grid gap-4">
+        <div class="fi-account-widget">
+            <x-filament::section>
         <x-filament-panels::avatar.user
             size="lg"
             :user="$user"
@@ -18,19 +20,6 @@ $user = filament()->auth()->user();
                 {{ filament()->getUserName($user) }}
             </p>
         </div>
-
-        @if(in_array($user->role ?? '', ['admin', 'meter_reader', 'collector']))
-        <div class="flex flex-wrap items-center gap-3">
-            @if(in_array($user->role ?? '', ['admin', 'meter_reader']))
-                {{ $this->createReadingAction }}
-                {{ $this->createSubscriberAction }}
-            @endif
-            @if(in_array($user->role ?? '', ['admin', 'collector']))
-                {{ $this->createPaymentAction }}
-            @endif
-        </div>
-        <x-filament-actions::modals />
-        @endif
 
         <form
             action="{{ filament()->getLogoutUrl() }}"
@@ -48,5 +37,23 @@ $user = filament()->auth()->user();
                 {{ __('filament-panels::widgets/account-widget.actions.logout.label') }}
             </x-filament::button>
         </form>
-    </x-filament::section>
+            </x-filament::section>
+        </div>
+        @if(in_array($user->role ?? '', ['admin', 'meter_reader', 'collector']))
+            <x-filament::section>
+                <x-slot name="heading">العمليات السريعة</x-slot>
+                <div class="flex flex-wrap items-center gap-3">
+            @if(in_array($user->role ?? '', ['admin', 'meter_reader']))
+                {{ $this->createReadingAction }}
+                {{ $this->createSubscriberAction }}
+            @endif
+            @if(in_array($user->role ?? '', ['admin', 'collector']))
+                {{ $this->createPaymentAction }}
+            @endif
+        </div>
+
+            </x-filament::section>
+            <x-filament-actions::modals />
+        @endif
+    </div>
 </x-filament-widgets::widget>
