@@ -1,0 +1,153 @@
+name: Water | Stage and test headless PDF browser
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: water-namecheap-remote
+  cancel-in-progress: false
+
+jobs:
+  stage-pdf:
+    name: Transfer pinned browser and test isolated PDF
+    if: ${{ github.ref == 'refs/heads/main' && github.actor == 'iitij' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Download the pinned Chrome Headless Shell on GitHub
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          export PUPPETEER_CACHE_DIR="$RUNNER_TEMP/browser-cache"
+          ./node_modules/.bin/puppeteer browsers install chrome-headless-shell@156.0.8078.47
+          browser="$PUPPETEER_CACHE_DIR/chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell"
+          test -x "$browser"
+          "$browser" --version
+          tar -czf "$RUNNER_TEMP/water-browser.tar.gz" -C "$PUPPETEER_CACHE_DIR" chrome-headless-shell/linux-156.0.8078.47
+          sha256sum "$RUNNER_TEMP/water-browser.tar.gz" | awk '{print $1}' > "$RUNNER_TEMP/water-browser.sha256"
+          echo "BROWSER_ARCHIVE_BYTES: $(stat -c %s "$RUNNER_TEMP/water-browser.tar.gz")"
+
+      - name: Prepare SSH and verify the Namecheap host
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.NAMECHEAP_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY" || { echo "::error::Missing SSH secret"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/namecheap-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/namecheap-ssh/id_ed25519"
+          ssh-keygen -y -f "$RUNNER_TEMP/namecheap-ssh/id_ed25519" >/dev/null
+          ssh-keyscan -T 15 -p 21098 -t ed25519 66.29.146.205 \
+            > "$RUNNER_TEMP/namecheap-ssh/known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/namecheap-ssh/known_hosts" -E sha256 | awk 'NR==1 {print $2}')"
+          test "$fingerprint" = 'SHA256:30IXGrYxD3pXnfOdvFZMCJ5YShzaMeRCYXRWXYnl4Rw' ||
+            { echo "::error::Unexpected host fingerprint"; exit 1; }
+
+      - name: Transfer and verify browser archive privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(cat "$RUNNER_TEMP/water-browser.sha256")"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 \
+            "set -eu; umask 077; test \"\$(id -un)\" = alweufti; test \"\$(uname -m)\" = x86_64; cd \"\$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1\"; test ! -e 'browser-transfer-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; mkdir 'browser-transfer-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; cd 'browser-transfer-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; cat > browser.tar.gz; printf '%s  browser.tar.gz\n' '$digest' | sha256sum -c -; tar -xzf browser.tar.gz; test -x chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell; rm browser.tar.gz; echo 'BROWSER_TRANSFER: VERIFIED'" \
+            < "$RUNNER_TEMP/water-browser.tar.gz"
+
+      - name: Run isolated synthetic PDF trial on Namecheap
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -p 21098 \
+            -i "$RUNNER_TEMP/namecheap-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/namecheap-ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            alweufti@66.29.146.205 "bash -se -- $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT" <<'REMOTE_TRIAL'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = alweufti
+          export PATH="/opt/alt/alt-nodejs24/root/usr/bin:$PATH"
+          stage="$HOME/.water-pdf-stage/abb820d78017426eac5f3ff5a10aa228fe582c23/45297269595-1"
+          test -d "$stage" && test ! -L "$stage"
+          cmp "$stage/package-lock.json" "$HOME/repositories/water/package-lock.json"
+          cd "$stage"
+          browser="$stage/browser-transfer-$1-$2/chrome-headless-shell/linux-156.0.8078.47/chrome-headless-shell-linux64/chrome-headless-shell"
+          test -x "$browser" && test -f "$browser"
+          echo "BROWSER_BINARY: $browser"
+          if command -v ldd >/dev/null 2>&1; then
+            libs="$(ldd "$browser" 2>&1)" || { echo 'BROWSER_LIBRARY_CHECK: FAILED'; exit 1; }
+            if grep -F 'not found' <<< "$libs"; then
+              echo 'BROWSER_LIBRARY_CHECK: MISSING DEPENDENCIES'
+              exit 1
+            fi
+            echo 'BROWSER_LIBRARY_CHECK: PASSED'
+          fi
+          timeout --kill-after=2s 5s "$browser" --version
+          echo '=== ONE SYNTHETIC A5 PDF; NETWORK REQUESTS BLOCKED ==='
+          trial="$(mktemp -d "$stage/trial.XXXXXXXX")"
+          trap 'rm -rf -- "$trial"' EXIT
+          export WATER_TRIAL_BROWSER="$browser"
+          export WATER_TRIAL_DIR="$trial"
+          cat > "$trial/smoke.mjs" <<'PDF_JS'
+          import puppeteer from 'puppeteer';
+          import { readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const start = Date.now();
+          let browser;
+          try {
+            browser = await puppeteer.launch({
+          executablePath: process.env.WATER_TRIAL_BROWSER,
+          headless: 'shell',
+          pipe: true,
+          timeout: 10000,
+          userDataDir: join(process.env.WATER_TRIAL_DIR, 'profile'),
+          args: ['--disable-gpu', '--disable-dev-shm-usage', '--renderer-process-limit=1'],
+            });
+            const page = await browser.newPage();
+            page.setDefaultTimeout(5000);
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+          const url = request.url();
+          void (url.startsWith('data:') || url === 'about:blank' ? request.continue() : request.abort()).catch(() => {});
+            });
+            await page.setContent('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><body><h1>اختبار الطباعة</h1><p>Water PDF smoke test — 100.00</p></body></html>', {waitUntil:'domcontentloaded', timeout:5000});
+            const output = join(process.env.WATER_TRIAL_DIR, 'sample.pdf');
+            await page.pdf({path:output, format:'A5', landscape:true, printBackground:true, timeout:8000});
+            const bytes = await readFile(output);
+            if (bytes.length < 1000 || bytes.subarray(0,5).toString() !== '%PDF-') throw new Error('Invalid PDF');
+            console.log('SYNTHETIC_PDF_BYTES:', bytes.length);
+            console.log('PDF_RENDER_MS:', Date.now() - start);
+          } finally {
+            if (browser) await browser.close();
+          }
+          PDF_JS
+          timeout --signal=TERM --kill-after=5s 30s node "$trial/smoke.mjs"
+          echo 'PDF_BROWSER_TRIAL: PASSED'
+          echo 'No persistent browser process, no Laravel changes, no public deployment, no real data.'
+          REMOTE_TRIAL
