@@ -172,6 +172,39 @@ class HistoricalTariffTest extends TestCase
         $this->assertSame('2026-01-31', $tariff->fresh()->end_date->toDateString());
     }
 
+    public function test_manual_api_issuance_ignores_client_amount_and_period_and_cannot_bill_twice(): void
+    {
+        $meter = $this->meter();
+        $tariff = $this->tariff('600.25', '2026-01-01', '2026-01-31');
+        $reading = $this->read($meter, '2026-01-01', '2026-02-01', 0, 10);
+        $admin = \App\Models\User::factory()->create(['role' => 'admin']);
+        $payload = [
+            'subscriber_id' => $meter->subscriber_id,
+            'meter_id' => $meter->id,
+            'consumption_fee' => 1,
+            'total_amount' => 1,
+            'previous_balance' => 999999,
+            'credit_applied' => 999999,
+            'bill_number' => 'CLIENT-OVERRIDE',
+            'bill_date' => '2020-01-01',
+            'billing_period_start' => '2020-01-01',
+            'billing_period_end' => '2020-02-01',
+        ];
+        $this->actingAs($admin, 'sanctum')->postJson('/api/invoices', $payload)->assertCreated();
+        $invoice = Invoice::sole();
+        $this->assertSame('6002.50', $invoice->total_amount);
+        $this->assertSame('2026-01-01', $invoice->billing_period_start->toDateString());
+        $this->assertSame('2026-02-01', $invoice->billing_period_end->toDateString());
+        $this->assertSame('0.00', $invoice->previous_balance);
+        $this->assertNotSame('CLIENT-OVERRIDE', $invoice->bill_number);
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id,
+            'reading_id' => $reading->id, 'tariff_id' => $tariff->id, 'amount' => 6002.50]);
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+        $this->postJson('/api/invoices', $payload)->assertUnprocessable();
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('transactions', 1);
+    }
+
     private function assertRejected(Meter $meter, Reading $reading): void
     {
         try {
