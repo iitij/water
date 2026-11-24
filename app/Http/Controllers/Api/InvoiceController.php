@@ -269,8 +269,8 @@ class InvoiceController extends ApiController
             'readings.*' => ['required', 'array:reading_id,corrected_units'],
             'readings.*.reading_id' => ['required', 'integer', 'min:1', 'distinct'],
             'readings.*.corrected_units' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
-            'corrected_units' => ['required_without:readings', 'prohibited_with:readings', 'numeric', 'min:0', 'decimal:0,2'],
-            'historical_unit_price' => ['required_without:readings', 'prohibited_with:readings', 'numeric', 'min:0', 'decimal:0,2'],
+            'corrected_units' => ['required_without:readings', 'prohibits:readings', 'numeric', 'min:0', 'decimal:0,2'],
+            'historical_unit_price' => ['required_without:readings', 'prohibits:readings', 'numeric', 'min:0', 'decimal:0,2'],
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
