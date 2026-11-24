@@ -38,6 +38,27 @@ class ObservationReadingIntervalTest extends TestCase
         ]);
     }
 
+    public function test_replacement_has_its_own_fractional_baseline_even_without_old_financial_history(): void
+    {
+        $old = $this->meter();
+        $subscriberId = $old->subscriber_id;
+        $result = app(\App\Services\SingleMeterService::class)->replace($old, [
+            'unique_code' => 'PERIOD-OBS-REPLACEMENT',
+            'initial_reading' => '100.25',
+        ], '2026-02-01', 'Synthetic installation baseline test');
+        $meter = $result['current_meter']->fresh();
+        $this->assertSame('100.25', $meter->initial_reading);
+        $this->assertSame('2026-02-01', $meter->installed_at->toDateString());
+        $this->assertSame($subscriberId, $meter->subscriber_id);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-02-12',
+            'current_reading' => '135.75',
+        ])->assertCreated()->json('reading.id');
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('2026-02-01', $reading->period_start);
+        $this->assertSame('35.50', $reading->consumption_units);
+    }
+
     public function test_fractional_consumption_survives_storage_edit_and_invoice_posting(): void
     {
         $meter = $this->meter();
