@@ -195,6 +195,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);
 
     // صندوق المحصّل: فتح/إغلاق/اعتماد/تقرير (خطة 2.0 — الفصل 5.2).
+    Route::post('/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'store']);
+    Route::get('/cash-sessions/{id}/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'index'])->whereNumber('id');
+    Route::post('/late-receipt-reviews/{id}/decide', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'decide'])->whereNumber('id');
     Route::get('/cash-sessions/current', [CashSessionController::class, 'current']);
     Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');
     Route::get('/cash-sessions/{id}/report/pdf', [CashSessionController::class, 'downloadPdf'])->whereNumber('id');

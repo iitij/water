@@ -382,12 +382,13 @@ class PaymentService
         ?string $syncUuid = null,
         ?int $requestedCashSessionId = null,
         bool $deferred = false,
+        ?int $lateReviewId = null,
     ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
             throw ValidationException::withMessages(['sync_uuid' => 'معرّف المزامنة غير صالح.']);
         }
-        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred) {
+        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount) {
                 throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
@@ -400,27 +401,44 @@ class PaymentService
                 throw new \LogicException('Payment issuance lock is missing.');
             }
 
+            $review = $syncUuid ? DB::table('late_receipt_reviews')->where('sync_uuid', $syncUuid)->lockForUpdate()->first() : null;
+            if ($lateReviewId !== null) {
+                abort_unless($review && (int) $review->id === $lateReviewId && $review->status === 'pending'
+                    && (int) $review->subscriber_id === (int) $subscriber->id
+                    && (int) $review->collector_id === (int) $userId
+                    && (int) ($review->invoice_id ?? 0) === (int) ($invoiceId ?? 0)
+                    && (float) $review->amount === $amount
+                    && $review->payment_method === $paymentMethod
+                    && $review->payment_date === $paymentDate
+                    && ($review->reference_number ?? '') === ($referenceNumber ?? '')
+                    && ($review->reason ?? '') === ($reason ?? '')
+                    && $requestedMeterId === null && $requestedCashSessionId === null, 409, 'بيانات التسوية الاستثنائية غير مطابقة.');
+            }
+
             if ($syncUuid) {
                 $existing = Payment::withTrashed()->where('sync_uuid', $syncUuid)->lockForUpdate()->first();
                 if ($existing) {
                     if ($existing->trashed()) {
                         abort(409, 'عملية الدفع المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
                     }
+                    $approvedReview = $review && $review->status === 'approved' && (int) $review->payment_id === (int) $existing->id;
                     if ((int) $existing->user_id !== (int) ($userId ?? 0)
                         || (int) $existing->subscriber_id !== (int) $subscriber->id
                         || (int) ($existing->invoice_id ?? 0) !== (int) ($invoiceId ?? 0)
                         || round((float) $existing->amount, 2) !== round($amount, 2)
-                        || (! $invoiceId && (int) ($existing->meter_id ?? 0) !== (int) ($requestedMeterId ?? 0))
-                        || ($requestedCashSessionId !== null && (int) $existing->cash_session_id !== $requestedCashSessionId)
+                        || (! $invoiceId && (int) (($approvedReview ? $review->submitted_meter_id : ($existing->meter_id ?? $existing->retired_meter_id)) ?? 0) !== (int) ($requestedMeterId ?? 0))
+                        || ($requestedCashSessionId !== null && (int) ($approvedReview ? $review->cash_session_id : $existing->cash_session_id) !== $requestedCashSessionId)
                         || $existing->payment_method !== $paymentMethod
                         || ($paymentDate !== null && $existing->payment_date->toDateString() !== \Carbon\CarbonImmutable::parse($paymentDate)->toDateString())
                         || ($existing->reference_number ?? '') !== ($referenceNumber ?? '')
                         || ($existing->reason ?? '') !== ($reason ?? '')) {
                         abort(409, 'معرّف المزامنة مستخدم مسبقاً لعملية دفع مختلفة.');
                     }
+                    abort_if($lateReviewId !== null, 409, 'سبق ترحيل هذا السند؛ يلزم التحقق من السجل الأصلي.');
                     return $existing;
                 }
             }
+            abort_if($review && $lateReviewId === null, 409, 'السند مرتبط بمراجعة مالية؛ لا يجوز ترحيله خارجها.');
 
             // A delayed operation must never be silently assigned to today's till.
             if ($deferred && ($requestedCashSessionId === null || ! $syncUuid || $paymentDate === null)) {
@@ -432,7 +450,7 @@ class PaymentService
 
             // Acquire collector/till locks before financial reads and number generation.
             $cashSessionId = null;
-            if ($userId) {
+            if ($userId && $lateReviewId === null) {
                 User::query()->lockForUpdate()->findOrFail($userId);
                 $cashSession = \App\Models\CashSession::query()
                     ->where('user_id', $userId)

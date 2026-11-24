@@ -224,6 +224,39 @@ class CashSessionApiTest extends TestCase
         $this->assertSame('100.25', $this->invoice->fresh()->amount_paid);
     }
 
+    public function test_late_receipt_review_requires_independent_verified_handover_and_posts_once(): void
+    {
+        $this->actingAs($this->admin, 'sanctum');
+        $old = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $this->postJson("/api/cash-sessions/{$old}/close", ['counted_amount' => 0])->assertOk();
+        $supervisor = User::factory()->create(['role' => 'admin']);
+        $supervisor->assignRole('super_admin');
+        $this->actingAs($supervisor, 'sanctum')->postJson("/api/cash-sessions/{$old}/approve", ['approve' => true])->assertOk();
+        $this->actingAs($this->admin, 'sanctum');
+        $new = $this->postJson('/api/cash-sessions', [])->assertCreated()->json('cash_session.id');
+        $payload = ['subscriber_id' => $this->subscriber->id, 'invoice_id' => $this->invoice->id,
+            'cash_session_id' => $old, 'sync_uuid' => (string) Str::uuid(),
+            'amount' => '125.25', 'payment_method' => 'cash', 'payment_date' => today()->toDateString()];
+        $case = $this->postJson('/api/late-receipt-reviews', $payload)->assertSuccessful()->json('review.id');
+        $this->postJson('/api/late-receipt-reviews', $payload)->assertSuccessful()->assertJsonPath('review.id', $case);
+        $this->postJson('/api/late-receipt-reviews', array_replace($payload, ['amount' => '126.25']))->assertConflict();
+        $decision = ['approve' => true, 'evidence' => 'Verified separate treasury handover after till closure',
+            'evidence_reference' => 'TREASURY-LATE-001', 'settlement_method' => 'separate_handover'];
+        $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)->assertForbidden();
+        $this->assertDatabaseCount('payments', 0);
+        $this->actingAs($supervisor, 'sanctum');
+        $id = $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)
+            ->assertOk()->assertJsonPath('review.status', 'approved')->json('review.payment_id');
+        $this->postJson("/api/late-receipt-reviews/{$case}/decide", $decision)->assertOk()->assertJsonPath('review.payment_id', $id);
+        $this->actingAs($this->admin, 'sanctum')->postJson('/api/invoices/'.$this->invoice->id.'/pay',
+            $payload + ['deferred_sync' => true])->assertSuccessful()->assertJsonPath('payment.id', $id);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('payments', ['id' => $id, 'cash_session_id' => null, 'user_id' => $this->admin->id]);
+        $this->assertDatabaseMissing('payments', ['cash_session_id' => $new]);
+        $this->assertDatabaseHas('cash_sessions', ['id' => $old, 'expected_amount' => 0, 'counted_amount' => 0, 'variance_amount' => 0]);
+        $this->assertSame('125.25', $this->invoice->fresh()->amount_paid);
+    }
+
     public function test_voiding_a_payment_restores_the_invoice_and_leaves_an_audit_trail(): void
     {
         $this->actingAs($this->admin, 'sanctum')
