@@ -13,7 +13,7 @@ Correct business and accounting invariants take precedence over compatibility wi
 
 ## Quantity precision
 
-Meter values and derived consumption use DECIMAL(12,2). The model subtracts integer hundredths, rejects decreasing values, and never accepts client-supplied usage as authoritative. Posting does not recalculate stored quantities. API input permits at most two decimal places; Flutter offline subtraction, administrative reports and spreadsheet exports preserve the fractional units. Historical tariff line rounding remains per line. Tests cover 35.50 units at 600.00, a 0.01-unit difference, zero usage, edits and invalid precision. No historical quantity or financial backfill is part of this schema migration.
+Meter values, installation baseline and derived consumption use DECIMAL(12,2). The model subtracts integer hundredths, rejects decreasing values, and never accepts client-supplied usage as authoritative. Posting does not recalculate stored quantities. API input permits at most two decimal places; Flutter offline subtraction, administrative reports and spreadsheet exports preserve the fractional units. Historical tariff line rounding remains per line. Tests cover 35.50 units at 600.00, a 0.01-unit difference, zero usage, edits and invalid precision. The baseline is captured during meter creation/replacement and the replacement has its own installation date, regardless of financial history. API and mobile cache select the latest reading by observed date rather than insertion order or calendar forecast. No historical quantity or financial backfill is part of these schema migrations.
 
 ## Historical exceptions (#43)
 
