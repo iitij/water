@@ -12,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 class Reading extends Model
 {
     use SoftDeletes;
+
+    protected $attributes = ['period_basis' => 'legacy_calendar', 'is_invoiced' => false];
     protected $fillable = [
         'meter_id',
         'reading_date',
@@ -68,7 +70,7 @@ class Reading extends Model
             foreach (['meter_id', 'reading_date', 'actual_reading_date', 'period_start', 'period_end',
                 'period_basis', 'previous_reading', 'current_reading', 'is_invoiced', 'invoice_id',
                 'retired_meter_id', 'deleted_at'] as $field) {
-                if ($fresh->getRawOriginal($field) != $this->getRawOriginal($field)) {
+                if ($fresh->getOriginal($field) != $this->getOriginal($field)) {
                     throw ValidationException::withMessages(['reading_date' => 'تغيرت القراءة؛ حدّث البيانات وأعد المحاولة.']);
                 }
             }
