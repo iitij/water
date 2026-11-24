@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Invoice;
 use App\Models\Meter;
 use App\Models\Payment;
-use App\Models\Reading;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Models\Transaction;
@@ -36,7 +35,7 @@ class FinancialReversalTest extends TestCase
             'status' => 'active',
         ]);
         $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'ACC05-'.$subscriber->id]);
-        $reading = Reading::create([
+        $reading = $this->createMeasuredReading([
             'meter_id' => $meter->id, 'reading_date' => '2026-02-01',
             'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
             'previous_reading' => 0, 'current_reading' => 10,
@@ -247,7 +246,7 @@ class FinancialReversalTest extends TestCase
         $this->assertSame(4000.0, $subscriber->getAccountDebt());
         $this->assertSame(100.0, $replacement->getLastReadingValue());
 
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $replacement->id, 'reading_date' => '2026-02-28',
             'period_start' => '2026-02-02', 'period_end' => '2026-02-28',
             'previous_reading' => 100, 'current_reading' => 105,
@@ -272,7 +271,7 @@ class FinancialReversalTest extends TestCase
             'name' => 'Correct synthetic account', 'square_id' => $from->square_id, 'status' => 'active',
         ]);
         $toMeter = Meter::create(['subscriber_id' => $to->id, 'unique_code' => 'ACC05-TRANSFER-TO']);
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $toMeter->id, 'reading_date' => '2026-02-01',
             'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
             'previous_reading' => 0, 'current_reading' => 5,
@@ -391,7 +390,7 @@ class FinancialReversalTest extends TestCase
         ]);
         $this->assertDatabaseHas('audit_events', ['event' => 'payment.refunded', 'entity_id' => (string) $id]);
 
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $meter->id, 'reading_date' => '2026-03-01',
             'period_start' => '2026-02-02', 'period_end' => '2026-03-01',
             'previous_reading' => 10, 'current_reading' => 12,
@@ -469,7 +468,7 @@ class FinancialReversalTest extends TestCase
 
         // The replacement must not fall through the normal cancellation path.
         $this->postJson('/api/invoices/'.$replacementId.'/cancel', ['reason' => 'Synthetic unsupported second correction'])->assertUnprocessable();
-        Reading::create([
+        $this->createMeasuredReading([
             'meter_id' => $new->id, 'reading_date' => '2026-03-01',
             'period_start' => '2026-02-02', 'period_end' => '2026-03-01',
             'previous_reading' => 100, 'current_reading' => 102,
@@ -521,7 +520,7 @@ class FinancialReversalTest extends TestCase
         \App\Models\Tariff::create(['name' => 'February tariff', 'unit_price' => 800,
             'start_date' => '2026-02-01', 'is_active' => true]);
         foreach ([['2026-01-01', '2026-02-01', 0, 10], ['2026-02-01', '2026-03-01', 10, 15]] as [$start, $end, $previous, $current]) {
-            Reading::create(['meter_id' => $meter->id, 'reading_date' => $end, 'period_start' => $start,
+            $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => $end, 'period_start' => $start,
                 'period_end' => $end, 'previous_reading' => $previous, 'current_reading' => $current]);
         }
         $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
