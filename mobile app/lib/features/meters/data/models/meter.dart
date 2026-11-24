@@ -144,18 +144,24 @@ class MeterDraft {
     required this.subscriberId,
     this.pathNumber,
     this.status = 'active',
+    this.initialReading,
+    this.installedAt,
   });
 
   final String uniqueCode;
   final int subscriberId;
   final int? pathNumber;
   final String status;
+  final double? initialReading;
+  final DateTime? installedAt;
 
   Map<String, dynamic> toJson() => {
     'unique_code': uniqueCode.trim(),
     'subscriber_id': subscriberId,
     'path_number': pathNumber,
     'status': status,
+    if (initialReading != null) 'initial_reading': initialReading,
+    if (installedAt != null) 'installed_at': _dateString(installedAt),
   };
 }
 
