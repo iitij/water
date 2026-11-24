@@ -6,13 +6,14 @@
   "teams": {
     "A": {
       "scope": "collections, bank reconciliation, treasury and closing",
-      "branch_observed": "fix/observation-period-v2",
-      "sha_observed": "a5f2cac67e0d6fd16428ed8267e0ffb863f3900f",
-      "status": "IN_PROGRESS",
+      "branch_observed": "fix/team-a-noncash-claim-proof",
+      "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_work_started",
-      "latest_verified_change": "Atomic separate late cash delivery; one commit after b116877; 11 changed files. PR branch contains 138 commits and 177 files ahead of main at snapshot.",
-      "next": "Continue G1A issue 56; independently verify idempotency, rollback, original allocation, already-counted path and treasury reconciliation. No period close or merge yet."
+      "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
+      "next": "Deliver PR #62 to D, hold merge; prepare design for remaining G1A bounced checks, partial/returned transfers and custody obligations, no shared-file implementation until review. Keep financial closing G1B gated.",
+      "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip."
     },
     "B": {
       "scope": "ACC-11 then ACC-09/14 gated",
@@ -21,21 +22,24 @@
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_work_started",
-      "next": "Retest final SHA, MySQL isolated, scheduler, and CI; then submit ACC-09/14 plan. No change to shared ReadingSettings before coordination."
+      "next": "Prepare ACC-14 isolated sequence service, table migration and dedicated tests only, without touching production call sites or shared models/services yet; reserve new paths after checking collisions. ACC-09 first specify exact decimal/minor-unit contract and pure unit tests, no cross-cutting edits. Resolve ACC-11 scheduler evidence with D.",
+      "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending."
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
       "status": "IN_PROGRESS",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_work_started",
-      "evidence": "Owner confirms started; no new team-specific branch or audit report verified at snapshot. ACC-10 first; ACC-12 remains blocked on integration."
+      "evidence": "Team report: static audit ACC-10, 5 risks, zero executed acceptance tests, no code commit.",
+      "next": "Supervisor authorizes ACC-10 phase 1: User.php, UserController.php, UsersResource and directly related user views; dedicated DeletedRecordIntegrityTest; new narrowly scoped migration only after inventory of FK/legacy rows and migration compatibility. No destructive historical changes; shared financial models read-only. Submit 16 acceptance cases and test results; ACC-12/13 remain gated."
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
       "status": "IN_PROGRESS",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_work_started",
-      "evidence": "Owner confirms started; no new independent test report verified. PR-triggered workflow run lookup returned no runs for A and B snapshot SHAs; does not prove no other CI runs."
+      "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
+      "next": "Verify exact SHA 539c4ae for PR #62 against base; reproduce QA-D-001/002 on c877e9f and 01fae90; rerun MySQL concurrency using eligible isolated DB name and confirm no accidental skips; inspect CI evidence and scheduler. No product edits or relaxed assertions; report separately by SHA."
     }
   },
   "original_accounting_tasks": [
@@ -82,21 +86,21 @@
     {
       "id": "ACC-09",
       "owner": "B",
-      "status": "OPEN",
-      "gate": "after ACC-11; file ownership review"
+      "status": "ASSIGNED",
+      "gate": "contract and pure tests only, shared financial services frozen until integration"
     },
     {
       "id": "ACC-10",
       "owner": "C",
       "status": "IN_PROGRESS",
       "next": "read-only audit and file reservation",
-      "evidence": "Owner reports team C started; implementation/QA evidence pending"
+      "evidence": "Team C static audit complete; 5 risks; 0 tests; supervisor authorized phase 1 user paths and narrow migration review"
     },
     {
       "id": "ACC-11",
       "owner": "B",
       "status": "REVIEW",
-      "evidence": "01fae90; earlier focused PHP 3 pass, Flutter 19 pass, full PHP 223 pass/1 fail/6 skip; final timezone change retest, MySQL, CI pending"
+      "evidence": "01fae90 team B focused SQLite/MySQL and Flutter pass; D independent report agrees focused; full suite has failures; scheduler hosting/CI and concurrency pending"
     },
     {
       "id": "ACC-12",
@@ -113,25 +117,25 @@
     {
       "id": "ACC-14",
       "owner": "B",
-      "status": "OPEN",
-      "gate": "after ACC-09 scope review; coordinate document generation"
+      "status": "ASSIGNED",
+      "gate": "isolated sequence service/migration/tests only; no call-site integration until coordination"
     }
   ],
   "supervisor_review": {
-    "decision": "HOLD_MERGE",
+    "decision": "HOLD_MERGE_ROUND_2_AUTHORIZED",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
     "observed_cross_team_file_overlap": [
       "app/Filament/Pages/ReadingSettings.php"
     ],
-    "integration_gate": "Preserve both A's period changes and B's grace validation; review both diffs before merge. C audit read-only in shared files. D independent tests at exact candidate SHA.",
+    "integration_gate": "No main merge until D independent review, baseline failures resolved/classified, concurrency actually executed, shared ReadingSettings changes preserved, and integrated SHA tested. No production DB writes.",
     "source_urls": [
-      "https://github.com/iitij/water/commit/a5f2cac67e0d6fd16428ed8267e0ffb863f3900f",
-      "https://github.com/iitij/water/commit/01fae90660fd88efd69f16f3a384e850b6f9a585",
-      "https://github.com/iitij/water/issues/56",
-      "https://github.com/iitij/water/issues/57"
+      "https://github.com/iitij/water/pull/62#issuecomment-7146065394",
+      "https://github.com/iitij/water/commit/539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+      "https://github.com/iitij/water/commit/01fae90660fd88efd69f16f3a384e850b6f9a585"
     ],
-    "limitations": "No live view of conversations; no new C/D evidence at this snapshot. No new test executed by supervisor."
+    "limitations": "A evidence verified in GitHub; B/C/D results retrieved from team conversations, not independently rerun by supervisor. PR-triggered workflow query empty for 01fae90; full CI status unverified. Team assignment requires user relay.",
+    "round": 2
   }
 }
