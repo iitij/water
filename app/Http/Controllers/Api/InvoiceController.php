@@ -153,6 +153,7 @@ class InvoiceController extends ApiController
 
         $data = $this->decorate($invoice);
         $data['allocation_snapshot'] = app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice);
+        $data['tariff_lines'] = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->orderBy('period_start')->orderBy('id')->get();
         return response()->json(['invoice' => $data]);
     }
 
@@ -461,7 +462,7 @@ class InvoiceController extends ApiController
         if ($invoice->invoice_type === 'meter' && $readings->isNotEmpty()) {
             $invoice->billing_period_start = $readings->min('period_start');
             $invoice->billing_period_end = $readings->max('period_end');
-            $invoice->consumption_fee = (float) $readings->sum('consumption_units') * Tariff::getActivePrice();
+            $invoice->consumption_fee = app(\App\Services\HistoricalTariffService::class)->quote($readings)['total'];
         }
         $older = Invoice::where('subscriber_id', $invoice->subscriber_id)
             ->where('id', '<', $invoice->id)
