@@ -20,6 +20,7 @@ class InvoiceAccounting {
   /// `max(0, total_amount - amount_paid)` — متبقي الفاتورة نفسها فقط
   /// (المتأخرات السابقة تُعرض ولا تُضاف كي لا تتضاعف عند جمع الفواتير).
   static double ownRemaining(InvoiceModel invoice) {
+    if (invoice.isDeleted || invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.cancelled) return 0;
     final value = invoice.totalAmount - invoice.amountPaid;
     return value < 0 ? 0 : value;
   }
@@ -30,6 +31,7 @@ class InvoiceAccounting {
     InvoiceModel invoice,
     List<InvoiceModel> siblings,
   ) {
+    if (invoice.isDeleted || invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.cancelled) return 0;
     if (invoice.serverTrueRemaining != null) {
       // الخادم أدق (يرى كل الفواتير وليس الصفحة الحالية فقط).
       return invoice.serverTrueRemaining!;
@@ -78,26 +80,18 @@ class InvoiceAccounting {
     bool strictOverdueOnNewInvoice = false,
     DateTime? now,
   }) {
+    if (invoice.isDeleted || invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.cancelled) {
+      return invoice.status;
+    }
     final reference = now ?? DateTime.now();
     final billDate = invoice.billDate ?? invoice.createdAt ?? reference;
     final dueDeadline = billDate.add(Duration(days: gracePeriodDays));
-    final isPastGrace = reference.isAfter(dueDeadline);
-    final latest = isLatestInvoice(invoice, siblings);
-
-    if (latest) {
-      final trueRem = trueRemaining(invoice, siblings);
-      final totalDebt = invoice.totalAmount + invoice.previousBalance;
-
-      if (trueRem <= 0) return InvoiceStatus.paid;
-      if (trueRem < totalDebt) return InvoiceStatus.partiallyPaid;
-      if (isPastGrace) return InvoiceStatus.overdue;
-      return InvoiceStatus.issued;
-    }
-
     final remaining = ownRemaining(invoice);
-    if (remaining <= 0) return InvoiceStatus.paid;
+    if (remaining <= 0.004999999) return InvoiceStatus.paid;
     if (invoice.amountPaid > 0) return InvoiceStatus.partiallyPaid;
-    if (strictOverdueOnNewInvoice || isPastGrace) return InvoiceStatus.overdue;
+    if ((strictOverdueOnNewInvoice && !isLatestInvoice(invoice, siblings)) || reference.isAfter(dueDeadline)) {
+      return InvoiceStatus.overdue;
+    }
     return InvoiceStatus.issued;
   }
 
@@ -133,7 +127,7 @@ class InvoiceAccounting {
   ) {
     InvoiceModel? best;
     for (final invoice in invoices) {
-      if (invoice.subscriberId != subscriberId) continue;
+      if (invoice.subscriberId != subscriberId || invoice.isDeleted || ownRemaining(invoice) <= 0) continue;
       if (invoice.status == InvoiceStatus.paid ||
           invoice.status == InvoiceStatus.draft ||
           invoice.status == InvoiceStatus.cancelled) {
