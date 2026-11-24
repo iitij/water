@@ -11,12 +11,32 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class PostedFinancialDocumentTest extends TestCase
 {
     use RefreshDatabase;
+
+    // Only synthetic corruption fixtures temporarily bypass the SQLite update trigger.
+    // Never used in production. MySQL DDL implicitly commits, so do not drop triggers there.
+    private function simulateLegacyLedgerMutation(callable $operation): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            if (app(\App\Services\LedgerProtection::class)->active()) {
+                $this->markTestSkipped('Legacy corruption fixture requires an unprotected isolated database.');
+            }
+            $operation();
+            return;
+        }
+        DB::unprepared('DROP TRIGGER IF EXISTS ledger_reject_update');
+        try {
+            $operation();
+        } finally {
+            app(\App\Services\LedgerProtection::class)->install();
+        }
+    }
 
     private function meter(): Meter
     {
@@ -134,8 +154,8 @@ class PostedFinancialDocumentTest extends TestCase
         $before = Transaction::withTrashed()->orderBy('id')->get()->toArray();
         $this->artisan('ledger:migrate')->assertExitCode(0);
         $this->assertSame($before, Transaction::withTrashed()->orderBy('id')->get()->toArray());
-        \Illuminate\Support\Facades\DB::table('transactions')->where('reference_type', Invoice::class)
-            ->where('reference_id', $invoice->id)->update(['deleted_at' => now()]);
+        $this->simulateLegacyLedgerMutation(fn () => DB::table('transactions')->where('reference_type', Invoice::class)
+            ->where('reference_id', $invoice->id)->update(['deleted_at' => now()]));
         $before = Transaction::withTrashed()->orderBy('id')->get()->toArray();
         $this->artisan('ledger:migrate')->assertExitCode(1);
         $this->assertSame($before, Transaction::withTrashed()->orderBy('id')->get()->toArray());

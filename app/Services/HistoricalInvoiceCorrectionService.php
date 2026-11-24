@@ -189,7 +189,6 @@ final class HistoricalInvoiceCorrectionService
                 'corrected_amount' => $decimal($amount), 'reason' => $reason, 'evidence' => $evidence]);
             $in = $ledger->recordTransaction($subscriber, 'invoice', -($amount / 100),
                 'فاتورة تاريخية مصححة '.$replacement->bill_number, $replacement);
-            $in->forceFill(['retired_meter_id' => $invoice->retired_meter_id, 'retired_meter_code' => $invoice->retired_meter_code])->saveQuietly();
             $allocator->recalculateInvoices($subscriber);
             $after = $minor($subscriber->getAccountBalance());
             if ($after !== $before + $oldAmount - $amount) {

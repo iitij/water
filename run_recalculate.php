@@ -1,10 +1,4 @@
 <?php
-
-use App\Models\Subscriber;
-use App\Models\Invoice;
-use App\Services\PaymentService;
-
-$ps = new PaymentService();
-$ps->recalculateInvoices(Subscriber::find(53));
-
-dump('INVOICES:', Invoice::where('subscriber_id', 53)->get(['id', 'bill_number', 'total_amount', 'amount_paid', 'status'])->toArray());
+// Retired ad hoc mutating script. Use approved application operations or read-only ledger:audit.
+fwrite(STDERR, "Disabled: this legacy script must not mutate application data.\n");
+exit(1);

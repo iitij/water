@@ -22,6 +22,25 @@ class PaymentAllocationHistoryTest extends TestCase
         \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
     }
 
+    // Only synthetic corruption fixtures temporarily bypass the SQLite update trigger.
+    // Never used in production. MySQL DDL implicitly commits, so do not drop triggers there.
+    private function simulateLegacyLedgerMutation(callable $operation): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            if (app(\App\Services\LedgerProtection::class)->active()) {
+                $this->markTestSkipped('Legacy corruption fixture requires an unprotected isolated database.');
+            }
+            $operation();
+            return;
+        }
+        DB::unprepared('DROP TRIGGER IF EXISTS ledger_reject_update');
+        try {
+            $operation();
+        } finally {
+            app(\App\Services\LedgerProtection::class)->install();
+        }
+    }
+
     private function account(): Subscriber
     {
         return Subscriber::create([
@@ -144,7 +163,7 @@ class PaymentAllocationHistoryTest extends TestCase
 
         // Deliberately simulate a legacy accounting discrepancy; the read audit
         // must report it without silently changing the account or replaying money.
-        DB::table('transactions')->where('subscriber_id', $subscriber->id)->where('type', 'payment')->update(['amount' => 750]);
+        $this->simulateLegacyLedgerMutation(fn () => DB::table('transactions')->where('subscriber_id', $subscriber->id)->where('type', 'payment')->update(['amount' => 750]));
         $this->assertFalse($reader->reconcile($subscriber)['matches']);
         $this->assertSame(-25, $reader->reconcile($subscriber)['difference_minor']);
         $this->assertSame($before->id, $this->current($subscriber)->id);
@@ -160,8 +179,10 @@ class PaymentAllocationHistoryTest extends TestCase
         $audit = app(\App\Services\FinancialReconciliationService::class);
         $this->assertTrue($audit->inspect($subscriber)['matches']);
         $this->artisan('ledger:audit', ['--subscriber' => $subscriber->id])->assertExitCode(0);
-        DB::table('transactions')->where('reference_type', Invoice::class)->where('reference_id', $invoice->id)->update(['amount' => -610]);
-        DB::table('transactions')->where('reference_type', \App\Models\Payment::class)->where('reference_id', $payment->id)->update(['amount' => 760.25]);
+        $this->simulateLegacyLedgerMutation(function () use ($invoice, $payment) {
+            DB::table('transactions')->where('reference_type', Invoice::class)->where('reference_id', $invoice->id)->update(['amount' => -610]);
+            DB::table('transactions')->where('reference_type', \App\Models\Payment::class)->where('reference_id', $payment->id)->update(['amount' => 760.25]);
+        });
         $before = DB::table('transactions')->orderBy('id')->get()->toArray();
         $result = $audit->inspect($subscriber);
         $this->assertFalse($result['matches']);
