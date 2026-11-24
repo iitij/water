@@ -13,7 +13,7 @@ class Reading extends Model
 {
     use SoftDeletes;
 
-    protected $attributes = ['period_basis' => 'legacy_calendar', 'is_invoiced' => false];
+    protected $attributes = ['period_basis' => 'observation', 'is_invoiced' => false];
     protected $fillable = [
         'meter_id',
         'reading_date',
@@ -81,6 +81,16 @@ class Reading extends Model
 
     public function save(array $options = [])
     {
+        if (! $this->exists) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
+                $meter = Meter::findOrFail($this->meter_id);
+                Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
+                $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
+                abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
+
+                return parent::save($options);
+            }, 3);
+        }
         if ($this->exists && $this->isDirty(['meter_id', 'reading_date', 'actual_reading_date',
             'previous_reading', 'current_reading', 'period_start', 'period_end', 'period_basis'])) {
             return $this->withLockedObservation(fn () => parent::save($options));
@@ -149,6 +159,11 @@ class Reading extends Model
     /** Meter readings have two decimal places; calculate in hundredths, not floats. */
     private function calculateConsumption(): void
     {
+        foreach (['previous_reading', 'current_reading'] as $field) {
+            if (! preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', (string) ($this->getAttributes()[$field] ?? ''))) {
+                throw ValidationException::withMessages([$field => 'القراءة يجب أن تكون غير سالبة وبمنزلتين عشريتين كحد أقصى.']);
+            }
+        }
         $toHundredths = static function ($value): int {
             if (! preg_match('/^\d{1,10}\.\d{2}$/D', (string) $value)) {
                 throw ValidationException::withMessages(['current_reading' => 'قيمة قراءة العداد خارج النطاق المسموح.']);
@@ -178,22 +193,32 @@ class Reading extends Model
         });
 
         static::creating(function (Reading $reading) {
-            // Auto-fill previous reading from meter's last reading
-            if ($reading->previous_reading === null) {
-                $reading->previous_reading = $reading->meter->getLastReadingValue();
+            if ($reading->period_basis !== 'observation') {
+                throw ValidationException::withMessages(['period_basis' => 'لا يُسمح بإنشاء قراءة جديدة وفق الفترات التقويمية القديمة.']);
             }
-
-            if ($reading->period_basis === 'observation') {
-                $meter = $reading->meter()->firstOrFail();
-                $reading->actual_reading_date ??= $reading->reading_date;
-                app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
-                    $meter, $reading->current_reading, $reading->period_start, $reading->period_end,
-                    $reading->actual_reading_date->toDateString()
-                );
-                if ((float) $reading->previous_reading !== $meter->getLastReadingValue()) {
-                    throw ValidationException::withMessages(['previous_reading' => 'القيمة السابقة لا تطابق آخر قراءة معتمدة.']);
+            $meter = $reading->meter()->firstOrFail();
+            if (! $reading->reading_date) {
+                throw ValidationException::withMessages(['reading_date' => 'يلزم تاريخ تسجيل القراءة.']);
+            }
+            $reading->actual_reading_date ??= $reading->reading_date;
+            $period = app(\App\Services\ReadingService::class)->calculateReadingPeriod(
+                $meter->id, $reading->actual_reading_date->toDateString()
+            );
+            foreach (['period_start', 'period_end'] as $field) {
+                if ($reading->{$field} !== null && CarbonImmutable::parse($reading->{$field})->toDateString() !== $period[$field]) {
+                    throw ValidationException::withMessages([$field => 'الفترة يجب أن تطابق التاريخ الفعلي للقراءتين.']);
                 }
+                $reading->{$field} = $period[$field];
             }
+            $previous = $meter->getLastReadingValue();
+            if ($reading->previous_reading !== null && (float) $reading->previous_reading !== $previous) {
+                throw ValidationException::withMessages(['previous_reading' => 'القيمة السابقة لا تطابق آخر قراءة معتمدة.']);
+            }
+            $reading->previous_reading = $previous;
+            app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
+                $meter, $reading->current_reading, $reading->period_start, $reading->period_end,
+                $reading->actual_reading_date->toDateString()
+            );
 
             // Calculate consumption units
             $reading->calculateConsumption();
