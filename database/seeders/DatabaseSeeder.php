@@ -42,10 +42,8 @@ class DatabaseSeeder extends Seeder
         \App\Models\Square::updateOrCreate(['id' => 1], ['name' => 'المربع الأول (A)']);
         \App\Models\Square::updateOrCreate(['id' => 2], ['name' => 'المربع الثاني (B)']);
 
-        // ─── 5. Restore Archived Subscribers & Readings ───
-        $this->call([
-            ArchivedDataSeeder::class,
-        ]);
+        // Historical records are never inserted by normal database setup.
+        // Development fixtures use SyntheticObservationSeeder explicitly.
 
         // ─── 6. صلاحيات الإصدار 2.0 (الصندوق وسجل التدقيق) ───
         $this->call([
