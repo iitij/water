@@ -100,3 +100,5 @@ jobs:
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: php artisan migrate:fresh --force --no-interaction
       - run: php artisan test --filter='ObservationReadingIntervalTest|ReadingPeriodInvoiceConsistencyTest|HistoricalTariffTest|SingleCurrentMeterTest|FinancialReversalTest'
+      - name: Real parallel observation and accounting writes
+        run: php artisan test tests/Feature/FinancialConcurrencyTest.php
