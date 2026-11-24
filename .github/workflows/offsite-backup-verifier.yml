@@ -1,0 +1,54 @@
+name: Water | Offline backup verification test
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/hosting/verify-offsite-backup.py'
+      - '.github/workflows/offsite-backup-verifier.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test valid, wrong-key, damaged, and inner-checksum-invalid backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          verifier="$PWD/scripts/hosting/verify-offsite-backup.py"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          cd "$tmp"
+          mkdir payload gnupg
+          chmod 700 gnupg
+          export GNUPGHOME="$tmp/gnupg"
+          openssl rand -hex 32 > key
+          openssl rand -hex 32 > wrong-key
+          cd payload
+          for name in database.sql source.tar application.env uploads.tar public-web.tar; do printf 'synthetic test content %s\n' "$name" > "$name"; done
+          printf 'format=water-backup-v1\nsource_commit=1234567890123456789012345678901234567890\ncreated_utc=2026-11-24T00:00:00Z\ndatabase=alweufti_water\ntables=32\n' > manifest.txt
+          sha256sum database.sql source.tar application.env uploads.tar public-web.tar manifest.txt > SHA256SUMS
+          cd ..
+          archive=water-20261124T000000Z-abcdef.tar.gz.gpg
+          build() {
+            tar -czf archive.tar.gz -C payload .
+            gpg --batch --yes --pinentry-mode loopback --passphrase-file key --cipher-algo AES256 --compress-algo none --symmetric --output "$archive" archive.tar.gz
+            sha256sum "$archive" > "$archive.sha256"
+          }
+          build
+          python3 "$verifier" "$archive" key
+          if python3 "$verifier" "$archive" wrong-key; then exit 1; fi
+          echo 'WRONG_KEY_REJECTED: PASSED'
+          printf 'damage' >> "$archive"
+          if python3 "$verifier" "$archive" key; then exit 1; fi
+          echo 'DAMAGED_ARCHIVE_REJECTED: PASSED'
+          printf 'modified content' >> payload/database.sql
+          build
+          if python3 "$verifier" "$archive" key; then exit 1; fi
+          echo 'INNER_CHECKSUM_MISMATCH_REJECTED: PASSED'
