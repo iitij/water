@@ -589,10 +589,12 @@ class PaymentService
                 $claim->invoice_id ? (int) $claim->invoice_id : null, $claim->payment_method,
                 $claim->instrument_reference, $claim->notes, null, (int) $claim->submitted_by,
                 $line->booked_on, null, $claim->sync_uuid, null, false, null, true);
-            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence);
+            // Link the decision before bank validation so the bank audit can verify
+            // the complete chain. The outer transaction rolls it back on any failure.
             $decision = ['status' => 'cleared', 'payment_id' => $payment->id, 'decided_by' => $actor->id,
                 'decision_evidence' => trim($evidence), 'decided_at' => now(), 'updated_at' => now()];
             DB::table('noncash_collection_claims')->where('id', $id)->update($decision);
+            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence);
             app(AuditLogger::class)->recordRequired('noncash_claim.cleared', [
                 'entity_type' => 'noncash_collection_claim', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'after' => $decision + ['bank_collection_id' => $result['collection']['id']],

@@ -73,6 +73,40 @@ final class NonCashClaimTest extends TestCase
         $this->assertSame(50.25, $subscriber->getAccountBalance());
     }
 
+    public function test_bank_proof_detects_inconsistent_claim_decision_and_replay(): void
+    {
+        [$issuer, $reviewer, $subscriber, $data, $clear] = $this->fixture();
+        $id = $this->postJson('/api/noncash-claims', $data)->assertCreated()->json('claim.id');
+        $url = '/api/noncash-claims/'.$id.'/clear';
+        $this->actingAs($reviewer, 'sanctum')->postJson($url, $clear)->assertOk();
+        $posting = DB::table('treasury_postings')->first();
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $this->assertTrue($bank->checkCollectionPosting($posting));
+        $claim = DB::table('noncash_collection_claims')->find($id);
+        foreach ([
+            'payment_id' => null,
+            'sync_uuid' => (string) Str::uuid(),
+            'amount_minor' => 5026,
+            'instrument_reference' => 'DIFFERENT-INSTRUMENT',
+            'instrument_on' => today()->addDay()->toDateString(),
+            'decided_by' => $issuer->id,
+            'decided_at' => null,
+            'status' => 'pending',
+            'decision_evidence' => 'Different decision evidence',
+        ] as $field => $value) {
+            DB::table('noncash_collection_claims')->where('id', $id)->update([$field => $value]);
+            $this->assertFalse($bank->checkCollectionPosting($posting), $field);
+            DB::table('noncash_collection_claims')->where('id', $id)->update([$field => $claim->$field]);
+            $this->assertTrue($bank->checkCollectionPosting($posting), $field);
+        }
+        DB::table('noncash_collection_claims')->where('id', $id)->update(['decision_evidence' => 'Different decision evidence']);
+        $this->postJson($url, $clear)->assertStatus(409);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+    }
+
     public function test_rejection_and_failed_clearance_leave_no_receipt_or_credit(): void
     {
         [$issuer, $reviewer, $subscriber, $data, $clear] = $this->fixture();
