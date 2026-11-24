@@ -45,14 +45,13 @@ class CashSessionService
         ?int $squareId = null,
         ?string $notes = null,
     ): CashSession {
-        $existing = $this->openSessionFor($user);
-        if ($existing) {
-            throw ValidationException::withMessages([
-                'cash_session' => ['لديك صندوق مفتوح بالفعل. أغلقه قبل فتح صندوق جديد.'],
-            ]);
-        }
-
         $session = DB::transaction(function () use ($user, $openingAmount, $squareId, $notes) {
+            User::query()->lockForUpdate()->findOrFail($user->id);
+            if ($this->openSessionFor($user)) {
+                throw ValidationException::withMessages([
+                    'cash_session' => ['لديك صندوق مفتوح بالفعل. أغلقه قبل فتح صندوق جديد.'],
+                ]);
+            }
             $session = CashSession::create([
                 'user_id' => $user->id,
                 'square_id' => $squareId,
@@ -96,7 +95,11 @@ class CashSessionService
         }
 
         return DB::transaction(function () use ($session, $countedAmount, $notes) {
+            User::query()->lockForUpdate()->findOrFail($session->user_id);
             $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
+            if (! $session->isOpen()) {
+                throw ValidationException::withMessages(['state' => ['لا يمكن إغلاق صندوق غير مفتوح.']]);
+            }
             $expected = $this->expectedAmount($session);
             $counted = round($countedAmount, 2);
 

@@ -43,7 +43,6 @@ class SingleMeterService
     public function update(Meter $meter, array $data): Meter
     {
         return DB::transaction(function () use ($meter, $data): Meter {
-            $meter = Meter::query()->lockForUpdate()->findOrFail($meter->getKey());
             $oldSubscriberId = (int) $meter->subscriber_id;
             $newSubscriberId = (int) ($data['subscriber_id'] ?? $meter->subscriber_id);
 
@@ -55,6 +54,10 @@ class SingleMeterService
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
+            $meter = Meter::query()->lockForUpdate()->findOrFail($meter->getKey());
+            if ((int) $meter->subscriber_id !== $oldSubscriberId) {
+                abort(409, 'تغير مالك العداد؛ حدّث البيانات وأعد المحاولة.');
+            }
             $destination = $subscribers->get($newSubscriberId);
             if (! $destination) {
                 throw ValidationException::withMessages([
@@ -116,8 +119,9 @@ class SingleMeterService
     public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
     {
         return DB::transaction(function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($oldMeter->subscriber_id);
             $old = Meter::query()->lockForUpdate()->findOrFail($oldMeter->getKey());
-            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($old->subscriber_id);
+            abort_unless((int) $old->subscriber_id === (int) $subscriber->id, 409, 'تغير مالك العداد؛ حدّث البيانات.');
 
             if (! $old->isCurrent()) {
                 throw ValidationException::withMessages([
