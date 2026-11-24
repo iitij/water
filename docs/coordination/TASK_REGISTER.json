@@ -10,10 +10,11 @@
       "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
-      "activity_report": "owner_reports_work_started",
+      "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Deliver PR #62 to D, hold merge; prepare design for remaining G1A bounced checks, partial/returned transfers and custody obligations, no shared-file implementation until review. Keep financial closing G1B gated.",
-      "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip."
+      "next": "Publish A-G1A-01 design with state machine, accounting entries, invariants, exact changed paths and acceptance tests in own branch; conditional authorization for isolated new files/tests for bounced checks only, no production call sites, no PaymentService/shared writes before supervisor checks design and D reviews PR62. Other G1A designs and G1B remain gated.",
+      "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
+      "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full."
     },
     "B": {
       "scope": "ACC-11 then ACC-09/14 gated",
@@ -21,25 +22,42 @@
       "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585",
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
-      "activity_report": "owner_reports_work_started",
-      "next": "Prepare ACC-14 isolated sequence service, table migration and dedicated tests only, without touching production call sites or shared models/services yet; reserve new paths after checking collisions. ACC-09 first specify exact decimal/minor-unit contract and pure unit tests, no cross-cutting edits. Resolve ACC-11 scheduler evidence with D.",
-      "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending."
+      "activity_report": "owner_reports_round_two_finished",
+      "next": "ACC-09 authorize implementation of pure PHP/Dart exact-money primitives and dedicated shared-vector tests only; no shared call sites or API changes. ACC-14 inventory all number writers, transaction/lock order, unique constraints, historical high-water marks, API/offline/import/correction paths; propose single atomic cutover and no mixed writers. Coordinate scheduler acceptance with D; no Namecheap writes.",
+      "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
+      "deliverables": [
+        {
+          "task": "ACC-09",
+          "branch": "fix/team-b-acc-09-isolated",
+          "sha": "4a97b571ce981f1a4eb93cee5e8cbedc20ab0ebe",
+          "evidence": "Repository contract document: PHP 4 pass/105 assertions; Dart CLI 85 checks, not full Flutter. No product integration."
+        },
+        {
+          "task": "ACC-14",
+          "branch": "fix/team-b-acc-14-isolated",
+          "sha": "7786d843184364d4543bcaf667259aeacf412888",
+          "evidence": "Repository report: MySQL 6 pass/39 assertions; SQLite 5 pass/1 skip/27 assertions; repeated 240 reservations across 6 concurrency runs. No product call sites."
+        }
+      ]
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
-      "activity_report": "owner_reports_work_started",
-      "evidence": "Team report: static audit ACC-10, 5 risks, zero executed acceptance tests, no code commit.",
-      "next": "Supervisor authorizes ACC-10 phase 1: User.php, UserController.php, UsersResource and directly related user views; dedicated DeletedRecordIntegrityTest; new narrowly scoped migration only after inventory of FK/legacy rows and migration compatibility. No destructive historical changes; shared financial models read-only. Submit 16 acceptance cases and test results; ACC-12/13 remain gated."
+      "activity_report": "owner_reports_round_two_finished",
+      "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
+      "next": "Submit exact final acceptance evidence for bcc63f2. Recheck MySQL restricted TRIGGER privileges and migration recovery after partial DDL, SQLite INSERT OR REPLACE and direct SQL bypass, user deactivation vs concurrent token/session and role changes, protect actor authorization, no schema/production writes. Fix any proved gaps on own branch only. ACC-12/13 read-only audit against a5f2cac/539c4ae; no duplicate period changes.",
+      "branch": "fix/accounting-acc-10",
+      "sha": "bcc63f2ef4078b8d00eef1a2df602632c7f5c65e"
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
-      "activity_report": "owner_reports_work_started",
+      "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Verify exact SHA 539c4ae for PR #62 against base; reproduce QA-D-001/002 on c877e9f and 01fae90; rerun MySQL concurrency using eligible isolated DB name and confirm no accidental skips; inspect CI evidence and scheduler. No product edits or relaxed assertions; report separately by SHA."
+      "next": "Publish final round-two report on exact SHAs (MySQL concurrency counts, PR62 review, CI, scheduler). Independently review ACC-10 bcc63f2 and ACC-14 7786d84 and ACC-09 4a97b57, prioritize user identity deletion bypass/host privileges and sequence all-writer cutover, distinguish reference vectors from real product behavior. Reproduce failures before any correction. No product edits.",
+      "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered."
     }
   },
   "original_accounting_tasks": [
@@ -86,15 +104,16 @@
     {
       "id": "ACC-09",
       "owner": "B",
-      "status": "ASSIGNED",
-      "gate": "contract and pure tests only, shared financial services frozen until integration"
+      "status": "IN_PROGRESS",
+      "gate": "Pure primitives and tests authorized; shared integration gated",
+      "evidence": "4a97b57 verified contract + tests; integration pending"
     },
     {
       "id": "ACC-10",
       "owner": "C",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW",
       "next": "read-only audit and file reservation",
-      "evidence": "Team C static audit complete; 5 risks; 0 tests; supervisor authorized phase 1 user paths and narrow migration review"
+      "evidence": "bcc63f2 verified phase-one code; interim SQLite 11 pass; final acceptance evidence and restricted-host DB guard review pending"
     },
     {
       "id": "ACC-11",
@@ -117,25 +136,27 @@
     {
       "id": "ACC-14",
       "owner": "B",
-      "status": "ASSIGNED",
-      "gate": "isolated sequence service/migration/tests only; no call-site integration until coordination"
+      "status": "IN_PROGRESS",
+      "gate": "No mixed number writers; all-path inventory and single atomic cutover after independent review",
+      "evidence": "7786d84 isolated sequence; report MySQL 6 pass, SQLite 5 pass/1 skip, 240 concurrent reservations"
     }
   ],
   "supervisor_review": {
-    "decision": "HOLD_MERGE_ROUND_2_AUTHORIZED",
+    "decision": "HOLD_MERGE_ROUND_3_SCOPED_AUTHORIZATION",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
     "observed_cross_team_file_overlap": [
       "app/Filament/Pages/ReadingSettings.php"
     ],
-    "integration_gate": "No main merge until D independent review, baseline failures resolved/classified, concurrency actually executed, shared ReadingSettings changes preserved, and integrated SHA tested. No production DB writes.",
+    "integration_gate": "Hold main; independent D acceptance, baseline QA failures classified/fixed, MySQL concurrency evidence, shared ReadingSettings preserved, ACC10 trigger privileges and migration recovery, ACC14 one writer cutover, ACC09 exact product integration. All on exact integrated SHA with no live DB changes.",
     "source_urls": [
-      "https://github.com/iitij/water/pull/62#issuecomment-7146065394",
-      "https://github.com/iitij/water/commit/539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
-      "https://github.com/iitij/water/commit/01fae90660fd88efd69f16f3a384e850b6f9a585"
+      "https://github.com/iitij/water/pull/62",
+      "https://github.com/iitij/water/commit/4a97b571ce981f1a4eb93cee5e8cbedc20ab0ebe",
+      "https://github.com/iitij/water/commit/7786d843184364d4543bcaf667259aeacf412888",
+      "https://github.com/iitij/water/commit/bcc63f2ef4078b8d00eef1a2df602632c7f5c65e"
     ],
-    "limitations": "A evidence verified in GitHub; B/C/D results retrieved from team conversations, not independently rerun by supervisor. PR-triggered workflow query empty for 01fae90; full CI status unverified. Team assignment requires user relay.",
-    "round": 2
+    "limitations": "GitHub branch heads and B documents checked; team A design summary and C/D interim reports retrieved, C/D final reports not accessible. No supervisor test rerun. Do not infer completion from owner report alone.",
+    "round": 3
   }
 }
