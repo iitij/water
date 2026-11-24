@@ -162,6 +162,7 @@ final class TreasuryRegisterService
     {
         $this->authorize($actor);
         return DB::transaction(function () use ($accountId): array {
+            $this->lockRegister();
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
             abort_unless($account, 404);
             $rows = DB::table('treasury_postings')->where('treasury_account_id', $accountId)
@@ -179,6 +180,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if (in_array($row->kind, ['internal_transfer_out', 'internal_transfer_in'], true)) {
+                    if (! app(TreasuryTransferService::class)->validPosting($row)) {
+                        $issues[] = ['code' => 'transfer_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->treasury_transfer_id || $row->treasury_transfer_receipt_id) {
+                    $issues[] = ['code' => 'unexpected_transfer_source', 'posting_id' => $row->id];
+                }
                 if ($row->kind === 'collector_funding') {
                     $funding = $row->cash_session_funding_id ? DB::table('cash_session_fundings')->find($row->cash_session_funding_id) : null;
                     $session = $funding ? CashSession::find($funding->cash_session_id) : null;
@@ -223,12 +233,15 @@ final class TreasuryRegisterService
             $unpostedFunding = DB::table('cash_session_fundings')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('cash_session_funding_id')->select('cash_session_funding_id'))->count();
             if ($unpostedFunding) $issues[] = ['code' => 'unposted_funding', 'count' => $unpostedFunding];
+            $transfers = app(TreasuryTransferService::class)->inspectAccount($accountId);
+            $issues = array_merge($issues, $transfers['issues']);
             return [
                 'account' => (array) $account,
                 'incoming_minor' => $incoming, 'outgoing_minor' => $outgoing,
                 'provisional_recorded_balance_minor' => $balance,
                 'certified_balance' => false,
-                'coverage' => 'opening_handover_refund_funding_only',
+                'coverage' => 'opening_handover_refund_funding_internal_transfers',
+                'internal_transfers' => $transfers,
                 'unposted_funding_count' => $unpostedFunding,
                 'channel_unposted_handover_count' => $unpostedHandover,
                 'channel_unposted_refund_count' => $unpostedRefund,

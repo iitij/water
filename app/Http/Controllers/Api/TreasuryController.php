@@ -53,6 +53,35 @@ final class TreasuryController extends ApiController
         return response()->json(['cash_session' => $sessions->summary($session), 'certified_balance' => false]);
     }
 
+    public function dispatchTransfer(Request $request, \App\Services\TreasuryTransferService $service)
+    {
+        $data = $request->validate([
+            'from_account_id' => ['required', 'integer', 'min:1'],
+            'to_account_id' => ['required', 'integer', 'min:1', 'different:from_account_id'],
+            'amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
+            'reference' => ['required', 'string', 'max:150'],
+            'dispatched_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        return response()->json(['transfer' => $service->dispatch($request->user(), $data)]);
+    }
+
+    public function receiveTransfer(Request $request, int $id, \App\Services\TreasuryTransferService $service)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
+            'reference' => ['required', 'string', 'max:150'],
+            'received_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+        ]);
+        return response()->json(['transfer' => $service->receive($request->user(), $id, $data)]);
+    }
+
+    public function transfers(Request $request, \App\Services\TreasuryTransferService $service)
+    {
+        return response()->json($service->overview($request->user()));
+    }
+
     public function post(Request $request, int $id, TreasuryRegisterService $service)
     {
         $service->authorize($request->user());

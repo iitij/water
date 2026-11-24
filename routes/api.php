@@ -208,6 +208,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cash-sessions/{id}/correct-duplicate', [CashSessionController::class, 'correctDuplicate'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/handovers', [CashSessionController::class, 'recordHandover'])->whereNumber('id');
+    Route::get('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'transfers']);
+    Route::post('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'dispatchTransfer']);
+    Route::post('/treasury/transfers/{id}/receive', [\App\Http\Controllers\Api\TreasuryController::class, 'receiveTransfer'])->whereNumber('id');
     Route::get('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'index']);
     Route::post('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'store']);
     Route::get('/treasury/accounts/{id}', [\App\Http\Controllers\Api\TreasuryController::class, 'show'])->whereNumber('id');
