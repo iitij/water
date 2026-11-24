@@ -266,6 +266,19 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     return filtered;
   }
 
+  // A pending reading can be the starting value of another queued reading.
+  // Refuse silent edits/deletes rather than corrupt the local chain.
+  Future<void> _assertNoCachedSuccessor(Reading reading) async {
+    final latest = await _database.getLatestCachedReading(reading.meterId);
+    if (latest == null) return;
+    final date = _parseDate(latest['actual_reading_date'] ?? latest['reading_date']);
+    if (date == null) return;
+    final original = reading.actualReadingDate ?? reading.readingDate;
+    if (_dateOnlyValue(date).isAfter(_dateOnlyValue(original))) {
+      throw StateError('لا يمكن تعديل أو حذف قراءة أصبحت أساساً لقراءة لاحقة. زامن القراءات أولاً.');
+    }
+  }
+
   @override
   Future<Reading> updateReading(
     Reading reading,
@@ -278,13 +291,24 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     if (newCurrentReading < reading.previousReading) {
       throw StateError('القراءة الحالية لا يمكن أن تكون أقل من القراءة السابقة.');
     }
+    await _assertNoCachedSuccessor(reading);
     final effectiveDate = newReadingDate ?? reading.readingDate;
     final effectiveActualDate = newReadingDate ?? reading.actualReadingDate ?? reading.readingDate;
+    // Newly queued readings use observation boundaries. Server-backed
+    // readings retain their original basis; the server validates/recomputes.
+    final effectiveEnd = reading.id == null
+        ? _dateOnlyValue(effectiveActualDate)
+        : reading.periodEnd;
+    if (reading.id == null &&
+        (!effectiveEnd.isAfter(_dateOnlyValue(reading.periodStart)) ||
+         effectiveEnd.isAfter(_dateOnlyValue(DateTime.now())))) {
+      throw StateError('تاريخ القراءة يجب أن يلي بداية الفترة وألا يقع في المستقبل.');
+    }
     final payload = {
       'reading_date': _dateOnly(effectiveDate),
       'actual_reading_date': _dateOnly(effectiveActualDate),
       'period_start': _dateOnly(reading.periodStart),
-      'period_end': _dateOnly(reading.periodEnd),
+      'period_end': _dateOnly(effectiveEnd),
       'previous_reading': reading.previousReading,
       'current_reading': newCurrentReading,
       'consumption_units': newCurrentReading - reading.previousReading,
@@ -325,7 +349,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         readingDate: effectiveDate,
         actualReadingDate: effectiveActualDate,
         periodStart: reading.periodStart,
-        periodEnd: reading.periodEnd,
+        periodEnd: effectiveEnd,
         previousReading: reading.previousReading,
         currentReading: newCurrentReading,
         consumptionUnits: newCurrentReading - reading.previousReading,
@@ -363,6 +387,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
   Future<void> deleteReading(Reading reading) async {
     if (reading.isInvoiced) throw StateError('لا يمكن حذف قراءة مفوترة.');
     if (reading.id == null) {
+      await _assertNoCachedSuccessor(reading);
       final localId = reading.localId;
       if (localId != null) await _database.deleteCachedReadingByLocalId(localId);
       return;
@@ -383,6 +408,10 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     var skipped = locallySkipped;
     var failed = 0;
 
+    // Preflight the entire local selection before deleting any pending row.
+    for (final reading in localReadings) {
+      await _assertNoCachedSuccessor(reading);
+    }
     for (final reading in localReadings) {
       if (reading.localId != null) {
         await _database.deleteCachedReadingByLocalId(reading.localId!);
