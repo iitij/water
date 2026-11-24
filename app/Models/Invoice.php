@@ -111,6 +111,11 @@ class Invoice extends Model
         return $this->belongsTo(Meter::class);
     }
 
+    public function tariffLines(): HasMany
+    {
+        return $this->hasMany(InvoiceTariffLine::class)->orderBy('period_start')->orderBy('id');
+    }
+
     public function readings(): HasMany
     {
         return $this->hasMany(Reading::class);
