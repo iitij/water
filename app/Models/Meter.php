@@ -44,8 +44,8 @@ class Meter extends Model
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
             $fresh = self::query()->lockForUpdate()->findOrFail($this->id);
-            if ($fresh->getRawOriginal('installed_at') != $this->getRawOriginal('installed_at')
-                || $fresh->getRawOriginal('initial_reading') != $this->getRawOriginal('initial_reading')) {
+            if ($fresh->getOriginal('installed_at') != $this->getOriginal('installed_at')
+                || $fresh->getOriginal('initial_reading') != $this->getOriginal('initial_reading')) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['installed_at' => 'تغيرت بيانات العداد؛ حدّث البيانات أولاً.']);
             }
             if ($fresh->readings()->withTrashed()->exists()) {
