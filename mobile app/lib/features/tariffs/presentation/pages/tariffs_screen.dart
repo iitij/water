@@ -424,7 +424,7 @@ class _ActivePriceHeader extends StatelessWidget {
           ),
           Text(
             state.activePrice == null
-                ? '—'
+                ? 'لا توجد تعرفة حالية مؤكدة'
                 : CurrencyFormatter.withLabel(state.activePrice),
             style: const TextStyle(
               fontSize: 14,
