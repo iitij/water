@@ -46,8 +46,8 @@ final class NonCashClaimService
             'instrument_reference' => $reference, 'instrument_on' => $date, 'notes' => $data['notes'] ?? null,
         ];
         return DB::transaction(function () use ($record, $actor): array {
-            Subscriber::query()->lockForUpdate()->findOrFail($record['subscriber_id']);
             $this->lock();
+            Subscriber::query()->lockForUpdate()->findOrFail($record['subscriber_id']);
             $existing = DB::table('noncash_collection_claims')->where('sync_uuid', $record['sync_uuid'])->lockForUpdate()->first();
             if ($existing) {
                 foreach ($record as $field => $value) {

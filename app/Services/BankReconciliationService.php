@@ -522,9 +522,10 @@ final class BankReconciliationService
         }
         $candidate = Payment::findOrFail($paymentId);
         return DB::transaction(function () use ($actor, $id, $lineId, $paymentId, $reference, $evidence, $candidate): array {
-            // Subscriber -> issuance -> payment -> statement/account, consistent with collection.
-            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
+            // Issuance -> subscriber -> payment -> statement/account. The shared
+            // fence serializes these writers before any business-resource lock.
             $this->lock();
+            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($paymentId);
             abort_unless((int) $payment->subscriber_id === (int) $candidate->subscriber_id, 409);
             $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();

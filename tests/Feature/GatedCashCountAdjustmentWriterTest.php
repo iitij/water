@@ -970,4 +970,43 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse(DB::transaction(fn () => $service->checkPayoutPosting($wrong)));
         $this->assertSame(-5, (int) DB::table('treasury_postings')->where('kind', 'held_cash_payout')->sole()->amount_minor);
     }
+    /** Deterministic SQL-order check, not a concurrent execution proof. */
+    private function assertIssuancePrecedesSubscriber(callable $operation): mixed
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        try {
+            $result = $operation();
+            $queries = array_map(static fn ($entry) => strtolower(str_replace(['"', chr(96)], '', $entry['query'])), DB::getQueryLog());
+            $issuance = $subscriber = null;
+            foreach ($queries as $index => $query) {
+                if (! str_starts_with(ltrim($query), 'select')) continue;
+                if ($issuance === null && preg_match('/\bfrom\s+payment_issuance_locks\b/', $query)) $issuance = $index;
+                if ($subscriber === null && preg_match('/\bfrom\s+subscribers\b/', $query)) $subscriber = $index;
+            }
+            $this->assertNotNull($issuance, 'Missing issuance lock read.');
+            $this->assertNotNull($subscriber, 'Missing subscriber read.');
+            $this->assertLessThan($subscriber, $issuance, 'Issuance must precede subscriber.');
+            return $result;
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
+    }
+
+    public function test_collection_and_cash_refund_acquire_issuance_before_subscriber(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $receipt = $this->assertIssuancePrecedesSubscriber(fn () =>
+            app(PaymentService::class)->collectPayment($subscriber, '200.00'));
+        $refund = $this->assertIssuancePrecedesSubscriber(fn () =>
+            app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '40.00',
+                'QA-ISSUANCE-ORDER-REFUND', 'treasury_cash', '2026-11-25',
+                'Synthetic refund of excess subscriber credit', 'Independent evidence of actual cash disbursement'));
+        $this->assertSame((int) $receipt->id, (int) $refund->payment_id);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(4000, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->unpostedCashRefundMinor()));
+    }
 }

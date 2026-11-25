@@ -51,8 +51,8 @@ final class LateReceiptReviewService
             'notes' => $data['notes'] ?? null,
         ];
         return DB::transaction(function () use ($claim, $collector): array {
-            Subscriber::query()->lockForUpdate()->findOrFail($claim['subscriber_id']);
             $this->lockIssuance();
+            Subscriber::query()->lockForUpdate()->findOrFail($claim['subscriber_id']);
             $existing = DB::table('late_receipt_reviews')->where('sync_uuid', $claim['sync_uuid'])->lockForUpdate()->first();
             if ($existing) {
                 foreach ($claim as $field => $value) {
@@ -147,8 +147,8 @@ final class LateReceiptReviewService
             throw ValidationException::withMessages(['evidence' => 'يلزم دليل مستقل ومرجع تسوية صالح.']);
         }
         return DB::transaction(function () use ($id, $actor, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination): array {
-            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $this->lockIssuance();
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
             $status = $approve ? 'approved' : 'rejected';
@@ -222,8 +222,8 @@ final class LateReceiptReviewService
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($id, $actor, $accountId, $receivedOn, $reference, $evidence, $candidate): array {
-            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $this->lockIssuance();
+            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $review->subscriber_id === (int) $candidate->subscriber_id, 409);
             abort_if((int) $review->collector_id === (int) $actor->id, 403);

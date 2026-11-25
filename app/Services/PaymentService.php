@@ -479,14 +479,13 @@ class PaymentService
         }
         $amount = $money->decimal();
         return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim) {
-            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
-
-            // Different subscriber/collector locks cannot arbitrate a global UUID
-            // or a shared monthly receipt sequence. Hold this row through posting.
+            // Acquire the shared issuance fence before subscriber/business locks.
+            // Scope-gated writers already hold it; nested acquisition is reentrant.
             $issuer = DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first();
             if (! $issuer) {
                 throw new \LogicException('Payment issuance lock is missing.');
             }
+            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
             $review = $syncUuid ? DB::table('late_receipt_reviews')->where('sync_uuid', $syncUuid)->lockForUpdate()->first() : null;
             if ($lateReviewId !== null) {
@@ -623,10 +622,10 @@ class PaymentService
         $candidate = DB::table('noncash_collection_claims')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reference, $evidence, $candidate): array {
-            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $claim = DB::table('noncash_collection_claims')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $claim->subscriber_id === (int) $subscriber->id, 409);
             abort_if((int) $claim->submitted_by === (int) $actor->id, 403, 'لا يجوز اعتماد طلبك بنفسك.');
@@ -680,10 +679,10 @@ class PaymentService
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $candidate): array {
-            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }
+            $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $review->subscriber_id === (int) $subscriber->id, 409);
             abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
