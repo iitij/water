@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted CI; fix confirmed failures only. Wire Filament single issue/cancel with stable form UUID, then inventory and wire batch/readings-driven issue; protect direct model mutation. Continue reserve discharge, general liquidity, Flutter inventory and integrated release checks.",
+  "next": "Verify exact targeted CI; fix confirmed failures only. Wire confirmed reading-driven and batch issuance callers with stable per-invoice identity, then protect direct model writers and remaining financial source paths; reserve discharge, liquidity, Flutter inventory and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-invoice-service-fence",
-      "commit": "ec8b04491c7b7394ba472191ff23df071bd98744",
-      "run": 45724729229,
-      "sqlite": "1 test, 64 assertions",
-      "mysql": "1 test, 64 assertions",
-      "scope": "Private issue subscriber/meter and cancellation invoice/actor scopes in GatedInvoiceTransferWriter; protect InvoiceService and InvoiceCancellationService under issuance lock. Default-off candidate switch, registered original or reversal blocks direct cancellation even when disabled. Targeted test checks closed period, direct and idle writer rejection, exact invoice debt and reversal, original ledger unchanged, reading released, replay and unchanged cash/held reserve."
+      "branch": "release/prospective-invoice-api",
+      "commit": "9b3985b999c4b493a317fc893fc0dc33bc3c1891",
+      "run": 45725263074,
+      "sqlite": "1 test, 70 assertions",
+      "mysql": "1 test, 70 assertions",
+      "scope": "Shared ProspectiveInvoiceEntry with policy authorization, stable operation UUID, current meter guard, staged gate and conflict handling. Actual POST /api/invoices, /api/invoices/generate-meter and /api/invoices/{id}/cancel wired. Targeted test verifies missing UUID, closed period, same issuance replay across endpoints, conflicting notes/reason, exact opposite ledger legs, unchanged cash and registered cancel rejection with switch off."
     }
   },
   "round146": {
@@ -1667,12 +1667,42 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_invoice_api": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "ec8b04491c7b7394ba472191ff23df071bd98744",
     "branch": "release/prospective-invoice-api",
-    "source": "a082c098bce5d8f9e373c1f77b2fa3d97431526e",
+    "source": "9b3985b999c4b493a317fc893fc0dc33bc3c1891",
     "scope": "Shared ProspectiveInvoiceEntry with policy authorization, stable operation UUID, current meter guard, staged gate and conflict handling. Actual POST /api/invoices, /api/invoices/generate-meter and /api/invoices/{id}/cancel wired. Targeted test verifies missing UUID, closed period, same issuance replay across endpoints, conflicting notes/reason, exact opposite ledger legs, unchanged cash and registered cancel rejection with switch off.",
-    "limits": "CI pending. Filament CreateInvoice, generate_invoice header action and cancel_invoice row action inventoried but not wired; batch/readings-driven callers and direct model/other mutation paths not fully inventoried. Existing mobile API callers require stable UUID rollout. No production activation or main merge; no historical repairs.",
-    "next": "Verify exact targeted CI; fix confirmed failures only. Wire Filament single issue/cancel with stable form UUID, then inventory and wire batch/readings-driven issue; protect direct model mutation. Continue reserve discharge, general liquidity, Flutter inventory and integrated release checks."
+    "limits": "Exact source, raw logs and lockfile verified. Super_admin and unprivileged collector cases tested; legacy admin/permission alias compatibility still to review before production; no historical correction or activation.",
+    "next": "Wire individual Filament page and actions; then reading-driven and bulk issuance.",
+    "initial_source": "a082c098bce5d8f9e373c1f77b2fa3d97431526e",
+    "initial_run": 45724911334,
+    "initial_failure": "Both engines returned 403 instead of 422 because the shared entry added policy permission for the explicitly authorized super_admin role. Aligned with existing writer role contract and added unauthorized collector tests; no grant to collector.",
+    "run": 45725263074,
+    "jobs": [
+      {
+        "id": 139593401163,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 70,
+        "exit": 0
+      },
+      {
+        "id": 139593400562,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 70,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_invoice_filament": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "9b3985b999c4b493a317fc893fc0dc33bc3c1891",
+    "branch": "release/prospective-invoice-filament",
+    "source": "210f0bd5807097a1f0f5a60d8b5279a5f6c31f84",
+    "scope": "Shared ProspectiveInvoiceAction with UUID hidden form field, explicit web policy, conflict as validation error; standard CreateInvoice, generate_invoice table header and cancel_invoice row action wired. Targeted UI/API test checks failed closed-period create retains identity, replay via header action, closed-period cancellation modal then success, API cancellation replay and exact financial legs without cash change.",
+    "limits": "CI pending. ReadingController bulkInvoice and reading-driven issue at line 512, ReadingResource bulk issuance and ListReadings header issuance are confirmed remaining callsites; direct model writers, legacy permission aliases, client UUID rollout and general reserve discharge/liquidity still open. No production activation, main merge or historical repair.",
+    "next": "Verify exact targeted CI; fix confirmed failures only. Wire confirmed reading-driven and batch issuance callers with stable per-invoice identity, then protect direct model writers and remaining financial source paths; reserve discharge, liquidity, Flutter inventory and integrated release checks."
   }
 }
