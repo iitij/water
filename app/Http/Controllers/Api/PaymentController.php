@@ -117,7 +117,10 @@ class PaymentController extends ApiController
             }
         }
 
-        $payment = $paymentService->collectPayment(
+        $entry = app(\App\Services\ProspectiveCashReceiptEntry::class);
+        $payment = $entry->enabled()
+            ? $entry->collect($request->user(), $subscriber, $data)
+            : $paymentService->collectPayment(
             $subscriber,
             $data['amount'],
             $data['invoice_id'] ?? null,
