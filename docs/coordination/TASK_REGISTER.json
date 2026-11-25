@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 63,
+    "round": 64,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3565,7 +3565,7 @@
     },
     "round62": {
       "phase": "Actual treasury opening and collector funding evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "f1c5b85806db87bdd99eb364b9397dfd6de11898",
       "source": "0830bb75b6e7f4401b82a0c9c90ba6056352a092",
       "workflow": "269ab38f6a230b3b9b2d3a2b4c204e6e2d991283",
@@ -3574,19 +3574,28 @@
       "runs": [
         {
           "id": 45614246290,
-          "name": "Treasury opening and funding source evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Opening identity distinct from movements including zero; exact D14 boundary, actual collector funding matches source, account, opening amount, issuer/collector, effective date. Three new cases per engine plus directly changed registry and verifier regressions.",
-      "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Runtime pending.",
-      "partial_results": {
+      "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Scoped runtime accepted.",
+      "results": {
         "sqlite": {
           "job": 139205424708,
           "tests": 20,
           "assertions": 176,
-          "exit": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139205425396,
+          "tests": 20,
+          "assertions": 176,
+          "exit": 0
+        },
+        "total": {
+          "tests": 40,
+          "assertions": 352,
           "errors": 0,
           "failures": 0,
           "skipped": 0
@@ -3595,7 +3604,7 @@
     },
     "round63": {
       "phase": "Actual bank fee and cash count adjustment source evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "0830bb75b6e7f4401b82a0c9c90ba6056352a092",
       "source": "8fd4f214fe68f423fabda85c8c6230dac99193e8",
       "workflow": "8a38ffabefc1d1d6117fef6bbebeac297eba6479",
@@ -3604,14 +3613,53 @@
       "runs": [
         {
           "id": 45614625621,
-          "name": "Treasury fee and cash adjustment evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "prerequisite": "Round 62 scoped runtime acceptance required before round 63 acceptance.",
       "scope": "Two new cases per engine: actual fee atomic rollback and corrupted source rejection; actual signed loss and held surplus with original count and review. Twelve changed-verifier regressions per engine. Read-only source evidence; existing fee and adjustment validators reused under issuance lock.",
-      "limits": "No complete source coverage, bank collection/late cash adapter, reconciliation certification, all-writer activation or final closure."
+      "limits": "No complete source coverage, bank collection/late cash adapter, reconciliation certification, all-writer activation or final closure.",
+      "results": {
+        "sqlite": {
+          "job": 139206704369,
+          "tests": 14,
+          "assertions": 133,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139206704881,
+          "tests": 14,
+          "assertions": 133,
+          "exit": 0
+        },
+        "total": {
+          "tests": 28,
+          "assertions": 266,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round64": {
+      "phase": "Actual bank collection and separate late cash evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "8fd4f214fe68f423fabda85c8c6230dac99193e8",
+      "source": "802fd4449dafe425f714e532e28e0f1cfc23c749",
+      "workflow": "f6a41d4336b3845b274846fe54e90e6caf438ad9",
+      "branch": "fix/central-g1b-treasury-collection-evidence",
+      "pr": 141,
+      "runs": [
+        {
+          "id": 45614984136,
+          "name": "Treasury collection source evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
+      "scope": "Two new cases per engine and 14 affected verifier cases per engine. Actual bank clearance of legacy receipt linked to subscriber ledger and corruption rejection; separate late cash two-leg evidence and atomic rollback.",
+      "limits": "Claim clearing, already-counted late receipt and complete source coverage not certified. Legacy subscriber-first writers can invert issuance-first verifier locks; no concurrent production activation until fencing and reviewed lock protocol. No main merge or production data."
     }
   }
 }
