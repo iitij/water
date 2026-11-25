@@ -3331,7 +3331,7 @@
     },
     "round56": {
       "phase": "Actual ledger correction evidence validation",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
       "source": "10c8f24575a6527b5e40c5399a55e0bc9f293e19",
       "workflow": "59982ae95fda3a914a6a977d02394e657dca275d",
@@ -3340,13 +3340,33 @@
       "runs": [
         {
           "id": 45610694945,
-          "name": "Actual correction ledger evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Three new actual payment service cases on each isolated engine: refund exact cents, two transfer legs conserve money and registry rolls back atomically, void preserves stable original evidence. Registry remains not a complete source coverage verifier.",
-      "limits": "No runtime acceptance yet; test-only source, no production callers, no historical invoice correction or retirement proof in this slice, no close activation or main merge."
+      "limits": "Scoped actual correction evidence accepted. Test-only source; historical invoice correction and retirement, returned cheque adapter, complete source coverage, production activation and main merge remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139193109430,
+          "tests": 3,
+          "assertions": 47,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139193110018,
+          "tests": 3,
+          "assertions": 47,
+          "exit": 0
+        },
+        "total": {
+          "tests": 6,
+          "assertions": 94,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
