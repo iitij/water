@@ -8,11 +8,11 @@
       "scope": "collections, bank reconciliation, treasury and closing",
       "branch_observed": "fix/team-a-noncash-claim-proof",
       "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
-      "status": "ASSIGNED",
+      "status": "RETIRED_FROM_ACTIVE_COORDINATION",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Final narrowly scoped concurrence on B corrected exact34d48fc in PR83 only, preserving prior contract review. Confirm zero normalization and range/grammar compatibility; no duplicate tests or broad review. A PR82 already D source accepted; preserve head, await runtime results.",
+      "next": "No new assignments. Historical branch, PR, evidence and prior decisions preserved. Remaining responsibilities transferred to central supervisor and Codex; do not independently continue or modify frozen heads.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -61,10 +61,10 @@
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
-      "status": "REVIEW",
+      "status": "RETIRED_FROM_ACTIVE_COORDINATION",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Freeze corrected34d48fc; B-I01-11-01 source closed by supervisor/D. Await A final concurrence and actual PDO64/63 evidence. Do not repeat accepted pure/zero/auxiliary checks or begin I02. No existing caller changes.",
+      "next": "No new assignments. Historical branch, PR, evidence and prior decisions preserved. Remaining responsibilities transferred to central supervisor and Codex; do not independently continue or modify frozen heads.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -130,11 +130,11 @@
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "REVIEW",
+      "status": "RETIRED_FROM_ACTIVE_COORDINATION",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Freeze ef4eb04, D source QA accepted. Await authorized ordinary runtime four cases per engine; report actual issuance/rejection/invalid fixture, no product repairs without separate scope.",
+      "next": "No new assignments. Historical branch, PR, evidence and prior decisions preserved. Remaining responsibilities transferred to central supervisor and Codex; do not independently continue or modify frozen heads.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -192,11 +192,11 @@
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "ASSIGNED",
+      "status": "RETIRED_FROM_ACTIVE_COORDINATION",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Exact source decisions received on PR81/82/83; handoff37002f3 accepted. One owner-mediated cloud runner, A/C authorized now, B only after explicit A final concurrence at exact corrected head. Review actual results, not repeat. Keep optional diagnostics OFF; inconclusive not proof. I02 held.",
+      "next": "No new assignments. Historical branch, PR, evidence and prior decisions preserved. Remaining responsibilities transferred to central supervisor and Codex; do not independently continue or modify frozen heads.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_11_SOURCE_QA_ACCEPTED_TARGETED_RUNTIME_AUTHORIZED_CONDITIONAL_B_HOLD_MAIN",
+    "decision": "ROUND_11_CENTRALIZED_SUPERVISOR_CODEX_ALL_SCOPED_RUNTIME_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1310,21 +1310,409 @@
         "source_decisions": {
           "A": "PR82 #7152178836 SOURCE QA ACCEPTED",
           "C": "PR81 #7152179326 SOURCE QA ACCEPTED",
-          "B": "PR83 #7152179906 SCOPED SOURCE ACCEPTED; A final concurrence pending"
+          "B": "PR83 #7152179906 D SCOPED SOURCE ACCEPTED; PR83 #7152247474 A FINAL SCOPED SOURCE ACCEPTED on exact34d48fc"
         },
         "B_I01_11_01": {
-          "status": "SOURCE_CORRECTED_ACCEPTED_SUPERVISOR_D_A_FINAL_PENDING",
+          "status": "SOURCE_CLOSED_A_D_SUPERVISOR",
           "evidence": "Only adapter/test/report changes since80ff9d9; verified zero normalization before exponent bound, original syntax and length, endpoint bounds retained; all four foundation Git blobs independently matched. B reports291 focused checks and two lint successes, not supervisor rerun."
         },
         "runtime": {
           "A": "Authorized two individually filtered ordinary MySQL tests with embedded controls, distinct fresh isolated instances; mandatory diagnostics OFF; follow PR82 final handoff and D matrix.",
           "C": "Authorized four cases per engine on approved isolated SQLite and MySQL runners; preserve actual outcomes, no product fixes.",
-          "B": "Conditional on recorded A final concurrence on exact34d48fc (no new head). PDO SQLite64 and MySQL63 expected checks only, isolated temporary fixture using approved runner private credentials, no product table access.",
+          "B": "A final concurrence received #7152247474; actual PDO SQLite64 and MySQL63 expected checks now authorized on exact34d48fc, using approved isolated temporary fixture/private credentials, no product table access.",
           "expected": "10 PHPUnit parent cases and127 standalone PDO checks, not observed results.",
           "report": "WATER_ROUND11_TARGETED_VALIDATION.md",
           "restrictions": "No repeated prior tests, restricted probes, schema/product edits, merge or deployment. Reuse existing exact-head evidence. Do not infer causal defect from timeout."
         },
-        "limits": "Supervisor checked remote refs, D source decisions, correction code and four foundation blobs. No tests executed, raw evidence not accessed. A final concurrence pending; I02 and main held."
+        "limits": "All scoped source gates satisfied. Runtime report still pending; no supervisor execution or raw cloud artifacts access. I02 and main held."
+      }
+    },
+    "operating_model": {
+      "authority": "Owner explicitly requested discontinuing separate A/B/C/D teams and continuing only in the current supervisor conversation and Codex.",
+      "status": "ACTIVE",
+      "roles": {
+        "central_supervisor": "Current ChatGPT conversation: planning, direct source inspection, accounting decisions, review of diffs and test evidence, precise authorization, integration gate and register maintenance.",
+        "codex": "Single implementation and execution channel: scoped implementation, ordinary isolated tests, evidence export, approved candidate composition; no self-approval of results or production deployment."
+      },
+      "retired_teams": {
+        "previous_state": {
+          "A": {
+            "scope": "collections, bank reconciliation, treasury and closing",
+            "branch_observed": "fix/team-a-noncash-claim-proof",
+            "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+            "status": "ASSIGNED",
+            "assignment_delivery": "confirmed_by_owner",
+            "activity_report": "owner_reports_round_two_finished",
+            "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
+            "next": "Final narrowly scoped concurrence on B corrected exact34d48fc in PR83 only, preserving prior contract review. Confirm zero normalization and range/grammar compatibility; no duplicate tests or broad review. A PR82 already D source accepted; preserve head, await runtime results.",
+            "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
+            "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
+            "round3": {
+              "branch": "fix/team-a-g1a01-isolated",
+              "sha": "fdb9c535bf71909c3323543d806e7d5eb343b14f",
+              "reported_tests": "63 pass / 153 assertions / 0 failures or skips; 9/13 acceptance criteria demonstrated; 4 integration-gated; no MySQL/Flutter/CI in this slice",
+              "next": "Preserve branch; wait for round four. No heavy tests or shared call-site changes."
+            },
+            "round4a": {
+              "head": "a0448f9d3e1890d0e6877405bda8ed4a317cee4c",
+              "tested": "e4e34d72780f78a3724d068869a74825c245bd05",
+              "evidence": "D PR68: actual widget SQLite and MySQL each 7 pass/118 assertions; no failures/skips; latest head docs only. A reports related 87 pass/499 assertions. Returned-cheque design only; no durable close guard."
+            },
+            "round4b": {
+              "head": "17eaa4f2100cd273c542e110663422882d449bc1",
+              "branch": "docs/team-a-round4b-closing",
+              "evidence": "Verified design document only; 12 closing criteria, immutable snapshot, OPEN/FROZEN/CLOSED state, cross-period return policy. No code or tests."
+            },
+            "round4c": {
+              "head": "3bbcfb5afa199d5adc3fbe58d1e4de96b91619a0",
+              "tested": "1d513471e3cadc70bb07f5369b84c89f521e0059",
+              "evidence": "Versioned report: 91 pure policy cases/102 checks, 0 failures/skips, PHP 8.4.24; 3 isolated paths vs 17eaa4f, no migration/activation."
+            },
+            "round4d": {
+              "head": "7f32b30c80514c958615c479c033a1be393b3a1b",
+              "evidence": "Design only, actual P1 source/lock review and durable close contract. Isolated policy 3bbcfb5 unchanged. Static G1B-I01..07 gaps, notably counter headroom before freeze. No new test or activation."
+            },
+            "round4e": {
+              "head": "2529082ee3fed5b663d1966dee0c90cec4e3c710",
+              "tested": "6b2e4dcbed3adf4acd2dbdddf91b32f35555bf57",
+              "evidence": "Versioned G1B_I01 report: same standalone 40 cases before 27 pass/13 fail/91 checks exit1, after 40 pass/102 checks exit0. D independent review pending; policy inactive."
+            },
+            "round5": {
+              "head": "2529082ee3fed5b663d1966dee0c90cec4e3c710",
+              "evidence": "D source/evidence scoped acceptance PR75 7149367364; 40/102 reported, raw logs not recovered. Remains outside candidate."
+            },
+            "round9": {
+              "status": "EXACT_HEAD_REVIEWS_REQUESTED",
+              "sources": [
+                "https://github.com/iitij/water/pull/79#issuecomment-7150952394",
+                "https://github.com/iitij/water/pull/80#issuecomment-7150952838"
+              ]
+            }
+          },
+          "B": {
+            "scope": "ACC-11 then ACC-09/14 gated",
+            "branch": "fix/accounting-acc-11",
+            "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
+            "status": "REVIEW",
+            "assignment_delivery": "confirmed_by_owner",
+            "activity_report": "owner_reports_round_two_finished",
+            "next": "Freeze corrected34d48fc; B-I01-11-01 source closed by supervisor/D. Await A final concurrence and actual PDO64/63 evidence. Do not repeat accepted pure/zero/auxiliary checks or begin I02. No existing caller changes.",
+            "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
+            "deliverables": [
+              {
+                "task": "ACC-09",
+                "branch": "fix/team-b-acc-09-isolated",
+                "sha": "4a97b571ce981f1a4eb93cee5e8cbedc20ab0ebe",
+                "evidence": "Repository contract document: PHP 4 pass/105 assertions; Dart CLI 85 checks, not full Flutter. No product integration."
+              },
+              {
+                "task": "ACC-14",
+                "branch": "fix/team-b-acc-14-isolated",
+                "sha": "7786d843184364d4543bcaf667259aeacf412888",
+                "evidence": "Repository report: MySQL 6 pass/39 assertions; SQLite 5 pass/1 skip/27 assertions; repeated 240 reservations across 6 concurrency runs. No product call sites."
+              }
+            ],
+            "round3": {
+              "acc09_sha": "2f4ac2bf430441f73dd5001346900e6876f5b87d",
+              "acc14_sha": "c2c0305829873b3c654c5341878dd75f43423c14",
+              "reported_evidence": "Exact money primitives PHP/Dart implemented; ACC14 writer inventory/cutover design committed; ACC11 scheduler and integration not accepted.",
+              "next": "Preserve branches; wait for round four. No heavy tests."
+            },
+            "round4a": {
+              "evidence": "D PR65: exact e940764, 22/0/0 in each of three TZs, 66 executions; offline dependency resolution differed. Team report: ACC09 14-group and ACC14 12-group matrices, actual documents not independently recovered; prior isolated primitives and sequence unchanged."
+            },
+            "round4b": {
+              "head": "833cae2d0c97e00604622b365f5efc7a319a8d50",
+              "branch": "integration/team-b-acc09-round4b",
+              "evidence": "Verified 25 changed paths vs a0448f9; 30048 CLI checks reported, 3 lint pass; five Laravel feature cases unexecuted; CI 45517612289 failed before steps, MySQL skipped, logs unavailable. ACC14 not active."
+            },
+            "round4c": {
+              "head": "833cae2d0c97e00604622b365f5efc7a319a8d50",
+              "evidence": "B and D reports preceded owner cloud screenshot; B had no direct cloud tool; unchanged head. Owner screenshot reports 196 test executions, 22005 assertions, 0 fail/skip; SQLite related 85/10879, MySQL related 85/10878, MySQL concurrency 16/156, standalone 30048 checks. Exact tested SHA and cloud allocation/revision not visible; full WATER_ACC09_VALIDATION.md needed before formal acceptance."
+            },
+            "round4d": {
+              "head": "833cae2d0c97e00604622b365f5efc7a319a8d50",
+              "evidence": "No new P1 branch/head verified. D PR71 reports full WATER_ACC09_VALIDATION.md inaccessible; owner screenshot 196/22005 and 30048 checks remains reported, not SHA-verified. Library title search no match. Do not repeat passed tests merely for missing report."
+            },
+            "round4e": {
+              "head": "833cae2d0c97e00604622b365f5efc7a319a8d50",
+              "evidence": "Owner pasted original ACC09 report, supervisor matched full SHA and reconciled all totals; scoped acceptance recorded in PR71 comment 7149316410. No literal lock hashes or raw JUnit supplied, no supervisor rerun. Prior G03 BLOCKED_EVIDENCE lifted for checkpoint only."
+            },
+            "round5": {
+              "head": "d90643a34729a1dac40c369649e5430fd4aa417b",
+              "evidence": "PR76 7149410355: eight changed paths, pure PHP 2018 checks exit0 reported, eight new DB integration cases unrun. Invoice.php untouched. Verified exact remote delta."
+            },
+            "round7": {
+              "head": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+              "files": 11,
+              "evidence": "PR77 #7150416613: 2052 pure checks reported (2020+32), exit0, 7 lint; 15 P1 +4 reversal per engine +2 MySQL races defined, not executed. 3 commits ahead of d90643a; 5 product,5 test,1 doc."
+            },
+            "round8": {
+              "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+              "evidence": "A #7150542286 and D #7150555531 scoped source acceptance; 40 planned DB executions not actual result in GitHub. Latest owner screenshot only meter-policy coverage, no P1 numbers. Prior2052 not additive to2018."
+            },
+            "round9": {
+              "head": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
+              "pr": 79,
+              "delta": 4,
+              "status": "RECEIVED_PURE_FOUNDATION_REVIEW_PENDING",
+              "evidence": "B reports 14177 standalone checks and 4000 auxiliary Python oracle matches, exit 0; reviewed four added paths and reuse of checked FinancialAmount::add. No independent runtime verification. No existing caller, schema or endpoint changes.",
+              "assignment_url": "https://github.com/iitij/water/pull/79#issuecomment-7150952394"
+            }
+          },
+          "C": {
+            "scope": "ACC-10 audit first, ACC-12/13 gated",
+            "status": "REVIEW",
+            "assignment_delivery": "confirmed_by_owner",
+            "activity_report": "owner_reports_round_two_finished",
+            "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
+            "next": "Freeze ef4eb04, D source QA accepted. Await authorized ordinary runtime four cases per engine; report actual issuance/rejection/invalid fixture, no product repairs without separate scope.",
+            "branch": "fix/accounting-acc-10",
+            "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
+            "round3": {
+              "last_remote_sha": "bcc63f2ef4078b8d00eef1a2df602632c7f5c65e",
+              "reported_evidence": "Owner supplied completion screenshot: ACC-12/13 audit complete; changes/logs saved; local slot released. Earlier displayed MySQL focused 25 passed/0 failed/1 skipped/143 assertions; restricted privilege and DDL recovery 10/10 reported. These are team-reported results, not independently rerun or proven on final SHA.",
+              "next": "Preserve branch; no further local tests or product edits until supervisor assignment.",
+              "latest_verified_remote_sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
+              "remaining": "Independent D review, full regression on final SHA, CI, actual hosting privileges and explicitly unexecuted security checks. Hold merge; no repeat of blocked security work in ordinary Codex."
+            },
+            "round4a": {
+              "head": "403f728d0f831c8455eea49bd46ed25b2dab3b49",
+              "base": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+              "evidence": "PR69; 8 changed paths verified. 30 PHP CLI checks on ReadingQuantity blob; new PHPUnit unit/feature suites not executed; prior 36/194 and Flutter 23 belong to old refs."
+            },
+            "round4b": {
+              "head": "cae7f2e2e8c0dcd634dc5555aa7b14acc9bb82e5",
+              "tested": "403f728d0f831c8455eea49bd46ed25b2dab3b49",
+              "evidence": "PR69 final C report: SQLite and MySQL each 2 unit/26 assertions + 41 feature/230 assertions; 86 executions/512 assertions, zero failures/skips. Docs-only successor. Copied vendor; no independent D rerun or new Flutter."
+            },
+            "round4c": {
+              "head": "240b79f1f5a23fb09941e66f94fb0f5ec4471df8",
+              "evidence": "D verified previous four raw log hashes at 403f728/cae7f2e; 86 executions/512 assertions accepted for previous code. Six new tests only at 240b79f; none executed; C12-R4C-01 independently identified static ambiguity of previous-day readings; no runtime result."
+            },
+            "round4d": {
+              "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
+              "product_fix": "13482dabb5e4c17f8748f5077a4d512f9d60a04f",
+              "test_fix": "c8c4b0f006b9028f4916750de47b8a5828c9711d",
+              "evidence": "Owner cloud screenshot pre-fix SQLite 6/59, MySQL 5 pass 1 fail/55; C report same counts at 240b79f. C reproduced on normalized SQLite fixture b943e14. After correction SQLite 47/298; MySQL 46 pass 1 fixture-only fail/281; corrected fixture targeted each engine 1/18 pass. Same product blobs, not a single clean 47-case MySQL final run. Verified 3 reserved changed paths. Independent D final fix review pending."
+            },
+            "round4e": {
+              "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
+              "evidence": "D independently verified all seven raw log SHA256 and accepted C12-R4C-01 scope PR69 comment 7149114716. Owner provided original Codex pre-fix report exact 240b79f, SQLite6/59 exit0, MySQL5pass1fail/55 exit1; no post-fix cloud run claimed."
+            },
+            "round5": {
+              "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
+              "evidence": "Candidate includes C ancestry; prior D scoped acceptance unchanged."
+            },
+            "round7": {
+              "head": "3572bf4f9968821651c7621cbce725e7da542788",
+              "files": 12,
+              "evidence": "PR78 and PR69 #7150458113: PHP lint12/12, diff/push exit0, original20-unit product regression, 2 legacy methods and 2 races defined, no Laravel runtime. Actual historical migration call sites changed; no live data or already-run replay."
+            },
+            "round8": {
+              "sha": "3572bf4f9968821651c7621cbce725e7da542788",
+              "evidence": "A conditional source review #7150542967, D #7150556226, C #7150537379. Owner Codex screenshot reports ordinary suites, both actual historical cases original20 removed and retained15 unchanged, rollback before DDL and two named races exercised. Exact report SHA, counts/exits/lock hashes not visible. Three A findings remain explicitly open."
+            },
+            "round9": {
+              "head": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+              "pr": 80,
+              "delta": 8,
+              "status": "RECEIVED_TARGETED_PRODUCT_FIX_RUNTIME_PENDING",
+              "evidence": "C reports lint 8/8, no runtime. 6 SQLite + 7 MySQL targeted executions planned. Source changes retain old audit rows, reject required unsaved audit creation, revalidate meter ownership and use current locking reads for pending reviews. Review the lock breadth of the unindexed pending-review lookup and exact rollback/afterCommit outcomes.",
+              "assignment_url": "https://github.com/iitij/water/pull/80#issuecomment-7150952838"
+            }
+          },
+          "D": {
+            "scope": "independent QA, CI, MySQL and Flutter",
+            "status": "ASSIGNED",
+            "assignment_delivery": "confirmed_by_owner",
+            "activity_report": "owner_reports_round_two_finished",
+            "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
+            "next": "Exact source decisions received on PR81/82/83; handoff37002f3 accepted. One owner-mediated cloud runner, A/C authorized now, B only after explicit A final concurrence at exact corrected head. Review actual results, not repeat. Keep optional diagnostics OFF; inconclusive not proof. I02 held.",
+            "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
+            "round3": {
+              "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
+              "next": "Exclusive local slot released by C; resume recovery under 30cfd85. Retrieve logs first, independently review final ACC10 SHA 76eac62 and latest A/B deliverables, run only unfinished ordinary regression tests and justified changed-code checks sequentially. Record security checks limited by tool as blocked, do not retry them through another tool. No product edits, main merge or production changes.",
+              "final_report": "Independent final comments retrieved in PR62/63/64/65/66/67; all assigned recovery reports delivered, scope acceptance only; HOLD MERGE.",
+              "evidence": {
+                "pr62": "https://github.com/iitij/water/pull/62#issuecomment-7146635797",
+                "acc09": "https://github.com/iitij/water/pull/64#issuecomment-7148024333",
+                "acc14": "https://github.com/iitij/water/pull/63#issuecomment-7148024841",
+                "acc11": "https://github.com/iitij/water/pull/65#issuecomment-7147309781",
+                "acc10": "https://github.com/iitij/water/pull/66#issuecomment-7148023185",
+                "periods": "https://github.com/iitij/water/pull/66#issuecomment-7147903813",
+                "a01": "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
+              },
+              "pr62": {
+                "sha": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+                "sqlite": [
+                  281,
+                  0,
+                  17,
+                  4391
+                ],
+                "mysql": [
+                  297,
+                  0,
+                  1,
+                  4547
+                ],
+                "concurrency": [
+                  16,
+                  0,
+                  0,
+                  156
+                ],
+                "ledger": [
+                  1,
+                  0,
+                  0,
+                  12
+                ],
+                "flutter": [
+                  759,
+                  0,
+                  25
+                ],
+                "caveat": "Flutter offline dependency resolution changed 8 dependencies in disposable checkout."
+              },
+              "acc10": {
+                "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
+                "sqlite_focused": [
+                  25,
+                  0,
+                  1,
+                  99
+                ],
+                "mysql_focused": [
+                  25,
+                  0,
+                  1,
+                  144
+                ],
+                "related_sqlite": [
+                  16,
+                  0,
+                  0,
+                  256
+                ],
+                "related_mysql": [
+                  16,
+                  0,
+                  0,
+                  256
+                ],
+                "sqlite_full": [
+                  245,
+                  1,
+                  7,
+                  3658
+                ],
+                "caveat": "No full new-head MySQL or Flutter. Mobile source unchanged from bcc63f2, prior Flutter full 759 pass/1 fail/25 skip retained only at prior SHA. Restricted checks not independently repeated."
+              },
+              "acc09": {
+                "sha": "2f4ac2bf430441f73dd5001346900e6876f5b87d",
+                "php": [
+                  6,
+                  0,
+                  0,
+                  10128
+                ],
+                "dart_checks": 10107,
+                "independent_oracle_cases": 3725
+              },
+              "acc14": {
+                "sha": "c2c0305829873b3c654c5341878dd75f43423c14",
+                "code_tested_sha": "7786d843184364d4543bcaf667259aeacf412888",
+                "mysql": [
+                  6,
+                  0,
+                  0,
+                  39
+                ],
+                "sqlite": [
+                  5,
+                  0,
+                  1,
+                  27
+                ],
+                "concurrent_reservations": 240,
+                "code_blobs_identical": true
+              },
+              "acc11": {
+                "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585",
+                "mysql_concurrency": [
+                  6,
+                  0,
+                  0,
+                  53
+                ],
+                "focused": [
+                  3,
+                  0,
+                  0,
+                  17
+                ],
+                "local_scheduler_mutex": "PASS",
+                "timezone_parity": "FAIL QA-D-007",
+                "hosting_cron_cache": "UNVERIFIED"
+              },
+              "a01": {
+                "sha": "fdb9c535bf71909c3323543d806e7d5eb343b14f",
+                "unit": [
+                  63,
+                  0,
+                  0,
+                  153
+                ],
+                "criteria_unit": 9,
+                "criteria_total": 13
+              }
+            },
+            "round4a": {
+              "evidence": [
+                "https://github.com/iitij/water/pull/65#issuecomment-7148207437",
+                "https://github.com/iitij/water/pull/68#issuecomment-7148207999"
+              ],
+              "reported_1553": "Recovered team report: baseline migrations pass; smoke attempts to remove FK-supporting meters_one_per_subscriber index. No independent log inspected by supervisor; separate smoke-helper defect from product acceptance."
+            },
+            "round4b": {
+              "evidence": "PR69 D source review 403f728 before C tests; prior D 1553 classification available; user reports all finished, exact final independent acceptance of new B/C tests not recovered. No inference of pass."
+            },
+            "round4c": {
+              "head": "a0a7ae3f5b59e36ba7f8e4491e12bdc1c32f40b4",
+              "evidence": "D reviewed C raw hashes, B source, CI jobs with unavailable annotation/logs; PR72 test-only smoke replacement and G00-G12 matrix, PHP lint passed, no MySQL scenarios executed. CI 45517612289 first cause unknown."
+            },
+            "round4d": {
+              "head": "34155207781a07f17547e6e9c44d859fad117208",
+              "smoke_tested": "a0a7ae3f5b59e36ba7f8e4491e12bdc1c32f40b4",
+              "evidence": "PR72 3/3 MySQL isolated smoke scenarios pass exit0/PASS markers; financial legacy scenario confirms expected rejection and rollback, not successful upgrade. No weakened constraints. PR71 full cloud evidence missing. ACC11 Invoice.php baseline unchanged by B at 833cae2; ReadingSettings semantic overlap identified. C final delivered after D review."
+            },
+            "round4e": {
+              "head": "6ba50dda7253e499f95719d19712bb8ceac32cf7",
+              "evidence": "PR72 manifest exact deltas and overlap decisions; G10 scoped PASS; seven C log hashes confirmed; ACC09 original report now supplied, reconciles missing 10/92. Independent raw cloud logs not accessible to supervisor."
+            },
+            "round5": {
+              "head": "047a5ea91a1c9851fead4dd8e830d100dde31d32",
+              "evidence": "D accepted scoped G03 and A G1B-I01; D preflight at seed before candidate composed. Supervisor now verified ancestry and locks via GitHub."
+            },
+            "round9": {
+              "manifest": "e18cee4b16d56e236e8a0204e43e50ded5f9d137",
+              "status": "PRE_DELIVERY_MATRIX_REFRESH_REQUESTED",
+              "source": "https://github.com/iitij/water/pull/72#issuecomment-7150817979"
+            }
+          }
+        },
+        "preservation": "Keep all branches, pull requests, accepted results, independent reviews and frozen commits. No deletion or merge. Historical team labels identify provenance only, not active assignees."
+      },
+      "handoff": "All Round11 exact-head runtime tests authorized now after A final concurrence. Preserve current scope from D37002f3, retrieve completed evidence first, no repeat. Next after actual report: central review of I01/G07/L01, authorize only proven fixes and I02 separately. No new parallel team assignments.",
+      "constraints": "No weakening of accounting invariants, source-vs-runtime distinction, reproducible locks, synthetic isolation, existing restricted-check exclusions, main freeze, approval of production changes or deployment. Future review independence provided by separate supervisor inspection of Codex work; not claim an independent human auditor. Cannot stop other conversations programmatically; owner should discontinue sending tasks there.",
+      "verified_refs": {
+        "main": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
+        "integration/accounting-candidate-v2": "40a216bec7ebd540b2d127bea4cdd9180cf0c52a",
+        "qa/team-a-v2-cross-account-locks": "4f97ad349f4166c40f6492426bb59a8925f47a12",
+        "integration/team-b-p2-i01": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
+        "qa/team-c-v2-g07-stored-billing": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a"
       }
     }
   }
