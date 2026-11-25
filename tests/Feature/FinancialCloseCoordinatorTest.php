@@ -208,8 +208,9 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->assertSame('FROZEN', DB::table('financial_periods')->where('month', '2026-11')->value('state'));
     }
 
-    private function prepareFollowingPeriod(bool $shiftBalances = false): array
+    private function prepareFollowingPeriod(bool $shiftBalances = false, ?array $priorCarries = null, ?array $followingCarries = null): array
     {
+        $this->proof->nextCarries = $priorCarries;
         $this->freeze();
         $prepared = $this->prepare();
         $closed = $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']));
@@ -222,7 +223,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
                 'movement' => 0, 'closing' => $shiftBalances ? 10000 : 10025, 'source_hash' => $h],
             ['sector' => 'transit', 'key' => 'T1', 'opening' => 101, 'movement' => 0, 'closing' => 101, 'source_hash' => $h],
         ];
-        $this->proof->nextCarries = [['id' => 'C1', 'sector' => 'transit', 'row_key' => 'T1',
+        $this->proof->nextCarries = $followingCarries ?? [['id' => 'C1', 'sector' => 'transit', 'row_key' => 'T1',
             'amount' => 101, 'owner' => 5, 'due_on' => '2027-01-10', 'evidence_hash' => $h]];
         $uuid = '55555555-5555-4555-8555-555555555555';
         $now = new DateTimeImmutable('2027-01-01T00:00:00+03:00');
@@ -272,5 +273,43 @@ final class FinancialCloseCoordinatorTest extends TestCase
         DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)
             ->update(['result_state_hash' => str_repeat('0', 64)]);
         $this->rejects('close_journal_hash', fn () => $this->continuity('2026-12'));
+    }
+
+    private function carryFixture(string $id, int $amount, int $owner = 5, string $due = '2027-01-10', ?string $hash = null): array
+    {
+        return ['id' => $id, 'sector' => 'transit', 'row_key' => 'T1', 'amount' => $amount,
+            'owner' => $owner, 'due_on' => $due, 'evidence_hash' => $hash ?? str_repeat('a', 64)];
+    }
+
+    public function test_round145_unchanged_carry_matches_structurally_without_certifying_underlying_evidence(): void
+    {
+        $carry = $this->carryFixture('C1', 101);
+        $this->prepareFollowingPeriod(false, [$carry], [$carry]);
+        $result = $this->continuity('2026-12');
+        $this->assertTrue($result['adjacent_snapshots_match']);
+        $this->assertTrue($result['carry_snapshots_unchanged']);
+        $this->assertSame(1, $result['unchanged_carries']);
+        $this->assertSame([], $result['carry_snapshot_issues']);
+        $this->assertFalse($result['carry_continuity_verified']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_round145_equal_total_does_not_hide_reassigned_removed_or_new_carries(): void
+    {
+        $prior = [$this->carryFixture('C1', 51), $this->carryFixture('C2', 50)];
+        $after = [$this->carryFixture('C1', 50, 6, '2027-01-15', str_repeat('c', 64)),
+            $this->carryFixture('C3', 51)];
+        $this->prepareFollowingPeriod(false, $prior, $after);
+        $result = $this->continuity('2026-12');
+        $this->assertTrue($result['adjacent_snapshots_match']);
+        $this->assertFalse($result['carry_snapshots_unchanged']);
+        $this->assertSame(0, $result['unchanged_carries']);
+        $this->assertSame([
+            ['code' => 'carry_change_requires_proof', 'id' => 'C1', 'fields' => ['amount', 'owner', 'due_on', 'evidence_hash']],
+            ['code' => 'carry_settlement_or_removal_requires_proof', 'id' => 'C2'],
+            ['code' => 'new_carry_requires_proof', 'id' => 'C3'],
+        ], $result['carry_snapshot_issues']);
+        $this->assertFalse($result['carry_continuity_verified']);
+        $this->assertFalse($result['closure_authorized']);
     }
 }
