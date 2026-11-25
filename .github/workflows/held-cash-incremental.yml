@@ -1,7 +1,7 @@
-name: Prospective cash receipt API acceptance
+name: Cash receipt writer affected regression
 on:
   push:
-    branches: ['release/prospective-cash-receipt-api']
+    branches: ['release/prospective-cash-receipt-api-regression']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Verify protected void boundaries and affected mutation regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_cash_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashReceiptWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Verify protected void boundaries and affected mutation regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_cash_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashReceiptWriterTest.php
 
