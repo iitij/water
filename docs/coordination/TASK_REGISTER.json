@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 102,
+    "round": 103,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4565,6 +4565,62 @@
       "scope": "Rename imported test helper post() to postCounted() and all calls, no product code, financial logic or assertion changed. Re-run same combined 34 test cases per engine.",
       "limits": "Corrected suite still pending; no claim of W18 acceptance. All round101 limits remain. No production, main, or real financial data changes.",
       "next": "Read exact corrected CI results and address proven failures; continue pre-disbursement authorization and subscriber credit liquidity reserve."
+    },
+    "round103": {
+      "phase": "Independent pre-disbursement authorization and conservative held-credit liquidity protection",
+      "status": "PRIOR_W18_BOTH_ENGINES_PASS_AUTHORIZATION_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "base": "f6b81c43f889197c08903ec5988170b80428cf57",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "45f0a0c3d444bdccd358f1228e8cb4563245b61e",
+      "runs": [
+        {
+          "id": 45641463825,
+          "head_sha": "f6b81c43f889197c08903ec5988170b80428cf57",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139300936139,
+              "engine": "sqlite",
+              "tests": 34,
+              "assertions": 296,
+              "exit": 0
+            },
+            {
+              "id": 139300935630,
+              "engine": "mysql",
+              "tests": 34,
+              "assertions": 296,
+              "exit": 0
+            }
+          ]
+        },
+        {
+          "id": 45642476390,
+          "head_sha": "45f0a0c3d444bdccd358f1228e8cb4563245b61e",
+          "conclusion": "pending_or_unaccepted",
+          "jobs": [
+            {
+              "id": 139304544492,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            },
+            {
+              "id": 139304545084,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success",
+              "tests": 38,
+              "assertions": 335,
+              "exit": 0
+            }
+          ]
+        }
+      ],
+      "syntax_validation": "Five changed PHP files linted from exact fetched SHA on msi; exit 0; no working tree checkout or live DB access.",
+      "scope": "Independent prior authorization names one executor, assignment, original cash account, exact amount, current effective day and separate durable evidence. Prior approval has no posting/discharge, reserves assignment capacity against competing credit/authorizations; payout consumes exact approval, distinct executor and evidence, earlier approval audit ID bound into posting hash. Independent evidenced cancellation releases authorization capacity but never original liability; no cancelled UUID reuse. Bidirectional authorization audit coverage, source actor segregation and exact replay. Conservative source-account liquidity reserve retains the full amount reclassified into subscriber credit, separately from held liability; ordinary outflows and authorized payout preserve both. Migration refuses historical payouts without independent review rather than fabricating approvals. Four new tests for approval, cancellation, reserve after discharge and missing audit; existing payout tests now use required pre-approval path.",
+      "limits": "No final runtime acceptance until exact jobs pass. Authorization and cancellation are candidate internal services, not activated web/API endpoints. Human evidence must prove consent, non-disbursement and actual delivery; no physical control claim. Credit reserve deliberately over-reserves even applied credit until all invoice/correction/refund writers fenced and independent proof of release exists; no global liquidity certification or reserve for unrelated subscriber credit. Legacy writer UUID collisions and full DB immutability still open. W18 distinct date, unsupported corrections and global source proof pending. Changed-path allocation, account reconciliation, reporting/mobile and registry suites plus concurrency and permanent close are not fully accepted. No production/main/live database modification.",
+      "next": "Obtain exact CI result, fix confirmed failures; independently review prior authorization and cancellation, establish fenced exact release policy for applied credit and physical custody reconciliation, run affected regression suites without repeating unrelated baselines before task-one acceptance."
     }
   }
 }
