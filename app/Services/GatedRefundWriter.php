@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedRefundWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private PaymentRefundService $refunds,
@@ -85,8 +87,14 @@ final class GatedRefundWriter
                 }
                 $balance = app(TransactionService::class);
                 $before = $balance->accountBalanceMinor($subscriber);
-                $refund = $this->refunds->record($payment, $actor, $amount, $reference, $method, $date, $reason, $evidence);
-                $posting = $this->treasury->post($actor, $accountId, 'payment_refund', (int) $refund->id);
+                $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_refund_mutation_scope');
+                $this->mutationIdentity = [$paymentId, $reference, $accountId, (int) $actor->id];
+                try {
+                    $refund = $this->refunds->record($payment, $actor, $amount, $reference, $method, $date, $reason, $evidence, $this);
+                    $posting = $this->treasury->post($actor, $accountId, 'payment_refund', (int) $refund->id, $this);
+                } finally {
+                    $this->mutationIdentity = null;
+                }
                 $entry = $this->entry(PaymentRefund::class, (int) $refund->id, 'payment_refund');
                 $minor = AccountMoney::stored($refund);
                 $legs = [$this->ledger->leg((int) $entry->id), $this->custody->leg((int) $posting['id'])];
@@ -99,6 +107,38 @@ final class GatedRefundWriter
                 $this->need($created === ! $replay, 'gated_refund_operation_conflict');
                 return ['refund' => $refund, 'posting' => $posting, 'transaction_id' => (int) $entry->id, 'registry_created' => $created];
             });
+    }
+
+    public function allowsRecord(int $paymentId, string $reference, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity !== null
+            && $this->mutationIdentity[0] === $paymentId && $this->mutationIdentity[1] === $reference
+            && $this->mutationIdentity[3] === $actorId;
+    }
+
+    public function allowsPosting(PaymentRefund $refund, int $accountId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [
+            (int) $refund->payment_id, $refund->disbursement_reference, $accountId, $actorId,
+        ] && (int) $refund->recorded_by === $actorId;
+    }
+
+    /** Both legs must remain protected even when the candidate switch is off. */
+    public static function hasRegisteredLeg(PaymentRefund $refund): bool
+    {
+        $events = DB::table('financial_posting_events')->where('scope_key', 'water');
+        $postingIds = DB::table('treasury_postings')->where('payment_refund_id', $refund->id)->pluck('id');
+        foreach ($postingIds as $id) {
+            if ((clone $events)->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $id)->exists()) return true;
+        }
+        $ledgerIds = Transaction::withTrashed()->where('reference_type', PaymentRefund::class)
+            ->where('reference_id', $refund->id)->where('type', 'payment_refund')->pluck('id');
+        foreach ($ledgerIds as $id) {
+            if ((clone $events)->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+                ->where('source_id', (string) $id)->exists()) return true;
+        }
+        return false;
     }
 
     private function verifyRefund(PaymentRefund $refund): object
