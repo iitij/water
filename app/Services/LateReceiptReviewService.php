@@ -61,6 +61,7 @@ final class LateReceiptReviewService
                 }
                 return (array) $existing;
             }
+            app(FinancialOperationIdentity::class)->requireUnusedRegistryIdentity($claim['sync_uuid']);
             abort_if(DB::table('noncash_collection_claims')->where('sync_uuid', $claim['sync_uuid'])->exists(), 409, 'المعرف مرتبط بطلب تحصيل غير نقدي.');
             abort_if(Payment::withTrashed()->where('sync_uuid', $claim['sync_uuid'])->lockForUpdate()->first(),
                 409, 'سبق تسجيل سند بهذا المعرّف؛ تحقق من السند الأصلي.');
