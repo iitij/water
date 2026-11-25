@@ -1,0 +1,140 @@
+name: V5 integrated Flutter G11 regression
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round38-v5-flutter-regression.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/accounting-candidate-v5'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: c930af1767b6ef63549a8fda5559826bb2d8db3c
+          persist-credentials: false
+      - name: Exact source and ordinary writer inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'c930af1767b6ef63549a8fda5559826bb2d8db3c'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          echo "SEQUENCE_CALLS"
+          git grep -n -E 'generateBillNumber|generateReceiptNumber|Invoice::create\(|Payment::create\(|new Invoice\(|new Payment\(' -- app routes database || test "$?" -eq 1
+          echo "DOCUMENT_IDENTIFIER_WRITER_FILES"
+          git grep -l -E 'bill_number|receipt_number' -- app routes database || test "$?" -eq 1
+          echo "LATE_RECEIPT_REVIEW_REFERENCES"
+          git grep -l 'late_receipt_reviews' -- app routes database || test "$?" -eq 1
+          echo "TEST_GENERATOR_CALLS"
+          git grep -n -E 'generateBillNumber|generateReceiptNumber' -- tests || test "$?" -eq 1
+          git diff --exit-code
+  flutter:
+    needs: inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: c930af1767b6ef63549a8fda5559826bb2d8db3c
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          ini-values: serialize_precision=-1
+          coverage: none
+          tools: composer:2.9.8
+      - name: Verify exact source and locked Laravel translation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'c930af1767b6ef63549a8fda5559826bb2d8db3c'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            '62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335  composer.lock' \
+            '4e49440cc7ed97bf3efa59fca5a4d892f89f9531bda9173ad5ad84777945ddd3  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          composer install --no-interaction --no-progress --prefer-dist --no-scripts
+          composer check-platform-reqs
+          php artisan package:discover --ansi
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: false
+      - name: Enforce Flutter and Dart versions and locked dependencies
+        working-directory: 'mobile app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version --machine > "$RUNNER_TEMP/flutter-version.json"
+          cat "$RUNNER_TEMP/flutter-version.json"
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["frameworkVersion"]=="3.44.0" and d["dartSdkVersion"]=="3.12.0"' "$RUNNER_TEMP/flutter-version.json"
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+      - name: Full analyzer and unit/widget suite
+        working-directory: 'mobile app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-files 'linux/flutter/ephemeral/**')"
+          flutter analyze --no-pub --no-fatal-infos
+          set +e
+          flutter test --no-pub --concurrency=1 --machine > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
+          result=$?
+          set -e
+          python3 - "$RUNNER_TEMP/flutter-tests.jsonl" <<'PY'
+          import json,sys
+          tests={}
+          done={}
+          run_complete=False
+          for line in open(sys.argv[1]):
+              try: event=json.loads(line)
+              except ValueError:
+                  print(line.rstrip())
+                  continue
+              if not isinstance(event, dict):
+                  print("FLUTTER_NON_EVENT", str(event)[:500])
+                  continue
+              kind=event.get("type")
+              if kind=="done":
+                  run_complete=event.get("success") is True
+              elif kind=="testStart":
+                  tests[event["test"]["id"]]=event["test"]["name"]
+              elif kind=="testDone" and not event.get("hidden",False):
+                  done[event["testID"]]=event
+              elif kind=="error":
+                  print("FLUTTER_ERROR",tests.get(event.get("testID"),""),event.get("error"),event.get("stackTrace"))
+          passed=skipped=failed=0
+          for i,event in done.items():
+              if event.get("skipped",False):
+                  skipped+=1
+                  print("FLUTTER_SKIPPED",tests.get(i,i))
+              elif event.get("result")=="success":
+                  passed+=1
+              else:
+                  failed+=1
+                  print("FLUTTER_FAILED",tests.get(i,i),event.get("result"))
+          print("FLUTTER_RESULT",json.dumps(dict(passed=passed,skipped=skipped,failed=failed)))
+          if not done or failed or not run_complete: sys.exit(1)
+          PY
+          echo "FLUTTER_EXIT=$result"
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+          exit "$result"
