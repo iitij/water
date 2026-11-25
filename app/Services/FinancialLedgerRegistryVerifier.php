@@ -21,6 +21,7 @@ final class FinancialLedgerRegistryVerifier
         private TreasuryTransferEvidence $treasury,
         private TreasuryCustodyEvidence $custody,
         private TreasuryOpeningFundingEvidence $openingFunding,
+        private TreasuryAdjustmentEvidence $adjustment,
     ) {}
 
     public function verifyPeriod(string $scope, int $periodId): array
@@ -75,6 +76,8 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->custody->leg((int) $id);
                 } elseif ($posting->kind === 'collector_funding') {
                     $actual = $this->openingFunding->funding((int) $id, $event->operation_effective_on);
+                } elseif (in_array($posting->kind, ['bank_fee', 'cash_count_adjustment'], true)) {
+                    $actual = $this->adjustment->leg((int) $id);
                 } else {
                     $unverified++;
                     continue;
