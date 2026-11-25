@@ -23,7 +23,7 @@ use Illuminate\Validation\ValidationException;
 final class PaymentRefundService
 {
     public function record(Payment $payment, User $actor, string $amount, string $reference,
-        string $method, string $date, string $reason, string $evidence): PaymentRefund
+        string $method, string $date, string $reason, string $evidence, ?GatedRefundWriter $gatedWriter = null): PaymentRefund
     {
         abort_unless($actor->hasRole('super_admin') ||
             ($actor->can('cash_sessions.approve') && $actor->can('payments.void.approve')), 403);
@@ -47,7 +47,7 @@ final class PaymentRefundService
         }
         $amount = $money->decimal();
 
-        return DB::transaction(function () use ($payment, $actor, $amount, $money, $reference, $method, $date, $reason, $evidence) {
+        return DB::transaction(function () use ($payment, $actor, $amount, $money, $reference, $method, $date, $reason, $evidence, $gatedWriter) {
             // Share the issuance fence before subscriber/business locks. This
             // records a completed disbursement; it is not prior authorization.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -68,6 +68,11 @@ final class PaymentRefundService
             $minor = static fn ($value): int => FinancialAmount::parse($value)->minor;
             $requested = $money->minor;
             $existing = PaymentRefund::where('disbursement_reference', $reference)->lockForUpdate()->first();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsRecord((int) $payment->id, $reference, (int) $actor->id))
+                && ($gatedWriter !== null || config('financial_candidate.refunds') === true
+                    || ($existing !== null && GatedRefundWriter::hasRegisteredLeg($existing)))) {
+                throw new \DomainException('gated_refund_writer_required');
+            }
             if ($existing) {
                 abort_unless((int) $existing->payment_id === (int) $payment->id
                     && $minor($existing->amount) === $requested
