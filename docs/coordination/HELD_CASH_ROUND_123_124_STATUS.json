@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Check exact round126 job output. Resolve confirmed failures only, then cover remaining prospective writer and reinstatement protections; do not repeat accepted baseline.",
+  "next": "Round127: harden automatic shadow reinstatement protection and verify cancellation rollback and existing missing-evidence detection; no historical remediation or active reserve reduction.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -119,12 +119,29 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round126": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "cc7a2c98d1604d77fcb3e5238ae0f95271e2bb2c",
     "branch": "qa/held-cash-journal-protection-round126",
     "source": "a4a1eeeedffe7acf01fa93dcc31767f83fab3811",
     "run": 45690964503,
     "scope": "Require release journal immutability trigger metadata (name, table, operation/timing and expected error message) in shared release proposal verification before approval or verified inspection. Tests drop and restore UPDATE/DELETE and SQLite REPLACE triggers; require no journal or audit mutation on rejection, then successful shadow approval without changing actual reserve.",
-    "limits": "New product candidate change not yet accepted. Metadata checks do not prove full trigger semantics against malicious replacement; automatic reinstatement trigger checks and broader entrypoint/writer coverage remain separate. No historical remediation, real data change, main merge or production activation."
+    "limits": "New product candidate change not yet accepted. Metadata checks do not prove full trigger semantics against malicious replacement; automatic reinstatement trigger checks and broader entrypoint/writer coverage remain separate. No historical remediation, real data change, main merge or production activation.",
+    "jobs": [
+      {
+        "id": 139475976149,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 24,
+        "exit": 0
+      },
+      {
+        "id": 139475976448,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 21,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
