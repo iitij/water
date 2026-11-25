@@ -2679,6 +2679,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         config(['financial_candidate.invoices' => true]);
+        $unauthorized = User::factory()->create(['role' => 'collector']);
+        $unauthorized->assignRole(Role::findOrCreate('collector', 'web'));
+        \Laravel\Sanctum\Sanctum::actingAs($unauthorized);
+        $this->postJson('/api/invoices', $data)->assertForbidden();
+        $this->postJson('/api/invoices/generate-meter', $data)->assertForbidden();
         \Laravel\Sanctum\Sanctum::actingAs($actor);
         $this->postJson('/api/invoices', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
         $this->postJson('/api/invoices/generate-meter', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
@@ -2694,6 +2699,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $afterIssue[$table] = $snapshot($table);
         $this->postJson('/api/invoices/generate-meter', $data)->assertCreated()->assertJsonPath('invoice.id', $id);
         $this->postJson('/api/invoices/generate-meter', array_replace($data, ['notes' => 'Different issuance intent']))->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($unauthorized);
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
         $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertUnprocessable();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
         $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertConflict();
