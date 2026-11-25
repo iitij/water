@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Support\AccountMoney;
+use App\Support\MoneyBoundary;
+use App\Support\SignedMinor;
 
 class Invoice extends Model
 {
@@ -136,13 +139,22 @@ class Invoice extends Model
     /**
      * المبلغ المتبقي
      */
-    public function getRemainingAmount(): float
+    public function getRemainingMinor(): int
     {
         if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
-            return 0.0;
+            return 0;
         }
-        // المبلغ الكلي المستحق لهذه الفاتورة فقط (تجاهل المتأخرات السابقة لتجنب المضاعفة)
-        return max(0, (float) $this->total_amount - (float) $this->amount_paid);
+        $billed = AccountMoney::stored($this, 'total_amount');
+        $paid = AccountMoney::stored($this, 'amount_paid');
+        if ($billed < 0 || $paid < 0 || $paid > $billed) {
+            throw new \LogicException('Invoice allocation must be between zero and its own billed amount.');
+        }
+        return SignedMinor::subtract($billed, $paid);
+    }
+
+    public function getRemainingAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getRemainingMinor());
     }
 
     public function scopeWithOwnDebt(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
@@ -168,43 +180,46 @@ class Invoice extends Model
 
     public function canCollect(): bool
     {
-        return $this->getCollectibleAmount() > 0;
+        return $this->getCollectibleMinor() > 0;
     }
 
     /**
      * Live collection suggestion, not the historical amount printed at issue.
      * Only the newest invoice represents cumulative outstanding debt.
      */
-    public function getCollectibleAmount(): float
+    public function getCollectibleMinor(): int
     {
         if ($this->trashed() || in_array($this->status, ['draft', 'cancelled'], true)) {
-            return 0.0;
+            return 0;
         }
+        return $this->isLatestInvoice() ? $this->getTrueRemainingMinor() : $this->getRemainingMinor();
+    }
 
-        return round($this->isLatestInvoice()
-            ? $this->getTrueRemainingAmount()
-            : $this->getRemainingAmount(), 2);
+    public function getCollectibleAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getCollectibleMinor());
     }
 
     /**
      * المبلغ المتبقي التراكمي (يضم هذه الفاتورة والفواتير السابقة لنفس الحساب)
      */
-    public function getTrueRemainingAmount(): float
+    public function getTrueRemainingMinor(): int
     {
         if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
-            return 0.0;
+            return 0;
         }
-        $thisRemaining = $this->getRemainingAmount();
+        $remaining = $this->getRemainingMinor();
+        foreach (self::where('subscriber_id', $this->subscriber_id)
+            ->where('id', '<', $this->id)->whereNotIn('status', ['draft', 'cancelled'])
+            ->orderBy('id')->cursor() as $invoice) {
+            $remaining = SignedMinor::add($remaining, $invoice->getRemainingMinor());
+        }
+        return $remaining;
+    }
 
-        $olderInvoicesRemaining = self::where('subscriber_id', $this->subscriber_id)
-            ->where('id', '<', $this->id)
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->get()
-            ->sum(function ($inv) {
-                return $inv->getRemainingAmount();
-            });
-
-        return $thisRemaining + $olderInvoicesRemaining;
+    public function getTrueRemainingAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getTrueRemainingMinor());
     }
     /**
      * هل هذه الفاتورة هي الأحدث للمشترك/العداد؟
@@ -230,7 +245,7 @@ class Invoice extends Model
             return;
         }
 
-        $remaining = round($this->getRemainingAmount(), 2);
+        $remaining = $this->getRemainingMinor();
         $gracePeriod = max(0, min(365, (int) Setting::get('grace_period', '14')));
         $strictOverdue = Setting::get('strict_overdue_on_new_invoice', '0') === '1';
 
@@ -239,7 +254,7 @@ class Invoice extends Model
         } elseif (($strictOverdue && ! $this->isLatestInvoice())
             || ($this->bill_date && today()->gt($this->bill_date->copy()->startOfDay()->addDays($gracePeriod)))) {
             $status = 'overdue';
-        } elseif ((float) $this->amount_paid > 0) {
+        } elseif (AccountMoney::stored($this, 'amount_paid') > 0) {
             $status = 'partially_paid';
         } else {
             $status = 'issued';
@@ -250,22 +265,4 @@ class Invoice extends Model
         }
     }
 
-    /**
-     * توليد رقم فاتورة فريد
-     */
-    public static function generateBillNumber(): string
-    {
-        $prefix = 'INV-' . date('Ym') . '-';
-        $lastInvoice = static::withTrashed()
-            ->where('bill_number', 'like', $prefix . '%')
-            ->orderByDesc('bill_number')
-            ->first();
-
-        if ($lastInvoice) {
-            $lastNumber = (int) str_replace($prefix, '', $lastInvoice->bill_number);
-            return $prefix . str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
-        }
-
-        return $prefix . '0001';
-    }
 }

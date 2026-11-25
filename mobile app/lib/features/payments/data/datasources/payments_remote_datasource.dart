@@ -40,10 +40,11 @@ class PaymentsRemoteDataSource {
   }
 
   /// #50 `POST /api/payments` — سند قبض عام (قد يكون بلا فاتورة → توزيع FIFO).
-  Future<CollectPaymentOutcome> create(Map<String, dynamic> payload) async {
+  Future<CollectPaymentOutcome> create(Map<String, dynamic> payload, {Map<String, dynamic>? sessionExtra}) async {
     final response = await _client.post(
       FinanceEndpoints.payments,
       body: payload,
+      sessionExtra: sessionExtra,
     );
     return _parseOutcome(response);
   }
@@ -51,11 +52,13 @@ class PaymentsRemoteDataSource {
   /// #44 `POST /api/invoices/{id}/pay` — التحصيل من شاشة الفاتورة/المحصل السريع.
   Future<CollectPaymentOutcome> payInvoice(
     int invoiceId,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    Map<String, dynamic>? sessionExtra,
+  }) async {
     final response = await _client.post(
       FinanceEndpoints.invoicePay(invoiceId),
       body: payload,
+      sessionExtra: sessionExtra,
     );
     return _parseOutcome(response);
   }
@@ -90,6 +93,7 @@ class PaymentsRemoteDataSource {
   Future<VoidPaymentOutcome> voidPayment(
     int id, {
     required String reason,
+    Map<String, dynamic>? sessionExtra,
   }) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
@@ -101,11 +105,15 @@ class PaymentsRemoteDataSource {
     final response = await _client.post(
       FinanceEndpoints.paymentVoid(id),
       body: <String, dynamic>{'reason': trimmed},
+      sessionExtra: sessionExtra,
     );
     final map = JsonUtils.asMap(response);
     final pending = map?['pending_approval'] == true;
     final data =
         JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
+    if (sessionExtra != null && data == null) {
+      throw const UnexpectedFailure('لم يؤكد الخادم هوية السند المطلوب إلغاؤه.');
+    }
     final payment = data == null ? await byId(id) : PaymentModel.fromJson(data);
     return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
   }

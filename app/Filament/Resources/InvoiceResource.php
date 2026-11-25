@@ -59,7 +59,6 @@ class InvoiceResource extends Resource
                     Forms\Components\TextInput::make('bill_number')
                         ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('رقم الفاتورة')
-                        ->default(fn() => Invoice::generateBillNumber())
                         ->disabled()
                         ->dehydrated(false),
 
