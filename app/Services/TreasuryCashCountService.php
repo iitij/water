@@ -49,6 +49,7 @@ final class TreasuryCashCountService
             if ($row->treasury_cash_adjustment_id === null) unset($row->treasury_cash_adjustment_id);
             if ($row->treasury_bank_collection_id === null) unset($row->treasury_bank_collection_id);
             if ($row->treasury_late_cash_receipt_id === null) unset($row->treasury_late_cash_receipt_id);
+            if ($row->held_cash_payout_uuid === null) unset($row->held_cash_payout_uuid);
         }
         $balance = Money::document($account->opening_minor);
         foreach ($rows as $row) {
@@ -250,7 +251,7 @@ final class TreasuryCashCountService
 
     private function checkAdjustmentPostingExact(object $posting): bool
     {
-        if ($posting->kind !== 'cash_count_adjustment' || ! $posting->treasury_cash_adjustment_id
+        if ($posting->kind !== 'cash_count_adjustment' || $posting->held_cash_payout_uuid !== null || ! $posting->treasury_cash_adjustment_id
             || $posting->cash_handover_id || $posting->payment_refund_id || $posting->cash_session_funding_id
             || $posting->treasury_transfer_id || $posting->treasury_transfer_receipt_id || $posting->treasury_bank_fee_id || $posting->treasury_bank_collection_id || $posting->treasury_late_cash_receipt_id) return false;
         $adjustment = DB::table('treasury_cash_adjustments')->find($posting->treasury_cash_adjustment_id);
