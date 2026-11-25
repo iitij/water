@@ -447,11 +447,68 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         // original physical disbursement was prevented by the posting guard.
     }
 
-    private function payoutHeld(User $actor, int $minor, string $uuid = self::OTHER): array
+    private function authorizeHeld(User $authorizer, User $executor, int $minor, string $uuid = self::OTHER): array
     {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->authorizePayout($authorizer, $executor,
+            self::NEXT, $minor, 'QA-HELD-AUTH-'.$uuid,
+            'Independent prior approval of the identified owner claim and designated cash executor',
+            $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    private function payoutHeld(User $actor, int $minor, string $uuid = self::OTHER, bool $authorize = true): array
+    {
+        if ($authorize && ! DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->exists()) {
+            $this->authorizeHeld($this->actor(), $actor, $minor, $uuid);
+        }
         return app(\App\Services\TreasuryHeldCashLiabilityService::class)->payout($actor, self::NEXT, $minor,
             'QA-HELD-PAYOUT-'.$uuid, 'Independent signed acknowledgement of returned cash by identified owner',
             $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    public function test_held_payout_requires_prior_independent_authorization_and_blocks_competing_credit(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $executor = $this->actor();
+        $authorizer = $this->actor();
+        $this->rejects('held_cash_payout_authorization_required', fn () => $this->payoutHeld($executor, 20, authorize: false));
+        $this->rejects('held_cash_authorization_independence', fn () => $this->authorizeHeld($executor, $executor, 20));
+        $auth = $this->authorizeHeld($authorizer, $executor, 20);
+        $this->assertTrue($auth['created']);
+        $this->assertSame('authorized', $auth['state']);
+        $this->assertFalse($this->authorizeHeld($authorizer, $executor, 20)['created']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => self::OTHER]);
+        $inspect = $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->inspect($lot));
+        $this->assertSame(20, $inspect['pending_authorized_minor']);
+        $this->assertSame(25, $inspect['outstanding_minor']);
+        $this->rejects('held_cash_credit_capacity', fn () => $this->creditHeld($authorizer, 6, '55555555-5555-4555-8555-555555555555'));
+        $this->rejects('held_cash_payout_authorization_mismatch', fn () => $this->payoutHeld($executor, 19, authorize: false));
+        $this->rejects('held_cash_payout_authorization_mismatch', fn () => $this->payoutHeld($authorizer, 20, authorize: false));
+        $result = $this->payoutHeld($executor, 20, authorize: false);
+        $this->assertSame(5, $result['outstanding_minor']);
+        $this->assertSame(0, $result['pending_authorized_minor']);
+        $this->assertSame('paid', $this->authorizeHeld($authorizer, $executor, 20)['state']);
+    }
+
+    public function test_held_payout_authorization_can_be_cancelled_without_discharge_or_reuse(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $executor = $this->actor();
+        $authorizer = $this->actor();
+        $this->authorizeHeld($authorizer, $executor, 25);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $evidence = 'Independent reconciliation confirms that no cash was physically handed over';
+        $cancel = fn (User $actor) => $service->cancelPayoutAuthorization($actor, self::OTHER, $evidence, '2026-11-25', $this->nowAt());
+        $this->rejects('held_cash_cancel_independence', fn () => $cancel($executor));
+        $this->assertTrue($cancel($authorizer)['created']);
+        $this->assertFalse($cancel($authorizer)['created']);
+        $this->assertSame('cancelled', $this->authorizeHeld($authorizer, $executor, 25)['state']);
+        $this->rejects('held_cash_payout_authorization_mismatch', fn () => $this->payoutHeld($executor, 25, authorize: false));
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(25, $this->gate(fn () => $service->inspect($lot))['outstanding_minor']);
+        $this->assertSame(0, $this->creditHeld($authorizer, 25, '55555555-5555-4555-8555-555555555555')['outstanding_minor']);
     }
 
     public function test_held_owner_payout_reduces_cash_and_liability_once_and_preserves_unidentified_cash(): void
