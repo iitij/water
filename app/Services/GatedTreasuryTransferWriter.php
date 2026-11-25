@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedTreasuryTransferWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private TreasuryTransferService $transfers,
@@ -32,7 +34,8 @@ final class GatedTreasuryTransferWriter
                 $existing = DB::table('treasury_transfers')->where('reference', mb_strtoupper(trim($data['reference'])))
                     ->lockForUpdate()->first();
                 $this->checkReplay($uuid, $existing ? $this->posting('treasury_transfer_id', (int) $existing->id) : null);
-                $result = $this->transfers->dispatch($actor, $data);
+                $result = $this->mutate(['dispatch', mb_strtoupper(trim($data['reference'])), (int) $actor->id],
+                    fn () => $this->transfers->dispatch($actor, $data, $this));
                 return $this->record($context, $uuid, $now, $result,
                     $this->posting('treasury_transfer_id', (int) $result['id']));
             });
@@ -63,10 +66,27 @@ final class GatedTreasuryTransferWriter
                 $existing = DB::table('treasury_transfer_receipts')->where('treasury_transfer_id', $transferId)
                     ->lockForUpdate()->first();
                 $this->checkReplay($uuid, $existing ? $this->posting('treasury_transfer_receipt_id', (int) $existing->id) : null);
-                $result = $this->transfers->receive($actor, $transferId, $data);
+                $result = $this->mutate(['receive', (string) $transferId, (int) $actor->id],
+                    fn () => $this->transfers->receive($actor, $transferId, $data, $this));
                 return $this->record($context, $uuid, $now, $result,
                     $this->posting('treasury_transfer_receipt_id', (int) $result['receipt']['id']));
             });
+    }
+
+    public function allowsMutation(string $kind, string $identity, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [$kind, $identity, $actorId];
+    }
+
+    private function mutate(array $identity, callable $action): array
+    {
+        $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_transfer_mutation_scope');
+        $this->mutationIdentity = $identity;
+        try {
+            return $action();
+        } finally {
+            $this->mutationIdentity = null;
+        }
     }
 
     private function lock(string $uuid): void
