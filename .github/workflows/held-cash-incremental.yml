@@ -1,35 +1,101 @@
-name: Prospective mobile decision locked SDK verification
+name: Prospective receipt void service fence
 on:
   push:
-    branches: ['release/prospective-void-mobile-decision-sdk']
+    branches: ['release/prospective-void-service-fence']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  flutter:
+  sqlite:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: "mobile app"
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@v2
+      - uses: shivammathur/setup-php@v2
         with:
-          flutter-version: '3.44.0'
-          channel: stable
-          cache: true
-      - name: Verify source and resolve dependencies
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
         run: |
           set -euo pipefail
           git rev-parse HEAD
-          flutter --version
-          sha256sum pubspec.lock
-          flutter pub get --enforce-lockfile
-          git diff --exit-code -- pubspec.lock
-      - name: Analyze changed modules
-        run: dart analyze --no-fatal-warnings lib/features/payments/data/models/payment_model.dart lib/features/payments/data/datasources/payments_remote_datasource.dart lib/features/payments/data/repositories/payments_repository_impl.dart lib/features/payments/domain/repositories/payments_repository.dart lib/features/payments/presentation/sheets/void_requests_sheet.dart test/features/payments/bound_void_decision_test.dart
-      - name: Verify bound decisions and affected list widget
-        run: flutter test --no-pub test/features/payments/bound_void_decision_test.dart test/features/payments/void_requests_pagination_test.dart
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Verify protected void boundaries and affected mutation regressions
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_(service_fence_|mobile_decision_|api_|filament_|approval_is_bound)|test_round137_(void_immediate|rejected_request)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+  mysql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: water_test
+          MYSQL_USER: water_qa
+          MYSQL_PASSWORD: disposable_qa_password
+          MYSQL_ROOT_PASSWORD: disposable_root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: water_test
+      DB_USERNAME: water_qa
+      DB_PASSWORD: disposable_qa_password
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pcntl, posix, mbstring, pdo_mysql, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Permit migration triggers in disposable MySQL only
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
+      - name: Verify protected void boundaries and affected mutation regressions
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_(service_fence_|mobile_decision_|api_|filament_|approval_is_bound)|test_round137_(void_immediate|rejected_request)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+
