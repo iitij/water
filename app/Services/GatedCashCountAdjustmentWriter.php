@@ -135,7 +135,13 @@ final class GatedCashCountAdjustmentWriter
                     && ($audit->after['evidence'] ?? null) === trim($evidence)
                     && ($audit->after['subscriber_posting_created'] ?? null) === false,
                     'gated_cash_count_audit_mismatch');
-                return $result + ['registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
+                $created = $this->registry->record($context, $uuid, [$leg], $now);
+                $result['registry_created'] = $created;
+                if ($classification === 'unattributed_cash_held') {
+                    $result['held_liability_id'] = app(TreasuryHeldCashLiabilityService::class)
+                        ->recognize((int) $adjustment['id'], $uuid, $created);
+                }
+                return $result;
             });
     }
 
