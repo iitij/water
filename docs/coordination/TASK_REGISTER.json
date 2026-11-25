@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 57,
+    "round": 58,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3406,6 +3406,25 @@
           "skipped": 0
         }
       }
+    },
+    "round58": {
+      "phase": "Revalidate registered ledger legs against actual persisted sources",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
+      "source": "1a9726d9171f824a760e1d23ad85d4a3ffdf62d9",
+      "workflow": "8517599a8c4a94e5c4c474b5ef809995d72be129",
+      "branch": "fix/central-g1b-registered-ledger-verifier",
+      "pr": 135,
+      "runs": [
+        {
+          "id": 45612281499,
+          "name": "Registered ledger source verification",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
+      "scope": "New read-only verifier: canonical registry verification followed by actual ledger source identity, exact minor amount, leg, currency and hash comparison. Reports unverified nonledger family count. Three new cases per engine: valid with incomplete coverage, internally consistent wrong hash, noncanonical ID.",
+      "limits": "No production activation, complete business-source coverage, close authorization or release. No prior suites repeated; runtime pending."
     }
   }
 }
