@@ -175,7 +175,7 @@ class PaymentsRemoteDataSource {
     Map<String, dynamic>? sessionExtra,
   }) async {
     if (requestId <= 0 || (approve != (operationUuid != null))) {
-      throw const ValidationFailure('هوية قرار الإلغاء غير صالحة.');
+      throw const ValidationFailure('هوية قرار الإلغاء غير صالحة.', <String, List<String>>{});
     }
     final response = await _client.post(
       FinanceEndpoints.paymentVoidDecision(id),
