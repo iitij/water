@@ -8,11 +8,11 @@
       "scope": "collections, bank reconciliation, treasury and closing",
       "branch_observed": "fix/team-a-noncash-claim-proof",
       "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Round 9 final acceptance checkpoint: review exact PR79 37ee7ea CashMoney/SignedMinor contract and PR80 e79c3b4 audit preservation, pending review locking/current read, exact balance/rollback, MySQL lock breadth. Record signed scoped acceptance or concrete defects in PR79/80, not merely review criteria. No product edits, repeated tests, main merge or activation.",
+      "next": "Final source decisions received PR79 #7151180357 and PR80 #7151181168. No further routine source review. Review actual outstanding runtime evidence and A-C-09-L01 operational lock breadth only if new evidence or a demonstrated defect; no activation or edits.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -64,7 +64,7 @@
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Freeze PR77 8f52bdc and isolated P2 foundation PR79 37ee7ea. Respond only to concrete A/D findings. Prepare read-only P2 integration slices, field/driver boundaries, exact storage, audit/lock order and rollback from future accepted V2; no integration, no duplicate arithmetic implementation, no candidate edits or main merge.",
+      "next": "P2 pure source accepted by A/D at37ee7ea; integration plan received PR79 #7151182531. Preserve frozen P1 and foundation; no more routine design or pure suite reruns. Hold runtime P2 integration until accepted V2 and explicit scope for I01 boundary adapters.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -134,7 +134,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Freeze PR80 e79c3b4. Retrieve existing exact-head cloud evidence if run; otherwise one authorized cloud runner executes only the 13 planned ordinary cases in PR80, separate synthetic schemas. Review actual current-read contention and required audit rollback; repair only independently confirmed defects under scope. No already-applied migration replay, product edits without defect approval, real data or main merge.",
+      "next": "PR80 source accepted by A/D at e79c3b4 for A-C-08-01/02/03. Freeze; actual 13 planned runtime results outstanding. A-C-09-L01 lock breadth is open operational risk, not reproduced defect; no schema change or new product edit. Review actual evidence when available.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -192,11 +192,11 @@
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Final acceptance checkpoint: recover actual Round8 counts/assertions/skips and Round9 C report from owner, no duplicate runs; review exact PR79/80 source and evidence and publish concrete decisions. Refresh V2 manifest: 27 unique paths before manifest, 20 FinancialConcurrencyTest methods (15 baseline +3 C +2 B), retain C bounded helper. Record G07 unresolved stored-reading billing ambiguity; no claim of pass or new product edit. Hosted CI failure with no steps/BlobNotFound unresolved, separate from runtime. No previously restricted checks or merge.",
+      "next": "Final source decisions and 27-path V2 matrix c47d9e794e9ae280117cf43f1b95cfd48bb751dc received. No duplicate review or test reruns. Reconcile missing original Codex evidence only, distinguish 14 command exits from actual tests and skips, document A-C-09-L01 ordinary MySQL operational evidence separately; no new merge until authorization.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_9_DELIVERIES_RECEIVED_HOLD_V2_AND_MAIN",
+    "decision": "ROUND_9_SCOPED_SOURCE_ACCEPTED_RUNTIME_EVIDENCE_HOLD_V2_AND_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -961,20 +961,25 @@
       },
       "final_acceptance_checkpoint": {
         "source": "Supervisor direct GitHub review of current c04319a2 register, PR79/80 bodies, exact heads and diffs; user reports all completed but no later exact runtime report supplied.",
-        "decision": "FINAL_EVIDENCE_HANDOFF_AND_SCOPED_REVIEW_BEFORE_V2",
+        "decision": "SOURCE_ACCEPTANCE_COMPLETE_RUNTIME_EVIDENCE_HOLD",
         "B": {
           "sha": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
-          "status": "IMPLEMENTED_PURE_EVIDENCE_REPORTED_A_D_REVIEW_PENDING",
-          "evidence": "14177 pure checks exit0 and 4000 auxiliary oracle comparisons (1071 expected overflows); auxiliary harness not committed; no DB/caller integration."
+          "status": "A_D_SCOPED_PURE_SOURCE_ACCEPTED",
+          "evidence": "A PR79 #7151180357, D #7151197573. B reported 14177 checks exit0 and 4000 auxiliary oracle matches (1071 expected overflows); no independent execution. No runtime integration, exclude from V2. B detailed P2 integration plan received #7151182531."
         },
         "C": {
           "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
-          "status": "IMPLEMENTED_RUNTIME_REPORT_PENDING",
-          "tests": "PR80 exact 5+1 ordinary methods per engine, plus 1 MySQL-only race = 13 planned. Reuse existing results if already run; otherwise only these exact scoped tests."
+          "status": "A_D_SCOPED_SOURCE_ACCEPTED_RUNTIME_HOLD",
+          "evidence": "A PR80 #7151181168, D #7151198389; 13 planned, actual counts/exit/skip not supplied; A-C-09-L01 unindexed current-read lock breadth open, not demonstrated defect. No schema change. Same-account race and callback tests scope limitations retained."
         },
-        "cloud": "Recover complete original Round8 P1 and meter reports and any existing Round9 follow-up report from owner. Prior 14 zero command exits includes 2 setups; not test counts. No repeat accepted suites. If Round9 was not executed, run only PR80 cases via approved water-qa synthetic environment. No restricted retries.",
-        "next": "Once A/D accept and exact runtime reports reconcile, supervisor authorizes V2 composition from frozen f043851 with B8f52bdc, Ce79c3b4 and G10 123fe5c; exclude P2 foundation until separate approval. Preserve 20 concurrency methods, lockfiles, protected records, no main merge. Then targeted V2 runtime including affected tests and G07 stored ambiguity; P2 integration only on separately approved accepted base.",
-        "limits": "No new test execution, product edits, branch composition or main merge in supervisor turn. User report completion not sufficient to infer actual test counts. CI root cause unknown; G02/G11 full suites and G12 deployment gates remain."
+        "cloud": "Existing Round8 exit ledger 14/14 (2 setup,12 test commands) accepted as reported command success. D confirms no actual counts/skips/raw hashes. Original reports not recovered from Library or prior context; Round9 report absent. Request one consolidated evidence export from existing Codex session; no repeat successful suites. If Round9 not run only approved 13 cases from PR80 exact SHA, no previously restricted checks.",
+        "next": "No new routine assignments to A/B/C/D. Once runtime gate reconciles and any demonstrated defect handled, authorize V2 composition from f043851 using B8f52bdc, Ce79c3b4 and G10 123fe5c, manifest c47d9e7. G00 verify 27 paths + manifest, exclusive blobs/modes, all20 shared methods and lockfiles; exact candidate targeted QA then P2 I01. No P2 foundation in V2, no main merge.",
+        "limits": "No product changes/test runs/branch creation or composition. G07 stored-reading ambiguity, G02/G11 full suites, G12 hosted CI and hosting open. User report completion does not substitute for actual runtime evidence.",
+        "D": {
+          "manifest": "c47d9e794e9ae280117cf43f1b95cfd48bb751dc",
+          "status": "SOURCE_MATRIX_COMPLETE",
+          "evidence": "PR72 #7151200647. Supervisor independently compared cumulative deltas B14/C13/G10 1, union27, only overlap tests/Feature/FinancialConcurrencyTest.php; preserve C bounded helper and 20 methods."
+        }
       }
     }
   }
