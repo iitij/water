@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 97,
+    "round": 98,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4284,6 +4284,82 @@
       "scope": "Added branch-scoped workflow only, read-only permissions, exact checkout and Composer lock validation, disposable SQLite in memory and MySQL 8.0 water_test service database. Each job runs GatedCashCountAdjustmentWriterTest.php (16 test methods) with fail-on-skipped and fail-on-empty-test-suite. Confirmed real push-triggered run and both jobs started on GitHub-hosted runners; local machine used only for read-only status retrieval. No product source changes. Renamed private helper post() to postAdjustment() and all internal calls only; no assertions or accounting logic changed. Confirmed fresh push-triggered run.",
       "limits": "SQLite exact corrected commit passed 16 tests and 123 assertions. MySQL final success not yet verified. Scoped acceptance only; no production activation or complete surplus settlement.",
       "next": "Read final conclusions and exact test logs for replacement run, fix any proven defects, then resume discharge and W18 proof."
+    },
+    "round98": {
+      "phase": "MySQL isolated migration environment correction and actual transfer/refund reservation cases",
+      "status": "CI_ENVIRONMENT_CORRECTED_EXTENDED_QA_RUNNING",
+      "base": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "319f64b6e4309de3f7237cd6fe7b6395bfde1a5c",
+      "runs": [
+        {
+          "id": 45634630889,
+          "head_sha": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
+          "status": "completed",
+          "conclusion": "failure",
+          "jobs": [
+            {
+              "id": 139276673181,
+              "engine": "sqlite",
+              "tests": 16,
+              "assertions": 123,
+              "exit": 0,
+              "conclusion": "success"
+            },
+            {
+              "id": 139276672582,
+              "engine": "mysql",
+              "tests": 16,
+              "assertions": 0,
+              "errors": 16,
+              "exit": 2,
+              "conclusion": "failure",
+              "reason": "MySQL error 1419 during existing protect_user_identity migration; binary logging with restricted test user prevents CREATE TRIGGER."
+            }
+          ]
+        },
+        {
+          "id": 45635529155,
+          "head_sha": "68b65deaa4093925baf83527dd98a8e7af05b458",
+          "status": "in_progress_at_observation",
+          "jobs": [
+            {
+              "id": 139279820899,
+              "engine": "sqlite",
+              "conclusion": "success",
+              "tests": 16,
+              "assertions": 123,
+              "exit": 0
+            },
+            {
+              "id": 139279821303,
+              "engine": "mysql",
+              "status": "in_progress"
+            }
+          ]
+        },
+        {
+          "id": 45635799680,
+          "head_sha": "319f64b6e4309de3f7237cd6fe7b6395bfde1a5c",
+          "status": "in_progress_at_observation",
+          "expected_tests_per_engine": 18,
+          "jobs": [
+            {
+              "id": 139280759558,
+              "engine": "sqlite",
+              "status": "in_progress"
+            },
+            {
+              "id": 139280760268,
+              "engine": "mysql",
+              "status": "in_progress"
+            }
+          ]
+        }
+      ],
+      "scope": "Changed only isolated GitHub MySQL service configuration via its exact job container ID: root sets log_bin_trust_function_creators=1, ordinary test user remains restricted. No application migration or trigger removed. Two actual integration test methods added for transfer boundary/replay and refund posting rejection with original refund document preserved and reconciliation gap visible. No product code changed in this round.",
+      "limits": "Current runs not fully concluded at observation. Refund posting rejection is not proof of prior physical payout prevention; explicit authorization and incident recording remain necessary. Held liability settlement, subscriber credit, W18 proof, global coverage, concurrency and closure remain open. No main merge, live data, deployment, or change to production DB permissions.",
+      "next": "Read final logs of both runs, resolve any proven defect, then implement explicit held-owner cash payout/settlement and subscriber noncash reclassification with independent verification."
     }
   }
 }
