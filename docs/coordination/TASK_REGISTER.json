@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_16_I06_SCOPED_RUNTIME_ACCEPTED_INTEGRATION_REVIEW_HOLD_MAIN",
+    "decision": "ROUND_17_V3_COMPOSITION_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -2047,6 +2047,14 @@
         }
       },
       "next": "Compose separately reviewed G07 and P2 product heads on a new integration candidate only after I06 runtime acceptance; verify complete path/blob manifest, targeted changed paths and then remaining G02/G11/G12. P3 API/Flutter/export compatibility, closing/returned cheques, numbering, L01 unresolved. No main merge or deployment."
+    },
+    "round17": {
+      "phase": "V3 integration of scoped P2 slices and G07",
+      "status": "AUTHORIZED_COMPOSITION_ONLY",
+      "base": "1a55c40e0219706d5942aa525c82660e218e1aa8",
+      "g07": "0583e2161a491445c2e597793cfa91377cb7a87f",
+      "branch": "integration/accounting-candidate-v3",
+      "scope": "Copy exact four G07 file blobs onto frozen P2 product/test head. Verify no overlapping paths versus V2, no other modifications except composition manifest and separately scoped hosted workflow; targeted integrated G07/I06 and broad backend regression where isolated and applicable. No change to main, existing accepted branches, schema or production; no claim P2/P3 full acceptance. L01, historical tariff anchors, legacy mixed observations, remaining projections, ACC14, closing and client contracts remain open."
     }
   }
 }
