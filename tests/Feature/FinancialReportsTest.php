@@ -168,6 +168,52 @@ class FinancialReportsTest extends TestCase
         $this->assertSame($before, Invoice::query()->get()->toArray());
     }
 
+    public function test_reports_aggregate_exact_cents_and_preserve_source_documents(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 31)->setTime(12, 0));
+        $square = Square::create(['name' => 'Exact reporting square']);
+        $debtor = $square->subscribers()->create(['name' => 'Exact debtor', 'status' => 'active']);
+        $creditor = $square->subscribers()->create(['name' => 'Exact creditor', 'status' => 'active']);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $debtor->id, 'unique_code' => 'P3-EXACT']);
+        \App\Models\Tariff::create(['name' => 'P3 tariff', 'unit_price' => '0.30', 'is_active' => true, 'start_date' => '2026-01-01']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-10-01',
+            'period_start' => '2026-09-01', 'period_end' => '2026-10-01', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\InvoiceService::class)->generateInvoice($debtor, $meter);
+        $payments = app(\App\Services\PaymentService::class);
+        $payments->collectPayment($debtor, '0.10');
+        $payments->collectPayment($creditor, '0.10');
+        $payments->collectPayment($creditor, '0.20');
+        $finance = app(\App\Services\FinancialReportingService::class);
+        $this->assertSame(40, $finance->grossReceiptMinor('2026-10-01', '2026-10-31', $square->id));
+        $this->assertSame(['debt' => 0.20, 'credit' => 0.30, 'basis' => 'current_subscriber_ledger'],
+            $finance->accountBalances($square->id));
+        $before = \Illuminate\Support\Facades\DB::table('transactions')->orderBy('id')->get()->toArray();
+        $this->getJson('/api/admin/reports?from_date=2026-10-01&to_date=2026-10-31&square_id='.$square->id)
+            ->assertOk()
+            ->assertJsonPath('summary.total_collected', 0.40)
+            ->assertJsonPath('summary.total_invoiced', 0.30)
+            ->assertJsonPath('summary.total_outstanding', 0.20)
+            ->assertJsonPath('summary.consumption_units', 1)
+            ->assertJsonPath('account_balances.debt', 0.20)
+            ->assertJsonPath('account_balances.credit', 0.30)
+            ->assertJsonPath('revenue_series.0.value', 0.40)
+            ->assertJsonPath('square_breakdown.0.value', 0.40)
+            ->assertJsonPath('financial_movements.gross_valid_receipts', 0.40)
+            ->assertJsonPath('financial_movements.invoice_postings', 0.30)
+            ->assertJsonPath('financial_movements.ledger_net_movement', 0.10);
+        $this->assertEquals($before, \Illuminate\Support\Facades\DB::table('transactions')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_report_rejects_invalid_stored_allocation_instead_of_clamping_it(): void
+    {
+        $subscriber = Square::create(['name' => 'Invalid report allocation'])->subscribers()
+            ->create(['name' => 'Invalid report fixture', 'status' => 'active']);
+        $this->invoice($subscriber, ['total_amount' => '1.00', 'amount_paid' => '1.01']);
+        $before = Invoice::query()->get()->toArray();
+        $this->getJson('/api/admin/reports?from_date=2026-10-01&to_date=2026-10-31')->assertServerError();
+        $this->assertSame($before, Invoice::query()->get()->toArray());
+    }
+
     private function seedReport(): array
     {
         $first = Square::create(['name' => 'المربع الأول'])->subscribers()->create(['name' => 'المشترك الأول', 'status' => 'active']);
