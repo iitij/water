@@ -69,7 +69,7 @@ class CashSessionService
                 'cash_session' => ['لديك صندوق مفتوح بالفعل. أغلقه قبل فتح صندوق جديد.'],
             ]);
         }
-        return CashSession::create([
+        $session = CashSession::create([
             'user_id' => $user->id,
             'square_id' => $squareId,
             'session_date' => now()->toDateString(),
@@ -79,6 +79,10 @@ class CashSessionService
             'opened_at' => now(),
             'opening_notes' => $notes,
         ]);
+        if (! $session->exists || $session->getKey() === null) {
+            throw new \RuntimeException('Cash session opening was not persisted.');
+        }
+        return $session;
     }
 
     private function auditOpening(CashSession $session, User $actor): void
@@ -99,7 +103,8 @@ class CashSessionService
         abort_if((int) $collector->id === (int) $issuer->id, 403, 'يلزم مسؤول خزينة مستقل عن المحصّل.');
         $reference = mb_strtoupper(trim($reference));
         $evidence = trim($evidence);
-        if (mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+        if (! preg_match('/^(\d{1,12})(?:\.(\d{1,2}))?$/D', $amount)
+            || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
             || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
             throw ValidationException::withMessages(['funding' => 'يلزم مبلغ نقدي صحيح ومرجع ودليل تسليم مستقل.']);
         }
