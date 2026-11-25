@@ -1,0 +1,41 @@
+{
+  "round111": {
+    "source": "6454aeda97ef3597ea0dd8ab394222ca1c7d5cc2",
+    "branch": "fix/central-g1a-surplus-liability",
+    "qa_branch": "qa/held-cash-corrections-round111",
+    "run": 45652983270,
+    "status": "PASS_BOTH_ENGINES_AND_CONCURRENCY_PROMOTED",
+    "jobs": [
+      {
+        "id": 139342080508,
+        "engine": "sqlite",
+        "tests": 119,
+        "assertions": 1345,
+        "exit": 0
+      },
+      {
+        "id": 139342081215,
+        "engine": "mysql",
+        "tests": 122,
+        "assertions": 1395,
+        "exit": 0,
+        "concurrency": {
+          "tests": 6,
+          "assertions": 90
+        }
+      }
+    ],
+    "promotion": "Compared old exact head 962d4f6; non-force ref update succeeded, verified identical to 6454aeda."
+  },
+  "round112": {
+    "base": "6454aeda97ef3597ea0dd8ab394222ca1c7d5cc2",
+    "source": "4538e7563cfaa991c1cfda43978145e69169d287",
+    "branch": "qa/held-cash-invoice-fence-round112",
+    "status": "STAGED_EXACT_SHA_RUNTIME_IN_PROGRESS",
+    "run": 45655296804,
+    "scope": "Acquire issuance lock before subscriber in InvoiceService.generateInvoice and PaymentService.recalculateInvoices. New Eloquent invoice save wraps insert and created-event allocation in same transaction with issuance and subscriber locks; does not make direct creation a certified financial posting. Tests for issuance-first generation and direct allocation, injected created-event failure rolling back invoice and prior allocation revisions, actual MySQL credit-versus-issue race. Add billing period and overdue regressions. No database schema modifications.",
+    "limits": "No global writer/outer caller coverage or direct SQL protection proof. No closure or spending release. Test candidate must pass both engines before promotion. No production, main or real data access."
+  },
+  "coordination": "TASK_REGISTER.json historical large-file update remains pending; independent receipts maintained. Prior round109–111 status and exact logs retained.",
+  "next": "Inspect exact round112 results; repair any actual regressions. Review direct raw financial writes, subscriber/meter retirement lock ordering and Eloquent event bypass, then implement narrowly scoped release/reinstatement only after safety prerequisites."
+}
