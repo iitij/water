@@ -3448,7 +3448,7 @@
     },
     "round59": {
       "phase": "Actual internal treasury transfer source evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "1a9726d9171f824a760e1d23ad85d4a3ffdf62d9",
       "source": "d9d607166413db1ee7490c41c2e609ae0430bb3b",
       "workflow": "b1a4be9e458bd1d6be8cbcc53023cba3c26b8fa6",
@@ -3457,13 +3457,33 @@
       "runs": [
         {
           "id": 45612707569,
-          "name": "Treasury transfer source evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Read-only transfer evidence adapter validates actual dispatch/receipt source and posting, signs, account, date, actor, reference and matching dispatch. Stable dispatch hash after receipt. Two new cases per isolated engine; rollback, missing source and outer transaction precondition.",
-      "limits": "Other treasury families, registry verifier integration, effective period binding, transit reconciliation, all-writer coverage, production activation and final closure remain open. Pending runtime."
+      "limits": "Scoped transfer adapter accepted. Other treasury families, registry verifier integration, effective period binding, transit reconciliation, all-writer coverage and production activation remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139200092597,
+          "tests": 2,
+          "assertions": 36,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139200092481,
+          "tests": 2,
+          "assertions": 36,
+          "exit": 0
+        },
+        "total": {
+          "tests": 4,
+          "assertions": 72,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
