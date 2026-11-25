@@ -133,7 +133,7 @@ final class TreasuryHeldCashLiabilityService
                     $this->need(! $this->registry->record($context, $uuid, $legs, $now), 'held_cash_payout_conflict');
                     return $this->inspectLocked($lot) + ['created' => false];
                 }
-                $paid = $this->paidForAssignment($assignment, $lot, $original, true);
+                $paid = SignedMinor::add($this->paidForAssignment($assignment, $lot, $original, true), $this->creditedForAssignment($assignment, $lot, true));
                 $this->need($minor <= SignedMinor::subtract(SignedMinor::parse($assignment->amount_minor), $paid),
                     'held_cash_payout_capacity');
                 foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims'] as $table) {
@@ -168,6 +168,122 @@ final class TreasuryHeldCashLiabilityService
             });
     }
 
+
+    /** Owner-authorized transfer of an identified claim to the same subscriber account. */
+    public function credit(User $actor, string $assignmentUuid, int $minor, string $reference,
+        string $evidence, string $uuid, string $date, DateTimeImmutable $now): array
+    {
+        $reference = mb_strtoupper(trim($reference));
+        $evidence = trim($evidence);
+        \App\Support\AccountMoney::positiveAllocation($minor);
+        $this->need(mb_strlen($reference) >= 3 && mb_strlen($reference) <= 150
+            && mb_strlen($evidence) >= 20 && mb_strlen($evidence) <= 4000
+            && $date === $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d')
+            && preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1,
+            'held_cash_credit_input');
+        return $this->gate->withinOpenPeriod('water', $date, $now,
+            function (array $context) use ($actor, $assignmentUuid, $minor, $reference, $evidence, $uuid, $date, $now): array {
+                $this->lock();
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                $this->treasury->authorize($actor);
+                $assignment = DB::table('treasury_held_cash_assignments')->where('operation_uuid', $assignmentUuid)->lockForUpdate()->first();
+                $this->need($assignment !== null, 'held_cash_assignment_missing');
+                $lot = $this->lot((int) $assignment->liability_id);
+                [$adjustment, $original] = $this->verifyLot($lot);
+                $count = DB::table('treasury_cash_counts')->where('id', $adjustment->treasury_cash_count_id)->lockForUpdate()->first();
+                $this->need($count !== null && (int) $actor->id !== (int) $assignment->approved_by
+                    && (int) $actor->id !== (int) $count->counted_by
+                    && (int) $actor->id !== (int) $adjustment->approved_by, 'held_cash_credit_independence');
+                $this->need($date >= $assignment->effective_on, 'held_cash_credit_date');
+                $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($assignment->subscriber_id);
+                $this->inspectLocked($lot);
+                $record = ['operation_uuid' => $uuid, 'assignment_uuid' => $assignmentUuid,
+                    'subscriber_id' => (int) $subscriber->id, 'approved_by' => (int) $actor->id,
+                    'amount' => \App\Support\ExactMoney::fromMinor($minor)->decimal(),
+                    'effective_on' => $date, 'reference' => $reference, 'evidence' => $evidence];
+                $old = \App\Models\TreasuryHeldCashCredit::where('operation_uuid', $uuid)->lockForUpdate()->first();
+                if ($old !== null) {
+                    foreach ($record as $key => $value) {
+                        $this->need((string) $old->$key === (string) $value, 'held_cash_credit_conflict');
+                    }
+                    $this->need(! $this->registry->record($context, $uuid, $this->creditLegs($old, $assignment, $lot), $now),
+                        'held_cash_credit_conflict');
+                    return $this->inspectLocked($lot) + ['created' => false];
+                }
+                $released = SignedMinor::add($this->paidForAssignment($assignment, $lot, $original, true),
+                    $this->creditedForAssignment($assignment, $lot, true));
+                $this->need($minor <= SignedMinor::subtract(SignedMinor::parse($assignment->amount_minor), $released),
+                    'held_cash_credit_capacity');
+                foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims'] as $table) {
+                    $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(), 'held_cash_uuid_reserved');
+                }
+                foreach (['treasury_held_cash_credits', 'treasury_held_cash_assignments', 'treasury_held_cash_payouts'] as $table) {
+                    $this->need(! DB::table($table)->where('reference', $reference)->exists(), 'held_cash_credit_conflict');
+                }
+                $this->need(! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists()
+                    && ! DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
+                    && ! DB::table('treasury_accounts')->where('opening_reference', $reference)->exists(), 'held_cash_credit_conflict');
+                $ledger = app(TransactionService::class);
+                $before = $ledger->accountBalanceMinor($subscriber);
+                $doc = \App\Models\TreasuryHeldCashCredit::create($record);
+                $ledger->recordTransaction($subscriber, 'held_cash_credit', $record['amount'],
+                    'تسوية فائض نقدي محتجز لصالح المشترك', $doc);
+                $this->need($this->registry->record($context, $uuid, $this->creditLegs($doc, $assignment, $lot), $now),
+                    'held_cash_credit_conflict');
+                $this->treasury->requiredAudit('treasury.held_cash_credited', ['entity_type' => 'held_cash_credit',
+                    'entity_id' => $doc->id, 'actor_user_id' => $actor->id,
+                    'after' => $record + ['amount_minor' => $minor, 'cash_movement' => false]]);
+                app(PaymentService::class)->recalculateInvoices($subscriber);
+                $this->need($ledger->accountBalanceMinor($subscriber) === SignedMinor::add($before, $minor),
+                    'held_cash_credit_balance');
+                $this->need(app(FinancialReconciliationService::class)->inspect($subscriber)['matches'],
+                    'held_cash_credit_reconciliation');
+                return array_replace($this->inspectLocked($lot), ['created' => true, 'discharge_created' => true,
+                    'subscriber_credit_created' => true]);
+            });
+    }
+
+    private function creditedForAssignment(object $assignment, object $lot, bool $periodProof): int
+    {
+        $credited = 0;
+        foreach (\App\Models\TreasuryHeldCashCredit::where('assignment_uuid', $assignment->operation_uuid)
+            ->orderBy('id')->lockForUpdate()->get() as $doc) {
+            $minor = \App\Support\AccountMoney::stored($doc);
+            $this->need($minor > 0 && (int) $doc->subscriber_id === (int) $assignment->subscriber_id
+                && $doc->effective_on >= $assignment->effective_on
+                && (int) $doc->approved_by !== (int) $assignment->approved_by, 'held_cash_credit_source');
+            $audit = \App\Models\AuditEvent::query()->where('event', 'treasury.held_cash_credited')
+                ->where('entity_type', 'held_cash_credit')->where('entity_id', (string) $doc->id)->lockForUpdate()->get();
+            $this->need($audit->count() === 1 && (int) $audit->first()->actor_user_id === (int) $doc->approved_by
+                && ($audit->first()->after['cash_movement'] ?? null) === false
+                && ($audit->first()->after['amount_minor'] ?? null) === $minor, 'held_cash_credit_audit');
+            foreach (['operation_uuid', 'assignment_uuid', 'subscriber_id', 'approved_by', 'effective_on', 'reference', 'evidence'] as $key) {
+                $this->need(array_key_exists($key, $audit->first()->after ?? [])
+                    && (string) $audit->first()->after[$key] === (string) $doc->$key, 'held_cash_credit_audit');
+            }
+            $this->registered($doc->operation_uuid, $doc->effective_on, $this->creditLegs($doc, $assignment, $lot), true, $periodProof);
+            $credited = SignedMinor::add($credited, $minor);
+        }
+        return $credited;
+    }
+
+    private function creditLegs(\App\Models\TreasuryHeldCashCredit $doc, object $assignment, object $lot): array
+    {
+        $minor = \App\Support\AccountMoney::stored($doc);
+        $rows = \App\Models\Transaction::withTrashed()->where('reference_type', \App\Models\TreasuryHeldCashCredit::class)
+            ->where('reference_id', $doc->id)->where('type', 'held_cash_credit')->lockForUpdate()->get();
+        $this->need($rows->count() === 1, 'held_cash_credit_source');
+        $entry = app(FinancialLedgerEvidence::class)->leg((int) $rows->first()->id);
+        $hash = hash('sha256', json_encode(['format' => 1, 'uuid' => $doc->operation_uuid,
+            'assignment_uuid' => $doc->assignment_uuid, 'assignment_hash' => $this->legs($assignment, $lot)[0]['source_hash'],
+            'credit_id' => (string) $doc->id, 'subscriber_id' => (string) $doc->subscriber_id,
+            'approved_by' => (string) $doc->approved_by, 'amount_minor' => (string) $minor,
+            'effective_on' => $doc->effective_on, 'reference' => $doc->reference, 'evidence' => $doc->evidence,
+            'ledger_hash' => $entry['source_hash']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        return [$entry, ['source_type' => 'held_cash_credit', 'source_id' => (string) $doc->id,
+            'leg' => 'identified_liability', 'amount_minor' => SignedMinor::negate($minor), 'currency' => 'YER', 'source_hash' => $hash]];
+    }
+
     /** Issuance-lock read path: never obtains scope/period locks after business locks. */
     public function releasedForAdjustment(int $adjustmentId): int
     {
@@ -182,7 +298,10 @@ final class TreasuryHeldCashLiabilityService
             $this->registered($assignment->operation_uuid, $assignment->effective_on, $this->legs($assignment, $lot), true, false);
             $assigned = SignedMinor::add($assigned, $minor);
             $this->need($assigned <= SignedMinor::parse($lot->amount_minor), 'held_cash_capacity_exceeded');
-            $paid = SignedMinor::add($paid, $this->paidForAssignment($assignment, $lot, $original, false));
+            $released = SignedMinor::add($this->paidForAssignment($assignment, $lot, $original, false),
+                $this->creditedForAssignment($assignment, $lot, false));
+            $this->need($released <= $minor, 'held_cash_credit_capacity');
+            $paid = SignedMinor::add($paid, $released);
         }
         return $paid;
     }
@@ -275,19 +394,24 @@ final class TreasuryHeldCashLiabilityService
             ->leftJoin('treasury_held_cash_payouts as p', 'p.operation_uuid', '=', 'e.source_id')
             ->where('e.source_type', 'held_cash_payout')->whereNull('p.operation_uuid')->first(),
             'held_cash_coverage_orphan_event');
+        $this->need(! DB::table('financial_posting_events as e')
+            ->leftJoin('treasury_held_cash_credits as c', 'c.operation_uuid', '=', 'e.operation_uuid')
+            ->where('e.source_type', 'held_cash_credit')->whereNull('c.id')->first(), 'held_cash_coverage_orphan_event');
         $held = 0;
         $identified = 0;
         $paid = 0;
+        $credited = 0;
         foreach ($lots as $lot) {
             $report = $this->inspectLocked($lot);
             $held = SignedMinor::add($held, $report['held_minor']);
             $identified = SignedMinor::add($identified, $report['identified_minor']);
             $paid = SignedMinor::add($paid, $report['paid_minor']);
+            $credited = SignedMinor::add($credited, $report['credited_minor']);
         }
         return ['liabilities' => $lots->count(), 'held_minor' => $held,
             'identified_minor' => $identified, 'paid_minor' => $paid,
-            'outstanding_minor' => SignedMinor::subtract($held, $paid),
-            'unidentified_minor' => SignedMinor::subtract(SignedMinor::subtract($held, $identified), $paid),
+            'credited_minor' => $credited, 'outstanding_minor' => SignedMinor::subtract(SignedMinor::subtract($held, $paid), $credited),
+            'unidentified_minor' => SignedMinor::subtract(SignedMinor::subtract(SignedMinor::subtract($held, $identified), $paid), $credited),
             'scope' => 'held_cash_only', 'source_coverage_verified' => false, 'closure_authorized' => false];
     }
 
@@ -298,6 +422,7 @@ final class TreasuryHeldCashLiabilityService
         $assigned = 0;
         $owners = [];
         $paid = 0;
+        $credited = 0;
         $rows = DB::table('treasury_held_cash_assignments')->where('liability_id', $lot->id)
             ->orderBy('operation_uuid')->lockForUpdate()->get();
         foreach ($rows as $row) {
@@ -307,13 +432,17 @@ final class TreasuryHeldCashLiabilityService
             $assigned = SignedMinor::add($assigned, $minor);
             $this->need($assigned <= $total, 'held_cash_capacity_exceeded');
             $owner = (string) $row->subscriber_id;
-            $released = $this->paidForAssignment($row, $lot, $posting, true);
-            $paid = SignedMinor::add($paid, $released);
+            $cashPaid = $this->paidForAssignment($row, $lot, $posting, true);
+            $accountCredit = $this->creditedForAssignment($row, $lot, true);
+            $released = SignedMinor::add($cashPaid, $accountCredit);
+            $this->need($released <= $minor, 'held_cash_credit_capacity');
+            $paid = SignedMinor::add($paid, $cashPaid);
+            $credited = SignedMinor::add($credited, $accountCredit);
             $owners[$owner] = SignedMinor::add($owners[$owner] ?? 0, SignedMinor::subtract($minor, $released));
         }
         return ['liability_id' => (int) $lot->id, 'held_minor' => $total,
-            'identified_minor' => SignedMinor::subtract($assigned, $paid), 'paid_minor' => $paid,
-            'outstanding_minor' => SignedMinor::subtract($total, $paid), 'unidentified_minor' => SignedMinor::subtract($total, $assigned),
+            'identified_minor' => SignedMinor::subtract(SignedMinor::subtract($assigned, $paid), $credited), 'paid_minor' => $paid,
+            'credited_minor' => $credited, 'outstanding_minor' => SignedMinor::subtract(SignedMinor::subtract($total, $paid), $credited), 'unidentified_minor' => SignedMinor::subtract($total, $assigned),
             'identified_by_subscriber' => $owners, 'cash_movement_created' => false,
             'discharge_created' => false, 'certified_balance' => false];
     }
