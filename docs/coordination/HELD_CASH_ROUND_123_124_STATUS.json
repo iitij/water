@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Design and implement independent opening/predecessor continuity without certifying history, then finish custody proof and writer cutover. No retrospective remediation.",
+  "next": "Verify exact round144 CI; finish trusted root opening, carry evidence, scope activation and protection of all writers before real close.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -682,5 +682,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round144": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "006e9887120f227823f887c3925565ad3026dc05",
+    "branch": "qa/close-continuity-round144",
+    "source": "d3892e9fa5046ccc9d19ce5773056087673622c2",
+    "run": 45702171279,
+    "scope": "Extract existing durable close journal reader for reuse; independently compare persisted adjacent period snapshots, per-account/sector opening vs prior closing, predecessor hash, missing or new nonzero opening rows. Two new tests and four directly affected close journal regressions on both engines.",
+    "limits": "Runtime pending. Only adjacent structural continuity, not independently certified root or carry evidence. Synthetic proof source in test only. No production binding, actual closure, historic remediation, real data, main merge or reserve release.",
+    "next": "Verify exact round144 CI; finish trusted root opening, carry evidence, scope activation and protection of all writers before real close."
   }
 }
