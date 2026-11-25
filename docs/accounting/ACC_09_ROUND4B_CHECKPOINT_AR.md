@@ -16,3 +16,6 @@ HistoricalInvoiceCorrectionService، refund/transfer/void thresholds خارج ا
 - CLI مستقل tests/Unit/acc09_financial_boundary_check.php: بوابة التوافق/حدود التخزين/التقريب/overflow، 30,000 تحقق حتمي إضافي.
 - Acc09CanonicalIntegrationTest: خمس حالات Laravel عادية (تسعير نصف سنت، التخصيص والدفتر وإعادة الطلب والعكس، رفض الكسور، rollback ضيق العداد عند الفاتورة والقبض، حد رصيد المشترك).
 - تشغيل مستقل على قاعدة اصطناعية SQLite/MySQL مطلوب؛ لا تُحسب الاختبارات المكتوبة كناجحة. سجل النتائج في PR.
+
+## دليل التنفيذ المحلي المعزول (ليس جهاز المستخدم)
+PHP 8.4.24 CLI: php -l على ExactMoney.php وFinancialAmount.php واختبار CLI = نجح؛ php tests/Unit/acc09_financial_boundary_check.php = 30048 checks PASS. بصمات Git blob مطابقة للالتزام ac66369: c4de0741b111ef2c66f75a4cc7d9f81cd1f6e4a9، 42cffbd82c483e1e6622e063312a10cdcccf90c2، 1c33da2d610f8ba8dcdbbbf006e28ef7c2a8ea2f. البيئة لا تحتوي Composer أو PDO SQLite/MySQL؛ لا دليل تشغيل Laravel. CI مخصص للفرع فقط، SQLite ثم MySQL على قواعد اصطناعية، بدون أسرار الإنتاج، ولا إعادة اختبارات أمنية متخصصة. نتائج CI غير متحققة حتى وصول سجل فعلي.
