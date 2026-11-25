@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Inventory remaining Filament receipt creation actions and integrate them with same gate and stable identity; then enforce service-level receipt fence, keeping actual late/noncash settlement contracts distinct.",
+  "next": "Verify exact targeted CI; inventory additional collection paths (subscriber ledger, relation managers, other pages), then enforce service-level receipt fence before production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1079,5 +1079,14 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_cash_receipt_actions": {
+    "status": "TARGETED_CI_RUN_DISCOVERY_PENDING",
+    "base": "a36967524ec21f8b98675dd75b59a75a2718ef7d",
+    "branch": "release/prospective-cash-receipt-actions",
+    "source": "2fe12d1a5490fd5bd860c53ace2ad02aad3cb0d8",
+    "scope": "SubscriberResource and InvoiceResource collect_payment table actions share ProspectiveCashReceiptAction with stable mounted UUID, date, explicit original till, cash-only candidate options, server create permission, no float coercion, no legacy fallback on conflicts. One new Livewire case exercises both modals, closed gate, replay across routes and cash/reserve conservation.",
+    "limits": "CI discovery pending; full inventory incomplete due recursive tree request timeout. Relation manager inspected read-only. No production activation, historical adoption, or main merge; other collection paths and service-level receipt fence remain.",
+    "next": "Verify exact targeted CI; inventory additional collection paths (subscriber ledger, relation managers, other pages), then enforce service-level receipt fence before production."
   }
 }
