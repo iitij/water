@@ -80,12 +80,9 @@ class Meter extends Model
     protected static function booted(): void
     {
         static::deleting(function (Meter $meter): void {
-            if ($meter->readings()->withTrashed()->lockForUpdate()->first(['id']) !== null
-                || $meter->invoices()->withTrashed()->lockForUpdate()->first(['id']) !== null
-                || $meter->payments()->withTrashed()->lockForUpdate()->first(['id']) !== null
-                || $meter->transactions()->withTrashed()->lockForUpdate()->first(['id']) !== null) {
+            if (app(\App\Services\MeterDataPurger::class)->hasOrdinaryHistoryLocked((int) $meter->id)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'meter_id' => 'لا يجوز حذف عداد له قراءات أو سجل مالي مباشرةً؛ استخدم الاستبدال المعتمد.',
+                    'meter_id' => 'لا يجوز حذف عداد له قراءات أو سجل مالي أو مراجعة قبض معلقة مباشرةً.',
                 ]);
             }
         });

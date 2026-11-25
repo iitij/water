@@ -545,13 +545,154 @@ class SingleCurrentMeterTest extends TestCase
         $retained = \App\Models\Reading::create([
             'meter_id' => $other->id, 'reading_date' => '2026-02-01', 'current_reading' => '15.00', 'image_path' => $path,
         ]);
+        $sole = 'readings/sole-fixture.jpg';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($sole, 'synthetic sole owner');
+        $exclusive = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-03-01', 'current_reading' => '25.00', 'image_path' => $sole,
+        ]);
         $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(), 'reason' => 'حماية الصورة المشتركة',
             'new_meter' => ['unique_code' => 'IMAGE-NEW'],
         ])->assertCreated();
         $this->assertDatabaseMissing('readings', ['id' => $removed->id]);
         $this->assertDatabaseHas('readings', ['id' => $retained->id, 'image_path' => $path]);
+        $this->assertDatabaseMissing('readings', ['id' => $exclusive->id]);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertMissing($sole);
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($path);
+    }
+
+    public function test_round9_repeated_replacement_retains_previous_audit_chain(): void
+    {
+        $subscriber = $this->subscriber();
+        $first = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'AUDIT-CHAIN-ONE']);
+        $service = app(\App\Services\SingleMeterService::class);
+        $second = $service->replace($first, ['unique_code' => 'AUDIT-CHAIN-TWO'],
+            '2026-02-01', 'Synthetic first replacement')['current_meter'];
+        $prior = \Illuminate\Support\Facades\DB::table('audit_events')->where('event', 'meter.replaced')
+            ->where('entity_id', (string) $second->id)->first();
+        $this->assertNotNull($prior);
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $second->id, 'reading_date' => '2026-03-01', 'current_reading' => '20.00',
+        ]);
+        $third = $service->replace($second, ['unique_code' => 'AUDIT-CHAIN-THREE'],
+            '2026-04-01', 'Synthetic second replacement')['current_meter'];
+        $this->assertEquals($prior, \Illuminate\Support\Facades\DB::table('audit_events')->where('id', $prior->id)->first());
+        $this->assertDatabaseMissing('readings', ['id' => $pending->id]);
+        $this->assertDatabaseMissing('meters', ['id' => $second->id]);
+        $audit = \App\Models\AuditEvent::where('event', 'meter.replaced')->where('entity_id', (string) $third->id)->firstOrFail();
+        $this->assertSame($second->id, $audit->after['old_meter_id']);
+        $this->assertSame(1, $audit->after['discarded_unbilled_readings']);
+        $this->assertSame($third->id, $subscriber->fresh()->currentMeter->id);
+    }
+
+    public function test_round9_pending_only_receipt_review_blocks_all_ordinary_removal_paths(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'REVIEW-ONLY']);
+        $collector = User::factory()->create(['role' => 'admin']);
+        $session = \Illuminate\Support\Facades\DB::table('cash_sessions')->insertGetId([
+            'user_id' => $collector->id, 'session_date' => '2026-02-01',
+            'opening_amount' => 0, 'expected_amount' => 0, 'counted_amount' => 0, 'variance_amount' => 0,
+            'state' => 'closed',
+        ]);
+        $review = \Illuminate\Support\Facades\DB::table('late_receipt_reviews')->insertGetId([
+            'sync_uuid' => (string) \Illuminate\Support\Str::uuid(), 'cash_session_id' => $session,
+            'collector_id' => $collector->id, 'subscriber_id' => $subscriber->id,
+            'submitted_meter_id' => $old->id, 'amount' => '20.00',
+            'payment_date' => '2026-02-01', 'payment_method' => 'cash', 'status' => 'pending',
+        ]);
+        $before = $this->meterCleanupSnapshot();
+        $this->assertDatabaseCount('readings', 0);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('invoices', 0);
+        $this->deleteJson('/api/meters/'.$old->id)->assertConflict();
+        $this->postJson('/api/meters/bulk-delete', ['ids' => [$old->id]])
+            ->assertOk()->assertJsonPath('deleted_count', 0)->assertJsonPath('skipped_count', 1);
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => '2026-03-01', 'reason' => 'Synthetic pending review',
+            'new_meter' => ['unique_code' => 'REVIEW-NEW'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        foreach ([
+            fn () => $old->fresh()->delete(),
+            fn () => app(\App\Services\MeterDataPurger::class)->purge($old->id),
+            fn () => \Illuminate\Support\Facades\DB::transaction(fn () =>
+                app(\App\Services\FinancialMeterRetirementService::class)->retire($old, $subscriber)),
+        ] as $operation) {
+            try {
+                $operation();
+                $this->fail('Pending review did not protect the meter.');
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $this->assertArrayHasKey('meter_id', $e->errors());
+            }
+            $this->assertEquals($before, $this->meterCleanupSnapshot());
+        }
+        $this->assertDatabaseHas('late_receipt_reviews', ['id' => $review, 'status' => 'pending']);
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+    }
+
+    public function test_round9_general_cache_max_plus_one_rolls_back_retirement_without_losing_pending_usage(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'CACHE-OVERFLOW']);
+        $ledger = app(\App\Services\TransactionService::class);
+        // Ordinary supported adjustment postings: each partition fits its own field.
+        $ledger->recordTransaction($subscriber, 'adjustment', '9999999999.99', 'Synthetic general limit');
+        $ledger->recordTransaction($subscriber, 'adjustment', '0.01', 'Synthetic meter cent', meter: $old);
+        $this->assertSame('9999999999.99', $subscriber->fresh()->balance);
+        $this->assertSame('0.01', $old->fresh()->balance);
+        $this->assertSame(1000000000000, $ledger->accountBalanceMinor($subscriber));
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $image = 'readings/cache-overflow.jpg';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($image, 'synthetic');
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-02-01', 'current_reading' => '20.00', 'image_path' => $image,
+        ]);
+        $before = $this->meterCleanupSnapshot();
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => '2026-03-01', 'reason' => 'Synthetic cache overflow',
+            'new_meter' => ['unique_code' => 'CACHE-OVERFLOW-NEW'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('subscriber_balance');
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+        $this->assertSame(1000000000000, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('readings', ['id' => $pending->id, 'meter_id' => $old->id]);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($image);
+    }
+
+    public function test_round9_cancelled_required_audit_rolls_back_financial_retirement_and_successor(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'AUDIT-CANCEL']);
+        $this->measuredConsumption($old, 20);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $image = 'readings/audit-cancel.jpg';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($image, 'synthetic');
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-03-01', 'current_reading' => '40.00', 'image_path' => $image,
+        ]);
+        $before = $this->meterCleanupSnapshot();
+        $attempted = false;
+        \App\Models\AuditEvent::creating(function (\App\Models\AuditEvent $audit) use ($old, $pending, $invoice, &$attempted) {
+            if ($audit->event !== 'meter.replaced') {
+                return;
+            }
+            $attempted = true;
+            $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+            $this->assertDatabaseMissing('readings', ['id' => $pending->id]);
+            $this->assertDatabaseHas('meters', ['unique_code' => 'AUDIT-CANCEL-NEW']);
+            $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'retired_meter_id' => $old->id]);
+            return false;
+        });
+        try {
+            app(\App\Services\SingleMeterService::class)->replace($old, ['unique_code' => 'AUDIT-CANCEL-NEW'],
+                '2026-04-01', 'Synthetic required audit cancellation');
+            $this->fail('Replacement committed without its required audit.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Required meter replacement audit was not persisted.', $e->getMessage());
+        }
+        $this->assertTrue($attempted);
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($image);
     }
 
     private function financialRowsWithoutMeterProvenance(): array
