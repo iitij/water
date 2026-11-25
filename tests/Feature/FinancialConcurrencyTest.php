@@ -290,6 +290,84 @@ class FinancialConcurrencyTest extends TestCase
         }
     }
 
+    public function test_round9_pending_review_committed_after_snapshot_blocks_meter_deletion(): void
+    {
+        $subscriber = Subscriber::create([
+            'name' => 'Synthetic current-read guard',
+            'square_id' => Square::create(['name' => 'Current read guard'])->id,
+            'status' => 'active',
+        ]);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'REVIEW-SNAPSHOT']);
+        $collector = User::factory()->create(['role' => 'admin']);
+        $sessionId = DB::table('cash_sessions')->insertGetId([
+            'user_id' => $collector->id, 'session_date' => '2026-02-01', 'state' => 'closed',
+            'opening_amount' => 0, 'expected_amount' => 0, 'counted_amount' => 0, 'variance_amount' => 0,
+        ]);
+        $uuid = (string) Str::uuid();
+        $dir = sys_get_temp_dir().'/water-review-current-read-'.Str::uuid();
+        mkdir($dir, 0700);
+        $await = static function (string $path): void {
+            $deadline = microtime(true) + 10;
+            while (! is_file($path)) {
+                if (microtime(true) > $deadline) {
+                    throw new \RuntimeException('Current-read coordination timed out.');
+                }
+                usleep(1000);
+            }
+        };
+        try {
+            $results = $this->race(
+                function () use ($meter, $dir, $await): array {
+                    // Connection-local isolation only; never change global settings.
+                    DB::statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+                    return DB::transaction(function () use ($meter, $dir, $await): array {
+                        $old = Meter::findOrFail($meter->id);
+                        $before = DB::table('late_receipt_reviews')->where('submitted_meter_id', $meter->id)->count();
+                        touch($dir.'/snapshot');
+                        $await($dir.'/committed');
+                        // Prove the ordinary consistent read still sees the old snapshot.
+                        $stale = DB::table('late_receipt_reviews')->where('submitted_meter_id', $meter->id)->count();
+                        try {
+                            $old->delete();
+                            return ['before' => $before, 'stale' => $stale, 'rejected' => false];
+                        } catch (ValidationException $e) {
+                            return ['before' => $before, 'stale' => $stale, 'rejected' => array_key_exists('meter_id', $e->errors())];
+                        }
+                    });
+                },
+                function () use ($subscriber, $meter, $collector, $sessionId, $uuid, $dir, $await): int {
+                    $await($dir.'/snapshot');
+                    $id = DB::transaction(function () use ($subscriber, $meter, $collector, $sessionId, $uuid) {
+                        Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+                        Meter::query()->lockForUpdate()->findOrFail($meter->id);
+                        // A synthetic ordinary pending review, no financial posting.
+                        return DB::table('late_receipt_reviews')->insertGetId([
+                            'sync_uuid' => $uuid, 'cash_session_id' => $sessionId,
+                            'collector_id' => $collector->id, 'subscriber_id' => $subscriber->id,
+                            'submitted_meter_id' => $meter->id, 'amount' => '20.00',
+                            'payment_date' => '2026-02-01', 'payment_method' => 'cash', 'status' => 'pending',
+                        ]);
+                    });
+                    touch($dir.'/committed');
+                    return $id;
+                }
+            );
+            $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+            $this->assertSame(['before' => 0, 'stale' => 0, 'rejected' => true], $results[0]['value']);
+            $this->assertDatabaseHas('meters', ['id' => $meter->id, 'deleted_at' => null]);
+            $this->assertDatabaseHas('late_receipt_reviews', ['id' => $results[1]['value'], 'sync_uuid' => $uuid, 'status' => 'pending']);
+            $this->assertDatabaseCount('readings', 0);
+            $this->assertDatabaseCount('invoices', 0);
+            $this->assertDatabaseCount('payments', 0);
+            $this->assertDatabaseCount('transactions', 0);
+        } finally {
+            foreach (glob($dir.'/*') as $file) {
+                unlink($file);
+            }
+            rmdir($dir);
+        }
+    }
+
     public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void
     {
         $meter = $this->fixture();

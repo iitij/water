@@ -166,9 +166,9 @@ class SingleMeterService
             );
 
             $beforeBalance = app(TransactionService::class)->accountBalanceMinor($subscriber);
-            $hasFinancialHistory = $old->invoices()->withTrashed()->exists()
-                || $old->payments()->withTrashed()->exists()
-                || $old->transactions()->withTrashed()->exists();
+            $hasFinancialHistory = $old->invoices()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null
+                || $old->payments()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null
+                || $old->transactions()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null;
             if ($hasFinancialHistory) {
                 $discarded = app(FinancialMeterRetirementService::class)->retireForReplacement($old, $subscriber);
             } else {
@@ -179,7 +179,7 @@ class SingleMeterService
                 throw new \RuntimeException('Meter replacement changed the subscriber financial balance.');
             }
 
-            AuditEvent::create([
+            $audit = AuditEvent::create([
                 'actor_user_id' => $actorId,
                 'event' => 'meter.replaced',
                 'entity_type' => 'meter',
@@ -198,6 +198,9 @@ class SingleMeterService
                 'source' => 'api',
                 'occurred_at' => now(),
             ]);
+            if (! $audit->exists || $audit->getKey() === null) {
+                throw new \RuntimeException('Required meter replacement audit was not persisted.');
+            }
 
             return [
                 'current_meter' => $replacement->load('subscriber.square'),
@@ -251,9 +254,6 @@ class SingleMeterService
 
     private function hasHistory(Meter $meter): bool
     {
-        return $meter->readings()->withTrashed()->exists()
-            || $meter->payments()->withTrashed()->exists()
-            || $meter->transactions()->withTrashed()->exists()
-            || $meter->invoices()->withTrashed()->exists();
+        return app(MeterDataPurger::class)->hasOrdinaryHistoryLocked((int) $meter->id);
     }
 }

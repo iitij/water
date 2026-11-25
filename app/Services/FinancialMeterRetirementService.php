@@ -81,8 +81,7 @@ final class FinancialMeterRetirementService
                 throw ValidationException::withMessages(['meter_id' => 'ارتباط المستند المالي بالعداد غير متطابق.']);
             }
         }
-        if (Schema::hasTable('late_receipt_reviews') && DB::table('late_receipt_reviews')
-            ->where('submitted_meter_id', $meter->id)->where('status', 'pending')->exists()) {
+        if ($purger->hasPendingReceiptReviewLocked((int) $meter->id)) {
             throw ValidationException::withMessages(['meter_id' => 'توجد مراجعة قبض معلقة لهذا العداد.']);
         }
         $deleted = DB::table('readings')->where('meter_id', $meter->id)->whereIn('id', $pendingIds)->delete();

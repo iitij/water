@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\AuditEvent;
-use App\Models\Meter;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,9 +13,9 @@ use Illuminate\Validation\ValidationException;
 /** Only explicitly obsolete, financially unlinked readings may be discarded. */
 final class MeterDataPurger
 {
-    public function purge(int $meterId): void
+    public function purge(int $meterId, ?int $subscriberId = null): void
     {
-        $this->purgeWithIntent($meterId, 'ordinary');
+        $this->purgeWithIntent($meterId, 'ordinary', $subscriberId);
     }
 
     /** Called only inside the transaction that creates the replacement. */
@@ -39,15 +38,20 @@ final class MeterDataPurger
         int $meterId, string $intent, ?int $subscriberId = null, ?int $survivorId = null
     ): int {
         return DB::transaction(function () use ($meterId, $intent, $subscriberId, $survivorId): int {
-            $candidate = DB::table('meters')->where('id', $meterId)->first();
-            if (! $candidate) {
-                if ($intent === 'replacement') {
-                    $this->reject('العداد المطلوب استبداله غير موجود.');
+            // A nonlocking read may identify the owner, never authorize deletion.
+            // Callers already holding locks supply the expected owner explicitly.
+            $ownerId = $subscriberId;
+            if ($ownerId === null) {
+                $candidate = DB::table('meters')->where('id', $meterId)->first(['subscriber_id']);
+                if (! $candidate) {
+                    return 0;
                 }
-                return 0;
+                $ownerId = (int) $candidate->subscriber_id;
             }
-            DB::table('subscribers')->where('id', $candidate->subscriber_id)->lockForUpdate()->first();
-            $meters = DB::table('meters')->where('subscriber_id', $candidate->subscriber_id)
+            if (! DB::table('subscribers')->where('id', $ownerId)->lockForUpdate()->first(['id'])) {
+                $this->reject('المشترك المرتبط بالعداد غير موجود.');
+            }
+            $meters = DB::table('meters')->where('subscriber_id', $ownerId)
                 ->orderBy('id')->lockForUpdate()->get();
             $locked = $meters->firstWhere('id', $meterId);
             if (! $locked) {
@@ -67,6 +71,38 @@ final class MeterDataPurger
 
             return $this->purgeLocked($locked, $intent, $survivorId);
         }, 3);
+    }
+
+    /**
+     * All ordinary deletion/retirement callers hold subscriber then meter locks.
+     * Use a locking current read, not EXISTS on an earlier REPEATABLE READ snapshot.
+     * Legacy migration schemas may not yet contain this table.
+     */
+    public function hasPendingReceiptReviewLocked(int $meterId): bool
+    {
+        if (DB::transactionLevel() === 0) {
+            throw new \LogicException('Pending receipt review guard requires a transaction.');
+        }
+
+        return Schema::hasTable('late_receipt_reviews')
+            && DB::table('late_receipt_reviews')->where('submitted_meter_id', $meterId)
+                ->where('status', 'pending')->orderBy('id')->lockForUpdate()->first(['id']) !== null;
+    }
+
+    /** Conservative ordinary deletion/owner-change guard, including soft-deleted evidence. */
+    public function hasOrdinaryHistoryLocked(int $meterId): bool
+    {
+        if (DB::transactionLevel() === 0) {
+            throw new \LogicException('Meter history guard requires a transaction.');
+        }
+        foreach (['invoices', 'payments', 'transactions', 'readings'] as $table) {
+            if (DB::table($table)->where('meter_id', $meterId)->orderBy('id')
+                ->lockForUpdate()->first(['id']) !== null) {
+                return true;
+            }
+        }
+
+        return $this->hasPendingReceiptReviewLocked($meterId);
     }
 
     /** Read-only classification of exact locked rows; compatible with old schemas. */
@@ -96,8 +132,7 @@ final class MeterDataPurger
         $transactions = DB::table('transactions')->where('meter_id', $meterId)
             ->orderBy('id')->lockForUpdate()->get();
         if ($invoices->isNotEmpty() || $payments->isNotEmpty() || $transactions->isNotEmpty()
-            || (Schema::hasTable('late_receipt_reviews') && DB::table('late_receipt_reviews')
-                ->where('submitted_meter_id', $meterId)->where('status', 'pending')->exists())) {
+            || $this->hasPendingReceiptReviewLocked($meterId)) {
             $this->reject('لا يجوز حذف عداد مرتبط بمستندات أو حركات مالية أو مراجعة قبض معلقة.');
         }
 
@@ -116,13 +151,12 @@ final class MeterDataPurger
         if ($deleted !== count($pendingIds)) {
             throw new \RuntimeException('Obsolete reading set changed during cleanup.');
         }
-        DB::table('audit_events')->whereIn('entity_type', ['meter', Meter::class])
-            ->where('entity_id', (string) $meterId)->delete();
+        // Audit history is not operational reading data; retain the entire chain.
         DB::table('meters')->where('id', $meterId)->delete();
 
         // No ledger rows changed; do not rewrite the retained meter or subscriber balance caches.
         if ($intent === 'legacy') {
-            AuditEvent::create([
+            $audit = AuditEvent::create([
                 'event' => 'meter.obsolete_purged', 'entity_type' => 'meter',
                 'entity_id' => (string) $meterId,
                 'after' => ['subscriber_id' => (int) $meter->subscriber_id,
@@ -131,6 +165,9 @@ final class MeterDataPurger
                     'discarded_unbilled_readings' => $deleted],
                 'source' => 'migration', 'occurred_at' => now(),
             ]);
+            if (! $audit->exists || $audit->getKey() === null) {
+                throw new \RuntimeException('Required obsolete meter audit was not persisted.');
+            }
         }
         $this->scheduleImageCleanup($readings, $meterId);
 
