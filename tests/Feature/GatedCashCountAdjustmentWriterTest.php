@@ -836,4 +836,51 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertSame(20, $this->gate(fn () => $service->inspect($lot))['identified_minor']);
     }
+    public function test_unposted_cash_refunds_reduce_held_cash_spending_capacity_without_double_counting(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '200.00');
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '40.00',
+            'QA-UNPOSTED-REFUND', 'treasury_cash', '2026-11-25',
+            'Synthetic refund of excess subscriber credit', 'Independent evidence of actual cash disbursement');
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $register = app(TreasuryRegisterService::class);
+        $report = $register->inspect($actor, (int) $account['id']);
+        $this->assertSame(4000, $report['channel_unposted_cash_refund_minor']);
+        $this->assertSame(0, $report['held_cash_possible_shortfall_minor']);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 6000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 6001, '2026-11-25')));
+        $posted = $register->post($actor, (int) $account['id'], 'payment_refund', (int) $refund->id);
+        $this->assertSame((int) $posted['id'], (int) $register->post($actor, (int) $account['id'], 'payment_refund', (int) $refund->id)['id']);
+        $after = $register->inspect($actor, (int) $account['id']);
+        $this->assertSame(0, $after['channel_unposted_cash_refund_minor']);
+        $this->assertSame(6025, $after['provisional_recorded_balance_minor']);
+        $this->assertSame(25, $after['held_cash_total_protected_minor']);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 6000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 6001, '2026-11-25')));
+        $this->assertDatabaseCount('treasury_postings', 2);
+    }
+
+    public function test_unposted_cash_refund_shortfall_blocks_held_owner_payout_authorization(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '200.00');
+        app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '100.01',
+            'QA-UNPOSTED-SHORTFALL', 'treasury_cash', '2026-11-25',
+            'Synthetic refund of excess subscriber credit', 'Independent evidence of actual cash disbursement');
+        $report = app(TreasuryRegisterService::class)->inspect($actor, (int) $account['id']);
+        $this->assertSame(10001, $report['channel_unposted_cash_refund_minor']);
+        $this->assertSame(1, $report['held_cash_possible_shortfall_minor']);
+        $this->assertContains('held_cash_possible_liquidity_shortfall', array_column($report['issues'], 'code'));
+        $executor = $this->actor();
+        $this->rejects('held_cash_payout_insufficient_cash', fn () => $this->authorizeHeld($actor, $executor, 1));
+        $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 0);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
 }

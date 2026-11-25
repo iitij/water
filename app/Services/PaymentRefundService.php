@@ -49,6 +49,11 @@ final class PaymentRefundService
 
         return DB::transaction(function () use ($payment, $actor, $amount, $money, $reference, $method, $date, $reason, $evidence) {
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
+            // Share the issuance fence with treasury outflow reservation. This
+            // records a completed disbursement; it is not prior authorization.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             abort_unless((int) $subscriber->id === (int) $payment->subscriber_id, 409);
             abort_if($payment->user_id && (int) $payment->user_id === (int) $actor->id, 403);

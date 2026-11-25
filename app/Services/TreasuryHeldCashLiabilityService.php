@@ -208,7 +208,8 @@ final class TreasuryHeldCashLiabilityService
         $guard = app(HeldCashReservation::class);
         $held = $guard->outstandingForAccount($accountId);
         $reserved = SignedMinor::add($held, $guard->subscriberCreditReserveForAccount($accountId));
-        $this->need($balance >= $reserved && $held >= $minor, 'held_cash_payout_insufficient_cash');
+        $pendingRefund = $guard->unpostedCashRefundMinor();
+        $this->need(SignedMinor::subtract($balance, $pendingRefund) >= $reserved && $held >= $minor, 'held_cash_payout_insufficient_cash');
     }
 
     private function authorizationState(object $auth, object $assignment, object $original): string

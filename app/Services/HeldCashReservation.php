@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class HeldCashReservation
 {
-    public function assertOrdinaryOutflow(int $accountId, int $minor, string $date): void
+    public function assertOrdinaryOutflow(int $accountId, int $minor, string $date, ?int $postingRefundId = null): void
     {
         if (DB::transactionLevel() <= 0 || $minor <= 0) {
             throw new DomainException('held_cash_reservation_context');
@@ -31,6 +31,7 @@ final class HeldCashReservation
         $held = $this->protectedForAccount($accountId);
         if ($held === 0) return;
 
+        $pending = $this->unpostedCashRefundMinor($postingRefundId, $minor);
         $balance = TreasuryMoney::document($account->opening_minor);
         foreach (DB::table('treasury_postings')->where('treasury_account_id', $accountId)
             ->orderBy('id')->lockForUpdate()->get() as $posting) {
@@ -40,10 +41,38 @@ final class HeldCashReservation
             }
             $balance = SignedMinor::add($balance, SignedMinor::parse($posting->amount_minor));
         }
-        if (SignedMinor::subtract($balance, $held) < $minor) {
+        if (SignedMinor::subtract(SignedMinor::subtract($balance, $held), $pending) < $minor) {
             throw new DomainException('held_cash_reserved');
         }
     }
+    /**
+     * Evidence of an already executed cash refund may not yet identify its
+     * treasury account. Conservatively count the full channel-wide amount
+     * against each cash account with held cash, never as an extra liability.
+     * The refund being posted is excluded exactly once after identity checks.
+     */
+    public function unpostedCashRefundMinor(?int $postingRefundId = null, ?int $postingMinor = null): int
+    {
+        if (DB::transactionLevel() <= 0) throw new DomainException('held_cash_reservation_context');
+        $total = 0;
+        $matched = $postingRefundId === null;
+        $rows = \App\Models\PaymentRefund::query()->where('method', 'treasury_cash')
+            ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('payment_refund_id')->select('payment_refund_id'))
+            ->orderBy('id')->lockForUpdate()->get();
+        foreach ($rows as $row) {
+            $minor = \App\Support\AccountMoney::stored($row);
+            if ($minor <= 0) throw new DomainException('held_cash_unposted_refund_amount');
+            if ((int) $row->id === $postingRefundId) {
+                if ($matched || $minor !== $postingMinor) throw new DomainException('held_cash_unposted_refund_identity');
+                $matched = true;
+                continue;
+            }
+            $total = SignedMinor::add($total, $minor);
+        }
+        if (! $matched) throw new DomainException('held_cash_unposted_refund_identity');
+        return $total;
+    }
+
     /**
      * Until all invoice/refund writers share a proven fence, do not release
      * cash on the strength of a mutable allocation snapshot. Reserve the full
