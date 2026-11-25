@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 62,
+    "round": 63,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3580,7 +3580,31 @@
         }
       ],
       "scope": "Opening identity distinct from movements including zero; exact D14 boundary, actual collector funding matches source, account, opening amount, issuer/collector, effective date. Three new cases per engine plus directly changed registry and verifier regressions.",
-      "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Runtime pending."
+      "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Runtime pending.",
+      "partial_results": {
+        "sqlite": {
+          "job": 139205424708,
+          "tests": 20,
+          "assertions": 176,
+          "exit": 0,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round63": {
+      "phase": "Actual bank fee and cash count adjustment source evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "0830bb75b6e7f4401b82a0c9c90ba6056352a092",
+      "source": "8fd4f214fe68f423fabda85c8c6230dac99193e8",
+      "workflow": "8a38ffabefc1d1d6117fef6bbebeac297eba6479",
+      "branch": "fix/central-g1b-treasury-adjustment-evidence",
+      "pr": 140,
+      "runs": [],
+      "prerequisite": "Round 62 scoped runtime acceptance required before round 63 acceptance.",
+      "scope": "Two new cases per engine: actual fee atomic rollback and corrupted source rejection; actual signed loss and held surplus with original count and review. Twelve changed-verifier regressions per engine. Read-only source evidence; existing fee and adjustment validators reused under issuance lock.",
+      "limits": "No complete source coverage, bank collection/late cash adapter, reconciliation certification, all-writer activation or final closure."
     }
   }
 }
