@@ -3571,7 +3571,14 @@
       "workflow": "269ab38f6a230b3b9b2d3a2b4c204e6e2d991283",
       "branch": "fix/central-g1b-treasury-opening-funding",
       "pr": 139,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45614246290,
+          "name": "Treasury opening and funding source evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "scope": "Opening identity distinct from movements including zero; exact D14 boundary, actual collector funding matches source, account, opening amount, issuer/collector, effective date. Three new cases per engine plus directly changed registry and verifier regressions.",
       "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Runtime pending."
     }
