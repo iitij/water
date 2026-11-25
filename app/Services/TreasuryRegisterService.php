@@ -103,13 +103,13 @@ final class TreasuryRegisterService
         }, 3);
     }
 
-    public function post(User $actor, int $accountId, string $kind, int $sourceId): array
+    public function post(User $actor, int $accountId, string $kind, int $sourceId, ?GatedCashHandoverWriter $gatedHandover = null): array
     {
         $this->authorize($actor);
         if (! in_array($kind, ['cash_handover', 'payment_refund'], true)) {
             $this->reject('kind', 'مصدر الحركة غير مدعوم في هذه المرحلة.');
         }
-        return DB::transaction(function () use ($actor, $accountId, $kind, $sourceId): array {
+        return DB::transaction(function () use ($actor, $accountId, $kind, $sourceId, $gatedHandover): array {
             $this->lockRegister();
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
             abort_unless($account, 404);
@@ -117,6 +117,18 @@ final class TreasuryRegisterService
             $source = $handover
                 ? CashHandover::query()->lockForUpdate()->findOrFail($sourceId)
                 : PaymentRefund::query()->lockForUpdate()->findOrFail($sourceId);
+            if ($handover) {
+                $postingId = DB::table('treasury_postings')->where('cash_handover_id', $sourceId)->value('id');
+                $registered = $postingId !== null && DB::table('financial_posting_events')
+                    ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                    ->where('source_id', (string) $postingId)->exists();
+                if (! ($gatedHandover !== null && $gatedHandover->allowsPosting($source, $accountId, (int) $actor->id))
+                    && ($gatedHandover !== null || $registered || config('financial_candidate.cash_handovers') === true)) {
+                    throw new \DomainException('gated_handover_writer_required');
+                }
+            } elseif ($gatedHandover !== null) {
+                throw new \DomainException('gated_handover_writer_required');
+            }
             $amount = $this->sourceMinor($source);
             if ($handover) {
                 $channel = 'cash';
