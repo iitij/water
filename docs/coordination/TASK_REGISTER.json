@@ -48,6 +48,13 @@
       "round5": {
         "head": "2529082ee3fed5b663d1966dee0c90cec4e3c710",
         "evidence": "D source/evidence scoped acceptance PR75 7149367364; 40/102 reported, raw logs not recovered. Remains outside candidate."
+      },
+      "round9": {
+        "status": "EXACT_HEAD_REVIEWS_REQUESTED",
+        "sources": [
+          "https://github.com/iitij/water/pull/79#issuecomment-7150952394",
+          "https://github.com/iitij/water/pull/80#issuecomment-7150952838"
+        ]
       }
     },
     "B": {
@@ -111,6 +118,14 @@
       "round8": {
         "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
         "evidence": "A #7150542286 and D #7150555531 scoped source acceptance; 40 planned DB executions not actual result in GitHub. Latest owner screenshot only meter-policy coverage, no P1 numbers. Prior2052 not additive to2018."
+      },
+      "round9": {
+        "head": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
+        "pr": 79,
+        "delta": 4,
+        "status": "RECEIVED_PURE_FOUNDATION_REVIEW_PENDING",
+        "evidence": "B reports 14177 standalone checks and 4000 auxiliary Python oracle matches, exit 0; reviewed four added paths and reuse of checked FinancialAmount::add. No independent runtime verification. No existing caller, schema or endpoint changes.",
+        "assignment_url": "https://github.com/iitij/water/pull/79#issuecomment-7150952394"
       }
     },
     "C": {
@@ -165,6 +180,14 @@
       "round8": {
         "sha": "3572bf4f9968821651c7621cbce725e7da542788",
         "evidence": "A conditional source review #7150542967, D #7150556226, C #7150537379. Owner Codex screenshot reports ordinary suites, both actual historical cases original20 removed and retained15 unchanged, rollback before DDL and two named races exercised. Exact report SHA, counts/exits/lock hashes not visible. Three A findings remain explicitly open."
+      },
+      "round9": {
+        "head": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+        "pr": 80,
+        "delta": 8,
+        "status": "RECEIVED_TARGETED_PRODUCT_FIX_RUNTIME_PENDING",
+        "evidence": "C reports lint 8/8, no runtime. 6 SQLite + 7 MySQL targeted executions planned. Source changes retain old audit rows, reject required unsaved audit creation, revalidate meter ownership and use current locking reads for pending reviews. Review the lock breadth of the unindexed pending-review lookup and exact rollback/afterCommit outcomes.",
+        "assignment_url": "https://github.com/iitij/water/pull/80#issuecomment-7150952838"
       }
     },
     "D": {
@@ -340,6 +363,11 @@
       "round5": {
         "head": "047a5ea91a1c9851fead4dd8e830d100dde31d32",
         "evidence": "D accepted scoped G03 and A G1B-I01; D preflight at seed before candidate composed. Supervisor now verified ancestry and locks via GitHub."
+      },
+      "round9": {
+        "manifest": "e18cee4b16d56e236e8a0204e43e50ded5f9d137",
+        "status": "PRE_DELIVERY_MATRIX_REFRESH_REQUESTED",
+        "source": "https://github.com/iitij/water/pull/72#issuecomment-7150817979"
       }
     }
   },
@@ -427,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_8_SOURCE_ACCEPTANCE_RECEIVED_ROUND_9_TARGETED_C_FOLLOWUP_AND_ISOLATED_P2_FOUNDATION_HOLD_MAIN",
+    "decision": "ROUND_9_DELIVERIES_RECEIVED_HOLD_V2_AND_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -822,7 +850,69 @@
         "https://github.com/iitij/water/pull/78#issuecomment-7150556226",
         "https://github.com/iitij/water/pull/72#issuecomment-7150556908"
       ],
-      "limitations": "Verified branch heads and source reviews. Screenshot supplies meter coverage only, actual per-engine counts and exact SHA/exit evidence not visible; no full reports available from files search, browser access blocked. No supervisor test execution, product edits, merge, or actual data deletion."
+      "limitations": "Verified branch heads and source reviews. Screenshot supplies meter coverage only, actual per-engine counts and exact SHA/exit evidence not visible; no full reports available from files search, browser access blocked. No supervisor test execution, product edits, merge, or actual data deletion.",
+      "checkpoint": {
+        "authority": "1a55669611676980b9ee393af15ae8dfc47f2b43",
+        "decision": "DELIVERIES_RECEIVED_INDEPENDENT_REVIEW_AND_RUNTIME_EVIDENCE_PENDING_HOLD_V2",
+        "frozen_refs_verified": true,
+        "round8_reports": {
+          "status": "ORIGINALS_NOT_RECOVERED",
+          "files": [
+            "WATER_ROUND8_P1_ACCEPTANCE.md",
+            "WATER_ROUND8_METER_POLICY_ACCEPTANCE.md"
+          ],
+          "searched": "GitHub handoffs and exact PR workflow runs, Library by filename, prior conversation context",
+          "prior": "Retain reported coverage and historical failure; no duplicate baseline runs."
+        },
+        "B": {
+          "head": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
+          "pr": 79,
+          "delta": 4,
+          "status": "RECEIVED_PURE_FOUNDATION_REVIEW_PENDING",
+          "evidence": "B reports 14177 standalone checks and 4000 auxiliary Python oracle matches, exit 0; reviewed four added paths and reuse of checked FinancialAmount::add. No independent runtime verification. No existing caller, schema or endpoint changes.",
+          "assignment_url": "https://github.com/iitij/water/pull/79#issuecomment-7150952394"
+        },
+        "C": {
+          "head": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+          "pr": 80,
+          "delta": 8,
+          "status": "RECEIVED_TARGETED_PRODUCT_FIX_RUNTIME_PENDING",
+          "evidence": "C reports lint 8/8, no runtime. 6 SQLite + 7 MySQL targeted executions planned. Source changes retain old audit rows, reject required unsaved audit creation, revalidate meter ownership and use current locking reads for pending reviews. Review the lock breadth of the unindexed pending-review lookup and exact rollback/afterCommit outcomes.",
+          "assignment_url": "https://github.com/iitij/water/pull/80#issuecomment-7150952838"
+        },
+        "D": {
+          "manifest": "e18cee4b16d56e236e8a0204e43e50ded5f9d137",
+          "status": "PRE_DELIVERY_MATRIX_REFRESH_REQUESTED",
+          "source": "https://github.com/iitij/water/pull/72#issuecomment-7150817979"
+        },
+        "V2": {
+          "status": "HOLD_NOT_COMPOSED",
+          "base": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+          "inputs": {
+            "B": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+            "C": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+            "G10": "123fe5c6935110248c84d0e83e2aa53c886ce066"
+          },
+          "paths": {
+            "B": 14,
+            "C": 13,
+            "G10": 1,
+            "overlap": [
+              "tests/Feature/FinancialConcurrencyTest.php"
+            ],
+            "unique_before_manifest": 27
+          },
+          "concurrency": "Keep C bounded helper, 15 baseline tests, C two replacement races plus round9 pending review race, and both B P1 races: 20 methods. Do not restore superseded contrary test.",
+          "excluded": [
+            "P2 foundation until separate approval",
+            "P2 runtime integration",
+            "P3",
+            "ACC14 activation",
+            "durable closing and return posting"
+          ],
+          "open": "Original Round 8 evidence, A/D acceptance on exact delivery heads, targeted C runtime and G07 stored billing ambiguity. Exact candidate QA after authorized composition."
+        }
+      }
     }
   }
 }
