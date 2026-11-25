@@ -3265,4 +3265,121 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
         $this->assertFalse($result['closure_authorized']);
     }
+
+    public function test_round142_continuous_bank_statement_and_counted_cash_proof_are_read_only(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-R142-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-24', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-R142-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        foreach (['2026-11-24', '2026-11-25'] as $day) {
+            app(\App\Services\BankReconciliationService::class)->import($issuer, (int) $bank['id'], [
+                'reference' => 'QA-R142-'.$day, 'from_date' => $day, 'to_date' => $day,
+                'opening_amount' => '100.00', 'closing_amount' => '100.00', 'evidence' => self::EVIDENCE, 'lines' => [],
+            ]);
+        }
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $owner = Subscriber::create(['name' => 'Synthetic counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $uuid = '99999999-9999-4999-8999-999999999999';
+        $claim = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
+            'sync_uuid' => $uuid, 'cash_session_id' => $session->id, 'subscriber_id' => $owner->id,
+            'amount' => '4.12', 'payment_method' => 'cash', 'payment_date' => '2026-11-25',
+        ]);
+        app(\App\Services\GatedCountedCashWriter::class)->allocate($reviewer, (int) $claim['id'], '2026-11-25',
+            'QA-R142-COUNTED', self::EVIDENCE, $uuid, $this->nowAt());
+        $inspect = fn () => $this->gate(fn (array $context) => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $context['period_id'], '2026-11-25'));
+        $tables = ['bank_statements', 'bank_statement_lines', 'bank_statement_matches', 'cash_sessions',
+            'late_receipt_reviews', 'payments', 'transactions', 'audit_events', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $result = $inspect();
+        $this->assertSame([], $result['issues']);
+        $this->assertTrue($result['scanned_settlements_match']);
+        $this->assertSame(1, $result['bank_accounts_checked']);
+        $this->assertSame(2, $result['bank_statements_checked']);
+        $this->assertSame(1, $result['counted_reviews_checked']);
+        $this->assertSame(1, $result['counted_sessions_verified']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertSame($result, $inspect());
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+    }
+
+    public function test_round142_bank_gap_and_zero_net_unmatched_lines_are_not_hidden(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-R142-GAP', 'name' => 'Synthetic gap bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-23', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-R142-GAP-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $id = (int) $bank['id'];
+        $service = app(\App\Services\BankReconciliationService::class);
+        $service->import($issuer, $id, [
+            'reference' => 'QA-R142-23', 'from_date' => '2026-11-23', 'to_date' => '2026-11-23',
+            'opening_amount' => '100.00', 'closing_amount' => '100.00', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        $report = $service->import($issuer, $id, [
+            'reference' => 'QA-R142-25', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+            'opening_amount' => '100.00', 'closing_amount' => '100.00', 'evidence' => self::EVIDENCE,
+            'lines' => [
+                ['bank_reference' => 'QA-R142-CREDIT', 'booked_on' => '2026-11-25', 'amount' => '1.00'],
+                ['bank_reference' => 'QA-R142-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-1.00'],
+            ],
+        ]);
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $context['period_id'], '2026-11-25'));
+        $this->assertFalse($result['scanned_settlements_match']);
+        $this->assertContains(['code' => 'bank_statement_gap', 'source' => 'treasury_accounts', 'id' => $id.':2026-11-24',
+            'missing_from' => '2026-11-24', 'missing_until_exclusive' => '2026-11-25'], $result['issues']);
+        $this->assertContains(['code' => 'bank_statement_unresolved', 'source' => 'bank_statements',
+            'id' => (string) $report['statement']['id'], 'unmatched_bank_count' => 2,
+            'unmatched_ledger_count' => 0, 'bank_unmatched_minor' => 0, 'ledger_unmatched_minor' => 0,
+            'opening_difference_minor' => 0, 'closing_difference_minor' => 0, 'integrity_matches' => true], $result['issues']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('bank_statement_matches', 0);
+    }
+
+    public function test_round142_unregistered_counted_cash_decision_is_reported_without_adoption(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $claim = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
+            'sync_uuid' => $uuid, 'cash_session_id' => $session->id, 'subscriber_id' => $subscriber->id,
+            'amount' => '4.12', 'payment_method' => 'cash', 'payment_date' => '2026-11-25',
+        ]);
+        app(\App\Services\LateReceiptReviewService::class)->decide((int) $claim['id'], $reviewer, [
+            'approve' => true, 'settlement_method' => 'already_counted',
+            'evidence_reference' => 'QA-R142-LEGACY', 'evidence' => self::EVIDENCE,
+        ]);
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $context['period_id'], '2026-11-25'));
+        $this->assertFalse($result['scanned_settlements_match']);
+        $this->assertSame(1, $result['counted_reviews_checked']);
+        $this->assertSame(0, $result['counted_sessions_verified']);
+        $this->assertContains('counted_cash_session_unverified', array_column($result['issues'], 'code'));
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $this->assertDatabaseHas('late_receipt_reviews', ['id' => $claim['id'], 'status' => 'approved']);
+    }
 }
