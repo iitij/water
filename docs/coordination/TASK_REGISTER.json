@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Round 8 scoped acceptance: independently review final B 8f52bdc proof, raw exact amounts, cap/replay and refund identity/lock ordering; review C 3572bf4 exact balance, financial retirement provenance and mixed pending deletion. Record issues or scoped approval in PR77/78; no product edits or repeat tests. Keep P2 design ready, no activation.",
+      "next": "Round 9: scoped source acceptance of B at 8f52bdc recorded PR77; review only C A-C-08-01/02/03 corrections and D image coverage, preserve audit evidence and exact balance, review isolated P2 domain primitive if delivered. No product edits, close/returns or ACC14 activation, no main merge.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -54,10 +54,10 @@
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Freeze 8f52bdc. Await single cloud runner exact focused tests specified in ACC_09_P1_CORRECTIONS_ROUND7_AR.md and A/D review; fix only confirmed failures in own branch with new SHA and targeted retest. No P2 implementation before approved integrated base. Preserve historical proof, strict cap, refund identity, ACC11 and API.",
+      "next": "Keep 8f52bdc frozen pending complete Codex report. To avoid idle time, authorize strictly isolated P2 domain foundation in separate integration/team-b-p2-domain-foundation from 8f52bdc: first inspect existing ExactMoney/domain primitives; implement only missing cash DECIMAL14 and checked portable signed arithmetic, raw lexical validation and pure tests in new independent files, no existing shared code/callers, schema/API changes, treasury posting or reporting integration. Preserve distinct DECIMAL10/12/14 limits; no widening existing ExactMoney12. If no missing primitive document reuse rather than duplicate. P2 runtime integration remains held until accepted new candidate. No product edits to frozen P1, no main merge.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -107,15 +107,19 @@
         "head": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
         "files": 11,
         "evidence": "PR77 #7150416613: 2052 pure checks reported (2020+32), exit0, 7 lint; 15 P1 +4 reversal per engine +2 MySQL races defined, not executed. 3 commits ahead of d90643a; 5 product,5 test,1 doc."
+      },
+      "round8": {
+        "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+        "evidence": "A #7150542286 and D #7150555531 scoped source acceptance; 40 planned DB executions not actual result in GitHub. Latest owner screenshot only meter-policy coverage, no P1 numbers. Prior2052 not additive to2018."
       }
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Freeze 3572bf4 until cloud tests and A/D review; two legacy methods require separate empty synthetic schema per method per engine, explicit opt-in; ordinary replacement and protection tests plus 2 bounded MySQL races. Fix confirmed scoped failures only. Already-applied migration forward cleanup plan remains separate; no production deletion. No shared financial writer edits.",
+      "next": "Round 9: independent integration/team-c-obsolete-meter-followup from frozen 3572bf4. Preserve audit history needed for meter replacement/retirement and financial provenance (no blanket audit deletion; owner approval concerns operational readings only). A-C-08-02 ensure ordinary model/API/purger/retirement parity for pending receipt review and current locked revalidation under subscriber-first ordered graph, ordinary application tests only; do not change shared financial writers or bypass protections. A-C-08-03 add targeted general-cache overflow and required audit failure atomic rollback tests using synthetic ordinary fixtures, and D shared-image callback actual execution and sole-owned cleanup coverage. Fix only confirmed source/contract gaps; if any requires new reserved path or schema, request approval. Preserve original 20-unit tests, retained readings and posted financial records. No live data, already-applied migration replay, candidate edits or main merge.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -157,6 +161,10 @@
         "head": "3572bf4f9968821651c7621cbce725e7da542788",
         "files": 12,
         "evidence": "PR78 and PR69 #7150458113: PHP lint12/12, diff/push exit0, original20-unit product regression, 2 legacy methods and 2 races defined, no Laravel runtime. Actual historical migration call sites changed; no live data or already-run replay."
+      },
+      "round8": {
+        "sha": "3572bf4f9968821651c7621cbce725e7da542788",
+        "evidence": "A conditional source review #7150542967, D #7150556226, C #7150537379. Owner Codex screenshot reports ordinary suites, both actual historical cases original20 removed and retained15 unchanged, rollback before DDL and two named races exercised. Exact report SHA, counts/exits/lock hashes not visible. Three A findings remain explicitly open."
       }
     },
     "D": {
@@ -165,7 +173,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Round 8 independent acceptance of final PR77/78 and exact cloud logs. Verify G10 corrected scenario screenshot 1/0/0 exit0 (raw report/actual SHA not visible); retain original candidate legacy-clean exit1 and prior fresh/financial passes. Review final source and test coverage, especially historical schema per-method isolation, no silent skips, transactional financial protection. Both B and C modify FinancialConcurrencyTest.php; preserve both sets in eventual composition. Do not rerun cloud checks merely to duplicate; no restricted probes. G07 stored ambiguous billing targeted proposal remains separate, no shared writer edits; full candidate regression deferred.",
+      "next": "Round 9: independently review C follow-up exact head and targeted ordinary test evidence. Review B isolated P2 foundation if delivered (pure no integration). Obtain owner-supplied original Round8 reports and reconcile actual counts/exit/SHA/lock/isolation; do not repeat successful suites merely to recover files. Preserve prior G10 and candidate evidence. Prepare V2 manifest B full14 paths, C12 plus followup, G10 fixture, resolve shared FinancialConcurrencyTest.php preserving C bounded helper and B races; no merge yet. G07 stored ambiguous billing targeted proposal remains distinct; no product edits or previously restricted checks.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -419,7 +427,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_7_IMPLEMENTATION_HANDOFF_RECEIVED_ROUND_8_FOCUSED_ACCEPTANCE_HOLD_MAIN",
+    "decision": "ROUND_8_SOURCE_ACCEPTANCE_RECEIVED_ROUND_9_TARGETED_C_FOLLOWUP_AND_ISOLATED_P2_FOUNDATION_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -782,6 +790,39 @@
         "https://github.com/iitij/water/pull/72#issuecomment-7150351161"
       ],
       "limitations": "Latest A/D reviews predate final B/C heads. Supervisor verified branch heads, exact changed paths, B report and C legacy test/PR scope; no runtime execution. Owner screenshot G10 scoped only; exact full P1/candidate prior reports not recovered in this turn. No new merge, product changes, or actual data deletion."
+    },
+    "round9": {
+      "phase": "Close three bounded meter-policy gaps while preparing isolated P2 domain primitives; V2 held for exact acceptance",
+      "frozen": {
+        "B": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+        "C": "3572bf4f9968821651c7621cbce725e7da542788",
+        "candidate": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+        "main": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6"
+      },
+      "C_followup": {
+        "branch": "integration/team-c-obsolete-meter-followup",
+        "dispositions": [
+          "A-C-08-01 retain necessary prior audit events and replacement/retirement provenance, no global audit deletion",
+          "A-C-08-02 parity for ordinary pending review protection and current locked revalidation, subscriber-first, no shared writer changes",
+          "A-C-08-03 add exact general-cache overflow and required audit failure rollback tests; D image callback execution and sole-owned cleanup test"
+        ],
+        "scope": "Original C reserved meter files and directly affected ordinary tests only. No new schema/financial changes or live deletion; new scope request if needed."
+      },
+      "P2_foundation": {
+        "branch": "integration/team-b-p2-domain-foundation",
+        "base": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+        "scope": "New isolated cash14 and portable signed arithmetic pure files/tests only after inventory to avoid duplication. No shared caller edit, no activation. P2 integration held pending V2."
+      },
+      "cloud": "Owner screenshot reports core meter policy coverage, not complete report or counts. Request complete original WATER_ROUND8_P1_ACCEPTANCE.md and WATER_ROUND8_METER_POLICY_ACCEPTANCE.md directly in chat; no reruns. Browser connector denied access to chatgpt.com, no further browser access attempted. New scoped ordinary tests only after C followup exact SHA; no previously restricted tests.",
+      "composition": "V2 not created. After exact report and A/D acceptance, compose approved B/C/G10 on new candidate and preserve all shared concurrency tests. P2 isolated foundation not included unless separately accepted. G07 billing ambiguity open. Full suites/CI/hosting/production remain held.",
+      "sources": [
+        "https://github.com/iitij/water/pull/77#issuecomment-7150542286",
+        "https://github.com/iitij/water/pull/77#issuecomment-7150555531",
+        "https://github.com/iitij/water/pull/78#issuecomment-7150542967",
+        "https://github.com/iitij/water/pull/78#issuecomment-7150556226",
+        "https://github.com/iitij/water/pull/72#issuecomment-7150556908"
+      ],
+      "limitations": "Verified branch heads and source reviews. Screenshot supplies meter coverage only, actual per-engine counts and exact SHA/exit evidence not visible; no full reports available from files search, browser access blocked. No supervisor test execution, product edits, merge, or actual data deletion."
     }
   }
 }
