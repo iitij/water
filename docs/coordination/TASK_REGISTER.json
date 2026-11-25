@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 58,
+    "round": 59,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3445,6 +3445,18 @@
           "skipped": 0
         }
       }
+    },
+    "round59": {
+      "phase": "Actual internal treasury transfer source evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "1a9726d9171f824a760e1d23ad85d4a3ffdf62d9",
+      "source": "d9d607166413db1ee7490c41c2e609ae0430bb3b",
+      "workflow": "b1a4be9e458bd1d6be8cbcc53023cba3c26b8fa6",
+      "branch": "fix/central-g1b-treasury-transfer-evidence",
+      "pr": 136,
+      "runs": [],
+      "scope": "Read-only transfer evidence adapter validates actual dispatch/receipt source and posting, signs, account, date, actor, reference and matching dispatch. Stable dispatch hash after receipt. Two new cases per isolated engine; rollback, missing source and outer transaction precondition.",
+      "limits": "Other treasury families, registry verifier integration, effective period binding, transit reconciliation, all-writer coverage, production activation and final closure remain open. Pending runtime."
     }
   }
 }
