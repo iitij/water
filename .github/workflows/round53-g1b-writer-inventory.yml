@@ -1,0 +1,42 @@
+name: G1B financial writer source inventory
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round53-g1b-writer-inventory.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/central-g1b-writer-inventory'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8a914bf804b47edee8fc9ec6e6d484296321b28b
+          persist-credentials: false
+      - name: Read-only source inventory (candidates, not proof of coverage)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '8a914bf804b47edee8fc9ec6e6d484296321b28b'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          git rev-parse HEAD
+          echo '=== TRANSACTION ENTRANCES / LOCKS ==='
+          git grep -nE 'DB::transaction\(|DB::beginTransaction\(|->transaction\(|->beginTransaction\(' -- app routes database/seeders || test "$?" -eq 1
+          echo '=== DOCUMENT / LEDGER WRITES AND ENTRY CALLS ==='
+          git grep -nE 'recordTransaction\(|reverseDocument\(|generateInvoice\(|collectPayment\(|postPayment\(|reserveForIssue\(|(Invoice|Payment|Transaction|Reading|CashSession|PaymentRefund|PaymentAccountTransfer|NonCashCollectionClaim|LateReceiptReview|TreasuryPosting|BankStatement|BankStatementLine|CashHandover)::(create|insert|update|upsert|firstOrCreate|updateOrCreate|destroy)\(' -- app routes database/seeders || test "$?" -eq 1
+          echo '=== RAW FINANCIAL TABLE REFERENCES ==='
+          git grep -nE "DB::table\(['\"](transactions|invoices|invoice_items|invoice_tariff_lines|payments|payment_allocation_revisions|payment_allocations|payment_refunds|payment_account_transfers|cash_sessions|cash_handovers|closed_cash_corrections|late_receipt_reviews|noncash_collection_claims|treasury_[a-z_]+|bank_[a-z_]+|readings|subscribers|meters|financial_[a-z_]+)['\"]" -- app routes database/seeders || test "$?" -eq 1
+          echo '=== NON-MODEL WRITE PRIMITIVES ==='
+          git grep -nE '(DB::(statement|unprepared|insert|update|delete|affectingStatement)\(|->(updateQuietly|saveQuietly|forceDelete|deleteQuietly|truncate|upsert|insertOrIgnore)\()' -- app routes database/seeders || test "$?" -eq 1
+          echo '=== MODELS / OBSERVERS / SCHEDULED ENTRYPOINTS ==='
+          git grep -nE 'static::(creating|created|saving|saved|updating|updated|deleting|deleted|restoring|restored)\(|::observe\(|Schedule::|->schedule\(' -- app routes bootstrap || test "$?" -eq 1
+          echo '=== GATE AND REGISTRY CALLERS ==='
+          git grep -nE 'FinancialWriteGate|FinancialPostingRegistry|FinancialCloseCoordinator|withinOpenPeriod\(' -- app routes || test "$?" -eq 1
+          echo '=== RELEVANT PATH INVENTORY ==='
+          git ls-files app/Services app/Console app/Jobs app/Observers app/Filament app/Http/Controllers routes database/seeders
+          test -z "$(git status --porcelain)"
+          echo 'SOURCE_INVENTORY_COMPLETE_NOT_COVERAGE_CERTIFIED'
