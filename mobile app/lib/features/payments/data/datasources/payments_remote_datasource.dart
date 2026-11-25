@@ -165,6 +165,43 @@ class PaymentsRemoteDataSource {
     return map != null && (map['payment'] != null || map['message'] != null);
   }
 
+  /// No success inferred from a message-only response or a different request.
+  Future<bool> decideBoundVoidRequest(
+    int id, {
+    required int requestId,
+    required bool approve,
+    String? operationUuid,
+    String? notes,
+    Map<String, dynamic>? sessionExtra,
+  }) async {
+    if (requestId <= 0 || (approve != (operationUuid != null))) {
+      throw const ValidationFailure('هوية قرار الإلغاء غير صالحة.');
+    }
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoidDecision(id),
+      body: <String, dynamic>{
+        'approve': approve,
+        'request_id': requestId,
+        if (operationUuid != null) 'operation_uuid': operationUuid,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+      sessionExtra: sessionExtra,
+    );
+    final map = JsonUtils.asMap(response);
+    final payment = JsonUtils.asMap(map?['payment']);
+    if (map == null ||
+        JsonUtils.asIntOrNull(map['request_id']) != requestId ||
+        map['operation_uuid'] != operationUuid ||
+        !map.containsKey('operation_uuid') ||
+        payment == null ||
+        JsonUtils.asIntOrNull(payment['id']) != id ||
+        !payment.containsKey('voided_at') ||
+        (payment['voided_at'] != null) != approve) {
+      throw const UnexpectedFailure('لم يؤكد الخادم هوية قرار الإلغاء ونتيجته.');
+    }
+    return true;
+  }
+
   /// #52 `POST /api/payments/bulk-delete`
   Future<int> bulkDelete(List<int> ids) async {
     final response = await _client.post(
