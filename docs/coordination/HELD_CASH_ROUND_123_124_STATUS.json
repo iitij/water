@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Round131: review remaining forward invoice and receipt writers, focus on an untested transition or atomic rollback, no release activation.",
+  "next": "Verify exact round131 jobs; fix only confirmed failures. Continue targeted noncash clearance and late receipt paths, then complete entrypoint coverage and safe release/closing prerequisites.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -252,5 +252,20 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round131": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "f70f4170cd4255f4a2ffe481c3f0bfba5fd8ea40",
+    "branch": "qa/held-cash-receipt-atomicity-round131",
+    "source": "759683725502888aae196a3abe090d59fd19aedb",
+    "run": 45693540280,
+    "source_review": [
+      "InvoiceService::generateInvoice acquires issuance lock before subscriber and meter/readings within one transaction.",
+      "InvoiceCancellationService::cancel acquires issuance lock before subscriber/meter/invoice/readings and recalculates in the transaction.",
+      "Invoice model new save acquires issuance/subscriber locks and created event recalculates; draft approval by normal status update rejected.",
+      "PaymentService::postPayment reserves receipt number, creates receipt, recalculates allocation including shadow reinstatement, then posts ledger inside one transaction; noncash clearance paths also acquire issuance lock."
+    ],
+    "scope": "Inject ledger INSERT failure only after shadow reinstatement exists during new receipt collection; assert atomic rollback of receipt, document sequence, invoice, allocations, ledger, audit, treasury and shadow evidence. Verify successful retry, number reuse, exact balances, reconciliation and sync UUID idempotent replay without reducing actual reserve.",
+    "limits": "Test and workflow changes only, result pending; full inventory of entrypoints, deferred/late receipts, noncash proof and closure remain. No historical remediation, actual reserve reduction, production, real data or main changes."
   }
 }
