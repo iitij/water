@@ -1,4 +1,11 @@
 {
+  "owner_scope_decision_2026_11_25": {
+    "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
+    "decision": "Exclude retroactive financial data remediation; retain prospective accounting correctness, current reversals/refunds, compatibility safeguards, audit evidence and all unclosed safety gates.",
+    "record": "docs/coordination/HELD_CASH_ROUND_123_124_STATUS.json",
+    "decision_commit": "796964547f0d9b6c3d54dcca4ff3128ab1bc5593",
+    "limits": "No product feature deletion inferred, no historical data mutation, no main merge or production activation. Earlier records remain historical evidence, not active instructions where superseded by this scope."
+  },
   "updated": "2026-11-25",
   "main_sha_at_snapshot": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
   "repository": "iitij/water",
