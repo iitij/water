@@ -203,7 +203,8 @@ final class TreasuryHeldCashLiabilityService
         $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
         $guard = app(HeldCashReservation::class);
         $held = $guard->outstandingForAccount($accountId);
-        $reserved = SignedMinor::add($held, $guard->subscriberCreditReserveForAccount($accountId));
+        $reserved = SignedMinor::add(SignedMinor::add($held, $guard->subscriberCreditReserveForAccount($accountId)),
+            app(HandoverSurplusReservation::class)->forAccount($accountId));
         $pendingRefund = $guard->unpostedCashRefundMinor();
         $this->need(SignedMinor::subtract($balance, $pendingRefund) >= $reserved && $held >= $minor, 'held_cash_payout_insufficient_cash');
     }
