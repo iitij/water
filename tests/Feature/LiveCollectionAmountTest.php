@@ -38,7 +38,7 @@ class LiveCollectionAmountTest extends TestCase
             'amount_paid' => $paid,
             'previous_balance' => $previous,
             'status' => $status,
-        ]));
+        ]))->fresh(); // Assert against actual persisted DECIMAL values, not the input float.
     }
 
     public function test_paid_historical_arrears_are_never_suggested_again(): void

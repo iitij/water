@@ -63,7 +63,10 @@ class SubscriberListMetadataTest extends TestCase
         $other = Subscriber::create(['name' => 'Beta', 'square_id' => $otherSquare->id, 'status' => 'active']);
         foreach ([$matching, $other] as $subscriber) {
             $subscriber->meters()->create([
-                'unique_code' => 'METER-' . $subscriber->id, 'path_number' => 12, 'status' => 'active',
+                // A numeric auto-increment ID in the code can also match the text search on MySQL's Unicode collation.
+                // Keep codes nonnumeric so this case isolates the intended path lookup.
+                'unique_code' => $subscriber->is($matching) ? 'METER-ALPHA' : 'METER-BETA',
+                'path_number' => 12, 'status' => 'active',
             ]);
         }
         $oldMeter = $matching->meters()->firstOrFail();
