@@ -128,9 +128,9 @@ final class LateReceiptReviewService
         ];
     }
 
-    private function assertCashSettlementWriter(object $review, ?GatedCollectionWriter $writer): void
+    private function assertCashSettlementWriter(object $review, GatedCollectionWriter|GatedCountedCashWriter|null $writer, string $kind = 'late_cash'): void
     {
-        if ($writer !== null && $writer->allowsMutation('late_cash', (int) $review->id, $review->sync_uuid)) {
+        if ($writer !== null && $writer->allowsMutation($kind, (int) $review->id, $review->sync_uuid)) {
             return;
         }
         $registered = DB::table('financial_posting_operations')->where('scope_key', 'water')
@@ -140,12 +140,12 @@ final class LateReceiptReviewService
         }
     }
 
-    public function decide(int $id, User $actor, array $data): array
+    public function decide(int $id, User $actor, array $data, ?GatedCountedCashWriter $gatedWriter = null): array
     {
-        return $this->decideInternal($id, $actor, $data, false);
+        return $this->decideInternal($id, $actor, $data, false, $gatedWriter);
     }
 
-    private function decideInternal(int $id, User $actor, array $data, bool $verifiedCashDestination, ?GatedCollectionWriter $gatedWriter = null): array
+    private function decideInternal(int $id, User $actor, array $data, bool $verifiedCashDestination, GatedCollectionWriter|GatedCountedCashWriter|null $gatedWriter = null): array
     {
         abort_unless($this->canDecide($actor), 403);
         $candidate = DB::table('late_receipt_reviews')->find($id);
@@ -164,7 +164,9 @@ final class LateReceiptReviewService
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
             if ($approve && $review->payment_method === 'cash') {
-                $this->assertCashSettlementWriter($review, $gatedWriter);
+                $this->assertCashSettlementWriter($review, $gatedWriter, $method === 'already_counted' ? 'already_counted' : 'late_cash');
+            } elseif ($gatedWriter !== null) {
+                throw new \DomainException('gated_late_cash_writer_required');
             }
             $status = $approve ? 'approved' : 'rejected';
             if ($review->status !== 'pending') {
