@@ -2351,4 +2351,145 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_late_cash_receipts', 1);
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
+
+    private function round134Collection(string $kind, bool $legacy = false): void
+    {
+        [, , $cash, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $writer = app(\App\Services\GatedCollectionWriter::class);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $date = '2026-11-25';
+        $session = null;
+        if ($kind !== 'claim') {
+            $sessions = app(CashSessionService::class);
+            $session = $sessions->decide($sessions->close($sessions->open($issuer), '0.00'), true, $reviewer);
+            $claim = $late->submit($issuer, ['sync_uuid' => $uuid, 'cash_session_id' => $session->id,
+                'subscriber_id' => $subscriber->id, 'amount' => '0.30',
+                'payment_method' => $kind === 'late_cash' ? 'cash' : 'check',
+                'payment_date' => $date, 'reference_number' => $kind === 'late_cash' ? null : 'QA-R134-CHECK']);
+        } else {
+            $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+                'sync_uuid' => $uuid, 'subscriber_id' => $subscriber->id, 'amount' => '0.30',
+                'payment_method' => 'check', 'instrument_reference' => 'QA-R134-CHECK', 'instrument_on' => $date,
+            ]);
+        }
+        $id = (int) $claim['id'];
+        if ($kind === 'late_cash') {
+            $accountId = (int) $cash['id'];
+            $act = fn () => $writer->receiveLateCash($reviewer, $id, $accountId, $date,
+                'QA-R134-CASH', self::EVIDENCE, $uuid, $this->nowAt());
+            $this->rejects('gated_collection_effective_date', fn () => $writer->receiveLateCash($reviewer, $id,
+                $accountId, '2026-11-24', 'QA-R134-CASH', self::EVIDENCE, $uuid, $this->nowAt()));
+        } else {
+            $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+                'code' => 'QA-R134-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+                'opening_on' => $date, 'opening_amount' => '0.00',
+                'opening_reference' => 'QA-R134-OPEN', 'opening_evidence' => 'Independent opening bank evidence',
+            ], '99999999-9999-4999-8999-999999999999', $this->nowAt())['account'];
+            $accountId = (int) $bank['id'];
+            $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, $accountId, [
+                'reference' => 'QA-R134-STMT', 'from_date' => $date, 'to_date' => $date,
+                'opening_amount' => '0.00', 'closing_amount' => '0.30', 'evidence' => self::EVIDENCE,
+                'lines' => [['bank_reference' => 'QA-R134-IN', 'booked_on' => $date, 'amount' => '0.30']],
+            ]);
+            $statementId = (int) $statement['statement']['id'];
+            $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+            $act = $kind === 'claim'
+                ? fn () => $writer->clearClaim($reviewer, $id, $statementId, $lineId, $date,
+                    'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt())
+                : fn () => $writer->clearLateBank($reviewer, $id, $statementId, $lineId, $date,
+                    'QA-R134-REVIEW', 'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt());
+            if ($legacy) {
+                app(PaymentService::class)->clearNonCashClaim($reviewer, $id, $statementId, $lineId, 'QA-R134-PROOF', self::EVIDENCE);
+                $this->rejects('gated_collection_operation_conflict', $act);
+                $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+                $this->assertDatabaseCount('payments', 1);
+                $this->assertDatabaseCount('treasury_bank_collections', 1);
+                return;
+            }
+        }
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'treasury_postings', 'audit_events', 'noncash_collection_claims', 'late_receipt_reviews',
+            'treasury_bank_collections', 'bank_statement_matches', 'treasury_late_cash_receipts',
+            'cash_sessions', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $ops = fn () => DB::table('financial_posting_operations')->orderBy('operation_uuid')->get()->map(fn ($row) => (array) $row)->all();
+        $seq = fn () => DB::table('document_sequences')->orderBy('kind')->orderBy('period')->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $beforeOps = $ops();
+        $beforeSeq = $seq();
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
+        $this->rejects('financial_scope_not_active', $act);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $act);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $condition = "NEW.operation_uuid = '{$uuid}' AND NEW.leg = 'treasury'";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r134_registry_failure'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r134_registry_failure'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r134_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $act();
+                $this->fail('Collection committed despite failure to register treasury leg.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r134_registry_failure', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeOps, $ops());
+            $this->assertSame($beforeSeq, $seq());
+            $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r134_registry');
+        }
+        $result = $act();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertCount(2, $events);
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => $uuid, 'effective_on' => $date]);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertFalse($verified['source_coverage_verified']);
+        $this->assertSame(2, $verified['registered_treasury_legs_verified']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $committedOps = $ops();
+        $committedSeq = $seq();
+        $this->assertFalse($act()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($committedOps, $ops());
+        $this->assertSame($committedSeq, $seq());
+    }
+
+    public function test_round134_noncash_claim_registers_both_legs_atomically(): void
+    {
+        $this->round134Collection('claim');
+    }
+
+    public function test_round134_late_bank_registers_both_legs_atomically(): void
+    {
+        $this->round134Collection('late_bank');
+    }
+
+    public function test_round134_late_cash_registers_both_legs_atomically(): void
+    {
+        $this->round134Collection('late_cash');
+    }
+
+    public function test_round134_never_adopts_unregistered_legacy_collection(): void
+    {
+        $this->round134Collection('claim', true);
+    }
 }
