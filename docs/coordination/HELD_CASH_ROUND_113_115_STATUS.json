@@ -1,0 +1,63 @@
+{
+  "round113": {
+    "source": "f97bf6e511ecd6df12de17bcb41187fc5fe24ed7",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45657669321,
+    "status": "BOTH_ENGINES_PASS_PROMOTED",
+    "jobs": [
+      {
+        "id": 139358629630,
+        "engine": "sqlite",
+        "tests": 181,
+        "assertions": 1740,
+        "exit": 0
+      },
+      {
+        "id": 139358629096,
+        "engine": "mysql",
+        "tests": 186,
+        "assertions": 1843,
+        "exit": 0
+      }
+    ],
+    "promotion": "Verified base 4538e756; non-force update successful; exact comparison identical."
+  },
+  "round114": {
+    "source": "ca32d90759e09b72f4be5779fe62643b8d0576e1",
+    "branch": "qa/held-cash-allocation-protection-round114",
+    "run": 45659109470,
+    "status": "SQLITE_PASS_MYSQL_PENDING_AT_LAST_CHECK",
+    "sqlite": {
+      "id": 139363773861,
+      "tests": 182,
+      "assertions": 1752,
+      "exit": 0
+    }
+  },
+  "round115": {
+    "base": "ca32d90759e09b72f4be5779fe62643b8d0576e1",
+    "source": "ff0f6023556c82585a35fd7ce2c5e4859c10c9d1",
+    "branch": "qa/held-cash-allocation-replay-round115",
+    "runs": [
+      {
+        "id": 45660230690,
+        "name": "Retired feature removal gate",
+        "status": "completed",
+        "conclusion": "success",
+        "sha": "ff0f6023556c82585a35fd7ce2c5e4859c10c9d1"
+      },
+      {
+        "id": 45660230679,
+        "name": "Held cash allocation replay acceptance",
+        "status": "in_progress",
+        "conclusion": null,
+        "sha": "ff0f6023556c82585a35fd7ce2c5e4859c10c9d1"
+      }
+    ],
+    "status": "STAGED_UNVERIFIED",
+    "scope": "Extract unchanged allocation plan from write path to read-only allocationPlanLocked. Compare persisted latest hash to deterministic source/target/FIFO replay in reconciliation after existing document and aggregate validation. Synthetic new revision swaps equal held and ordinary allocations while preserving ledger, source and invoice totals and a valid fingerprint; audit and held allocation evidence must reject without repair. No new migration.",
+    "limits": "Not proof of all insert origins or historical revision authenticity; current policy verification only, same deterministic planner used by write path. No full coverage or release authority. Runtime verification required on both engines. No main or production changes."
+  },
+  "coordination": "Independent receipts while central register large update unresolved.",
+  "next": "Review exact round114 and round115 acceptance, correct proven failures, then design insertion origin and release/reinstatement controls."
+}
