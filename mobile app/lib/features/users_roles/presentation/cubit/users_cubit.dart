@@ -31,14 +31,18 @@ class UsersState extends Equatable {
 
   List<SystemUser> get visibleUsers {
     final needle = query.trim().toLowerCase();
-    return users.where((user) {
-      final matchesRole = roleFilter == null || user.roles.contains(roleFilter);
-      final matchesQuery = needle.isEmpty ||
-          user.name.toLowerCase().contains(needle) ||
-          user.email.toLowerCase().contains(needle) ||
-          user.roles.any((role) => role.toLowerCase().contains(needle));
-      return matchesRole && matchesQuery;
-    }).toList(growable: false);
+    return users
+        .where((user) {
+          final matchesRole =
+              roleFilter == null || user.roles.contains(roleFilter);
+          final matchesQuery =
+              needle.isEmpty ||
+              user.name.toLowerCase().contains(needle) ||
+              user.email.toLowerCase().contains(needle) ||
+              user.roles.any((role) => role.toLowerCase().contains(needle));
+          return matchesRole && matchesQuery;
+        })
+        .toList(growable: false);
   }
 
   UsersState copyWith({
@@ -69,20 +73,21 @@ class UsersState extends Equatable {
 
   @override
   List<Object?> get props => [
-        users,
-        availableRoles,
-        query,
-        roleFilter,
-        selectedIds,
-        deletingIds,
-        isLoading,
-        isSaving,
-        errorMessage,
-      ];
+    users,
+    availableRoles,
+    query,
+    roleFilter,
+    selectedIds,
+    deletingIds,
+    isLoading,
+    isSaving,
+    errorMessage,
+  ];
 }
 
 class UsersCubit extends Cubit<UsersState> {
-  UsersCubit(this._repository, {this.currentUserId}) : super(const UsersState());
+  UsersCubit(this._repository, {this.currentUserId})
+    : super(const UsersState());
 
   final RbacRepository _repository;
   final int? currentUserId;
@@ -112,7 +117,13 @@ class UsersCubit extends Cubit<UsersState> {
   void search(String query) => emit(state.copyWith(query: query));
 
   void filterRole(String? role) {
-    emit(state.copyWith(roleFilter: role, clearRoleFilter: role == null, clearError: true));
+    emit(
+      state.copyWith(
+        roleFilter: role,
+        clearRoleFilter: role == null,
+        clearError: true,
+      ),
+    );
   }
 
   void toggleSelected(int id, bool selected) {
@@ -134,7 +145,9 @@ class UsersCubit extends Cubit<UsersState> {
   }) async {
     if (state.isSaving) return false;
     if (user.roles.isEmpty) {
-      emit(state.copyWith(errorMessage: 'اختر دوراً واحداً على الأقل للمستخدم.'));
+      emit(
+        state.copyWith(errorMessage: 'اختر دوراً واحداً على الأقل للمستخدم.'),
+      );
       return false;
     }
     emit(state.copyWith(isSaving: true, clearError: true));
@@ -170,16 +183,26 @@ class UsersCubit extends Cubit<UsersState> {
 
   Future<void> delete(SystemUser user) async {
     if (user.id == currentUserId) {
-      emit(state.copyWith(errorMessage: 'لا يمكنك حذف حسابك الحالي.'));
+      emit(state.copyWith(errorMessage: 'لا يمكنك تعطيل حسابك الحالي.'));
       return;
     }
-    if (state.deletingIds.contains(user.id)) return;
-    emit(state.copyWith(deletingIds: {...state.deletingIds, user.id}, clearError: true));
+    if (user.isDisabled ||
+        user.roles.contains('super_admin') ||
+        state.deletingIds.contains(user.id)) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        deletingIds: {...state.deletingIds, user.id},
+        clearError: true,
+      ),
+    );
     try {
       await _repository.deleteUser(user.id);
+      final users = await _repository.getUsers(role: state.roleFilter);
       emit(
         state.copyWith(
-          users: state.users.where((item) => item.id != user.id).toList(),
+          users: users,
           selectedIds: {...state.selectedIds}..remove(user.id),
           deletingIds: {...state.deletingIds}..remove(user.id),
         ),
@@ -198,19 +221,18 @@ class UsersCubit extends Cubit<UsersState> {
     final ids = state.selectedIds.toList();
     if (ids.isEmpty) return;
     if (currentUserId != null && ids.contains(currentUserId)) {
-      emit(state.copyWith(errorMessage: 'ألغِ تحديد حسابك الحالي قبل الحذف الجماعي.'));
+      emit(
+        state.copyWith(
+          errorMessage: 'ألغِ تحديد حسابك الحالي قبل التعطيل الجماعي.',
+        ),
+      );
       return;
     }
     emit(state.copyWith(isSaving: true, clearError: true));
     try {
       await _repository.bulkDeleteUsers(ids);
-      emit(
-        state.copyWith(
-          users: state.users.where((user) => !ids.contains(user.id)).toList(),
-          selectedIds: {},
-          isSaving: false,
-        ),
-      );
+      final users = await _repository.getUsers(role: state.roleFilter);
+      emit(state.copyWith(users: users, selectedIds: {}, isSaving: false));
     } catch (error) {
       emit(state.copyWith(isSaving: false, errorMessage: error.toString()));
     }
