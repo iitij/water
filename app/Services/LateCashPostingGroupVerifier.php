@@ -45,6 +45,8 @@ final class LateCashPostingGroupVerifier
             ->where('op.scope_key', $scope)->where('op.payload_format', '<>', 2)->lockForUpdate()->first(),
             'late_cash_group_verifier_format');
 
+        $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
+            'late_cash_group_issuance_lock');
         $digest = hash_init('sha256');
         hash_update($digest, $this->encode(['format' => 2, 'scope' => $scope,
             'period_id' => $periodId, 'month' => $period->month])."\n");
