@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify three CI jobs, correct confirmed failures only. Complete actual registered receipt creation entrypoints and check queue error handling without deleting existing local evidence.",
+  "next": "Verify final Flutter job and exact log, then prioritize actual registered receipt creation entrypoints and queue attention integration. Do not repeat passing backend cases unless affected.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -965,7 +965,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_void_intent": {
-    "status": "SQLITE_PASS_MYSQL_FLUTTER_PENDING",
+    "status": "BACKEND_BOTH_ENGINES_PASS_FLUTTER_TEST_STEP_PASS_FINAL_LOG_PENDING",
     "base": "4ca488c21714dfe767715672b5178cdf0f0fabf8",
     "branch": "release/prospective-void-intent",
     "source": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
@@ -980,9 +980,20 @@
         "tests": 3,
         "assertions": 60,
         "exit": 0
+      },
+      {
+        "id": 139539360341,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 60,
+        "exit": 0
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335",
-    "queue_review": "Existing SyncRetryPolicy treats HTTP 409 as permanent needsAttention without automatic retry. No queue migration or deletion; actual old-item dispatch/attention UI needs verification."
+    "queue_review": "Existing SyncRetryPolicy treats HTTP 409 as permanent needsAttention without automatic retry. No queue migration or deletion; actual old-item dispatch/attention UI needs verification.",
+    "flutter_observation": {
+      "id": 139539359825,
+      "status": "test and analyze steps successful; post-job cleanup in progress; final log unavailable (404)"
+    }
   }
 }
