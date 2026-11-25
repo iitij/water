@@ -6,6 +6,10 @@ use App\Models\CashHandover;
 use App\Models\CashSession;
 use App\Models\PaymentRefund;
 use App\Models\User;
+use App\Support\CashCustodyAmounts as Cash;
+use App\Support\DecimalDomain;
+use App\Support\SignedMinor;
+use App\Support\TreasuryMoney as Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -29,13 +33,24 @@ final class TreasuryRegisterService
         throw ValidationException::withMessages([$field => $message]);
     }
 
-    /** Parse DECIMAL strings without binary floating point or permissive rounding. */
-    private function minor(string $amount): int
+    private function minor(mixed $amount): int
     {
-        if (! preg_match('/^(\d{1,12})(?:\.(\d{1,2}))?$/D', $amount, $parts)) {
-            $this->reject('amount', 'المبلغ غير صالح أو يتجاوز منزلتين عشريتين.');
+        return Cash::input($amount, 'amount', DecimalDomain::D14, digitsOnly: true);
+    }
+
+    private function sourceMinor(CashHandover|PaymentRefund $source): int
+    {
+        return Cash::positiveStored($source->getRawOriginal('amount'), $source->getConnection()->getDriverName(),
+            $source instanceof CashHandover ? DecimalDomain::D14 : DecimalDomain::D12);
+    }
+
+    /** Required persisted event, scoped to treasury operations. */
+    public function requiredAudit(string $event, array $context): void
+    {
+        $audit = app(AuditLogger::class)->recordRequired($event, $context);
+        if (! $audit->exists || $audit->getKey() === null) {
+            throw new \RuntimeException('Treasury operation requires a persisted audit event.');
         }
-        return (int) $parts[1] * 100 + (int) str_pad($parts[2] ?? '', 2, '0');
     }
 
     private function date(string $date): void
@@ -54,7 +69,7 @@ final class TreasuryRegisterService
         $name = trim($data['name']);
         $reference = mb_strtoupper(trim($data['opening_reference']));
         $evidence = trim($data['opening_evidence']);
-        $opening = $this->minor((string) $data['opening_amount']);
+        $opening = $this->minor($data['opening_amount']);
         $this->date($data['opening_on']);
         if (! preg_match('/^[A-Z0-9_-]{2,50}$/D', $code)
             || mb_strlen($name) < 2 || mb_strlen($name) > 150
@@ -81,7 +96,7 @@ final class TreasuryRegisterService
                 || DB::table('treasury_postings')->where('evidence_reference', $record['opening_reference'])->exists(),
                 409, 'مرجع الافتتاح مستخدم مسبقاً.');
             $id = DB::table('treasury_accounts')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
-            app(AuditLogger::class)->recordRequired('treasury.opened', [
+            $this->requiredAudit('treasury.opened', [
                 'entity_type' => 'treasury_account', 'entity_id' => $id, 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return (array) DB::table('treasury_accounts')->find($id);
@@ -102,7 +117,7 @@ final class TreasuryRegisterService
             $source = $handover
                 ? CashHandover::query()->lockForUpdate()->findOrFail($sourceId)
                 : PaymentRefund::query()->lockForUpdate()->findOrFail($sourceId);
-            $amount = $this->minor((string) $source->amount);
+            $amount = $this->sourceMinor($source);
             if ($handover) {
                 $channel = 'cash';
                 $date = $source->received_on->toDateString();
@@ -122,7 +137,7 @@ final class TreasuryRegisterService
                 };
                 $date = $source->disbursed_on->toDateString();
                 $reference = $source->disbursement_reference;
-                $amount = -$amount;
+                $amount = SignedMinor::negate($amount);
             }
             $this->date($date);
             $reference = mb_strtoupper(trim($reference));
@@ -151,7 +166,7 @@ final class TreasuryRegisterService
             $id = DB::table('treasury_postings')->insertGetId($record + [
                 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
             ]);
-            app(AuditLogger::class)->recordRequired('treasury.posted', [
+            $this->requiredAudit('treasury.posted', [
                 'entity_type' => 'treasury_posting', 'entity_id' => $id, 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return (array) DB::table('treasury_postings')->find($id);
@@ -167,16 +182,18 @@ final class TreasuryRegisterService
             abort_unless($account, 404);
             $rows = DB::table('treasury_postings')->where('treasury_account_id', $accountId)
                 ->orderBy('effective_on')->orderBy('id')->get();
-            $balance = (int) $account->opening_minor;
+            $balance = Money::document($account->opening_minor);
             $incoming = 0;
             $outgoing = 0;
             $entries = [];
             $issues = [];
             foreach ($rows as $row) {
-                $amount = (int) $row->amount_minor;
-                $balance += $amount;
-                $incoming += max(0, $amount);
-                $outgoing += max(0, -$amount);
+                $amount = Money::signed($row->amount_minor);
+                $totals = Money::accumulate($balance, $incoming, $outgoing, $amount);
+                $balance = $totals['balance'];
+                $incoming = $totals['incoming'];
+                $outgoing = $totals['outgoing'];
+                if ($amount === 0) $issues[] = ['code' => 'zero_posting_amount', 'posting_id' => $row->id];
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
@@ -230,7 +247,7 @@ final class TreasuryRegisterService
                     $session = $funding ? CashSession::find($funding->cash_session_id) : null;
                     if (! $funding || ! $session || $row->cash_handover_id || $row->payment_refund_id
                         || $account->channel !== 'cash' || (int) $funding->treasury_account_id !== $accountId
-                        || $amount !== -(int) $funding->amount_minor || $row->effective_on !== $funding->issued_on
+                        || $amount !== SignedMinor::negate(Money::document($funding->amount_minor, true)) || $row->effective_on !== $funding->issued_on
                         || $row->effective_on < $account->opening_on || $row->evidence_reference !== $funding->reference
                         || app(CashSessionService::class)->fundingSummary($session)['status'] !== 'documented') {
                         $issues[] = ['code' => 'funding_source_mismatch', 'posting_id' => $row->id];
@@ -244,8 +261,15 @@ final class TreasuryRegisterService
                     ? CashHandover::find($row->cash_handover_id)
                     : ($row->kind === 'payment_refund' && $row->payment_refund_id && ! $row->cash_handover_id
                         ? PaymentRefund::find($row->payment_refund_id) : null);
-                $expected = $source instanceof CashHandover ? $this->minor((string) $source->amount)
-                    : ($source instanceof PaymentRefund ? -$this->minor((string) $source->amount) : null);
+                $expected = null;
+                if ($source) {
+                    try {
+                        $minor = $this->sourceMinor($source);
+                        $expected = $source instanceof CashHandover ? $minor : SignedMinor::negate($minor);
+                    } catch (\InvalidArgumentException|\OverflowException) {
+                        // Report an inconsistent source, never round it into a valid posting.
+                    }
+                }
                 $sourceDate = $source instanceof CashHandover ? $source->received_on->toDateString()
                     : ($source instanceof PaymentRefund ? $source->disbursed_on->toDateString() : null);
                 $sourceChannel = $source instanceof CashHandover ? 'cash'
@@ -275,8 +299,15 @@ final class TreasuryRegisterService
             $unpostedAdjustments = DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_cash_adjustment_id')->select('treasury_cash_adjustment_id'))->count();
             if ($unpostedAdjustments) $issues[] = ['code' => 'unposted_cash_adjustment', 'count' => $unpostedAdjustments];
-            $held = (int) DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
-                ->where('classification', 'unattributed_cash_held')->sum('amount_minor');
+            $held = 0;
+            foreach (DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
+                ->where('classification', 'unattributed_cash_held')->orderBy('id')->get(['id', 'amount_minor']) as $adjustment) {
+                $minor = Money::signed($adjustment->amount_minor);
+                if ($minor <= 0) {
+                    throw new \InvalidArgumentException('Unattributed held cash must have a positive amount.');
+                }
+                $held = SignedMinor::add($held, $minor);
+            }
             $unpostedCollections = DB::table('treasury_bank_collections')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_collection_id')->select('treasury_bank_collection_id'))->count();
             if ($unpostedCollections) $issues[] = ['code' => 'unposted_bank_collection', 'count' => $unpostedCollections];
