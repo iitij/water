@@ -3671,4 +3671,76 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($receipt->fresh()->isVoided());
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
     }
+
+    public function test_release_void_service_fence_blocks_legacy_paths_even_when_flag_disabled(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $service = app(PaymentService::class);
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented receipt cancellation';
+        $tables = ['payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_events', 'financial_posting_operations', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            try {
+                $action();
+                $this->fail('Protected receipt accepted an unguarded mutation.');
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                $this->assertArrayHasKey('payment', $error->errors());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        config(['financial_candidate.void_api' => false]);
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $unchanged(fn () => $service->requestVoid($receipt, $reason, $issuer->id));
+        $unchanged(fn () => $service->voidPayment($receipt, $reason, $reviewer->id, 'gated'));
+        $unchanged(fn () => $service->voidPayment($receipt, $reason, $reviewer->id, 'gated', $writer));
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $id = (int) $receipt->id;
+        $request = $writer->request($issuer, $id, $reason, $this->nowAt())['request_id'];
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        foreach ([true, false] as $approve) {
+            $unchanged(fn () => $service->decideVoidRequest($receipt, $approve, $reviewer, 'Old client'));
+            $unchanged(fn () => $service->decideVoidRequest($receipt, $approve, $reviewer, 'Spoofed source', 'gated', $writer));
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $before = DB::table('audit_events')->count();
+        $this->postJson('/api/payments/'.$id.'/void-decision', ['approve' => true])->assertUnprocessable();
+        $this->postJson('/api/payments/'.$id.'/void-decision', ['approve' => false])->assertUnprocessable();
+        $this->assertSame($before, DB::table('audit_events')->count());
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertFalse($receipt->fresh()->isVoided());
+        $writer->decide($reviewer, $id, false, 'Independent rejection', $this->nowAt(), requestId: $request);
+        $unchanged(fn () => $service->requestVoid($receipt, $reason, $issuer->id));
+        $second = $writer->request($issuer, $id, $reason, $this->nowAt())['request_id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->assertTrue($writer->decide($reviewer, $id, true, null, $this->nowAt(), $uuid, $second)['registry_created']);
+        $this->assertFalse($writer->allowsMutation($receipt));
+        $this->assertFalse($writer->decide($reviewer, $id, true, null, $this->nowAt(), $uuid, $second)['registry_created']);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_void_service_fence_preserves_unregistered_legacy_receipt_behavior(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $service = app(PaymentService::class);
+        $legacy = $service->collectPayment($subscriber, '1.00');
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $reason = 'Independent documented legacy cancellation';
+        $this->assertTrue($service->requestVoid($legacy, $reason, $issuer->id)['pending']);
+        $this->assertFalse($service->decideVoidRequest($legacy, false, $reviewer, 'Independent rejection')->isVoided());
+        $this->assertTrue($service->requestVoid($legacy, $reason, $issuer->id)['pending']);
+        $this->assertTrue($service->decideVoidRequest($legacy, true, $reviewer)->isVoided());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }
