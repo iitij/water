@@ -2803,6 +2803,79 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
 
+    public function test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        $date = '2026-11-25';
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($receiver, [
+            'code' => 'QA-TRANSFER-DEST', 'name' => 'Synthetic transfer destination', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-TRANSFER-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $from = (int) $account['id'];
+        $to = (int) $destination['id'];
+        $dispatchUuid = '88888888-8888-4888-8888-888888888888';
+        $receiveUuid = '99999999-9999-4999-8999-999999999999';
+        $dispatch = ['from_account_id' => $from, 'to_account_id' => $to, 'amount' => '4.00',
+            'reference' => 'QA-TRANSFER-DISPATCH', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE];
+        $receive = ['amount' => '4.00', 'reference' => 'QA-TRANSFER-RECEIVE',
+            'received_on' => $date, 'evidence' => self::EVIDENCE];
+        $service = app(\App\Services\TreasuryTransferService::class);
+        $writer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $treasury = app(TreasuryRegisterService::class);
+        $url = '/api/treasury/transfers';
+        $tables = ['payments', 'transactions', 'treasury_transfers', 'treasury_transfer_receipts',
+            'treasury_postings', 'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.treasury_transfers' => true]);
+        $this->rejects('gated_treasury_transfer_writer_required', fn () => $service->dispatch($sender, $dispatch));
+        $this->rejects('gated_treasury_transfer_writer_required', fn () =>
+            DB::transaction(fn () => $service->dispatch($sender, $dispatch, $writer)));
+        \Laravel\Sanctum\Sanctum::actingAs($sender);
+        $this->postJson($url, $dispatch)->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertConflict();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $response = $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertOk()
+            ->assertJsonPath('transfer.status', 'in_transit')->assertJsonPath('transfer.in_transit_minor', 400);
+        $id = (int) $response->json('transfer.id');
+        $this->assertSame(9625, $treasury->inspect($sender, $from)['provisional_recorded_balance_minor']);
+        $this->assertSame(100, $treasury->inspect($sender, $to)['provisional_recorded_balance_minor']);
+        $receiptUrl = $url.'/'.$id.'/receive';
+        $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($receiver);
+        $this->rejects('gated_treasury_transfer_writer_required', fn () => $service->receive($receiver, $id, $receive));
+        $this->rejects('gated_treasury_transfer_writer_required', fn () =>
+            DB::transaction(fn () => $service->receive($receiver, $id, $receive, $writer)));
+        config(['financial_candidate.treasury_transfers' => false]);
+        $this->postJson($receiptUrl, $receive)->assertConflict();
+        $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertConflict();
+        config(['financial_candidate.treasury_transfers' => true]);
+        $this->postJson($receiptUrl, array_replace($receive, ['amount' => '3.99', 'operation_uuid' => $receiveUuid]))->assertUnprocessable();
+        $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertOk()
+            ->assertJsonPath('transfer.status', 'received')->assertJsonPath('transfer.in_transit_minor', 0);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertOk();
+        \Laravel\Sanctum\Sanctum::actingAs($sender);
+        $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertOk()
+            ->assertJsonPath('transfer.id', $id);
+        config(['financial_candidate.treasury_transfers' => false]);
+        $this->postJson($url, $dispatch)->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $dispatchUuid, 'leg' => 'treasury', 'amount_minor' => -400]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $receiveUuid, 'leg' => 'treasury', 'amount_minor' => 400]);
+        $this->assertSame(9625, $treasury->inspect($receiver, $from)['provisional_recorded_balance_minor']);
+        $this->assertSame(500, $treasury->inspect($receiver, $to)['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($from)));
+        foreach (['payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+    }
+
     public function test_release_refund_entrypoints_modal_and_api_share_atomic_debit(): void
     {
         [, , $account, , , $subscriber] = $this->held();
