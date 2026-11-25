@@ -3062,6 +3062,80 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
+    public function test_release_surplus_proof_ordering_preserves_cash_after_prior_allocation_and_replay(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $owner = Subscriber::create(['name' => 'Synthetic prior allocation owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $allocate = function (string $uuid, string $reference) use ($late, $collector, $reviewer, $session, $owner) {
+            $id = (int) $late->submit($collector, ['sync_uuid' => $uuid, 'cash_session_id' => $session->id,
+                'subscriber_id' => $owner->id, 'amount' => '2.00', 'payment_method' => 'cash', 'payment_date' => '2026-11-25'])['id'];
+            return app(\App\Services\GatedCountedCashWriter::class)->allocate($reviewer, $id, '2026-11-25',
+                $reference, self::EVIDENCE, $uuid, $this->nowAt());
+        };
+        config(['financial_candidate.cash_handovers' => true, 'financial_candidate.late_cash_settlements' => true]);
+        $this->assertSame(300, $allocate('99999999-9999-4999-8999-999999999999', 'QA-ORDER-FIRST')['allocation']['available_minor']);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $receive = fn () => $writer->receive($reviewer, (int) $session->id, $accountId,
+            '15.00', 'QA-ORDER-HANDOVER', '2026-11-25', self::EVIDENCE, $uuid, $this->nowAt());
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = $snapshot('transactions');
+        $this->assertTrue($receive()['registry_created']);
+        $this->assertSame($before, $snapshot('transactions'));
+        $treasury = $snapshot('treasury_postings');
+        $this->assertSame(100, $allocate('77777777-7777-4777-8777-777777777777', 'QA-ORDER-SECOND')['allocation']['available_minor']);
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->assertFalse($receive()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($treasury, $snapshot('treasury_postings'));
+        $this->assertSame(400, $owner->fresh()->getAccountBalanceMinor());
+        $this->assertSame(1000, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame(525, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
+
+    public function test_release_surplus_proof_ordering_refuses_tampered_or_missing_reserve(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        config(['financial_candidate.cash_handovers' => true]);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id,
+            $accountId, '15.00', 'QA-PROOF-HANDOVER', '2026-11-25', self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $check = fn () => DB::transaction(fn () => $guard->assertOrdinaryOutflow($accountId, 1, '2026-11-25'));
+        $this->assertSame(525, DB::transaction(fn () => $guard->protectedForAccount($accountId)));
+        $row = DB::table('audit_events')->where('event', 'financial.handover_surplus_reserved')->sole();
+        $after = json_decode($row->after, true, flags: JSON_THROW_ON_ERROR);
+        $after['reserved_minor'] = 499;
+        DB::table('audit_events')->where('id', $row->id)->update(['after' => json_encode($after, JSON_THROW_ON_ERROR)]);
+        $this->rejects('gated_handover_surplus_reserve_invalid', $check);
+        DB::table('audit_events')->where('id', $row->id)->update(['after' => $row->after]);
+        $this->assertSame(525, DB::transaction(fn () => $guard->protectedForAccount($accountId)));
+        DB::table('audit_events')->where('id', $row->id)->delete();
+        $this->rejects('gated_handover_surplus_reserve_invalid', $check);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => '88888888-8888-4888-8888-888888888888',
+            'leg' => 'treasury', 'amount_minor' => 1500]);
+    }
+
     public function test_release_surplus_handover_reserves_full_variance_without_duplicate_cash(): void
     {
         [, , $account, , , $subscriber] = $this->held();
