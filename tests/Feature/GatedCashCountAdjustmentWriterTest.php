@@ -2352,7 +2352,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -2432,6 +2432,39 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         $beforeOps = $ops();
         $beforeSeq = $seq();
+        if ($bankFence) {
+            config(['financial_candidate.noncash_settlements' => true]);
+            $result = $act();
+            $this->assertTrue($result['registry_created']);
+            $paymentId = (int) ($kind === 'claim' ? $result['claim']['payment_id'] : $result['review']['payment_id']);
+            $bankService = app(\App\Services\BankReconciliationService::class);
+            $confirm = fn (?\App\Services\GatedCollectionWriter $candidate = null) => $bankService->confirmCollection(
+                $reviewer, $statementId, $lineId, $paymentId, 'QA-R134-PROOF', self::EVIDENCE, $candidate);
+            $url = '/api/treasury/bank-statements/'.$statementId.'/collections';
+            $data = ['line_id' => $lineId, 'payment_id' => $paymentId, 'reference' => 'QA-R134-PROOF', 'evidence' => self::EVIDENCE];
+            \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+            $committed = [];
+            foreach ($tables as $table) $committed[$table] = $snapshot($table);
+            $committedOps = $ops();
+            $committedSeq = $seq();
+            $this->rejects('gated_bank_collection_writer_required', $confirm);
+            $this->rejects('gated_bank_collection_writer_required', fn () => DB::transaction(fn () => $confirm($writer)));
+            $this->postJson($url, $data)->assertConflict();
+            $this->assertFalse($act()['registry_created']);
+            config(['financial_candidate.noncash_settlements' => false]);
+            $this->rejects('gated_bank_collection_writer_required', $confirm);
+            $this->postJson($url, $data)->assertConflict();
+            $this->assertFalse($act()['registry_created']);
+            foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($committedOps, $ops());
+            $this->assertSame($committedSeq, $seq());
+            $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+            $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+            $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+            $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+            return;
+        }
         if ($api) {
             $cashMode = $kind === 'late_cash';
             $switch = $cashMode ? 'financial_candidate.late_cash_settlements' : 'financial_candidate.noncash_settlements';
@@ -2564,6 +2597,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertSame($committedOps, $ops());
         $this->assertSame($committedSeq, $seq());
+    }
+
+    public function test_release_bank_confirmation_fence_claim(): void
+    {
+        $this->round134Collection('claim', bankFence: true);
+    }
+
+    public function test_release_bank_confirmation_fence_late_bank(): void
+    {
+        $this->round134Collection('late_bank', bankFence: true);
     }
 
     public function test_release_settlement_api_claim(): void
