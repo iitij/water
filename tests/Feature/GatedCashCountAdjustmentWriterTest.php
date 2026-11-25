@@ -2875,7 +2875,21 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
         $legacy = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.50',
             '88888888-8888-4888-8888-888888888888', $this->nowAt())['payment'];
-        app(PaymentService::class)->requestVoid($legacy, $reason, $issuer->id);
+        // The new service fence refuses this previously possible legacy
+        // request. Simulate a pre-fence pending row in the disposable test DB
+        // so the original missing-gated-proof check remains meaningful.
+        try {
+            app(PaymentService::class)->requestVoid($legacy, $reason, $issuer->id);
+            $this->fail('Registered receipt accepted a legacy void request.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertArrayHasKey('payment', $error->errors());
+        }
+        $this->assertFalse($legacy->fresh()->hasPendingVoidRequest());
+        DB::table('payments')->where('id', $legacy->id)->update([
+            'void_requested_at' => now(),
+            'void_requested_by' => $issuer->id,
+            'void_request_reason' => $reason,
+        ]);
         $this->rejects('gated_void_request_unverified', fn () => $writer->decide($reviewer, (int) $legacy->id, true,
             'Independent decision', $this->nowAt(), '99999999-9999-4999-8999-999999999999'));
         $this->assertTrue($legacy->fresh()->hasPendingVoidRequest());
