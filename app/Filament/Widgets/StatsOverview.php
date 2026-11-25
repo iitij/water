@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Invoice;
 use App\Models\Subscriber;
+use App\Support\MoneyBoundary;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -19,9 +20,12 @@ class StatsOverview extends BaseWidget
         $balances = $finance->accountBalances();
         $outstandingAmount = $balances['debt'];
 
-        $monthlyCollection = $finance->grossReceipts(now()->startOfMonth()->toDateString(), now()->toDateString());
+        $from = now()->startOfMonth()->toDateString();
+        $to = now()->toDateString();
+        $grossMinor = $finance->grossReceiptMinor($from, $to);
+        $monthlyCollection = MoneyBoundary::numericMajorOutput($grossMinor);
 
-        $cash = $finance->movements(now()->startOfMonth()->toDateString(), now()->toDateString(), null, (float) $monthlyCollection);
+        $cash = $finance->movementsFromMinor($from, $to, null, $grossMinor);
         $overdueCount = Invoice::where('status', 'overdue')->count();
 
         return [

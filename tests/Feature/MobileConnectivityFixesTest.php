@@ -385,7 +385,11 @@ class MobileConnectivityFixesTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/payments?invoice_id='.$invoice->id.'&voided=all')
             ->assertOk()
-            ->assertJsonCount(1, 'data');
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.invoice.id', $invoice->id)
+            ->assertJsonPath('data.0.receipt_data.invoice_remaining', number_format((float) $invoice->total_amount - 200, 2, '.', ''))
+            ->assertJsonMissingPath('data.0.invoice.amount_paid')
+            ->assertJsonMissingPath('data.0.invoice.subscriber_id');
 
         // وفلتر voided=only يعيد لا شيء لعدم وجود سندات ملغاة.
         $this->actingAs($this->admin, 'sanctum')
