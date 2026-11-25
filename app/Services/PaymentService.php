@@ -519,6 +519,9 @@ class PaymentService
                     return $existing;
                 }
             }
+            if ($syncUuid !== null) {
+                app(FinancialOperationIdentity::class)->requireUnusedRegistryIdentity($syncUuid);
+            }
             abort_if($review && $lateReviewId === null, 409, 'السند مرتبط بمراجعة مالية؛ لا يجوز ترحيله خارجها.');
 
             if (! in_array($paymentMethod, ['cash', 'bank_transfer', 'check'], true)
