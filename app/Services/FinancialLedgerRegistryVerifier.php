@@ -34,6 +34,8 @@ final class FinancialLedgerRegistryVerifier
         $unverified = 0;
         $treasuryVerified = 0;
         $openingVerified = 0;
+        $heldVerified = 0;
+        $heldProof = false;
         // Scope-first isolated verification only. Legacy subscriber-first
         // writers can invert this lock order; do not activate concurrently
         // with unfenced writers before a reviewed lock protocol exists.
@@ -48,6 +50,14 @@ final class FinancialLedgerRegistryVerifier
         foreach ($query->lazyById(250, 'e.id', 'id') as $event) {
             if ($event->scope_key !== $scope) {
                 throw new DomainException('ledger_registry_scope_mismatch');
+            }
+            if (in_array($event->source_type, ['held_cash_assignment', 'held_cash_payout', 'held_cash_credit'], true)) {
+                if (! $heldProof) {
+                    app(TreasuryHeldCashLiabilityService::class)->verifyCoverage();
+                    $heldProof = true;
+                }
+                $heldVerified++;
+                continue;
             }
             if (! in_array($event->source_type, ['ledger_transaction', 'treasury_posting', 'treasury_opening'], true)) {
                 $unverified++;
@@ -105,13 +115,14 @@ final class FinancialLedgerRegistryVerifier
                 $verified++;
             }
         }
-        if ($verified + $treasuryVerified + $openingVerified + $unverified !== $result['events']) {
+        if ($verified + $treasuryVerified + $openingVerified + $heldVerified + $unverified !== $result['events']) {
             throw new DomainException('ledger_registry_event_count_mismatch');
         }
         return $result + [
             'registered_ledger_legs_verified' => $verified,
             'registered_treasury_legs_verified' => $treasuryVerified,
             'registered_opening_legs_verified' => $openingVerified,
+            'registered_held_legs_verified' => $heldVerified,
             'other_registered_legs_unverified' => $unverified,
         ];
     }
