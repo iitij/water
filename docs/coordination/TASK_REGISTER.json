@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 91,
+    "round": 92,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4160,6 +4160,20 @@
       "scope": "Inactive withinOpenPeriods method validates one or two dates, deduplicates and sorts dates, locks scope then unique months chronologically and returns exact date contexts in one transaction before any business effects. Original single-date API unchanged. Five QA methods per engine prepared covering distinct months, same month and same day, closed/frozen/missing months, invalid/future dates and nested gate/atomic rollback of two synthetic registry probes. Design note specifies original subscriber receipt date vs actual treasury receipt date; both periods must be open; closed-period correction requires separate approved policy. No arbitrary UUID split or backdating.",
       "limits": "No runtime validation after previous restriction; no new workflow. Gate alone is not W17 dual-date writer or multi-date registry. Group identity/payload schema, compatibility with format 1, independent completeness and closure proof, historical closed-period correction policy and production lock ordering remain open. Synthetic probes only; not business receipt proof. No integration into main or production changes.",
       "next": "Design multi-date posting group and independent verification compatible with existing registry and UUID ownership; review closed-period exception and W18 completeness before activation."
+    },
+    "round92": {
+      "phase": "W17 canonical format 2 group and actual source evidence adapter",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "8e5454aa023d115d736bd4361811ec920ba360cc",
+      "branch": "fix/central-g1b-dual-date-group-contract",
+      "source": "9c18969e817c83c78b682cfefb63a6f49598d363",
+      "group_commit": "6e7a5dc04a38e8b432f77cfda033a2d65d35556c",
+      "evidence_commit": "5cc9363ea1f5e752e2380514a261361b76e16b48",
+      "test_commit": "c5fb51791d67a99a0822b771bc8651908c1a308d",
+      "runs": [],
+      "scope": "Pure canonical format 2 contract for separate late cash with one UUID and exactly two linked positive equal subscriber/treasury effects, distinct ordered dates, exact period/epoch/version, canonical source identity and source hashes, review/payment/receipt IDs, SHA256 and independently reconstructed byte comparison. Inactive source adapter derives actual two legs from persisted linked sources within both open period contexts. Seven pure unit test methods prepared; no database test results. Design note proposes shared global UUID and effect uniqueness across formats with per-part contexts; existing format 1 unchanged.",
+      "limits": "No runtime validation or new workflow after earlier restriction. No persistence migration, grouped registry insertion, historical read verifier, W17 integrated writer, or closure proof; adapter not separately tested against actual database fixture. SHA256 not immutable protection. Must review existing schema and digest compatibility, ownership candidate R90, cross-period lock ordering and closed-period recognition; no production changes or main merge.",
+      "next": "Review exact existing registry migrations and closure snapshot compatibility; implement shared group storage and independent per-period verification only after explicit compatibility design, then validate pending candidates."
     }
   }
 }
