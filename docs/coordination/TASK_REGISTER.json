@@ -1760,6 +1760,22 @@
         "available": "GitHub connector read/write, isolated assistant PHP 8.4.24 CLI and pure checks; no Composer, PDO drivers, MySQL server or Docker CLI found in current runtime. No user-device or hosting access used.",
         "policy": "Continue source inspection, implementation preparation and justified isolated pure tests in current chat; preserve exact accepted heads and existing QA gates. Do not repeat unavailable database tests, substitute simulated results as actual PDO/Laravel/MySQL acceptance, bypass restricted checks, or advance production/merge. No new team tasks or Codex assignments until owner notification.",
         "remaining": "Round11 G07 and L01 actual ordinary tests and P2-I01 actual PDO remain unexecuted/unverified here. Reuse exact-head reports if already available. I02 remains held for actual I01 acceptance; prepare exact implementation contract only."
+      },
+      "github_actions_recovery": {
+        "status": "PUBLIC_CONFIRMED_SMOKE_RERUN_REQUEST_ACCEPTED",
+        "authority": "Owner changed repository visibility to public and requested continuation.",
+        "visibility": "public",
+        "observed": "GitHub repository metadata confirms public and admin/push permissions.",
+        "probe": {
+          "run_id": 45533597126,
+          "prior_job_id": 138934666252,
+          "prior_result": "failure before steps; zero recorded steps",
+          "workflow": "Retired feature removal gate",
+          "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+          "rerun": "Failed-jobs-only rerun request accepted by GitHub; latest job list initially empty. Execution success not yet proven."
+        },
+        "next": "Verify hosted runner actually starts and probe result. Then prepare narrowly scoped ordinary QA-only workflow for pending round11 exact heads, respecting synthetic isolation, locked dependencies and excluded diagnostics. Avoid deployment and repeated accepted suites.",
+        "limits": "No billing settings changed or financial commitments. Public exposure is owner decision; full secrets/privacy/history audit not certified. No fresh application test result yet."
       }
     }
   }
