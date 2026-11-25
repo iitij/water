@@ -321,6 +321,7 @@ final class TreasuryRegisterService
                 $held = SignedMinor::add($held, $minor);
             }
             $heldOutstanding = app(HeldCashReservation::class)->outstandingForAccount($accountId);
+            $creditReserve = app(HeldCashReservation::class)->subscriberCreditReserveForAccount($accountId);
             $unpostedCollections = DB::table('treasury_bank_collections')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_collection_id')->select('treasury_bank_collection_id'))->count();
             if ($unpostedCollections) $issues[] = ['code' => 'unposted_bank_collection', 'count' => $unpostedCollections];
@@ -349,6 +350,9 @@ final class TreasuryRegisterService
                 'unposted_cash_adjustment_count' => $unpostedAdjustments,
                 'unattributed_cash_held_minor' => $held,
                 'held_cash_outstanding_minor' => $heldOutstanding,
+                'held_cash_subscriber_credit_reserve_minor' => $creditReserve,
+                'held_cash_total_protected_minor' => SignedMinor::add($heldOutstanding, $creditReserve),
+                'held_cash_credit_release_verified' => false,
                 'unposted_bank_fee_count' => $unpostedFees,
                 'internal_transfers' => $transfers,
                 'unposted_funding_count' => $unpostedFunding,
