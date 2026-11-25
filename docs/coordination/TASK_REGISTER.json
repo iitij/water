@@ -2191,14 +2191,63 @@
     },
     "round19": {
       "phase": "Corrected V3 integrated G02",
-      "status": "HOSTED_FULL_REGRESSION_PENDING",
+      "status": "SQLITE_FULL_PASS_MYSQL_PENDING_SKIP_CLASSIFICATION_REQUIRED",
       "branch": "integration/accounting-candidate-v3-corrected",
       "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
       "workflow": "44c1d38fe48b9c13d102cb85cd9687457b1b5be6",
       "pr": 95,
       "delta": "Six verified paths from frozen manifest; no changes to locks/schema; no accepted-head modification.",
       "scope": "Full Unit,Feature both isolated engines, named skips; previous standalone chain not repeated. No deployment or main merge.",
-      "next": "Inspect actual runtime and skip evidence; P3 read-model source inventory and L01 unresolved classification may proceed separately without claiming acceptance."
+      "next": "Inspect actual runtime and skip evidence; P3 read-model source inventory and L01 unresolved classification may proceed separately without claiming acceptance.",
+      "run": 45557453394,
+      "results": {
+        "sqlite": {
+          "job": 139012849260,
+          "tests": 480,
+          "assertions": 15990,
+          "passed": 455,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 25,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139012848855,
+          "status": "in_progress"
+        }
+      }
+    },
+    "round20": {
+      "phase": "ACC09 P3 exact financial reporting",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
+      "branch": "fix/central-p3-exact-reporting",
+      "source": "b1c146c9201aa641f70e7c90e0af04e0cae7d01b",
+      "workflow": "ccfae747392790323c760a4c99104a7abbf34cf7",
+      "pr": 96,
+      "run": 45557659969,
+      "scope": "FinancialReportingService, AdminController, FinancialReportsTest. Exact raw DECIMAL per-row sums and per-account non-netted debt/credit, invoice allocation fail-closed, receipt breakdowns/movements, exact reading hundredths, preserve keys and date filters.",
+      "results": {
+        "sqlite": {
+          "job": 139013508013,
+          "tests": 13,
+          "assertions": 126,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139013507607,
+          "tests": 13,
+          "assertions": 126,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        }
+      },
+      "limits": "Source and actual hosted focused logs inspected; no broad integration or P3 completion. Cross-query snapshot coherence, scale performance, Filament/export/mobile, G11/G12, ACC14, L01 and closing remain open."
     }
   }
 }
