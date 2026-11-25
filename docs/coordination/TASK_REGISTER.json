@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_14_I04_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
+    "decision": "ROUND_14_I04_SCOPED_RUNTIME_ACCEPTED_I05_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1952,12 +1952,41 @@
     "round14": {
       "phase": "P2-I04 exact bank reconciliation and clearing",
       "base": "9c803d0e32e48d097691c0e6f3f12de22219f158",
-      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "scope": "BankReconciliationService exact signed D14 input/identity, raw positive D12 receipt/ledger and late review, signed running sums and gaps, canonical hash, required persisted audit; PaymentService claim and late noncash clearing raw amounts and required audit. No schema, dependency or main changes.",
       "product_test_head": "3c9bf0eeb9274d66e18e3f43accaf14ea08b3c8c",
       "workflow_head": "c3b1a454bd252d83d7b12317b6839434255d3377",
       "pr": 89,
-      "tests": "4 new exact bank cases and 9 changed-path regression cases per engine. No runtime result yet."
+      "tests": "4 new exact bank cases and 9 changed-path regression cases per engine. No runtime result yet.",
+      "run": 45555485127,
+      "results": {
+        "sqlite": {
+          "job": 139006397218,
+          "tests": 13,
+          "assertions": 202,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139006397637,
+          "tests": 13,
+          "assertions": 202,
+          "exit": 0
+        },
+        "total": {
+          "tests": 26,
+          "assertions": 404,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "limits": "Exact product/test source; raw logs inspected; scoped acceptance, no full regression or deployment."
+    },
+    "round15": {
+      "phase": "P2-I05 exact account aggregation and reconciliation",
+      "base": "3c9bf0eeb9274d66e18e3f43accaf14ea08b3c8c",
+      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
+      "scope": "Raw DECIMAL12 financial document and ledger values; checked signed sums and reconciliation; immutable allocation hash validation, exact account balance and read projections; preserve ownership, provenance, locks and API shapes. No historical repair, schema/dependency changes, privileged diagnostics or main merge. Test new cases and changed paths on both engines."
     }
   }
 }
