@@ -447,4 +447,80 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         // original physical disbursement was prevented by the posting guard.
     }
 
+    private function payoutHeld(User $actor, int $minor, string $uuid = self::OTHER): array
+    {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->payout($actor, self::NEXT, $minor,
+            'QA-HELD-PAYOUT-'.$uuid, 'Independent signed acknowledgement of returned cash by identified owner',
+            $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    public function test_held_owner_payout_reduces_cash_and_liability_once_and_preserves_unidentified_cash(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $assigner = $this->actor();
+        $this->assignHeld($assigner, $lot, $subscriber, 20);
+        $this->rejects('held_cash_payout_independence', fn () => $this->payoutHeld($assigner, 1));
+        $payer = $this->actor();
+        $result = $this->payoutHeld($payer, 15);
+        $this->assertTrue($result['created']);
+        $this->assertTrue($result['discharge_created']);
+        $this->assertSame(15, $result['paid_minor']);
+        $this->assertSame(10, $result['outstanding_minor']);
+        $this->assertSame(5, $result['identified_minor']);
+        $this->assertSame(5, $result['unidentified_minor']);
+        $this->assertFalse($this->payoutHeld($payer, 15)['created']);
+        $this->rejects('held_cash_payout_capacity', fn () =>
+            $this->payoutHeld($payer, 6, '55555555-5555-4555-8555-555555555555'));
+        $report = app(TreasuryRegisterService::class)->inspect($payer, (int) $account['id']);
+        $this->assertSame(10010, $report['provisional_recorded_balance_minor']);
+        $this->assertSame(10, $report['held_cash_outstanding_minor']);
+        $this->assertSame([], $report['issues']);
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 1);
+        $this->assertDatabaseCount('treasury_postings', 2);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('transactions', 0);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 10000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
+    }
+
+    public function test_held_payout_posting_failure_rolls_back_all_effects_and_allows_retry(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $payer = $this->actor();
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_payout_failure BEFORE INSERT ON treasury_postings BEGIN SELECT RAISE(ABORT, 'synthetic_payout_failure'); END"
+            : "CREATE TRIGGER qa_payout_failure BEFORE INSERT ON treasury_postings FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_payout_failure'";
+        DB::unprepared($trigger);
+        try {
+            $this->payoutHeld($payer, 25);
+            $this->fail('Expected payout posting failure.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_payout_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_payout_failure');
+        }
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => self::OTHER]);
+        $result = $this->payoutHeld($payer, 25);
+        $this->assertSame(0, $result['outstanding_minor']);
+        $this->assertSame(25, $result['paid_minor']);
+    }
+
+    public function test_missing_payout_audit_blocks_release_and_coverage(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->payoutHeld($this->actor(), 25);
+        DB::table('audit_events')->where('event', 'treasury.held_cash_paid')->delete();
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $this->rejects('held_cash_payout_audit', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->rejects('held_cash_payout_audit', fn () => $this->gate(fn () =>
+            app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage()));
+    }
+
 }
