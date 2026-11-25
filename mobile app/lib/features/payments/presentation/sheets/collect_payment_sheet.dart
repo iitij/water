@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/datasources/references_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
+import '../../data/models/collect_payment_models.dart';
 import '../../domain/repositories/payments_repository.dart';
 import '../cubit/collect_payment_cubit.dart';
 import '../widgets/collect_payment_form.dart';
@@ -37,6 +38,17 @@ class CollectPaymentSheet extends StatelessWidget {
     SubscriberOption? subscriber,
     int? meterId,
   }) async {
+    final outcome = await showOutcome(context, invoice: invoice, subscriber: subscriber, meterId: meterId);
+    return outcome?.isSuccess ?? false;
+  }
+
+  /// Preserve the confirmed/queued distinction for callers that refresh a list.
+  static Future<CollectPaymentOutcome?> showOutcome(
+    BuildContext context, {
+    InvoiceModel? invoice,
+    SubscriberOption? subscriber,
+    int? meterId,
+  }) async {
     if (invoice == null && subscriber == null) {
       throw ArgumentError('يجب تمرير invoice أو subscriber لفتح نافذة التحصيل.');
     }
@@ -54,7 +66,8 @@ class CollectPaymentSheet extends StatelessWidget {
       unawaited(cubit.openForSubscriber(subscriber!.id, name: subscriber.name));
     }
 
-    final saved = await showModalBottomSheet<bool>(
+    try {
+      final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -62,9 +75,11 @@ class CollectPaymentSheet extends StatelessWidget {
         value: cubit,
         child: CollectPaymentSheet(invoice: invoice, subscriber: subscriber),
       ),
-    ).whenComplete(cubit.close);
-
-    return saved ?? false;
+      );
+      return saved == true ? cubit.state.outcome : null;
+    } finally {
+      await cubit.close();
+    }
   }
 
   @override

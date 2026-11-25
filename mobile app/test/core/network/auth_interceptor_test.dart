@@ -67,7 +67,18 @@ void main() {
     // تخزين حالة حقيقي: التوكن المكتوب يُقرأ في الطلب التالي، وإلا اختبرنا
     // سلوكاً لا يشبه التطبيق.
     var stored = 'old-token';
+    when(() => storage.sessionGeneration).thenReturn(1);
     when(() => storage.readAccessToken()).thenAnswer((_) async => stored);
+    when(() => storage.replaceAccessTokenIfCurrent(
+      generation: any(named: 'generation'),
+      expected: any(named: 'expected'),
+      replacement: any(named: 'replacement'),
+    )).thenAnswer((invocation) async {
+      if (invocation.namedArguments[#generation] != 1 || invocation.namedArguments[#expected] != stored) return false;
+      stored = invocation.namedArguments[#replacement] as String;
+      tokenWrites.add(stored);
+      return true;
+    });
     when(() => storage.writeAccessToken(any())).thenAnswer((invocation) async {
       stored = invocation.positionalArguments.first as String;
       tokenWrites.add(stored);

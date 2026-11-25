@@ -73,12 +73,14 @@ class FinanceApiClient {
     Object? body,
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
+    Map<String, dynamic>? sessionExtra,
   }) => _guardRaw(() async {
     final response = await dio.post<dynamic>(
       financeApiPath(path),
       data: body,
       queryParameters: _clean(query),
       cancelToken: cancelToken,
+      options: sessionExtra == null ? null : Options(extra: sessionExtra),
     );
     return response.data;
   });
