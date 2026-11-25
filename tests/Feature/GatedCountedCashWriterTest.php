@@ -122,7 +122,7 @@ final class GatedCountedCashWriterTest extends TestCase
         ]);
     }
 
-    private function post(User $actor, array $review, string $reference = 'QA-COUNTED-01',
+    private function postCounted(User $actor, array $review, string $reference = 'QA-COUNTED-01',
         string $date = '2026-11-25', string $evidence = self::EVIDENCE): array
     {
         return app(GatedCountedCashWriter::class)->allocate($actor, (int) $review['id'], $date,
@@ -151,19 +151,19 @@ final class GatedCountedCashWriterTest extends TestCase
         $excess = $this->claim($collector, $session, $c, self::THIRD, '0.01');
         $sessionBytes = $session->getRawOriginal();
         $receiptBytes = $receipt->getRawOriginal();
-        $one = $this->post($reviewer, $first);
+        $one = $this->postCounted($reviewer, $first);
         $this->assertTrue($one['registry_created']);
         $this->assertSame(1025, $one['allocation']['capacity_minor']);
         $this->assertSame(412, $one['allocation']['allocated_minor']);
         $this->assertSame(613, $one['allocation']['available_minor']);
-        $two = $this->post($reviewer, $second, 'QA-COUNTED-02');
+        $two = $this->postCounted($reviewer, $second, 'QA-COUNTED-02');
         $this->assertTrue($two['registry_created']);
         $this->assertSame(1025, $two['allocation']['allocated_minor']);
         $this->assertSame(0, $two['allocation']['available_minor']);
-        $again = $this->post($reviewer, $first);
+        $again = $this->postCounted($reviewer, $first);
         $this->assertFalse($again['registry_created']);
         $this->assertSame($one['transaction_id'], $again['transaction_id']);
-        $this->rejects('gated_counted_capacity_exceeded', fn () => $this->post($reviewer, $excess, 'QA-COUNTED-03'));
+        $this->rejects('gated_counted_capacity_exceeded', fn () => $this->postCounted($reviewer, $excess, 'QA-COUNTED-03'));
         $this->assertSame(412, $a->fresh()->getAccountBalanceMinor());
         $this->assertSame(613, $b->fresh()->getAccountBalanceMinor());
         $this->assertSame(0, $c->fresh()->getAccountBalanceMinor());
@@ -196,7 +196,7 @@ final class GatedCountedCashWriterTest extends TestCase
             'approve' => true, 'settlement_method' => 'already_counted', 'evidence_reference' => 'QA-LEGACY',
             'evidence' => self::EVIDENCE,
         ]);
-        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->post($reviewer, $second));
+        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->postCounted($reviewer, $second));
         $this->assertDatabaseCount('financial_posting_events', 1);
         $this->assertDatabaseCount('payments', 2);
         $this->assertDatabaseHas('late_receipt_reviews', ['id' => $second['id'], 'status' => 'pending']);
@@ -207,12 +207,12 @@ final class GatedCountedCashWriterTest extends TestCase
         [$collector, $reviewer, $session] = $this->fixture();
         $first = $this->claim($collector, $session, $this->subscriber('A'), self::OTHER, '4.12');
         $second = $this->claim($collector, $session, $this->subscriber('B'), self::SECOND, '6.13');
-        $this->post($reviewer, $first);
+        $this->postCounted($reviewer, $first);
         $proof = AuditEvent::query()->where('event', 'financial.counted_cash_allocated')->sole();
         $data = $proof->after;
         $data['allocated_after_minor'] = 411;
         DB::table('audit_events')->where('id', $proof->id)->update(['after' => json_encode($data, JSON_THROW_ON_ERROR)]);
-        $this->rejects('gated_counted_proof_mismatch', fn () => $this->post($reviewer, $second, 'QA-COUNTED-02'));
+        $this->rejects('gated_counted_proof_mismatch', fn () => $this->postCounted($reviewer, $second, 'QA-COUNTED-02'));
         $this->assertDatabaseCount('financial_posting_events', 2);
         $this->assertDatabaseHas('late_receipt_reviews', ['id' => $second['id'], 'status' => 'pending']);
     }
@@ -221,7 +221,7 @@ final class GatedCountedCashWriterTest extends TestCase
     {
         [$collector, $reviewer, $session] = $this->fixture(registered: false);
         $claim = $this->claim($collector, $session, $this->subscriber('A'), self::OTHER, '4.12');
-        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->post($reviewer, $claim));
+        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->postCounted($reviewer, $claim));
         $this->assertDatabaseCount('financial_posting_events', 0);
         $this->assertDatabaseCount('payments', 1);
     }
@@ -230,8 +230,8 @@ final class GatedCountedCashWriterTest extends TestCase
     {
         [$collector, $reviewer, $session] = $this->fixture(counted: '5.00');
         $claim = $this->claim($collector, $session, $this->subscriber('A'), self::OTHER, '0.01');
-        $this->rejects('gated_counted_effective_date', fn () => $this->post($reviewer, $claim, date: '2026-11-24'));
-        $this->rejects('gated_counted_no_surplus', fn () => $this->post($reviewer, $claim));
+        $this->rejects('gated_counted_effective_date', fn () => $this->postCounted($reviewer, $claim, date: '2026-11-24'));
+        $this->rejects('gated_counted_no_surplus', fn () => $this->postCounted($reviewer, $claim));
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
@@ -241,18 +241,18 @@ final class GatedCountedCashWriterTest extends TestCase
         [$collector, $reviewer, $session] = $this->fixture(approved: false);
         $claim = $this->claim($collector, $session, $this->subscriber('A'), self::OTHER, '4.12');
         try {
-            $this->post($collector, $claim);
+            $this->postCounted($collector, $claim);
             $this->fail('Self approval accepted.');
         } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
             $this->assertSame(403, $error->getStatusCode());
         }
-        $this->rejects('gated_counted_session_unverified', fn () => $this->post($reviewer, $claim));
+        $this->rejects('gated_counted_session_unverified', fn () => $this->postCounted($reviewer, $claim));
         app(CashSessionService::class)->decide($session, true, $reviewer);
         DB::table('financial_periods')->update(['state' => 'CLOSED']);
-        $this->rejects('financial_period_not_open', fn () => $this->post($reviewer, $claim));
+        $this->rejects('financial_period_not_open', fn () => $this->postCounted($reviewer, $claim));
         DB::table('financial_periods')->update(['state' => 'OPEN']);
         DB::table('financial_scopes')->update(['active_freeze_uuid' => self::OTHER]);
-        $this->rejects('financial_scope_not_active', fn () => $this->post($reviewer, $claim));
+        $this->rejects('financial_scope_not_active', fn () => $this->postCounted($reviewer, $claim));
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseHas('late_receipt_reviews', ['id' => $claim['id'], 'status' => 'pending']);
@@ -273,7 +273,7 @@ final class GatedCountedCashWriterTest extends TestCase
             : "CREATE TRIGGER qa_registry_failure BEFORE INSERT ON financial_posting_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_registry_failure'";
         DB::unprepared($trigger);
         try {
-            $this->post($reviewer, $claim);
+            $this->postCounted($reviewer, $claim);
             $this->fail('Registry insert should fail.');
         } catch (\Illuminate\Database\QueryException $error) {
             $this->assertStringContainsString('synthetic_registry_failure', $error->getMessage());
@@ -288,7 +288,7 @@ final class GatedCountedCashWriterTest extends TestCase
         $this->assertDatabaseCount('payment_allocations', $rows);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
-        $result = $this->post($reviewer, $claim);
+        $result = $this->postCounted($reviewer, $claim);
         $this->assertTrue($result['registry_created']);
         $this->assertSame(0, $result['allocation']['available_minor']);
         $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
@@ -300,7 +300,7 @@ final class GatedCountedCashWriterTest extends TestCase
         [$collector, $reviewer, $session, $original] = $this->fixture(counted: '25.25', funded: true);
         $claim = $this->claim($collector, $session, $this->subscriber('funded owner'), self::OTHER, '10.25');
         $before = $session->getRawOriginal();
-        $result = $this->post($reviewer, $claim);
+        $result = $this->postCounted($reviewer, $claim);
         $this->assertSame(1025, $result['allocation']['capacity_minor']);
         $this->assertSame(0, $result['allocation']['available_minor']);
         $this->assertSame($before, $session->fresh()->getRawOriginal());
@@ -325,7 +325,7 @@ final class GatedCountedCashWriterTest extends TestCase
     {
         [$collector, $reviewer, $session] = $this->fixture(counted: '25.25', funded: true, registeredFunding: false);
         $claim = $this->claim($collector, $session, $this->subscriber('unregistered funding'), self::OTHER, '10.25');
-        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->post($reviewer, $claim));
+        $this->rejects('gated_counted_prerequisite_unregistered', fn () => $this->postCounted($reviewer, $claim));
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
@@ -361,7 +361,7 @@ final class GatedCountedCashWriterTest extends TestCase
         });
         $cashOwner = $this->subscriber('cash owner');
         $cash = $this->claim($collector, $session, $cashOwner, self::OTHER, '10.25');
-        $result = $this->post($reviewer, $cash);
+        $result = $this->postCounted($reviewer, $cash);
         $this->assertSame(1025, $result['allocation']['capacity_minor']);
         $this->assertSame(0, $result['allocation']['available_minor']);
         $this->assertSame(1025, $cashOwner->fresh()->getAccountBalanceMinor());
