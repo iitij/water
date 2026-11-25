@@ -2001,4 +2001,82 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($auditCount, AuditEvent::query()->count());
         $this->assertDatabaseCount('payment_account_transfers', 1);
     }
+
+    public function test_round131_receipt_ledger_failure_rolls_back_sequence_and_shadow_reinstatement(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic receipt atomicity tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND131-RECEIPT']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $release->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-ROUND131-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $release->recordRelease($this->actor(), $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $ledger = app(\App\Services\TransactionService::class);
+        $payments = app(PaymentService::class);
+        $sync = '88888888-8888-4888-8888-888888888888';
+        $collect = fn () => $payments->collectPayment($subscriber, '0.30', paymentDate: '2026-11-25', syncUuid: $sync);
+        $inspect = fn () => $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount($accountId));
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(10, $inspect()['applied_minor']);
+        $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $beforeInvoice = $invoice->fresh()->getRawOriginal();
+        $snapshot = fn (string $table) => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $sequence = fn () => DB::table('document_sequences')->orderBy('kind')->orderBy('period')->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'held_cash_release_journal', 'held_cash_shadow_reinstatements', 'treasury_postings', 'audit_events'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $beforeSequence = $sequence();
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN NEW.type = 'payment' AND EXISTS (SELECT 1 FROM held_cash_shadow_reinstatements) BEGIN SELECT RAISE(ABORT, 'qa_receipt_ledger_after_shadow'); END"
+            : "FOR EACH ROW BEGIN IF NEW.type = 'payment' AND EXISTS (SELECT 1 FROM held_cash_shadow_reinstatements) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_receipt_ledger_after_shadow'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_round131_receipt_ledger BEFORE INSERT ON transactions {$body}");
+        try {
+            try {
+                $collect();
+                $this->fail('Receipt unexpectedly committed despite ledger failure after reinstatement.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_receipt_ledger_after_shadow', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeSequence, $sequence());
+            $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
+            $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+            $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_round131_receipt_ledger');
+        }
+        $receipt = $collect();
+        $this->assertSame('REC-202611-0001', $receipt->receipt_number);
+        $this->assertSame(40, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(0, $inspect()['applied_minor']);
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $journal = $release->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(0, $journal['shadow_released_minor']);
+        $this->assertSame(0, $journal['reinstatement_due_minor']);
+        $this->assertSame(25, $journal['actual_protected_minor']);
+        $this->assertFalse($journal['spending_release_authorized']);
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $committedSequence = $sequence();
+        $this->assertSame($receipt->id, $collect()->id);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($committedSequence, $sequence());
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
+    }
 }
