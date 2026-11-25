@@ -17,9 +17,15 @@ final class HeldCashReleaseReadiness
 {
     public function preview(int $accountId, DateTimeImmutable $now): array
     {
+        return $this->withinPreview($accountId, $now, static fn (array $preview): array => $preview);
+    }
+
+    /** Internal candidate writer callback under the same scope-first transaction. */
+    public function withinPreview(int $accountId, DateTimeImmutable $now, callable $reader): mixed
+    {
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($accountId, $date): array {
+            function (array $context) use ($accountId, $date, $reader): mixed {
                 if (! app(AllocationHistoryProtection::class)->active()
                     || ! app(HeldCashDocumentProtection::class)->active()) {
                     throw new DomainException('held_release_protection_missing');
@@ -38,11 +44,11 @@ final class HeldCashReleaseReadiness
                     || $result['credited_minor'] !== $proof['credited_minor']) {
                     throw new DomainException('held_release_protection_mismatch');
                 }
-                return $result + [
+                return $reader($result + [
                     'account_id' => $accountId, 'effective_on' => $date,
                     'period_id' => $context['period_id'], 'credits' => $credits,
                     'source_coverage_verified' => false, 'closure_authorized' => false,
-                ];
+                ]);
             });
     }
 }

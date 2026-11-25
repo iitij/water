@@ -1,7 +1,7 @@
-name: Held cash release policy acceptance
+name: Held cash release proposal acceptance
 on:
   push:
-    branches: ['qa/held-cash-release-policy-round116', 'fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-release-documents-round117', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read

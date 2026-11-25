@@ -1256,4 +1256,61 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('held_release_credit_identity', fn () => $policy->reinstate(100, 0, 0, $before, [$after[0]]));
         $this->assertSame(0, $policy->evaluate(100, 101, 0, [])['candidate_additional_release_minor']);
     }
+    public function test_release_proposal_and_withdrawal_are_immutable_and_never_reduce_actual_reserve(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic proposal tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RELEASE-PROPOSAL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $creditActor = $this->actor();
+        $this->creditHeld($creditActor, 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $uuid = '66666666-6666-4666-8666-666666666666';
+        $propose = fn ($who, $minor) => $service->propose($who, (int) $account['id'], (int) $credit->id,
+            $minor, $uuid, 'QA-RELEASE-PROPOSAL', 'Independent review of allocation evidence', $this->nowAt());
+        $this->rejects('held_release_proposal_independence', fn () => $propose($creditActor, 10));
+        $this->rejects('held_release_proposal_capacity', fn () => $propose($actor, 11));
+        $result = $propose($actor, 10);
+        $this->assertTrue($result['created']);
+        $this->assertFalse($result['spending_release_authorized']);
+        $this->assertFalse($propose($actor, 10)['created']);
+        $this->rejects('held_release_proposal_conflict', fn () => $propose($actor, 9));
+        $this->assertDatabaseCount('held_cash_release_proposals', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
+        $this->rejects('held_release_proposal_conflict', fn () => $propose($actor, 10));
+        $withdraw = fn ($who) => $service->withdraw($who, (int) $account['id'], $uuid,
+            'Independent review of changed allocation evidence', $this->nowAt());
+        $this->rejects('held_release_withdrawal_identity', fn () => $withdraw($actor));
+        $cancel = $withdraw($reviewer);
+        $this->assertTrue($cancel['created']);
+        $this->assertSame(0, $cancel['applied_minor']);
+        $this->assertFalse($cancel['spending_release_authorized']);
+        $this->assertFalse($withdraw($reviewer)['created']);
+        foreach ([
+            fn () => DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->update(['amount_minor' => 1]),
+            fn () => DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->delete(),
+            fn () => DB::table('held_cash_release_withdrawals')->where('proposal_uuid', $uuid)->update(['applied_minor' => 10]),
+            fn () => DB::table('held_cash_release_withdrawals')->where('proposal_uuid', $uuid)->delete(),
+        ] as $operation) {
+            try {
+                DB::transaction($operation);
+                $this->fail('Saved proposal evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Held release proposal is immutable', $error->getMessage());
+            }
+        }
+        $this->assertDatabaseCount('held_cash_release_withdrawals', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }
