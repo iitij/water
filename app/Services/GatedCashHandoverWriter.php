@@ -67,8 +67,17 @@ final class GatedCashHandoverWriter
                 && $counted !== null && $counted > 0 && $expected !== null && $variance !== null
                 && Cash::consistent($counted, $expected, $variance),
                 'gated_handover_session_scope');
-            $this->need(! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists()
-                && ! DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)->exists(), 'gated_handover_session_scope');
+            $this->need(! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists(),
+                'gated_handover_session_scope');
+            if (DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)->exists()) {
+                // Late receipts outside the original till cannot rewrite counted
+                // custody. Reuse the independent registered settlement proof,
+                // including the ordered allocations of already-counted cash.
+                $this->need($variance > 0, 'gated_handover_session_scope');
+                $allocation = app(GatedCountedCashWriter::class)->verifySession($sessionId);
+                $this->need($allocation['capacity_minor'] === $variance,
+                    'gated_handover_count_mismatch');
+            }
             $approval = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
                 ->where('entity_id', (string) $sessionId)->lockForUpdate()->sole();
             $this->need((int) $approval->actor_user_id === (int) $session->approved_by
