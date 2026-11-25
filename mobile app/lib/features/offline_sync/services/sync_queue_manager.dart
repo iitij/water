@@ -700,6 +700,9 @@ class SyncQueueManager extends ChangeNotifier {
     }
 
     _checkScope(scope, item);
+    if (scope != null) {
+      ensurePaymentAcknowledged(response.data, payload, ownerUserId: scope.userId);
+    }
     final responseMap = _asMap(response.data);
     await _runRepositoryWrite(
       () => _repository.markPaymentSynced(
