@@ -743,7 +743,7 @@ class PaymentService
             $bank = app(BankReconciliationService::class);
             if ($claim->status === 'cleared') {
                 abort_unless((int) $claim->decided_by === (int) $actor->id, 409);
-                $result = $bank->confirmCollection($actor, $statementId, $lineId, (int) $claim->payment_id, $reference, $evidence);
+                $result = $bank->confirmCollection($actor, $statementId, $lineId, (int) $claim->payment_id, $reference, $evidence, $gatedWriter);
                 return ['claim' => (array) $claim, 'payment_id' => (int) $claim->payment_id, 'bank' => $result];
             }
             abort_unless($claim->status === 'pending', 409, 'سبق رفض الطلب.');
@@ -766,7 +766,7 @@ class PaymentService
             $decision = ['status' => 'cleared', 'payment_id' => $payment->id, 'decided_by' => $actor->id,
                 'decision_evidence' => trim($evidence), 'decided_at' => now(), 'updated_at' => now()];
             DB::table('noncash_collection_claims')->where('id', $id)->update($decision);
-            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence);
+            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence, $gatedWriter);
             app(TreasuryRegisterService::class)->requiredAudit('noncash_claim.cleared', [
                 'entity_type' => 'noncash_collection_claim', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'after' => $decision + ['bank_collection_id' => $result['collection']['id']],
@@ -805,7 +805,7 @@ class PaymentService
                     && $review->evidence_reference === $reviewReference && $review->bank_clearance_reference === $bankReference
                     && $review->evidence === $evidence, 409, 'سبق البت في المطالبة بطريقة مختلفة.');
                 return ['review' => (array) $review, 'bank' => $bank->confirmCollection($actor, $statementId, $lineId,
-                    (int) $review->payment_id, $bankReference, $evidence)];
+                    (int) $review->payment_id, $bankReference, $evidence, $gatedWriter)];
             }
             $session = \App\Models\CashSession::query()->lockForUpdate()->findOrFail($review->cash_session_id);
             abort_unless($session->isApproved() && (int) $session->user_id === (int) $review->collector_id,
@@ -844,7 +844,7 @@ class PaymentService
                 'evidence_reference' => $reviewReference, 'bank_clearance_reference' => $bankReference,
                 'evidence' => $evidence, 'updated_at' => now()];
             DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
-            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $bankReference, $evidence);
+            $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $bankReference, $evidence, $gatedWriter);
             app(TreasuryRegisterService::class)->requiredAudit('late_receipt.approved', [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'before' => (array) $review, 'after' => $decision + [
