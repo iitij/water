@@ -3062,6 +3062,46 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
+    public function test_release_shortage_handover_only_posts_counted_cash_and_preserves_shortage(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '8.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $receive = fn (string $amount, string $reference, string $key) => $writer->receive($reviewer,
+            (int) $session->id, $accountId, $amount, $reference, '2026-11-25', self::EVIDENCE, $key, $this->nowAt());
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.cash_handovers' => true]);
+        // The approved count cannot be replaced by the larger book total.
+        try {
+            $receive('10.00', 'QA-SHORTAGE-OVER', $uuid);
+            $this->fail('Handover exceeded independently counted cash.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertArrayHasKey('amount', $error->errors());
+        }
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertTrue($receive('8.00', 'QA-SHORTAGE-RECEIVED', $uuid)['registry_created']);
+        $this->assertFalse($receive('8.00', 'QA-SHORTAGE-RECEIVED', $uuid)['registry_created']);
+        $this->assertSame('complete', app(\App\Services\CashHandoverService::class)->summary($session)['status']);
+        $this->assertSame('-2.00', $session->fresh()->variance_amount);
+        $this->assertSame(1000, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        foreach (['cash_sessions', 'payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => 800]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
+
     public function test_release_handover_entrypoints_modal_and_api_preserve_single_treasury_effect(): void
     {
         [, , $account, , , $subscriber] = $this->held();
