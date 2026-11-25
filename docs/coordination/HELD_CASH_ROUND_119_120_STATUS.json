@@ -1,0 +1,48 @@
+{
+  "round119": {
+    "source": "325cd7958bda7ff6a8cb3047887907994fa579f0",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45681510002,
+    "status": "TARGETED_BOTH_ENGINES_PASS_PROMOTED",
+    "jobs": [
+      {
+        "id": 139442961365,
+        "engine": "sqlite",
+        "tests": 5,
+        "assertions": 82,
+        "exit": 0
+      },
+      {
+        "id": 139442961001,
+        "engine": "mysql",
+        "tests": 5,
+        "assertions": 82,
+        "exit": 0
+      }
+    ],
+    "prior_baseline": "Round118: 380 tests / 3783 assertions, exact SHA 1833f309; unchanged paths only. No repeated full run requested."
+  },
+  "round120": {
+    "source": "e71adc943489e920a0030a01e52bbb5e1fb40b98",
+    "base": "325cd7958bda7ff6a8cb3047887907994fa579f0",
+    "branch": "qa/held-cash-atomic-reinstatement-round120",
+    "runs": [
+      {
+        "id": 45682988346,
+        "name": "Held cash incremental atomic reinstatement acceptance",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 45682988153,
+        "name": "Retired feature removal gate",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "status": "STAGED_INCREMENTAL_RUNTIME_UNVERIFIED",
+    "scope": "Automatic shadow reinstatement within allocation replay transaction after invoice updates. Immutable event anchored to last journal entry and exact revision/hash; replays do not increase release. No scope/period lock acquired after issuance and subscriber. Test injected insert failure rolls back cancellation and allocation, retry succeeds, repeated replay no duplicate. Filter four affected cases per engine.",
+    "limits": "Shadow only; no actual reserve reduction. Historical event completeness and skipped intermediate allocation revisions, independent origin checks, full caller inventory, actual-vs-optional event handling and concurrent cases require further proof. Shared PaymentService changed; broader changed-path regressions needed before promotion, not full suite indiscriminately. No production, main or real data changes."
+  },
+  "next": "Verify incremental results; add targeted regressions for refunds/transfers/voids and actual MySQL races, then independently validate shadow event completeness before any activation."
+}
