@@ -402,4 +402,49 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-24')));
     }
 
+    public function test_held_cash_reservation_protects_transfer_dispatch_and_exact_replay(): void
+    {
+        [, , $account] = $this->held();
+        $sender = $this->actor();
+        $register = app(TreasuryRegisterService::class);
+        $destination = $register->open($sender, ['code' => 'QA-HELD-BANK', 'name' => 'Synthetic destination bank',
+            'channel' => 'bank', 'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-HELD-BANK-OPEN', 'opening_evidence' => 'Independent opening statement']);
+        $transfer = app(TreasuryTransferService::class);
+        $data = ['from_account_id' => $account['id'], 'to_account_id' => $destination['id'],
+            'amount' => '100.01', 'reference' => 'QA-HELD-TRANSFER', 'dispatched_on' => '2026-11-25',
+            'evidence' => 'Independent actual cash dispatch evidence'];
+        $this->rejects('held_cash_reserved', fn () => $transfer->dispatch($sender, $data));
+        $this->assertDatabaseCount('treasury_transfers', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $data['amount'] = '100.00';
+        $sent = $transfer->dispatch($sender, $data);
+        $this->assertSame('in_transit', $sent['status']);
+        $this->assertSame($sent['id'], $transfer->dispatch($sender, $data)['id']);
+        $this->assertDatabaseCount('treasury_transfers', 1);
+        $this->assertDatabaseCount('treasury_postings', 2);
+        $this->assertSame(25, $register->inspect($sender, (int) $account['id'])['provisional_recorded_balance_minor']);
+    }
+
+    public function test_refund_posting_reservation_does_not_erase_already_recorded_refund_source(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, '200.00');
+        $refund = app(\App\Services\PaymentRefundService::class)->record($payment, $actor, '100.01',
+            'QA-HELD-REFUND', 'treasury_cash', '2026-11-25',
+            'Synthetic refund of excess subscriber credit', 'Independent evidence of recorded actual cash disbursement');
+        $register = app(TreasuryRegisterService::class);
+        $this->rejects('held_cash_reserved', fn () => $register->post($actor, (int) $account['id'],
+            'payment_refund', (int) $refund->id));
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $report = $register->inspect($actor, (int) $account['id']);
+        $this->assertSame(1, $report['channel_unposted_refund_count']);
+        $this->assertFalse($report['certified_balance']);
+        $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
+        // This is a visible reconciliation incident, not proof that the
+        // original physical disbursement was prevented by the posting guard.
+    }
+
 }
