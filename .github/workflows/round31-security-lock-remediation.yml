@@ -1,0 +1,85 @@
+name: G12 security lock remediation candidate
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round31-security-lock-remediation.yml']
+permissions:
+  contents: read
+jobs:
+  resolve:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/central-security-lock-remediation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      APP_ENV: testing
+      COMPOSER_NO_INTERACTION: '1'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: dd920a1dde29737cd42923c3be94c05364690231
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, intl, mbstring, pdo_mysql, openssl, zip
+          tools: composer:2.9.8
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+      - name: Verify exact source and baseline lockfiles
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'dd920a1dde29737cd42923c3be94c05364690231'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            'eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c  composer.lock' \
+            'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' | sha256sum --check
+      - name: Resolve candidate lockfiles without installing or running package scripts
+        run: |
+          set +e
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/security-candidate"
+          # Allow compatible Filament 5.x fixes, never disable advisory blocking.
+          composer config --no-plugins --no-interaction audit.block-insecure true
+          composer require 'filament/filament:^5.6' --no-update --no-scripts --no-plugins --no-interaction
+          composer update bezhansalleh/filament-shield ysfkaya/filament-phone-input filament/actions filament/filament filament/infolists filament/tables guzzlehttp/guzzle guzzlehttp/psr7 laravel/framework league/commonmark league/flysystem livewire/livewire symfony/html-sanitizer symfony/http-foundation symfony/http-kernel symfony/mime symfony/routing ueberdosis/tiptap-php --with-all-dependencies --minimal-changes --no-install --no-scripts --no-plugins --no-interaction --no-progress
+          composer_resolve=$?
+          npm audit fix --package-lock-only --ignore-scripts --no-fund
+          npm_resolve=$?
+          composer audit --locked --no-dev --format=json > "$RUNNER_TEMP/security-candidate/composer-audit.json"
+          composer_audit=$?
+          npm audit --package-lock-only --audit-level=high --json > "$RUNNER_TEMP/security-candidate/npm-audit.json"
+          npm_audit=$?
+          printf 'COMPOSER_RESOLVE=%s NPM_RESOLVE=%s COMPOSER_AUDIT=%s NPM_AUDIT=%s\n' "$composer_resolve" "$npm_resolve" "$composer_audit" "$npm_audit"
+          python3 - <<'PY'
+          import json,subprocess
+          original=json.loads(subprocess.check_output(['git','show','HEAD:composer.json']))
+          candidate=json.load(open('composer.json'))
+          original['require']['filament/filament']='^5.6'
+          # Composer's explicit advisory-block config is the only extra key allowed.
+          if candidate.get('config',{}).get('audit') == {'block-insecure': True}:
+              candidate['config'].pop('audit')
+          assert original==candidate
+          PY
+          manifest_result=$?
+          git diff --exit-code -- package.json
+          npm_manifest_result=$?
+          test "$npm_manifest_result" -eq 0 || manifest_result=1
+          git diff --stat
+          git diff -- composer.json composer.lock package.json package-lock.json > "$RUNNER_TEMP/security-candidate/lockfiles.diff"
+          cp composer.json composer.lock package.json package-lock.json "$RUNNER_TEMP/security-candidate/"
+          sha256sum composer.lock package-lock.json
+          git status --short
+          test "$composer_resolve" -eq 0 && test "$npm_resolve" -eq 0 && test "$composer_audit" -eq 0 && test "$npm_audit" -eq 0 && test "$manifest_result" -eq 0
+      - name: Preserve candidate and audit evidence for independent review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-lock-candidate
+          path: ${{ runner.temp }}/security-candidate/
+          if-no-files-found: error
+          retention-days: 7
