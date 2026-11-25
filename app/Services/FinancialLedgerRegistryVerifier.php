@@ -20,6 +20,7 @@ final class FinancialLedgerRegistryVerifier
         private FinancialLedgerEvidence $ledger,
         private TreasuryTransferEvidence $treasury,
         private TreasuryCustodyEvidence $custody,
+        private TreasuryOpeningFundingEvidence $openingFunding,
     ) {}
 
     public function verifyPeriod(string $scope, int $periodId): array
@@ -30,6 +31,7 @@ final class FinancialLedgerRegistryVerifier
         $verified = 0;
         $unverified = 0;
         $treasuryVerified = 0;
+        $openingVerified = 0;
         // Treasury writers acquire the issuance lock before business rows.
         // Obtain it before reading any source, even in a mixed registry.
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -44,7 +46,7 @@ final class FinancialLedgerRegistryVerifier
             if ($event->scope_key !== $scope) {
                 throw new DomainException('ledger_registry_scope_mismatch');
             }
-            if (! in_array($event->source_type, ['ledger_transaction', 'treasury_posting'], true)) {
+            if (! in_array($event->source_type, ['ledger_transaction', 'treasury_posting', 'treasury_opening'], true)) {
                 $unverified++;
                 continue;
             }
@@ -54,7 +56,10 @@ final class FinancialLedgerRegistryVerifier
                 throw new DomainException('ledger_registry_source_identity');
             }
             $isTreasury = $event->source_type === 'treasury_posting';
-            if ($isTreasury) {
+            $isOpening = $event->source_type === 'treasury_opening';
+            if ($isOpening) {
+                $actual = $this->openingFunding->opening((int) $id, $event->operation_effective_on);
+            } elseif ($isTreasury) {
                 $posting = DB::table('treasury_postings')->where('id', (int) $id)->lockForUpdate()->first();
                 if (! $posting) {
                     throw new DomainException('treasury_registry_source_missing');
@@ -68,6 +73,8 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->treasury->leg((int) $id);
                 } elseif (in_array($posting->kind, ['cash_handover', 'payment_refund'], true)) {
                     $actual = $this->custody->leg((int) $id);
+                } elseif ($posting->kind === 'collector_funding') {
+                    $actual = $this->openingFunding->funding((int) $id, $event->operation_effective_on);
                 } else {
                     $unverified++;
                     continue;
@@ -83,18 +90,21 @@ final class FinancialLedgerRegistryVerifier
                 || ! hash_equals($actual['source_hash'], $event->source_hash)) {
                 throw new DomainException('ledger_registry_source_mismatch');
             }
-            if ($isTreasury) {
+            if ($isOpening) {
+                $openingVerified++;
+            } elseif ($isTreasury) {
                 $treasuryVerified++;
             } else {
                 $verified++;
             }
         }
-        if ($verified + $treasuryVerified + $unverified !== $result['events']) {
+        if ($verified + $treasuryVerified + $openingVerified + $unverified !== $result['events']) {
             throw new DomainException('ledger_registry_event_count_mismatch');
         }
         return $result + [
             'registered_ledger_legs_verified' => $verified,
             'registered_treasury_legs_verified' => $treasuryVerified,
+            'registered_opening_legs_verified' => $openingVerified,
             'other_registered_legs_unverified' => $unverified,
         ];
     }
