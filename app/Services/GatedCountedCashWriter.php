@@ -125,6 +125,38 @@ final class GatedCountedCashWriter
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
 
+    /** Scoped bidirectional audit; legacy approvals without proof are reported by refusal. */
+    public function verifyCoverage(): array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_counted_requires_gate');
+        $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+        $this->need($scope !== null && $scope->mode === 'ACTIVE' && $scope->currency === 'YER',
+            'gated_counted_requires_gate');
+        DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+        $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
+            'gated_counted_issuance_lock_missing');
+        $rows = DB::table('late_receipt_reviews')->where('status', 'approved')->where('settlement_method', 'already_counted')
+            ->orderBy('id')->lockForUpdate()->get();
+        $audits = AuditEvent::query()->where('event', 'financial.counted_cash_allocated')->orderBy('id')->lockForUpdate()->get();
+        $this->need($audits->count() === $rows->count(), 'gated_counted_coverage_missing_or_orphan_proof');
+        foreach ($audits as $audit) {
+            $this->need($audit->entity_type === 'late_receipt_review'
+                && $rows->contains(fn ($row) => (string) $row->id === (string) $audit->entity_id),
+                'gated_counted_coverage_missing_or_orphan_proof');
+        }
+        $capacity = 0;
+        $allocated = 0;
+        $sessions = $rows->pluck('cash_session_id')->unique()->sort()->values();
+        foreach ($sessions as $sessionId) {
+            $proof = $this->verifySession((int) $sessionId);
+            $capacity = SignedMinor::add($capacity, $proof['capacity_minor']);
+            $allocated = SignedMinor::add($allocated, $proof['allocated_minor']);
+        }
+        return ['scope' => 'approved_counted_cash_only', 'sessions' => $sessions->count(),
+            'allocations' => $rows->count(), 'capacity_minor' => $capacity, 'allocated_minor' => $allocated,
+            'source_coverage_verified' => false, 'closure_authorized' => false];
+    }
+
     private function verifyOtherCollection(Payment $payment, object $operation, string $kind, ?int $reviewId = null): int
     {
         $this->need(! $payment->isVoided() && ! $payment->hasPendingVoidRequest(), 'gated_counted_other_settlement_unsupported');
@@ -141,6 +173,11 @@ final class GatedCountedCashWriter
         $this->need($document !== null, 'gated_counted_other_settlement_unsupported');
         $posting = DB::table('treasury_postings')->where($column, $document->id)->lockForUpdate()->first();
         $this->need($posting !== null && $posting->kind === $kind, 'gated_counted_other_settlement_unsupported');
+        $account = DB::table('treasury_accounts')->where('id', $posting->treasury_account_id)->lockForUpdate()->first();
+        $this->need($account !== null, 'gated_counted_other_settlement_unsupported');
+        $opening = app(TreasuryOpeningFundingEvidence::class)->opening((int) $account->id, $account->opening_on);
+        $openingOp = $this->registered($opening, $account->opening_on);
+        $this->registry->verifyPeriod('water', (int) $openingOp->period_id);
         $leg = app(TreasuryCollectionEvidence::class)->leg((int) $posting->id);
         $op = $this->registered($leg, $posting->effective_on);
         $this->need($op->operation_uuid === $operation->operation_uuid
@@ -198,6 +235,10 @@ final class GatedCountedCashWriter
                 && (int) $payment->user_id === (int) $session->user_id
                 && $payment->payment_date->toDateString() === $session->session_date->toDateString()
                 && is_string($payment->sync_uuid), 'gated_counted_till_receipt_unsupported');
+            foreach (['payment_refunds', 'payment_account_transfers'] as $table) {
+                $this->need(! DB::table($table)->where('payment_id', $payment->id)->exists(),
+                    'gated_counted_till_receipt_unsupported');
+            }
             $leg = $this->ledger->leg((int) $this->entry((int) $payment->id)->id);
             $op = $this->registered($leg, $payment->payment_date->toDateString());
             $this->need($op->operation_uuid === $payment->sync_uuid, 'gated_counted_till_receipt_unsupported');
