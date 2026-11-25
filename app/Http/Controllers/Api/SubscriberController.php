@@ -285,6 +285,8 @@ class SubscriberController extends ApiController
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'cash_session_id' => ['nullable', 'integer', 'min:1'],
+            'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
             return response()->json(['message' => 'الفاتورة المحددة لا تتبع هذا المشترك.'], 422);
@@ -293,7 +295,10 @@ class SubscriberController extends ApiController
             return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
         }
 
-        $payment = $paymentService->collectPayment(
+        $entry = app(\App\Services\ProspectiveCashReceiptEntry::class);
+        $payment = $entry->enabled()
+            ? $entry->collect($request->user(), $subscriber, $data)
+            : $paymentService->collectPayment(
             $subscriber,
             $data['amount'],
             $data['invoice_id'] ?? null,
