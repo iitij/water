@@ -3442,6 +3442,76 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('bank_statement_matches', 0);
     }
 
+    public function test_release_counted_cash_fence_preserves_capacity_and_single_ledger_effect(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $owner = Subscriber::create(['name' => 'Synthetic fenced counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $writer = app(\App\Services\GatedCountedCashWriter::class);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $other = '99999999-9999-4999-8999-999999999999';
+        $submit = fn (string $key, string $amount) => $late->submit($issuer, [
+            'sync_uuid' => $key, 'cash_session_id' => $session->id, 'subscriber_id' => $owner->id,
+            'amount' => $amount, 'payment_method' => 'cash', 'payment_date' => '2026-11-25',
+        ]);
+        $id = (int) $submit($uuid, '4.12')['id'];
+        $over = (int) $submit($other, '6.14')['id'];
+        $data = ['approve' => true, 'settlement_method' => 'already_counted',
+            'evidence_reference' => 'QA-COUNTED-FENCE', 'evidence' => self::EVIDENCE];
+        $direct = fn (?\App\Services\GatedCountedCashWriter $candidate = null) =>
+            $late->decide($id, $reviewer, $data, $candidate);
+        $issue = fn (?\App\Services\GatedCountedCashWriter $candidate = null) =>
+            app(PaymentService::class)->collectPayment($owner, '4.12', userId: $issuer->id,
+                paymentDate: '2026-11-25', syncUuid: $uuid, lateReviewId: $id, settlementWriter: $candidate);
+        $act = fn () => $writer->allocate($reviewer, $id, '2026-11-25',
+            'QA-COUNTED-FENCE', self::EVIDENCE, $uuid, $this->nowAt());
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $tables = ['cash_sessions', 'treasury_postings', 'payments', 'transactions', 'late_receipt_reviews',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'document_sequences'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.late_cash_settlements' => true]);
+        $reason = 'gated_late_cash_writer_required';
+        $this->rejects($reason, $direct);
+        $this->rejects($reason, $issue);
+        $this->rejects($reason, fn () => DB::transaction(fn () => $direct($writer)));
+        $this->rejects($reason, fn () => DB::transaction(fn () => $issue($writer)));
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $act);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $result = $act();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(1025, $result['allocation']['capacity_minor']);
+        $this->assertSame(412, $result['allocation']['allocated_minor']);
+        $this->assertSame(613, $result['allocation']['available_minor']);
+        $this->assertSame(412, $owner->fresh()->getAccountBalanceMinor());
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->get();
+        $this->assertCount(1, $events);
+        $this->assertSame('subscriber', $events->sole()->leg);
+        $this->assertSame(412, (int) $events->sole()->amount_minor);
+        $this->assertFalse($writer->allowsMutation('already_counted', $id, $uuid));
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->rejects('gated_counted_capacity_exceeded', fn () => $writer->allocate($reviewer,
+            $over, '2026-11-25', 'QA-COUNTED-OVER', self::EVIDENCE, $other, $this->nowAt()));
+        config(['financial_candidate.late_cash_settlements' => false]);
+        $this->rejects($reason, $direct);
+        $this->rejects($reason, $issue);
+        $this->assertFalse($act()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $other]);
+    }
+
     public function test_round142_unregistered_counted_cash_decision_is_reported_without_adoption(): void
     {
         [, , , , , $subscriber] = $this->held();
