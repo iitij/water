@@ -1,0 +1,48 @@
+{
+  "round121": {
+    "source": "9e98f27ad194f1bbddd3f89a9f8fc3f1dca601c8",
+    "run": 45683410208,
+    "status": "TWO_CASES_PASS_ONE_ASSERTION_FAILURE_PER_ENGINE_NOT_ACCEPTED",
+    "jobs": [
+      {
+        "id": 139449570852,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 31,
+        "failures": 1
+      },
+      {
+        "id": 139449571247,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 31,
+        "failures": 1
+      }
+    ],
+    "failure": "Line1428 expected shadow release 10 after ordinary receipt and refund; observed 0. Canonical same-day allocation orders ordinary receipt before held cash; displacement must automatically restore the reserve. No production logic change required for this assertion.",
+    "retained": "Passed atomic cancellation rollback and missing intermediate reinstatement detection; unchanged tests and product source retained."
+  },
+  "round122": {
+    "source": "061e97b6a0af0b7c5c4f12625ad60973df715c87",
+    "base": "9e98f27ad194f1bbddd3f89a9f8fc3f1dca601c8",
+    "branch": "qa/held-cash-reinstatement-race-round122",
+    "runs": [
+      {
+        "id": 45683795205,
+        "name": "Held cash incremental correction and race acceptance",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 45683795147,
+        "name": "Retired feature removal gate",
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ],
+    "status": "STAGED_TARGETED_UNVERIFIED",
+    "scope": "Correct failed correction test to assert same-day receipt displaces held credit, exactly one restoration of 10 to zero, subsequent refund/transfer/void preserve balances and restored reserve. New independent MySQL concurrent approval vs cancellation scenario accepts only serial outcomes: approval first restores 20, cancellation first rejects stale proposal. Workflow runs only corrected case per engine and new race as independent job; previous passed cases not repeated. Product unchanged.",
+    "limits": "No runtime results for round122 yet. Shared writer broader changed-path evidence and current revision missing-event detection (allowPendingLatest must be limited to newly appended revisions), historic correction intermediate behavior and actual event handling remain. Shadow reserve only; no real release, main merge or production."
+  },
+  "next": "Verify exact round122 jobs and preserve passed results. Correct failed job only. Then address latest revision missing-event detection and historical correction path."
+}
