@@ -55,7 +55,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -173,6 +173,12 @@ class AppDatabase extends GeneratedDatabase {
               );
             }
             await purgeRetiredOfflineFields(this);
+          }
+          if (from < 7 && to >= 7) {
+            final columns = await _select('PRAGMA table_info(pending_sync_actions)');
+            if (!columns.any((row) => row['name'] == 'owner_server')) {
+              await customStatement('ALTER TABLE pending_sync_actions ADD COLUMN owner_server TEXT');
+            }
           }
         },
         beforeOpen: (_) async {
@@ -298,6 +304,7 @@ class AppDatabase extends GeneratedDatabase {
       last_error TEXT,
       server_response_json TEXT,
       owner_user_id TEXT,
+      owner_server TEXT,
       next_attempt_at TEXT,
       last_status_code INTEGER
     )''',
@@ -715,8 +722,8 @@ class AppDatabase extends GeneratedDatabase {
               '''INSERT OR REPLACE INTO pending_sync_actions(
                  id, action_type, payload_json, state, attempt_count, created_at,
                  updated_at, last_error, server_response_json, owner_user_id,
-                 next_attempt_at, last_status_code
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  owner_server, next_attempt_at, last_status_code
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
               [
                 id,
                 action['action_type'] ?? action['type'] ?? 'unknown',
@@ -728,6 +735,7 @@ class AppDatabase extends GeneratedDatabase {
                 action['last_error'],
                 action['server_response_json'],
                 action['owner_user_id'],
+                action['owner_server'],
                 action['next_attempt_at'],
                 _int(action['last_status_code']),
               ],
@@ -881,6 +889,7 @@ class AppDatabase extends GeneratedDatabase {
     required Map<String, dynamic> reading,
     required String actionId,
     String? ownerUserId,
+    String? ownerServer,
   }) async {
     final enrichedReading = <String, dynamic>{
       ...reading,
@@ -912,9 +921,9 @@ class AppDatabase extends GeneratedDatabase {
       );
       await _execute(
         '''INSERT INTO pending_sync_actions(
-          id, action_type, payload_json, state, attempt_count, created_at, updated_at, owner_user_id
-        ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?, ?)''',
-        [actionId, _jsonEncode(enrichedReading), _now(), _now(), effectiveOwner],
+          id, action_type, payload_json, state, attempt_count, created_at, updated_at, owner_user_id, owner_server
+         ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?, ?, ?)''',
+        [actionId, _jsonEncode(enrichedReading), _now(), _now(), effectiveOwner, ownerServer],
       );
       await _execute(
         'UPDATE cached_meters SET last_reading = ? WHERE server_id = ?',
@@ -1078,13 +1087,14 @@ class AppDatabase extends GeneratedDatabase {
     String? createdAt,
     String? lastError,
     String? ownerUserId,
+    String? ownerServer,
     String? nextAttemptAt,
   }) async {
     final timestamp = createdAt ?? _now();
     await _execute(
-      '''INSERT OR REPLACE INTO pending_sync_actions(
-        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, next_attempt_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      '''INSERT INTO pending_sync_actions(
+        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, owner_server, next_attempt_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         id,
         type,
@@ -1095,6 +1105,7 @@ class AppDatabase extends GeneratedDatabase {
         _now(),
         lastError,
         ownerUserId,
+        ownerServer,
         nextAttemptAt,
       ],
     );
@@ -1136,7 +1147,7 @@ class AppDatabase extends GeneratedDatabase {
   Future<int> getPendingActionCount() async {
     final rows = await _select(
       '''SELECT COUNT(*) AS count FROM pending_sync_actions
-         WHERE state IN ('pending', 'retrying', 'syncing', 'failed')''',
+         WHERE state IN ('pending', 'retrying', 'syncing', 'failed', 'needs_attention')''',
     );
     return rows.isEmpty ? 0 : (_int(rows.first['count']) ?? 0);
   }
