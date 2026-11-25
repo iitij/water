@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify pinned Flutter run. Close legacy unbound bypass against gated pending requests at service boundary, then actual receipt entrypoints and direct/offline void policy.",
+  "next": "Test service-level registered receipt protection, including flag-off old API, direct service and exact gated paths.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,13 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-void-filament",
-      "commit": "0d242c7eaa0a8821039f3f1cc8bba0809ae4a69c",
-      "run": 45707269801,
-      "sqlite": "1 test, 23 assertions",
-      "mysql": "1 test, 23 assertions",
-      "scope": "Standard Filament payment table request/approve/reject actions share default-off staging/testing candidate API switch; request ID and operation UUID captured at modal mount, no recomputation on submit, no legacy fallback; actual Livewire stale modal test."
+      "branch": "release/prospective-void-mobile-decision-sdk",
+      "commit": "cae2f05417694c2bf96115b90923ed3d7aa1bcf8",
+      "run": 45708028058,
+      "sqlite": "2 tests, 38 assertions at product-identical 54b74b64",
+      "mysql": "2 tests, 38 assertions at product-identical 54b74b64",
+      "flutter": "4 tests pass, locked SDK 3.44.0, 2 informational lint notices",
+      "scope": "Mobile bound decision contract preserves request_id from selected row, deterministic UUID v5 per approval, captured session, verifies response identity and void state; explicit null request cannot fall back. API rejects bound request if candidate disabled, echoes request/operation ID. Three new Dart cases, affected list regression and two HTTP tests per engine."
     }
   },
   "round146": {
@@ -866,7 +867,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_void_mobile_decision": {
-    "status": "BACKEND_BOTH_ENGINES_PASS_FLUTTER_LOCKED_SDK_RERUN_PENDING",
+    "status": "TARGETED_BACKEND_AND_LOCKED_FLUTTER_PASS",
     "base": "0d242c7eaa0a8821039f3f1cc8bba0809ae4a69c",
     "branch": "release/prospective-void-mobile-decision",
     "source": "54b74b64fc11a7fad1a528541c16eb9eb3fa15f5",
@@ -903,7 +904,14 @@
       "run": 45708028058,
       "sdk": "3.44.0",
       "pubspec_lock_sha256": "1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d",
-      "scope": "Workflow-only change; official 3.44.0 flutter_test/localizations pins match locked versions; enforce-lockfile and no-pub test. No repeat of accepted backend tests."
+      "scope": "Workflow-only change; official 3.44.0 flutter_test/localizations pins match locked versions; enforce-lockfile and no-pub test. No repeat of accepted backend tests.",
+      "job": {
+        "id": 139534903865,
+        "tests": 4,
+        "exit": 0,
+        "analyze": "0 errors, 0 warnings, 2 informational directives_ordering notices",
+        "lock_unchanged": true
+      }
     }
   }
 }
