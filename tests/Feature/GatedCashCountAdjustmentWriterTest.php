@@ -2492,4 +2492,146 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $this->round134Collection('claim', true);
     }
+
+    public function test_round135_invoice_issue_cancel_register_exact_legs_and_rollback(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic gated invoice tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-R135-INVOICE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $issueUuid = '66666666-6666-4666-8666-666666666666';
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $issue = fn () => $writer->issue($actor, (int) $subscriber->id, (int) $meter->id, $issueUuid, $this->nowAt(), 'Synthetic gated issue');
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'held_cash_shadow_reinstatements'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $ledger = app(\App\Services\TransactionService::class);
+        $failRegistry = function (string $uuid, callable $action) use ($snapshot, $tables): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            $condition = "NEW.operation_uuid = '{$uuid}'";
+            $body = DB::getDriverName() === 'sqlite'
+                ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r135_registry_failure'); END"
+                : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r135_registry_failure'; END IF; END";
+            DB::unprepared("CREATE TRIGGER qa_r135_registry BEFORE INSERT ON financial_posting_events {$body}");
+            try {
+                try {
+                    $action();
+                    $this->fail('Financial operation committed despite registry failure.');
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('qa_r135_registry_failure', $error->getMessage());
+                }
+                foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            } finally {
+                DB::unprepared('DROP TRIGGER IF EXISTS qa_r135_registry');
+            }
+        };
+        $failRegistry($issueUuid, $issue);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $issued = $issue();
+        $this->assertTrue($issued['registry_created']);
+        $invoice = $issued['invoice'];
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertFalse($issue()['registry_created']);
+        $this->rejects('gated_invoice_replay_conflict', fn () => $writer->issue($actor, (int) $subscriber->id,
+            (int) $meter->id, $issueUuid, $this->nowAt(), 'Different request'));
+        $original = DB::table('transactions')->where('reference_type', \App\Models\Invoice::class)
+            ->where('reference_id', $invoice->id)->where('type', 'invoice')->sole();
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $issueUuid,
+            'source_id' => (string) $original->id, 'amount_minor' => -10]);
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id,
+            'Independent prospective invoice cancellation', $cancelUuid, $this->nowAt());
+        $failRegistry($cancelUuid, $cancel);
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $this->assertEquals($original, DB::table('transactions')->find($original->id));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'amount_minor' => 10]);
+        $this->assertFalse($cancel()['registry_created']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertFalse($verified['source_coverage_verified']);
+        $this->assertSame(2, $verified['registered_ledger_legs_verified']);
+    }
+
+    public function test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay(): void
+    {
+        [, , $account, , $lot, $from] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $from, 25);
+        $this->creditHeld($this->actor(), 20);
+        $to = Subscriber::create(['name' => 'Synthetic gated transfer destination', 'square_id' => $from->square_id, 'status' => 'active']);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $from->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $reason = 'Independent current receipt transfer';
+        $transfer = fn () => $writer->transfer($reviewer, (int) $receipt->id, (int) $to->id, $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(50, $ledger->accountBalanceMinor($from));
+        $this->assertSame(0, $ledger->accountBalanceMinor($to));
+        $tables = ['payments', 'transactions', 'payment_account_transfers', 'payment_allocation_revisions',
+            'payment_allocations', 'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $transfer);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $condition = "NEW.operation_uuid = '{$uuid}' AND NEW.amount_minor > 0";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r135_transfer_registry'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r135_transfer_registry'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r135_transfer_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $transfer();
+                $this->fail('Transfer committed despite incoming registry failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r135_transfer_registry', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r135_transfer_registry');
+        }
+        $this->assertTrue($transfer()['registry_created']);
+        $this->assertSame(20, $ledger->accountBalanceMinor($from));
+        $this->assertSame(30, $ledger->accountBalanceMinor($to));
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('amount_minor')->get();
+        $this->assertSame([-30, 30], $events->map(fn ($row) => (int) $row->amount_minor)->all());
+        $this->assertFalse($transfer()['registry_created']);
+        $this->rejects('gated_transfer_replay_conflict', fn () => $writer->transfer($reviewer, (int) $receipt->id,
+            (int) $to->id, 'Different documented reason', self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        $this->assertDatabaseCount('payment_account_transfers', 1);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(3, $verified['registered_ledger_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
+
+    public function test_round135_unregistered_original_receipt_cannot_be_adopted(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '0.30');
+        $destination = Subscriber::create(['name' => 'Synthetic destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->rejects('gated_document_prerequisite_unregistered', fn () => app(\App\Services\GatedInvoiceTransferWriter::class)
+            ->transfer($this->actor(), (int) $receipt->id, (int) $destination->id,
+                'Independent current receipt transfer', self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $this->assertDatabaseCount('payment_account_transfers', 0);
+    }
 }
