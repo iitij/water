@@ -286,7 +286,12 @@ class LocalBackupService {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) throw const BackupException('ملف غير معروف');
       final map = Map<String, dynamic>.from(decoded);
-      final counts = _countsOf(map['data']);
+      final data = map['data'];
+      final counts = _countsOf(data);
+      final valid = map['format'] == 'water-field-backup' &&
+          map['version'] is int && map['version'] == BackupFormat.version &&
+          data is Map && map['checksum'] is String &&
+          checksumOf(Map<String, dynamic>.from(data)) == map['checksum'];
       return BackupFile(
         name: name,
         createdAt: DateTime.tryParse(map['created_at']?.toString() ?? '')?.toUtc() ?? fallbackDate,
@@ -294,7 +299,7 @@ class LocalBackupService {
         appVersion: map['app_version']?.toString(),
         formatVersion: (map['version'] as num?)?.toInt() ?? 0,
         counts: counts,
-        isCompatible: (map['version'] as num?)?.toInt() == BackupFormat.version,
+        isCompatible: valid,
       );
     } catch (_) {
       return BackupFile(
@@ -324,11 +329,14 @@ class LocalBackupService {
     if (payload['format'] != 'water-field-backup') {
       throw const BackupException('الملف ليس نسخة احتياطية من تطبيق المياه.');
     }
-    final version = (payload['version'] as num?)?.toInt() ?? 0;
-    if (version > BackupFormat.version) {
+    final version = payload['version'];
+    if (version is int && version > BackupFormat.version) {
       throw BackupException(
         'النسخة من إصدار أحدث (صيغة $version). حدّث التطبيق ثم أعد المحاولة.',
       );
+    }
+    if (version is! int || version != BackupFormat.version) {
+      throw const BackupException('صيغة النسخة غير معتمدة للاستعادة.');
     }
     final data = payload['data'];
     if (data is! Map) throw const BackupException('الملف لا يحتوي بيانات.');
