@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact new CI, fix confirmed failures only; inspect Flutter handover client and variance/late-review handover, then continue bank fees/disbursement and actual entrypoint inventory.",
+  "next": "Verify exact targeted CI; complete Flutter handover callsite inventory (avoid archive download); design source-linked positive surplus custody protection without double-counting counted allocations, then remaining disbursement paths.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-handover-service-fence",
-      "commit": "dc34c1cd15df1603466241055947262420bf7c86",
-      "run": 45718712237,
-      "sqlite": "1 test, 36 assertions",
-      "mysql": "1 test, 36 assertions",
-      "scope": "GatedCashHandoverWriter private session/reference/account/actor scope covers CashHandoverService::record and TreasuryRegisterService::post(cash_handover) in one transaction. Direct service calls and registered source replay refused without verified writer; default-off new cash_handovers flag retains distinct legacy compatibility. One targeted test verifies both fences, closed period, exact replay with flag on/off, single treasury leg, preserved till, subscriber ledger and held cash."
+      "branch": "release/prospective-handover-entrypoints",
+      "commit": "56cfc31ac57c92296257fa9b775419fedaedf9bc",
+      "run": 45719015314,
+      "sqlite": "1 test, 41 assertions",
+      "mysql": "1 test, 41 assertions",
+      "scope": "Shared ProspectiveHandoverEntry for actual POST /api/cash-sessions/{id}/handovers and CashSessionsTable record_treasury_handover. Explicit cash account and stable operation UUID required in candidate mode, exact amount, atomic custody and treasury posting, preserve legacy response keys plus posting in candidate; explicit atomic intent refused when disabled; direct treasury posting conflicts mapped to 409. Targeted cross-interface Livewire/HTTP case checks closed period, collector independence, missing destination, replay, no subscriber change."
     }
   },
   "round146": {
@@ -1361,12 +1361,45 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_handover_entrypoints": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "dc34c1cd15df1603466241055947262420bf7c86",
     "branch": "release/prospective-handover-entrypoints",
     "source": "56cfc31ac57c92296257fa9b775419fedaedf9bc",
     "scope": "Shared ProspectiveHandoverEntry for actual POST /api/cash-sessions/{id}/handovers and CashSessionsTable record_treasury_handover. Explicit cash account and stable operation UUID required in candidate mode, exact amount, atomic custody and treasury posting, preserve legacy response keys plus posting in candidate; explicit atomic intent refused when disabled; direct treasury posting conflicts mapped to 409. Targeted cross-interface Livewire/HTTP case checks closed period, collector independence, missing destination, replay, no subscriber change.",
-    "limits": "CI pending. Only backend HTTP and Filament changed; Flutter client contract and broader variance/late-review scenarios are not yet implemented. Same existing restricted reconciled cash-only writer scope. No real data, production activation or main merge.",
-    "next": "Verify exact new CI, fix confirmed failures only; inspect Flutter handover client and variance/late-review handover, then continue bank fees/disbursement and actual entrypoint inventory."
+    "limits": "Exact source, raw logs and lockfile hash verified. Actual HTTP and Filament handover paths accepted for existing restricted writer contract. No mobile implementation, variance/late-review or production activation.",
+    "next": "Inspect Flutter client inventory and extend independently verified handover contract.",
+    "run": 45719015314,
+    "jobs": [
+      {
+        "id": 139572314651,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 41,
+        "exit": 0
+      },
+      {
+        "id": 139572314062,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 41,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_handover_flutter_inventory": {
+    "status": "PARTIAL_SOURCE_REVIEW",
+    "reviewed_source": "56cfc31ac57c92296257fa9b775419fedaedf9bc",
+    "scope": "Recursive repository tree complete; inspected cash_session_api.dart, cash_session_service.dart and cash_session_review_screen.dart. No handover or treasury method found in these three mobile files.",
+    "limits": "Complete Dart content search via public archive timed out after 30 seconds. No conclusion about absence elsewhere, no Flutter modifications or tests. Recheck cash_session_screen.dart, domain models, other screens and exact /handovers references before deciding whether a new mobile feature is needed."
+  },
+  "release_shortage_handover": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "56cfc31ac57c92296257fa9b775419fedaedf9bc",
+    "branch": "release/prospective-shortage-handover",
+    "source": "c1b346a42bc3684ee67f7a4de822a02851e12948",
+    "scope": "Extend existing cash-only registered till handover to approved negative variance. Reconstruct expected cash from registered receipts/funding/voids, validate expected/count/variance against original approval, enforce actual counted amount limit, preserve original shortage and subscriber ledger. One new targeted case verifies 1000 minor expected, 800 counted, rejects 1000 handover, posts exactly 800 treasury-only, replay unchanged, held cash reserve unchanged.",
+    "limits": "CI pending. Positive surplus intentionally remains refused until a source-linked reserve/liability contract is proven. No shortage write-off, separate shortage settlement, noncash/late-review or historical corrections. No production activation or main merge.",
+    "next": "Verify exact targeted CI; complete Flutter handover callsite inventory (avoid archive download); design source-linked positive surplus custody protection without double-counting counted allocations, then remaining disbursement paths."
   }
 }
