@@ -31,7 +31,7 @@ class LiveCollectionAmountTest extends TestCase
             'subscriber_id' => $meter->subscriber_id,
             'meter_id' => $general ? null : $meter->id,
             'invoice_type' => 'meter',
-            'bill_number' => Invoice::generateBillNumber(),
+            'bill_number' => 'SYNTH-LIVE-'.\Illuminate\Support\Str::uuid(),
             'bill_date' => now()->toDateString(),
             'consumption_fee' => $total,
             'total_amount' => $total,
