@@ -3879,13 +3879,19 @@
     },
     "round70": {
       "phase": "Inactive gated invoice writer and targeted receipt allocation",
-      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "status": "SOURCE_REVIEWED_VALIDATION_BLOCKED",
       "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
-      "source": "7c549b419460e42b8457624d3fd945ab7e620e0d",
+      "source": "34ac201f711518c62064d85fd744c46cf22ae957",
       "branch": "fix/central-g1b-gated-invoice",
       "runs": [],
-      "scope": "Current issue date distinct from consumption period; exact pending reading set, stable operation UUID and mandatory actor audit; actual invoice source and registry atomicity. Four cases per engine prepared: two-tariff invoice and targeted receipt, reading conflicts/frozen/closed, legacy rejection, fault rollback and credit allocation.",
-      "limits": "Workflow creation tool call blocked; no new execution evidence or PR. No production activation or global writer/concurrency certification. No main merge."
+      "scope": "Ordinary gated invoice issue and targeted receipt allocation. Five cases per engine prepared; added deterministic test clock, real zero-consumption invoice, exact allocation revision/hash/rows/counts before fault, after rollback and after successful retry. Product writer unchanged.",
+      "limits": "Prior workflow creation tool call blocked; no runtime execution of round 70 source, no PR, no activation. Preserve prior source. No all-writer fencing or global concurrency certification. No main merge.",
+      "prior_source": "7c549b419460e42b8457624d3fd945ab7e620e0d",
+      "review_findings": [
+        "Original QA used a fixed gate date without freezing application clock; corrected in QA.",
+        "Original rollback test checked invoice balance but not exact allocation history; strengthened with persisted allocation integrity, revision IDs, fingerprints, row identity and amounts.",
+        "Ledger proof currently binds monetary effect, not full invoice tariff/reading/audit content; separate source completeness and database immutability proof required before activation."
+      ]
     }
   }
 }
