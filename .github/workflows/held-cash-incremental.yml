@@ -1,7 +1,7 @@
-name: Held cash incremental journal definition acceptance
+name: Held cash incremental proposal definition acceptance
 on:
   push:
-    branches: ['qa/held-cash-journal-definition-round128']
+    branches: ['qa/held-cash-proposal-definition-round129']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round128_counterfeit_journal_guards_reject_approval_and_allocation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round129_proposal_and_withdrawal_guards_reject_counterfeit_definitions' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,4 +97,4 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round128_counterfeit_journal_guards_reject_approval_and_allocation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round129_proposal_and_withdrawal_guards_reject_counterfeit_definitions' tests/Feature/GatedCashCountAdjustmentWriterTest.php
