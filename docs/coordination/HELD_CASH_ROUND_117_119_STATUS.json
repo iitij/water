@@ -1,0 +1,72 @@
+{
+  "round117": {
+    "source": "40849e614d60275144542a7963119e29227ac4ae",
+    "run": 45677562709,
+    "status": "BOTH_ENGINES_PASS",
+    "jobs": [
+      {
+        "id": 139429064611,
+        "engine": "sqlite",
+        "tests": 186,
+        "assertions": 1827,
+        "exit": 0
+      },
+      {
+        "id": 139429065087,
+        "engine": "mysql",
+        "tests": 192,
+        "assertions": 1937,
+        "exit": 0
+      }
+    ]
+  },
+  "round118": {
+    "source": "1833f30999a873883b362a9ba8612fcb01830b59",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45678565274,
+    "status": "BOTH_ENGINES_PASS_PROMOTED",
+    "jobs": [
+      {
+        "id": 139432640323,
+        "engine": "sqlite",
+        "tests": 187,
+        "assertions": 1836,
+        "exit": 0
+      },
+      {
+        "id": 139432639903,
+        "engine": "mysql",
+        "tests": 193,
+        "assertions": 1947,
+        "exit": 0
+      }
+    ],
+    "promotion": "Verified exact round116 base, two commits ahead, non-force update and exact identical comparison. Old workflow automatically triggered run 45681286874 on promotion; not required for accepted evidence."
+  },
+  "round119": {
+    "source": "325cd7958bda7ff6a8cb3047887907994fa579f0",
+    "base": "1833f30999a873883b362a9ba8612fcb01830b59",
+    "branch": "qa/held-cash-release-journal-round119",
+    "runs": [
+      {
+        "id": 45681510002,
+        "name": "Held cash incremental release journal acceptance",
+        "status": "in_progress",
+        "conclusion": null,
+        "sha": "325cd7958bda7ff6a8cb3047887907994fa579f0"
+      },
+      {
+        "id": 45681509846,
+        "name": "Retired feature removal gate",
+        "status": "completed",
+        "conclusion": "success",
+        "sha": "325cd7958bda7ff6a8cb3047887907994fa579f0"
+      }
+    ],
+    "status": "STAGED_INCREMENTAL_RUNTIME_UNVERIFIED",
+    "scope": "New immutable shadow release/reinstatement journal, distinct proposal approver, exact current proposal, per-credit cumulative cap, reconstruction with historical allocation proof and audit. Disallow proposal withdrawal once recorded. Test release, cancellation, due reinstatement, exact restoration, unchanged actual reserve and duplicate rejection. Full acceptance manual only; targeted release filter on each engine in independent jobs. No existing business writer or existing reservation logic changed.",
+    "limits": "No real reserve reduction or production activation. Journal duplicate rejection not idempotent replay; global origin/protection definitions and full chain on other accounts, historical liquidity and atomic reinstatement on all allocation writers still require proof. Reinstatement here is manually invoked shadow record only; not atomic with invoice cancellation. New migration affects schema; targeted tests run migrate:fresh on both engines. Prior baseline evidence retained only for unchanged paths, not new SHA-wide comprehensive acceptance. No main merge or real data."
+  },
+  "coordination": "Independent receipt; central register large update unresolved.",
+  "next": "Check targeted exact SHA results. If failure rerun only affected engine/job or filter. Then implement atomic journal integration with allocation-changing paths and enforce reserve/reinstatement before any spend activation."
+}
