@@ -2659,6 +2659,65 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_invoice_api_shares_issue_identity_and_cancellation_reversal(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic invoice API tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-INVOICE-API']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $issueUuid = '66666666-6666-4666-8666-666666666666';
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id,
+            'notes' => 'Synthetic protected API issuance', 'operation_uuid' => $issueUuid];
+        $cancelData = ['reason' => 'Independent prospective invoice cancellation', 'operation_uuid' => $cancelUuid];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions', 'payments',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->postJson('/api/invoices', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
+        $this->postJson('/api/invoices/generate-meter', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson('/api/invoices', $data)->assertConflict();
+        $this->postJson('/api/invoices/generate-meter', $data)->assertConflict();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $issued = $this->postJson('/api/invoices', $data)->assertCreated();
+        $id = (int) $issued->json('invoice.id');
+        $this->assertGreaterThan(0, $id);
+        $afterIssue = [];
+        foreach ($tables as $table) $afterIssue[$table] = $snapshot($table);
+        $this->postJson('/api/invoices/generate-meter', $data)->assertCreated()->assertJsonPath('invoice.id', $id);
+        $this->postJson('/api/invoices/generate-meter', array_replace($data, ['notes' => 'Different issuance intent']))->assertConflict();
+        $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertConflict();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($afterIssue as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertOk()->assertJsonPath('invoice.status', 'cancelled');
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertOk()->assertJsonPath('invoice.id', $id);
+        $this->postJson('/api/invoices/'.$id.'/cancel', array_replace($cancelData, ['reason' => 'Different cancellation intent']))->assertConflict();
+        config(['financial_candidate.invoices' => false]);
+        $this->postJson('/api/invoices', $data)->assertConflict();
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertConflict();
+        $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $issueUuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'leg' => 'subscriber', 'amount_minor' => 10]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $issueUuid)->count());
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $cancelUuid)->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_invoice_service_fence_preserves_original_and_reversal(): void
     {
         [, , $account, , , $subscriber] = $this->held();
