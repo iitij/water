@@ -309,11 +309,16 @@ final class GatedCountedCashWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_late_cash_receipts', 0);
         $proof = fn () => $this->gate(fn () => app(GatedCountedCashWriter::class)->verifySession((int) $session->id));
         $this->assertSame(1025, $proof()['allocated_minor']);
+        $coverage = fn () => $this->gate(fn () => app(GatedCountedCashWriter::class)->verifyCoverage());
+        $this->assertSame(1, $coverage()['allocations']);
+        $this->assertFalse($coverage()['closure_authorized']);
         $audit = AuditEvent::query()->where('event', 'financial.counted_cash_allocated')->sole();
         $after = $audit->after;
         $after['capacity_minor'] = 2025;
         DB::table('audit_events')->where('id', $audit->id)->update(['after' => json_encode($after, JSON_THROW_ON_ERROR)]);
         $this->rejects('gated_counted_proof_mismatch', $proof);
+        DB::table('audit_events')->where('id', $audit->id)->delete();
+        $this->rejects('gated_counted_coverage_missing_or_orphan_proof', $coverage);
     }
 
     public function test_unregistered_funding_blocks_surplus_even_when_physical_totals_match(): void
