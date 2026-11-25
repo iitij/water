@@ -1744,4 +1744,95 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($journal['spending_release_authorized']);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+
+    public function test_round128_counterfeit_journal_guards_reject_approval_and_allocation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic journal guard tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND128-GUARD']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $protection = app(\App\Services\HeldCashReleaseDocumentProtection::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-ROUND128-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $reviewer = $this->actor();
+        $approve = fn () => $service->recordRelease($reviewer, $accountId, $proposal,
+            '77777777-7777-4777-8777-777777777777', 'Independent approval of shadow release', $this->nowAt());
+        $sqlite = DB::getDriverName() === 'sqlite';
+        $body = $sqlite ? "BEGIN SELECT RAISE(ABORT, 'Held release journal is immutable'); END"
+            : "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Held release journal is immutable'";
+        $noop = $sqlite ? "BEGIN SELECT 'Held release journal is immutable'; END"
+            : "FOR EACH ROW SET @qa_journal_noop = 'Held release journal is immutable'";
+        $this->assertTrue($protection->journalActive());
+        $auditCount = AuditEvent::query()->count();
+        DB::unprepared('DROP TRIGGER release_journal_reject_update');
+        try {
+            DB::unprepared("CREATE TRIGGER release_journal_reject_update BEFORE UPDATE ON held_cash_release_journal {$noop}");
+            $this->assertFalse($protection->journalActive());
+            $this->rejects('held_release_protection_missing', $approve);
+            $this->assertDatabaseCount('held_cash_release_journal', 0);
+            $this->assertSame($auditCount, AuditEvent::query()->count());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS release_journal_reject_update');
+            DB::unprepared("CREATE TRIGGER release_journal_reject_update BEFORE UPDATE ON held_cash_release_journal {$body}");
+        }
+        $this->assertTrue($protection->journalActive());
+        $approve();
+        $beforeInvoice = $invoice->fresh()->getRawOriginal();
+        $revisionCount = DB::table('payment_allocation_revisions')->count();
+        $auditCount = AuditEvent::query()->count();
+        $transactionCount = DB::table('transactions')->count();
+        $cancel = fn () => app(\App\Services\InvoiceCancellationService::class)->cancel(
+            $invoice->fresh(), 'Synthetic independently documented cancellation', $reviewer->id);
+        DB::unprepared('DROP TRIGGER release_journal_reject_delete');
+        try {
+            DB::unprepared("CREATE TRIGGER release_journal_reject_delete BEFORE DELETE ON held_cash_release_journal {$noop}");
+            $this->assertFalse($protection->journalActive());
+            $this->rejects('held_release_protection_missing', fn () => $service->inspectJournal($accountId, $this->nowAt()));
+            $this->rejects('held_release_protection_missing', $cancel);
+            $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
+            $this->assertSame($revisionCount, DB::table('payment_allocation_revisions')->count());
+            $this->assertSame($auditCount, AuditEvent::query()->count());
+            $this->assertSame($transactionCount, DB::table('transactions')->count());
+            $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS release_journal_reject_delete');
+            DB::unprepared("CREATE TRIGGER release_journal_reject_delete BEFORE DELETE ON held_cash_release_journal {$body}");
+        }
+        if ($sqlite) {
+            DB::unprepared('DROP TRIGGER release_journal_reject_replace');
+            try {
+                // A guard with the expected error but an incomplete unique-key predicate.
+                DB::unprepared("CREATE TRIGGER release_journal_reject_replace BEFORE INSERT ON held_cash_release_journal
+                    FOR EACH ROW WHEN EXISTS (SELECT 1 FROM held_cash_release_journal j WHERE j.id = NEW.id) {$body}");
+                $this->assertFalse($protection->journalActive());
+                $this->rejects('held_release_protection_missing', $cancel);
+                $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+            } finally {
+                DB::unprepared('DROP TRIGGER IF EXISTS release_journal_reject_replace');
+                DB::unprepared("CREATE TRIGGER release_journal_reject_replace BEFORE INSERT ON held_cash_release_journal
+                    FOR EACH ROW WHEN EXISTS (SELECT 1 FROM held_cash_release_journal j WHERE j.id = NEW.id
+                    OR j.operation_uuid = NEW.operation_uuid OR j.proposal_uuid = NEW.proposal_uuid) {$body}");
+            }
+        }
+        $this->assertTrue($protection->journalActive());
+        $cancel();
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $journal = $service->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(0, $journal['shadow_released_minor']);
+        $this->assertSame(25, $journal['actual_protected_minor']);
+        $this->assertFalse($journal['spending_release_authorized']);
+        $this->assertDatabaseCount('held_cash_release_journal', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
 }
