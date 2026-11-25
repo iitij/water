@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 96,
+    "round": 97,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4223,6 +4223,36 @@
       "scope": "Conservative cash reservation retains all positive held cash adjustment amounts, including unadopted legacy adjustments, validates original adjustment posting, refuses ordinary outflows consuming the reserve or backdating behind newer movements, uses existing issuance lock without acquiring scope after business locks. Integrated on isolated branch into treasury transfer dispatch, collector funding and refund posting after idempotent replay checks. Two feature methods prepared for exact funding boundary and preservation after owner assignment.",
       "limits": "No release/discharge implementation, no proof of complete treasury balance or all entrypoint fencing. Guard is conservative and not a certified available cash report. Existing outflow methods may record already physically executed events; final design requires explicit authorized pre-disbursement control and separately recorded incident path if physical loss/unauthorized payout already occurred. Cash count shortages and direct SQL must be handled separately, not suppressed. No discharge, new payment method, payout source, W18 funded/mixed till proof, runtime acceptance or production change. Scope-wide lock integration and concurrent tests pending. Do not treat this candidate as production-ready.",
       "next": "Define and implement explicit owner payout source and liability discharge, with separate actual cash outflow evidence and independent verification. Subscriber credit requires explicit noncash reclassification document and allocation semantics, not a fake ordinary cash receipt. Finish W18 independent proof. Restore exact locked test environment and run isolated tests sequentially. Preserve priority task order; no main merge or live data changes."
+    },
+    "round97": {
+      "phase": "Focused GitHub Actions held cash acceptance requested by owner",
+      "status": "CI_RUN_STARTED_PENDING_RESULT",
+      "base": "44908f9339fdf4e1b32725436ecd5b60cdd0c79f",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "32215e1bf7fa8821dc1c98fb71dd20b76b24760b",
+      "runs": [
+        {
+          "id": 45634489268,
+          "url": "https://github.com/iitij/water/actions/runs/45634489268",
+          "head_sha": "32215e1bf7fa8821dc1c98fb71dd20b76b24760b",
+          "status": "in_progress",
+          "jobs": [
+            {
+              "id": 139276168964,
+              "engine": "sqlite",
+              "status": "in_progress"
+            },
+            {
+              "id": 139276169482,
+              "engine": "mysql",
+              "status": "in_progress"
+            }
+          ]
+        }
+      ],
+      "scope": "Added branch-scoped workflow only, read-only permissions, exact checkout and Composer lock validation, disposable SQLite in memory and MySQL 8.0 water_test service database. Each job runs GatedCashCountAdjustmentWriterTest.php (16 test methods) with fail-on-skipped and fail-on-empty-test-suite. Confirmed real push-triggered run and both jobs started on GitHub-hosted runners; local machine used only for read-only status retrieval. No product source changes.",
+      "limits": "At observation both jobs in progress; SQLite installing dependencies, MySQL initializing service container. No test pass/fail evidence yet. No production database, main merge or deploy. Surplus discharge, W18 proof and other open items remain.",
+      "next": "Read final job conclusions and logs, record actual tests/assertions/exit status, address any proven failure on isolated branch before further accounting acceptance."
     }
   }
 }
