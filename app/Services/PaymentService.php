@@ -565,15 +565,16 @@ class PaymentService
             }
 
             // 1. إنشاء سجل الدفع
+            $issuedAt = now();
             $payment = Payment::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meterId,
                 'invoice_id' => $invoiceId,
                 'user_id' => $userId,
                 'cash_session_id' => $cashSessionId,
-                'receipt_number' => Payment::generateReceiptNumber(),
+                'receipt_number' => app(DocumentSequenceService::class)->reserveForIssue('REC', $issuedAt->format('Ym')),
                 'amount' => $amount,
-                'payment_date' => $paymentDate ?? now()->toDateString(),
+                'payment_date' => $paymentDate ?? $issuedAt->toDateString(),
                 'payment_method' => $paymentMethod,
                 'reference_number' => $referenceNumber,
                 'notes' => $notes,
