@@ -56,6 +56,14 @@ final class GatedInvoiceWriter
                 $operation = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)
                     ->lockForUpdate()->first();
 
+                // Do not consume a receipt identity reserved by an unposted
+                // claim, late review or pre-registry receipt. The issuance
+                // lock serializes these checks with their current services.
+                $this->need(! \App\Models\Payment::withTrashed()->where('sync_uuid', $uuid)->lockForUpdate()->first()
+                    && ! DB::table('noncash_collection_claims')->where('sync_uuid', $uuid)->lockForUpdate()->first()
+                    && ! DB::table('late_receipt_reviews')->where('sync_uuid', $uuid)->lockForUpdate()->first(),
+                    'gated_invoice_uuid_reserved');
+
                 if ($operation !== null) {
                     $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)
                         ->lockForUpdate()->get();
