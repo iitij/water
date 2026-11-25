@@ -700,19 +700,32 @@ class PaymentService
         }, 3);
     }
 
+    private function assertNonCashSettlementWriter(string $kind, object $claim, ?GatedCollectionWriter $writer): void
+    {
+        if ($writer !== null && $writer->allowsMutation($kind, (int) $claim->id, $claim->sync_uuid)) {
+            return;
+        }
+        $registered = DB::table('financial_posting_operations')->where('scope_key', 'water')
+            ->where('operation_uuid', $claim->sync_uuid)->exists();
+        if ($writer !== null || $registered || config('financial_candidate.noncash_settlements') === true) {
+            throw new \DomainException('gated_collection_writer_required');
+        }
+    }
+
     /** The only new noncash receipt issuance path; proof and both ledgers commit together. */
-    public function clearNonCashClaim(User $actor, int $id, int $statementId, int $lineId, string $reference, string $evidence): array
+    public function clearNonCashClaim(User $actor, int $id, int $statementId, int $lineId, string $reference, string $evidence, ?GatedCollectionWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $candidate = DB::table('noncash_collection_claims')->find($id);
         abort_unless($candidate, 404);
-        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reference, $evidence, $candidate): array {
+        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reference, $evidence, $candidate, $gatedWriter): array {
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $claim = DB::table('noncash_collection_claims')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $claim->subscriber_id === (int) $subscriber->id, 409);
+            $this->assertNonCashSettlementWriter('claim', $claim, $gatedWriter);
             abort_if((int) $claim->submitted_by === (int) $actor->id, 403, 'لا يجوز اعتماد طلبك بنفسك.');
             $bank = app(BankReconciliationService::class);
             if ($claim->status === 'cleared') {
@@ -750,7 +763,7 @@ class PaymentService
     }
 
     /** Resolve a late, unposted noncash receipt against actual bank clearance. */
-    public function clearLateNonCash(User $actor, int $id, int $statementId, int $lineId, string $reviewReference, string $bankReference, string $evidence): array
+    public function clearLateNonCash(User $actor, int $id, int $statementId, int $lineId, string $reviewReference, string $bankReference, string $evidence, ?GatedCollectionWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reviewReference = mb_strtoupper(trim($reviewReference));
@@ -763,13 +776,14 @@ class PaymentService
         }
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
-        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $candidate): array {
+        return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $candidate, $gatedWriter): array {
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $review->subscriber_id === (int) $subscriber->id, 409);
+            $this->assertNonCashSettlementWriter('late_bank', $review, $gatedWriter);
             abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
             $bank = app(BankReconciliationService::class);
             if ($review->status !== 'pending') {
