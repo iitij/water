@@ -2803,6 +2803,66 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
 
+    public function test_release_refund_entrypoints_modal_and_api_share_atomic_debit(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        foreach (['ViewAny:Payment', 'View:Payment'] as $permission) {
+            $reviewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['amount' => '4.00', 'disbursement_reference' => 'QA-REFUND-ENTRY', 'method' => 'treasury_cash',
+            'disbursed_on' => '2026-11-25', 'reason' => 'Independent documented excess credit refund',
+            'evidence' => self::EVIDENCE, 'disbursement_confirmed' => true,
+            'treasury_account_id' => $accountId, 'operation_uuid' => $uuid];
+        $url = '/api/payments/'.$receipt->id.'/refund';
+        $tables = ['payments', 'payment_refunds', 'transactions', 'treasury_postings', 'audit_events',
+            'payment_allocation_revisions', 'payment_allocations', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.refunds' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $this->postJson($url, $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, array_diff_key($data, ['treasury_account_id' => true]))->assertUnprocessable();
+        $this->postJson($url, array_replace($data, ['disbursement_confirmed' => false]))->assertUnprocessable();
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($reviewer, 'web');
+        $page = \App\Filament\Resources\PaymentResource\Pages\ListPayments::class;
+        $action = \Filament\Actions\Testing\TestAction::make('record_refund')->table($receipt);
+        $modal = \Livewire\Livewire::test($page)->mountAction($action)->setActionData($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $modal->assertActionDataSet(['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $refund = \App\Models\PaymentRefund::where('disbursement_reference', $data['disbursement_reference'])->sole();
+        $posting = DB::table('treasury_postings')->where('payment_refund_id', $refund->id)->sole();
+        $this->assertSame($accountId, (int) $posting->treasury_account_id);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-400, -400], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('refund.id', $refund->id)
+            ->assertJsonPath('posting.id', $posting->id);
+        $this->postJson('/api/treasury/accounts/'.$accountId.'/postings', ['kind' => 'payment_refund', 'source_id' => $refund->id])->assertConflict();
+        config(['financial_candidate.refunds' => false]);
+        $this->postJson($url, $data)->assertConflict();
+        $this->postJson($url, array_diff_key($data, ['treasury_account_id' => true, 'operation_uuid' => true]))->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame(600, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
+
     public function test_release_refund_service_fence_protects_both_legs_and_handover_reserve(): void
     {
         [, , $account, , , $subscriber] = $this->held();
