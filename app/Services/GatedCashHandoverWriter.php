@@ -19,8 +19,8 @@ use Illuminate\Support\Facades\DB;
 
 /** Inactive handover adapter for reconciled cash-only tills, including
  * registered opening funding and registered pre-close ordinary voids.
- * Verified shortages preserve the original till variance; positive surplus
- * and late/closed corrections still require separate proof.
+ * Verified shortages preserve original variance. Positive surplus requires
+ * a full single-destination handover with a permanent conservative reserve.
  */
 final class GatedCashHandoverWriter
 {
@@ -65,7 +65,7 @@ final class GatedCashHandoverWriter
                 && (int) $session->approved_by > 0 && (int) $session->approved_by !== (int) $session->user_id
                 && $openingMinor !== null && $openingMinor >= 0
                 && $counted !== null && $counted > 0 && $expected !== null && $variance !== null
-                && $variance <= 0 && Cash::consistent($counted, $expected, $variance),
+                && Cash::consistent($counted, $expected, $variance),
                 'gated_handover_session_scope');
             $this->need(! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists()
                 && ! DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)->exists(), 'gated_handover_session_scope');
@@ -117,6 +117,11 @@ final class GatedCashHandoverWriter
             $op = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
             $replay = $existing !== null;
             $this->need($replay === ($op !== null), 'gated_handover_operation_conflict');
+            if ($variance > 0) {
+                $this->need(Cash::input($amount, 'handover', DecimalDomain::D14, 1) === $counted
+                    && CashHandover::where('cash_session_id', $sessionId)->count() === ($replay ? 1 : 0),
+                    'gated_handover_surplus_requires_full_count');
+            }
             foreach (CashHandover::query()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get() as $prior) {
                 $posted = DB::table('treasury_postings')->where('cash_handover_id', $prior->id)->lockForUpdate()->first();
                 $this->need($posted !== null, 'gated_handover_prior_unregistered');
@@ -144,6 +149,17 @@ final class GatedCashHandoverWriter
                     ->map(fn ($p) => $p->getRawOriginal())->all() === $paymentBytes, 'gated_handover_effect_mismatch');
             $created = $this->registry->record($context, $uuid, [$leg], $now);
             $this->need($created === ! $replay, 'gated_handover_operation_conflict');
+            if ($variance > 0) {
+                if ($created) {
+                    app(AuditLogger::class)->recordRequired('financial.handover_surplus_reserved', [
+                        'entity_type' => CashHandover::class, 'entity_id' => $handover->id,
+                        'actor_user_id' => $actor->id,
+                        'after' => HandoverSurplusReservation::proof($handover, (object) $posting, $uuid, $variance, (int) $approval->id),
+                    ]);
+                }
+                $this->need(app(HandoverSurplusReservation::class)->forAccount($accountId) >= $variance,
+                    'gated_handover_surplus_reserve_invalid');
+            }
             return ['handover' => $handover, 'posting' => $posting, 'registry_created' => $created];
         });
     }
