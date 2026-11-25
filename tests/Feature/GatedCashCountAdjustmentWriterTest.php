@@ -1331,4 +1331,51 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_release_proposals', 0);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
+    public function test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic journal tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RELEASE-JOURNAL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $creditActor = $this->actor();
+        $this->creditHeld($creditActor, 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $accountId = (int) $account['id'];
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $release = '77777777-7777-4777-8777-777777777777';
+        $restore = '88888888-8888-4888-8888-888888888888';
+        $service->propose($proposer, $accountId, (int) $credit->id, 10, $proposal,
+            'QA-JOURNAL-PROPOSAL', 'Independent review of allocation evidence', $this->nowAt());
+        $record = fn ($actor) => $service->recordRelease($actor, $accountId, $proposal, $release,
+            'Independent approval of shadow release', $this->nowAt());
+        $this->rejects('held_release_journal_proposal', fn () => $record($proposer));
+        $this->rejects('held_release_proposal_independence', fn () => $record($creditActor));
+        $result = $record($reviewer);
+        $this->assertSame(10, $result['after_minor']);
+        $this->assertFalse($result['spending_release_authorized']);
+        $this->rejects('held_release_journal_duplicate', fn () => $record($reviewer));
+        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
+        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['reinstatement_due_minor']);
+        $result = $service->recordReinstatement($reviewer, $accountId, (int) $credit->id, $restore,
+            'Independent review of changed allocation evidence', $this->nowAt());
+        $this->assertSame(10, $result['amount_minor']);
+        $this->assertSame(0, $result['after_minor']);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['reinstatement_due_minor']);
+        $this->assertSame(25, $service->inspectJournal($accountId, $this->nowAt())['actual_protected_minor']);
+        $this->assertDatabaseCount('held_cash_release_journal', 2);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        try {
+            DB::transaction(fn () => DB::table('held_cash_release_journal')->where('operation_uuid', $release)->update(['amount_minor' => 1]));
+            $this->fail('Release journal was mutable.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Held release journal is immutable', $error->getMessage());
+        }
+    }
 }

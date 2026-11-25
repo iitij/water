@@ -77,6 +77,8 @@ final class HeldCashReleaseProposalService
                 $proposal = DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->lockForUpdate()->first();
                 $this->need($proposal !== null && (int) $proposal->treasury_account_id === $accountId
                     && (int) $proposal->proposed_by !== (int) $actor->id, 'held_release_withdrawal_identity');
+                $this->need(! DB::table('held_cash_release_journal')->where('proposal_uuid', $uuid)->exists(),
+                    'held_release_journal_already_recorded');
                 $this->verifyAudit('treasury.held_release_proposed', $uuid, (array) $proposal, 'proposed_by');
                 $credit = $this->credit($proof, (int) $proposal->credit_id);
                 $this->need($credit['subscriber_id'] === (int) $proposal->subscriber_id
@@ -97,6 +99,148 @@ final class HeldCashReleaseProposalService
                 $this->audit('treasury.held_release_withdrawn', $uuid, $row, 'withdrawn_by');
                 return $this->result($row, true);
             });
+    }
+
+    /**
+     * Record a shadow release decision, never a permission to spend.
+     * A distinct approver must review the exact still-current proposal.
+     */
+    public function recordRelease(User $actor, int $accountId, string $proposalUuid, string $uuid,
+        string $evidence, DateTimeImmutable $now): array
+    {
+        return $this->journalCommand($actor, $accountId, $uuid, $evidence, $now,
+            function (array $proof, array $state) use ($actor, $proposalUuid): array {
+                $proposal = DB::table('held_cash_release_proposals')->where('operation_uuid', $proposalUuid)->lockForUpdate()->first();
+                $this->need($proposal !== null && (int) $proposal->treasury_account_id === $proof['account_id']
+                    && (int) $proposal->proposed_by !== (int) $actor->id
+                    && ! DB::table('held_cash_release_withdrawals')->where('proposal_uuid', $proposalUuid)->exists(),
+                    'held_release_journal_proposal');
+                $credit = $this->credit($proof, (int) $proposal->credit_id);
+                $source = DB::table('treasury_held_cash_credits')->where('id', $credit['credit_id'])->first();
+                $this->need($source !== null && (int) $source->approved_by !== (int) $actor->id,
+                    'held_release_proposal_independence');
+                $before = $state[$credit['credit_id']] ?? 0;
+                $minor = SignedMinor::parse($proposal->amount_minor);
+                $this->need($credit['revision_id'] === (int) $proposal->revision_id
+                    && hash_equals($credit['allocation_hash'], $proposal->allocation_hash)
+                    && $proof['effective_on'] === $proposal->effective_on
+                    && $proof['recorded_balance_minor'] === SignedMinor::parse($proposal->recorded_balance_minor)
+                    && $proof['pending_refunds_minor'] === SignedMinor::parse($proposal->pending_refunds_minor)
+                    && $proof['protected_minor'] === SignedMinor::parse($proposal->protected_minor),
+                    'held_release_journal_stale');
+                $this->need(! DB::table('held_cash_release_journal')->where('proposal_uuid', $proposalUuid)->exists()
+                    && $minor > 0 && SignedMinor::add($before, $minor) <= $credit['applied_minor']
+                    && $minor <= $proof['candidate_additional_release_minor'], 'held_release_journal_capacity');
+                return $this->journalRow($proof, $credit, 'release', $before, SignedMinor::add($before, $minor), $proposalUuid);
+            });
+    }
+
+    /** Record the exact per-credit reduction required by the latest allocation. */
+    public function recordReinstatement(User $actor, int $accountId, int $creditId, string $uuid,
+        string $evidence, DateTimeImmutable $now): array
+    {
+        return $this->journalCommand($actor, $accountId, $uuid, $evidence, $now,
+            function (array $proof, array $state) use ($creditId): array {
+                $credit = $this->credit($proof, $creditId);
+                $before = $state[$creditId] ?? 0;
+                $after = min($before, $credit['applied_minor']);
+                $this->need($after < $before, 'held_release_journal_no_reinstatement');
+                return $this->journalRow($proof, $credit, 'reinstate', $before, $after, null);
+            });
+    }
+
+    private function journalCommand(User $actor, int $accountId, string $uuid, string $evidence,
+        DateTimeImmutable $now, callable $plan): array
+    {
+        $evidence = trim($evidence);
+        $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1
+            && mb_strlen($evidence) >= 20 && mb_strlen($evidence) <= 4000, 'held_release_proposal_input');
+        return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now,
+            function (array $proof) use ($actor, $uuid, $evidence, $plan): array {
+                $this->authorize($actor);
+                $this->verifyLocked($proof);
+                $state = $this->journalState($proof);
+                // Strict duplicate rejection until command-specific replay is
+                // bound to the original immutable request and response.
+                $this->need(! DB::table('held_cash_release_journal')->where('operation_uuid', $uuid)->exists(),
+                    'held_release_journal_duplicate');
+                $row = $plan($proof, $state) + ['operation_uuid' => $uuid, 'actor_id' => (int) $actor->id, 'evidence' => $evidence];
+                $this->need(DB::table('held_cash_release_journal')->insert($row), 'held_release_proposal_write');
+                app(AuditLogger::class)->recordRequired('treasury.held_release_journal_recorded', [
+                    'entity_type' => 'held_cash_release_journal', 'entity_id' => $uuid,
+                    'actor_user_id' => $actor->id, 'after' => $row, 'source' => 'internal']);
+                $this->journalState($proof);
+                return $this->result($row, true);
+            });
+    }
+
+    private function journalRow(array $proof, array $credit, string $kind, int $before, int $after, ?string $proposal): array
+    {
+        return ['proposal_uuid' => $proposal, 'credit_id' => $credit['credit_id'],
+            'treasury_account_id' => $proof['account_id'], 'revision_id' => $credit['revision_id'],
+            'period_id' => $proof['period_id'], 'kind' => $kind,
+            'amount_minor' => $kind === 'release' ? SignedMinor::subtract($after, $before) : SignedMinor::subtract($before, $after),
+            'applied_minor' => $credit['applied_minor'], 'before_minor' => $before, 'after_minor' => $after,
+            'allocation_hash' => $credit['allocation_hash'], 'effective_on' => $proof['effective_on']];
+    }
+
+    /** Reconstruct the shadow journal; no active reservation reads this state. */
+    private function journalState(array $proof): array
+    {
+        $rows = DB::table('held_cash_release_journal')->orderBy('id')->lockForUpdate()->get();
+        $audits = AuditEvent::query()->where('event', 'treasury.held_release_journal_recorded')->lockForUpdate()->get();
+        $this->need($rows->count() === $audits->count(), 'held_release_journal_coverage');
+        $state = [];
+        foreach ($rows as $row) {
+            $matches = $audits->filter(fn ($a) => $a->entity_id === $row->operation_uuid
+                && $a->entity_type === 'held_cash_release_journal');
+            $this->need($matches->count() === 1 && (int) $matches->first()->actor_user_id === (int) $row->actor_id,
+                'held_release_journal_coverage');
+            foreach ((array) $row as $key => $value) {
+                if ($key === 'id') continue;
+                $after = $matches->first()->after ?? [];
+                $this->need(array_key_exists($key, $after) && ($value === null ? $after[$key] === null
+                    : $after[$key] !== null && (string) $after[$key] === (string) $value), 'held_release_journal_coverage');
+            }
+            if ((int) $row->treasury_account_id !== $proof['account_id']) continue;
+            $credit = $this->credit($proof, (int) $row->credit_id);
+            $applied = $this->historicalApplied($row, $credit['credit_id'], $credit['subscriber_id'], $credit['amount_minor']);
+            $before = $state[$credit['credit_id']] ?? 0;
+            $minor = SignedMinor::parse($row->amount_minor);
+            $after = SignedMinor::parse($row->after_minor);
+            $this->need($minor > 0 && $before === SignedMinor::parse($row->before_minor)
+                && $after >= 0 && $after <= $applied, 'held_release_journal_chain');
+            if ($row->kind === 'release') {
+                $proposal = DB::table('held_cash_release_proposals')->where('operation_uuid', $row->proposal_uuid)->first();
+                $this->need($proposal !== null && (int) $proposal->credit_id === $credit['credit_id']
+                    && (int) $proposal->treasury_account_id === $proof['account_id']
+                    && (int) $proposal->revision_id === (int) $row->revision_id
+                    && (int) $proposal->proposed_by !== (int) $row->actor_id
+                    && SignedMinor::parse($proposal->amount_minor) === $minor
+                    && ! DB::table('held_cash_release_withdrawals')->where('proposal_uuid', $row->proposal_uuid)->exists()
+                    && $after === SignedMinor::add($before, $minor), 'held_release_journal_chain');
+            } else {
+                $this->need($row->kind === 'reinstate' && $row->proposal_uuid === null
+                    && $after === min($before, $applied) && $after === SignedMinor::subtract($before, $minor),
+                    'held_release_journal_chain');
+            }
+            $state[$credit['credit_id']] = $after;
+        }
+        return $state;
+    }
+
+    public function inspectJournal(int $accountId, DateTimeImmutable $now): array
+    {
+        return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now, function (array $proof): array {
+            $this->verifyLocked($proof);
+            $state = $this->journalState($proof);
+            $due = 0;
+            foreach ($proof['credits'] as $credit) {
+                $due = SignedMinor::add($due, max(0, SignedMinor::subtract($state[$credit['credit_id']] ?? 0, $credit['applied_minor'])));
+            }
+            return ['shadow_released_minor' => SignedMinor::sum($state), 'reinstatement_due_minor' => $due,
+                'actual_protected_minor' => $proof['protected_minor'], 'spending_release_authorized' => false];
+        });
     }
 
     /** Read-only bidirectional coverage, under the same scope/issuance fence. */

@@ -1,7 +1,5 @@
-name: Held cash release coverage acceptance
+name: Held cash full acceptance (manual)
 on:
-  push:
-    branches: ['qa/held-cash-release-coverage-round118', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read
