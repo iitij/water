@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Support\ExactMoney;
+use App\Support\ReceiptPostingIdentity;
 use App\Support\FinancialAmount;
 
 use App\Models\CashSession;
@@ -87,12 +87,11 @@ final class PaymentRefundService
                 }
             }
 
-            $originals = Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            $originals = Transaction::withTrashed()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                 ->where('type', 'payment')->lockForUpdate()->get();
-            if ($originals->count() !== 1 || (int) $originals->first()->subscriber_id !== (int) $subscriber->id
-                || $minor($originals->first()->amount) !== $minor($payment->amount)
-                || (int) ($originals->first()->meter_id ?? 0) !== (int) ($payment->meter_id ?? 0)
-                || Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            if ($originals->count() !== 1 || $originals->first()->trashed()
+                || ! ReceiptPostingIdentity::matches((object) $payment->getRawOriginal(), (object) $originals->first()->getRawOriginal())
+                || Transaction::withTrashed()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                     ->where('type', 'payment_reversal')->exists()) {
                 throw ValidationException::withMessages(['payment' => 'لا يوجد قيد قبض أصلي مطابق وسارٍ.']);
             }

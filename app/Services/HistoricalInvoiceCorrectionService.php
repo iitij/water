@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Support\ExactMoney;
 use App\Support\FinancialAmount;
 use App\Support\InvoiceAmounts;
+use App\Support\HistoricalTariffEvidence;
 
 use App\Models\HistoricalInvoiceCorrection;
 use App\Models\Invoice;
@@ -109,43 +110,33 @@ final class HistoricalInvoiceCorrectionService
             \App\Models\Tariff::lockCatalog();
             $originalLines = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)
                 ->orderBy('reading_id')->lockForUpdate()->get();
-            if ($originalLines->isEmpty()) {
-                $originalLines = collect(app(HistoricalTariffService::class)->quote($readings)['lines'])
-                    ->map(fn ($line) => (object) $line);
-                $source = 'approved_historical_catalog';
-            } else {
-                $lineIds = $originalLines->pluck('reading_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-                $originalTotal = 0;
-                foreach ($originalLines as $line) {
-                    $lineMinor = $minor($line->amount);
-                    if ($lineMinor < 0) {
-                        throw ValidationException::withMessages(['invoice' => 'مبلغ بند التعرفة التاريخي غير صالح.']);
-                    }
-                    $originalTotal = FinancialAmount::add($originalTotal, $lineMinor);
-                }
-                if ($lineIds !== array_map('intval', $ids)
-                    || $originalTotal !== $minor($invoice->consumption_fee)) {
-                    throw ValidationException::withMessages(['invoice' => 'أدلة تسعير الفاتورة لا تطابق القراءات أو المبلغ التاريخي.']);
-                }
-                $source = 'original_invoice_snapshot';
+            // Never reconstruct a posted invoice's tariff from today's catalog.
+            // Even a coincidentally equal total does not establish line-level provenance.
+            try {
+                HistoricalTariffEvidence::verify(
+                    $readings->map(fn ($reading) => (object) [
+                        'id' => $reading->id,
+                        'period_start' => $reading->period_start ? \Carbon\CarbonImmutable::parse($reading->period_start)->toDateString() : null,
+                        'period_end' => $reading->period_end ? \Carbon\CarbonImmutable::parse($reading->period_end)->toDateString() : null,
+                        'consumption_units' => $reading->getRawOriginal('consumption_units'),
+                    ]),
+                    $originalLines,
+                    $invoice->getRawOriginal('consumption_fee'),
+                );
+            } catch (\DomainException|\InvalidArgumentException|\OverflowException) {
+                throw ValidationException::withMessages(['invoice' => 'أدلة التعرفة الأصلية مفقودة أو غير متطابقة؛ يلزم مراجعة محاسبية موثقة.']);
             }
-            $readingById = $readings->keyBy('id');
+            $source = 'original_invoice_snapshot';
             $lines = [];
             $prices = [];
             $u = 0;
             $amount = 0;
             foreach ($originalLines as $original) {
-                $reading = $readingById->get($original->reading_id);
-                if (! $reading || ! $reading->period_start || ! $reading->period_end
-                    || $original->period_start !== \Carbon\CarbonImmutable::parse($reading->period_start)->toDateString()
-                    || $original->period_end !== \Carbon\CarbonImmutable::parse($reading->period_end)->toDateString()) {
-                    throw ValidationException::withMessages(['invoice' => 'توجد أدلة تاريخية غير متطابقة؛ يلزم مراجعة محاسبية.']);
-                }
                 $p = $minor($original->unit_price);
                 if ($confirmedPrice !== null && $confirmedPrice !== $p) {
                     throw ValidationException::withMessages(['historical_unit_price' => 'السعر المدخل لا يطابق التعرفة التاريخية الموثقة.']);
                 }
-                $quantity = $requestedUnits[(int) $reading->id];
+                $quantity = $requestedUnits[(int) $original->reading_id];
                 try {
                     $lineAmount = ExactMoney::tariffLine($decimal($quantity), $decimal($p))->minor;
                     $u = ExactMoney::fromMinor(FinancialAmount::add($u, $quantity))->minor;

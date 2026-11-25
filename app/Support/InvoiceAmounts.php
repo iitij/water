@@ -11,11 +11,11 @@ final class InvoiceAmounts
     {
         $billed = FinancialAmount::parse($total)->minor;
         $allocated = FinancialAmount::parse($paid)->minor;
-        if ($billed < 0 || $allocated < 0) {
-            throw new \LogicException('Negative billed or allocated amount.');
+        if ($billed < 0 || $allocated < 0 || $allocated > $billed) {
+            throw new \LogicException('Invoice allocation must be between zero and its own billed amount.');
         }
 
-        return max(0, $billed - $allocated);
+        return $billed - $allocated;
     }
 
     /** Caller supplies only eligible, non-deleted invoices under the account lock. */
