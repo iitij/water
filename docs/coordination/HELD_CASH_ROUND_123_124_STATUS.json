@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact CI results and fix confirmed failures only. Extend tested families and resolve cutover boundary and source attribution; never return source_coverage_verified true from diagnostic alone.",
+  "next": "Verify corrected round140 logs and then extend independent source coverage beyond the selected month, without historic corrections or closure certification.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -552,13 +552,36 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round140": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "CORRECTED_TARGETED_CI_IN_PROGRESS_UNVERIFIED",
     "base": "2c0a0ec4c6659a6b9c075aa2e3f4b0c2bd139236",
-    "branch": "qa/source-coverage-round140",
-    "source": "5f145e80482f4fbddec508dde0432672cec30d85",
-    "run": 45700105594,
+    "branch": "qa/source-coverage-round140-corrected",
+    "source": "2f402e4168f444a9b8837dba260b34f20514623d",
+    "run": 45700274573,
     "scope": "Read-only FinancialSourceCoverageDiagnostic in explicit month, verifies registry source proof first, scans eligible documents and treasury postings, detects missing/duplicate/deleted ledger and treasury sources, checks authoritative dates, same-operation multi-leg groups and reverse coverage. Three targeted synthetic tests.",
     "limits": "Runtime pending. Whole selected month only, no chosen production cutover or historical remediation; held subledger coverage prerequisite remains global. Scanner does not establish all writer fences, complete document family inventory, approved cross-date policy, allocation/carry/balance or closure proof. Creation time for unclassified ledger rows only anomaly discovery; transfer date requires matching approval audit. No activation, real data change, main merge or actual release.",
-    "next": "Verify exact CI results and fix confirmed failures only. Extend tested families and resolve cutover boundary and source attribution; never return source_coverage_verified true from diagnostic alone."
+    "next": "Verify exact CI results and fix confirmed failures only. Extend tested families and resolve cutover boundary and source attribution; never return source_coverage_verified true from diagnostic alone.",
+    "first_attempt": {
+      "source": "5f145e80482f4fbddec508dde0432672cec30d85",
+      "run": 45700105594,
+      "jobs": [
+        {
+          "engine": "sqlite",
+          "id": 139507686798,
+          "tests": 3,
+          "assertions": 33,
+          "failures": 1,
+          "exit": 1
+        },
+        {
+          "engine": "mysql",
+          "id": 139507686220,
+          "tests": 3,
+          "assertions": 36,
+          "exit": 0
+        }
+      ],
+      "cause": "SQLite third case detected incorrectly dated receipt but missed split refund group. MySQL all passed. Candidate correction uses the same PaymentRefund Eloquent date cast as custody evidence, not raw SQLite timestamp, to normalize authoritative disbursed_on."
+    },
+    "correction": "Only refund date retrieval changed; rerun directly affected split-refund/date case on both engines; unaffected cases preserved."
   }
 }
