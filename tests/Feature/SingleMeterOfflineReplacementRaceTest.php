@@ -38,12 +38,27 @@ class SingleMeterOfflineReplacementRaceTest extends TestCase
             'unique_code' => 'RACE-OLD',
         ]);
 
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $acceptedUuid = (string) Str::uuid();
+        $accepted = [
+            'meter_id' => $old->id, 'reading_date' => now()->subDays(1)->toDateString(),
+            'current_reading' => '20.00', 'sync_uuid' => $acceptedUuid,
+        ];
+        // Give the old physical meter a real installation anchor before accepting usage.
+        $old->update(['installed_at' => now()->subDays(7)->toDateString()]);
+        $this->postJson('/api/readings', $accepted)->assertCreated();
+
         // Device B replaces the meter while device A still has an unsent old reading.
         $currentId = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
             'reason' => 'استبدال عداد أثناء انقطاع اتصال القارئ',
             'new_meter' => ['unique_code' => 'RACE-NEW', 'initial_reading' => 0, 'installed_at' => now()->subDays(7)->toDateString()],
         ])->assertCreated()->json('current_meter.id');
+
+        $this->assertDatabaseMissing('readings', ['sync_uuid' => $acceptedUuid]);
+        $this->postJson('/api/readings/sync-batch', ['readings' => [$accepted]])
+            ->assertOk()->assertJsonPath('results.0.success', false)
+            ->assertJsonPath('results.0.retryable', false);
 
         $oldUuid = (string) Str::uuid();
         $newUuid = (string) Str::uuid();

@@ -139,7 +139,7 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertSame($first->id, $meterA->fresh()->subscriber_id);
     }
 
-    public function test_unbilled_reading_blocks_ending_meter_assignment(): void
+    public function test_unbilled_reading_cannot_be_removed_through_ordinary_meter_edit(): void
     {
         $subscriber = $this->subscriber();
         $meter = Meter::create([
@@ -344,6 +344,14 @@ class SingleCurrentMeterTest extends TestCase
             'payment_method' => 'cash',
         ])->assertCreated()->json('payment.id');
 
+        $billed = $old->readings()->firstOrFail();
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-03-01', 'current_reading' => '120.00',
+        ]);
+        $linesBefore = \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->orderBy('id')->get()->all();
+        $balanceBefore = app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber);
+        $financeBefore = $this->financialRowsWithoutMeterProvenance();
+
         $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
             'reason' => 'حذف بيانات العداد التالف',
@@ -354,6 +362,12 @@ class SingleCurrentMeterTest extends TestCase
         $this->assertDatabaseHas('invoices', ['id' => $invoice, 'meter_id' => null, 'retired_meter_id' => $old->id, 'total_amount' => 100, 'amount_paid' => 40]);
         $this->assertDatabaseHas('payments', ['id' => $receipt, 'meter_id' => null, 'retired_meter_id' => $old->id, 'amount' => 40]);
         $this->assertDatabaseCount('transactions', 2);
+        $this->assertDatabaseMissing('readings', ['id' => $pending->id]);
+        $this->assertDatabaseHas('readings', ['id' => $billed->id, 'meter_id' => null,
+            'retired_meter_id' => $old->id, 'invoice_id' => $invoice, 'consumption_units' => 100]);
+        $this->assertEquals($linesBefore, \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->orderBy('id')->get()->all());
+        $this->assertSame($balanceBefore, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertEquals($financeBefore, $this->financialRowsWithoutMeterProvenance());
         $this->assertSame(60.0, $subscriber->getAccountDebt());
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
         $this->assertSame('0.00', (string) Meter::findOrFail($new)->balance);
@@ -392,42 +406,183 @@ class SingleCurrentMeterTest extends TestCase
         ]);
     }
 
-    public function test_replacement_requires_posting_pending_consumption_without_retaining_old_meter(): void
+    public function test_replacement_discards_original_twenty_unit_pending_reading_without_creating_debt(): void
     {
         $subscriber = $this->subscriber();
         $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'PENDING-SWAP']);
         \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
-        \App\Models\Tariff::create(['name' => 'Replacement tariff', 'unit_price' => 600, 'is_active' => true]);
         $readingId = $this->postJson('/api/readings', [
-            'meter_id' => $old->id,
-            'current_reading' => '7.25',
-            'reading_date' => '2026-02-01',
+            'meter_id' => $old->id, 'current_reading' => '20.00', 'reading_date' => '2026-02-01',
         ])->assertCreated()->json('reading.id');
+        $other = Meter::create(['subscriber_id' => $this->subscriber('Retained')->id, 'unique_code' => 'KEEP-PENDING']);
+        $kept = \App\Models\Reading::create([
+            'meter_id' => $other->id, 'reading_date' => '2026-02-01', 'current_reading' => '15.00',
+        ]);
+        $keptBefore = \Illuminate\Support\Facades\DB::table('readings')->where('id', $kept->id)->first();
 
-        $replacement = [
+        $this->deleteJson('/api/meters/'.$old->id)->assertConflict();
+        $this->postJson('/api/meters/bulk-delete', ['ids' => [$old->id, $other->id]])
+            ->assertOk()->assertJsonPath('deleted_count', 0)->assertJsonPath('skipped_count', 2);
+        $this->assertDatabaseHas('readings', ['id' => $readingId, 'consumption_units' => 20, 'is_invoiced' => false]);
+        try {
+            $old->delete();
+            $this->fail('Ordinary model deletion discarded a current observation.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertArrayHasKey('meter_id', $e->errors());
+        }
+        $this->assertNull($old->fresh()->deleted_at);
+
+
+        $new = $this->postJson('/api/meters/'.$old->id.'/replace', [
             'removed_at' => now()->toDateString(),
-            'reason' => 'استبدال العداد مع حماية الاستهلاك',
-            'new_meter' => ['unique_code' => 'NEW-PENDING'],
-        ];
-        $this->postJson('/api/meters/'.$old->id.'/replace', $replacement)
-            ->assertUnprocessable()->assertJsonValidationErrors('meter_id');
-        $this->assertDatabaseHas('meters', ['id' => $old->id]);
-        $this->assertDatabaseHas('readings', ['id' => $readingId, 'meter_id' => $old->id, 'is_invoiced' => false]);
-        $this->assertDatabaseCount('meters', 1);
-        $this->assertDatabaseCount('invoices', 0);
-
-        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
-        $this->assertSame(4350.0, $subscriber->getAccountDebt());
-        $new = $this->postJson('/api/meters/'.$old->id.'/replace', $replacement)
-            ->assertCreated()->json('current_meter.id');
+            'reason' => 'استبدال عداد وإزالة القراءة غير المفوترة',
+            'new_meter' => ['unique_code' => 'NEW-PENDING', 'initial_reading' => '100.25',
+                'installed_at' => '2026-02-02'],
+        ])->assertCreated()->json('current_meter.id');
 
         $this->assertDatabaseMissing('meters', ['id' => $old->id]);
-        $this->assertDatabaseCount('meters', 1);
-        $this->assertDatabaseHas('readings', ['id' => $readingId, 'meter_id' => null,
-            'retired_meter_id' => $old->id, 'invoice_id' => $invoice->id]);
-        $this->assertDatabaseCount('invoices', 1);
-        $this->assertSame(4350.0, $subscriber->getAccountDebt());
+        $this->assertDatabaseMissing('readings', ['id' => $readingId]);
+        $this->assertEquals($keptBefore, \Illuminate\Support\Facades\DB::table('readings')->where('id', $kept->id)->first());
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame($new, $subscriber->fresh()->currentMeter->id);
+        $this->assertNotSame($old->id, $new);
+        $reading = \App\Models\Reading::create([
+            'meter_id' => $new, 'reading_date' => '2026-03-01', 'current_reading' => '100.26',
+        ]);
+        $this->assertSame('100.25', $reading->previous_reading);
+        $this->assertSame('0.01', $reading->consumption_units);
+        $this->assertSame('2026-02-02', $reading->period_start);
+        $audit = \App\Models\AuditEvent::where('event', 'meter.replaced')->where('entity_id', (string) $new)->firstOrFail();
+        $this->assertSame(1, $audit->after['discarded_unbilled_readings']);
+    }
+
+    public function test_replacement_rejects_ambiguous_unbilled_flag_with_financial_tariff_link(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'AMBIGUOUS-PENDING']);
+        $this->measuredConsumption($old, 20);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
+        $reading = $old->readings()->firstOrFail();
+        // Ordinary synthetic inconsistency: a historical price snapshot still protects the row.
+        \Illuminate\Support\Facades\DB::table('readings')->where('id', $reading->id)
+            ->update(['is_invoiced' => false, 'invoice_id' => null]);
+        $before = $this->meterCleanupSnapshot();
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(), 'reason' => 'اختبار ارتباط مالي ملتبس',
+            'new_meter' => ['unique_code' => 'AMBIGUOUS-NEW'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoice->id, 'reading_id' => $reading->id]);
+    }
+
+    public function test_failed_replacement_after_pending_deletion_restores_financial_rows_and_images(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'ATOMIC-OLD']);
+        $this->measuredConsumption($old, 20);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
+        \Illuminate\Support\Facades\Storage::fake('public');
+        \Illuminate\Support\Facades\Storage::disk('public')->put('readings/atomic-pending.jpg', 'synthetic');
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-03-01',
+            'current_reading' => '40.00', 'image_path' => 'readings/atomic-pending.jpg',
+        ]);
+        $before = $this->meterCleanupSnapshot();
+        Meter::creating(function (Meter $new) use ($old, $pending, $invoice): void {
+            if ($new->unique_code === 'ATOMIC-FAIL') {
+                $this->assertDatabaseMissing('meters', ['id' => $old->id]);
+                $this->assertDatabaseMissing('readings', ['id' => $pending->id]);
+                $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'retired_meter_id' => $old->id]);
+                \Illuminate\Support\Facades\Storage::disk('public')->assertExists('readings/atomic-pending.jpg');
+                throw new \RuntimeException('Synthetic failure after retirement');
+            }
+        });
+        try {
+            app(\App\Services\SingleMeterService::class)->replace($old,
+                ['unique_code' => 'ATOMIC-FAIL'], now()->toDateString(), 'Synthetic rollback');
+            $this->fail('Replacement unexpectedly succeeded.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('Synthetic failure after retirement', $e->getMessage());
+        }
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists('readings/atomic-pending.jpg');
+    }
+
+    public function test_direct_financial_retirement_cannot_discard_pending_readings_without_replacement_intent(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'DIRECT-RETIRE']);
+        $this->measuredConsumption($old, 20);
+        app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $old);
+        $pending = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-03-01', 'current_reading' => '40.00',
+        ]);
+        $before = $this->meterCleanupSnapshot();
+        try {
+            \Illuminate\Support\Facades\DB::transaction(fn () =>
+                app(\App\Services\FinancialMeterRetirementService::class)->retire($old, $subscriber));
+            $this->fail('Direct retirement discarded pending usage.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertArrayHasKey('meter_id', $e->errors());
+        }
+        $this->assertDatabaseHas('readings', ['id' => $pending->id]);
+        $this->assertEquals($before, $this->meterCleanupSnapshot());
+    }
+
+    public function test_replacement_preserves_image_referenced_by_another_meter(): void
+    {
+        $subscriber = $this->subscriber();
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'IMAGE-OLD']);
+        $other = Meter::create(['subscriber_id' => $this->subscriber('Shared image')->id, 'unique_code' => 'IMAGE-KEEP']);
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $path = 'readings/shared-fixture.jpg';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($path, 'synthetic');
+        $removed = \App\Models\Reading::create([
+            'meter_id' => $old->id, 'reading_date' => '2026-02-01', 'current_reading' => '20.00', 'image_path' => $path,
+        ]);
+        $retained = \App\Models\Reading::create([
+            'meter_id' => $other->id, 'reading_date' => '2026-02-01', 'current_reading' => '15.00', 'image_path' => $path,
+        ]);
+        $this->postJson('/api/meters/'.$old->id.'/replace', [
+            'removed_at' => now()->toDateString(), 'reason' => 'حماية الصورة المشتركة',
+            'new_meter' => ['unique_code' => 'IMAGE-NEW'],
+        ])->assertCreated();
+        $this->assertDatabaseMissing('readings', ['id' => $removed->id]);
+        $this->assertDatabaseHas('readings', ['id' => $retained->id, 'image_path' => $path]);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($path);
+    }
+
+    private function financialRowsWithoutMeterProvenance(): array
+    {
+        $snapshot = [];
+        foreach (['invoices', 'payments', 'transactions', 'invoice_items', 'invoice_tariff_lines',
+            'payment_allocations', 'payment_allocation_revisions', 'payment_refunds',
+            'payment_account_transfers', 'cash_sessions', 'treasury_postings',
+            'bank_statement_matches', 'late_receipt_reviews'] as $table) {
+            $snapshot[$table] = \Illuminate\Support\Facades\DB::table($table)->orderBy('id')->get()
+                ->map(function ($row) use ($table) {
+                    $row = (array) $row;
+                    if (in_array($table, ['invoices', 'payments', 'transactions'], true)) {
+                        unset($row['meter_id'], $row['retired_meter_id'], $row['retired_meter_code']);
+                    }
+                    return $row;
+                })->all();
+        }
+        return $snapshot;
+    }
+
+    private function meterCleanupSnapshot(): array
+    {
+        $snapshot = [];
+        foreach (['meters', 'subscribers', 'readings', 'invoices', 'invoice_items', 'invoice_tariff_lines',
+            'payments', 'transactions', 'cash_sessions', 'audit_events', 'reading_faults', 'route_visits',
+            'payment_allocations', 'payment_allocation_revisions', 'payment_refunds', 'payment_account_transfers',
+            'treasury_postings', 'bank_statement_matches', 'late_receipt_reviews'] as $table) {
+            $snapshot[$table] = \Illuminate\Support\Facades\DB::table($table)->orderBy('id')->get()->all();
+        }
+        return $snapshot;
     }
 
     public function test_offline_batch_marks_physically_deleted_meter_non_retryable(): void
