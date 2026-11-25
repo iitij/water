@@ -700,6 +700,24 @@
         "scope": "Only synthetic pending reading excluded from legacy-clean; financial scenario unchanged; no changes to current runtime or frozen candidate. Revised fixture must be tested independently. Original failure remains evidence, not converted to pass.",
         "business_policy_followup": "Owner direction concerns obsolete-meter unbilled observations in legacy and future data. Existing MeterDataPurger rejects active unbilled readings. Review call sites and reconcile explicit deletion contract in a separately approved product slice; do not infer permission to delete active retained-meter readings or financially linked records. Test old/new behavior, pending vs billed, rollback and financial conservation. No actual data deletion or guard removal in this task.",
         "status": "FIXTURE_PATCH_UNTESTED_PRODUCT_POLICY_OPEN"
+      },
+      "followup": {
+        "phase": "Round 6 targeted completion; no new broad round",
+        "candidate": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+        "p1": "d90643a34729a1dac40c369649e5430fd4aa417b",
+        "fixture": "123fe5c6935110248c84d0e83e2aa53c886ce066",
+        "cloud": "Use existing published water session sequentially. Retrieve complete candidate report without rerun. Run P1 eight cases per engine on isolated checkout if not already executed. Then validate revised G10 fixture on exact test-only branch in synthetic MySQL; run changed legacy-clean scenario using supported ordinary workflow, retain prior fresh/legacy-financial evidence and verify unchanged behavior as justified. Report unavailable checks rather than retry restricted checks. No product/test edits, merges or environment modifications.",
+        "C": "Review obsolete-meter unbilled deletion contract and all legacy/future call sites read-only, propose exact bounded changes and regression cases preserving retained current-meter readings, financially linked records, transactional consistency and audit. No product writes until supervisor reserves paths and approves plan. Also classify pre-existing ambiguous/overlapping unbilled billing source concern against existing G07 evidence; no claims of reproduced failure.",
+        "D": "Review full candidate/P1 evidence; validate G10 test-only change and separate runtime-policy acceptance requirements. Do not mark original G10 failure pass or general deletion policy implemented. No duplicated runs; no product edits.",
+        "A": "Review P1 findings A-P1-01..04 and P2 domain/lock contract with B; design/review only.",
+        "B": "Keep P1 frozen pending cloud evidence; address proven findings only with approval and exact retest. P2 proposal received PR76; no execution until P1 acceptance and new approved base.",
+        "source_reviews": [
+          "https://github.com/iitij/water/pull/69#issuecomment-7149680631",
+          "https://github.com/iitij/water/pull/72#issuecomment-7149700224",
+          "https://github.com/iitij/water/pull/76#issuecomment-7149680526",
+          "https://github.com/iitij/water/pull/76#issuecomment-7149700825"
+        ],
+        "limitations": "Candidate report screenshot only; complete report and P1 runtime evidence not received. Source review concerns are not new reproduced failures. G10 fixture patch is not runtime policy implementation. main and candidate remain frozen; no actual data deletion."
       }
     }
   }
