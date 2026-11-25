@@ -64,10 +64,31 @@ final class BankReconciliationController extends ApiController
             'reference' => ['required', 'string', 'max:150'],
             'reason' => ['required', 'string', 'min:10', 'max:500'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'operation_uuid' => ['nullable', 'uuid'],
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
         ]);
-        return response()->json($service->recordFee($request->user(), $id, (int) $data['line_id'],
-            $data['reference'], $data['reason'], $data['evidence']));
+        try {
+            if (config('financial_candidate.bank_fees') === true) {
+                abort_unless(app()->environment(['testing', 'staging']), 503);
+                $request->validate(['operation_uuid' => ['required', 'uuid']]);
+                $line = \Illuminate\Support\Facades\DB::table('bank_statement_lines')
+                    ->where('bank_statement_id', $id)->find((int) $data['line_id']);
+                abort_unless($line !== null, 404);
+                $result = app(\App\Services\GatedBankFeeWriter::class)->record(
+                    $request->user(), $id, (int) $data['line_id'], $line->booked_on,
+                    $data['reference'], $data['reason'], $data['evidence'],
+                    strtolower($data['operation_uuid']), now()->toDateTimeImmutable());
+                unset($result['registry_created']);
+                return response()->json($result);
+            }
+            if (isset($data['operation_uuid'])) {
+                throw new \DomainException('gated_bank_fee_entry_disabled');
+            }
+            return response()->json($service->recordFee($request->user(), $id, (int) $data['line_id'],
+                $data['reference'], $data['reason'], $data['evidence']));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 
     public function matchLine(Request $request, int $id, BankReconciliationService $service)
