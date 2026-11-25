@@ -213,6 +213,16 @@ void main() {
       expect(store.imports, 0);
     });
 
+    test('listing marks checksum mismatch and fractional format version incompatible', () async {
+      final created = await service.createBackup();
+      final original = jsonDecode(storage.files[created.name]!) as Map<String, dynamic>;
+      storage.files[created.name] = jsonEncode({...original, 'checksum': 'bad'});
+      expect((await service.listBackups()).single.isCompatible, isFalse);
+      storage.files[created.name] = jsonEncode({...original, 'version': 1.5});
+      expect((await service.listBackups()).single.isCompatible, isFalse);
+      await expectLater(service.restore(created.name), throwsA(isA<BackupException>()));
+    });
+
     test('ملف بلا بصمة يُرفض', () async {
       storage.files['water-backup-20261024-090507.json'] = jsonEncode(<String, dynamic>{
         'format': 'water-field-backup',
