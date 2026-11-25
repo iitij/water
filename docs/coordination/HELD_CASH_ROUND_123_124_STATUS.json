@@ -46,9 +46,50 @@
         "conclusion": null
       }
     ],
-    "status": "STAGED_TARGETED_UNVERIFIED",
+    "status": "JOBS_SUCCESS_SCOPE_EXCLUDED_FROM_FURTHER_WORK",
     "scope": "Test actual historical correction of retired-meter invoice with existing shadow release, trigger-injected rollback of correction and reinstatement, successful retry, exact old/new invoice amounts, original reading linkage, balance conservation, replay and unchanged treasury. Conservative rule: committed intermediate allocation decline restores shadow release, later allocation rise does not automatically release again. Only tests and incremental workflow changed.",
-    "limits": "No actual reserve reduction. No new product changes. Prior baseline evidence retained for unchanged paths; broader shared writer regression still pending. No main merge, production or real data changes."
+    "limits": "No actual reserve reduction. No new product changes. Prior baseline evidence retained for unchanged paths; broader shared writer regression still pending. No main merge, production or real data changes.",
+    "latest_observed_jobs": [
+      {
+        "run": 45684571286,
+        "id": 139453637275,
+        "engine": "mysql",
+        "conclusion": "success"
+      },
+      {
+        "run": 45684571286,
+        "id": 139453638012,
+        "engine": "sqlite",
+        "conclusion": "success"
+      },
+      {
+        "run": 45684571218,
+        "id": 139453637312,
+        "name": "reject-removed-feature",
+        "conclusion": "success"
+      }
+    ],
+    "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Check exact round124 jobs and fix only proven failures. Validate remaining affected writer regressions, journal protection and outflow/actual-loss handling before any real release."
+  "next": "Continue prospective held-cash writer regression, journal integrity and outflow/actual-loss protection, then verified release/replenishment and remaining entrypoint, concurrency and permanent closing gates. Preserve conservative reserve until independently proven safe. Do not repeat round124 or undertake retroactive correction.",
+  "owner_scope_decision": {
+    "date": "2026-11-25",
+    "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
+    "authority": "Repository owner direction in ChatGPT: لا حاجة للتصحيحات التاريخية",
+    "excluded": [
+      "Retroactive correction/recalculation of previously stored invoices, balances, journals and historical accounting data",
+      "New historical data cleanup or backfill work and tests dedicated solely to retroactive remediation"
+    ],
+    "retained": [
+      "Correct prospective accounting logic, exact financial amounts, liabilities and protection of held cash",
+      "Current lawful cancellation/refund/reversal and rollback behavior, immutable evidence and auditability",
+      "Compatibility safeguards where existing data directly affect new transactions; do not interpret these as permission to remediate history",
+      "Previously accepted evidence and frozen branches; no removal of existing product functionality inferred from this scope decision"
+    ],
+    "constraints": [
+      "No real data mutation, production activation or main merge",
+      "No rerun of accepted baseline; use only justified incremental tests",
+      "Do not treat scope exclusion as completed implementation or proof of global financial safety"
+    ]
+  }
 }
