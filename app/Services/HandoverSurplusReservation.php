@@ -70,7 +70,10 @@ final class HandoverSurplusReservation
                 && $event->currency === 'YER' && hash_equals($leg['source_hash'], $event->source_hash));
             $proof = $matches->sole();
             $expectedProof = self::proof($source, $posting, $event->operation_uuid, $variance, (int) $approval->id);
-            $this->need((int) $proof->actor_user_id === (int) $posting->posted_by && $proof->after === $expectedProof);
+            $this->need((int) $proof->actor_user_id === (int) $posting->posted_by && count($proof->after ?? []) === count($expectedProof));
+            foreach ($expectedProof as $field => $value) {
+                $this->need(array_key_exists($field, $proof->after ?? []) && $proof->after[$field] === $value);
+            }
             $seen[(string) $proof->id] = true;
             $total = SignedMinor::add($total, $variance);
         }
