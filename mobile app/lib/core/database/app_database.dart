@@ -599,7 +599,7 @@ class AppDatabase extends GeneratedDatabase {
   /// نُصدّر الصفوف كما هي في الجداول (لا نماذج ناقصة) حتى تعود النسخة مطابقة:
   /// المزامنة تعتمد على `local_id` و`server_id` معاً، وأي تحويل يفقد أحدهما
   /// يُنشئ صفوفاً مكرّرة عند الاستعادة.
-  Future<Map<String, dynamic>> exportFieldData() async => <String, dynamic>{
+  Future<Map<String, dynamic>> exportFieldData() => transaction(() async => <String, dynamic>{
         'squares': await _select('SELECT * FROM cached_squares ORDER BY server_id'),
         'subscribers': await _select('SELECT * FROM cached_subscribers ORDER BY server_id'),
         'meters': await _select('SELECT * FROM cached_meters ORDER BY server_id'),
@@ -607,7 +607,7 @@ class AppDatabase extends GeneratedDatabase {
         'readings': await _select('SELECT * FROM cached_readings ORDER BY local_id'),
         'pending_actions': await _select('SELECT * FROM pending_sync_actions ORDER BY created_at'),
         'settings': await _select('SELECT * FROM cached_settings ORDER BY setting_key'),
-      };
+      });
 
   /// استعادة نسخة محلية.
   ///
@@ -694,6 +694,31 @@ class AppDatabase extends GeneratedDatabase {
           'يوجد عمل ميداني غير مرسل على هذا الجهاز. زامنه أو عالجه قبل استعادة النسخة حتى لا تُفقد البيانات.',
         );
       }
+      // Validate queue identities before touching any cached tables. A backup
+      // is not authorization to overwrite existing acknowledged/discarded work.
+      if (pendingActions && data.containsKey('pending_actions')) {
+        final actions = data['pending_actions'];
+        if (actions is! List) throw const FormatException('Invalid backup queue.');
+        final ids = <String>{};
+        const states = {'pending', 'retrying', 'syncing', 'failed',
+          'needs_attention', 'synced', 'discarded'};
+        for (final action in actions) {
+          if (action is! Map || action['id'] is! String ||
+              (action['id'] as String).trim().isEmpty ||
+              action['action_type'] is! String ||
+              (action['action_type'] as String).isEmpty ||
+              action['payload_json'] is! String ||
+              !states.contains(action['state'])) {
+            throw const FormatException('Invalid backup action.');
+          }
+          final id = action['id'] as String;
+          if (!ids.add(id) || await getSyncAction(id) != null) {
+            throw StateError('Backup action identity already exists; no data was restored.');
+          }
+          final payload = jsonDecode(action['payload_json'] as String);
+          if (payload is! Map) throw const FormatException('Invalid backup action payload.');
+        }
+      }
       for (final entry in tables.entries) {
         final rows = data[entry.key];
         if (rows is! List) continue;
@@ -714,12 +739,11 @@ class AppDatabase extends GeneratedDatabase {
       if (pendingActions) {
         final actions = data['pending_actions'];
         if (actions is List) {
-          await _execute("DELETE FROM pending_sync_actions WHERE state != 'synced'");
           for (final action in actions.whereType<Map>()) {
             final id = action['id']?.toString();
             if (id == null || id.isEmpty) continue;
             await _execute(
-              '''INSERT OR REPLACE INTO pending_sync_actions(
+              '''INSERT INTO pending_sync_actions(
                  id, action_type, payload_json, state, attempt_count, created_at,
                  updated_at, last_error, server_response_json, owner_user_id,
                   owner_server, next_attempt_at, last_status_code

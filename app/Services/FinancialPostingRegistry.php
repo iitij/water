@@ -96,6 +96,91 @@ final class FinancialPostingRegistry
         }, 1);
     }
 
+    /**
+     * Verify persisted evidence under the existing scope-first transaction.
+     * An empty or internally consistent registry is NOT proof of complete
+     * business-source coverage. No authorization or close decision is made here.
+     */
+    public function verifyPeriod(string $scope, int $periodId): array
+    {
+        $this->need(DB::connection()->transactionLevel() > 0, 'posting_registry_requires_outer_gate');
+        $this->need($periodId > 0 && preg_match('/\A[a-z0-9_-]{1,64}\z/', $scope) === 1, 'posting_context');
+        $gate = DB::table('financial_scopes')->where('scope_key', $scope)->lockForUpdate()->first();
+        $this->need($gate && $gate->scope_key === $scope && $gate->mode === 'ACTIVE'
+            && $gate->currency === 'YER' && $gate->timezone === 'Asia/Aden'
+            && (string) $gate->calendar_version === '1', 'posting_scope_changed');
+        $period = DB::table('financial_periods')->where('id', $periodId)->lockForUpdate()->first();
+        $this->need($period && $period->scope_key === $scope
+            && in_array($period->state, ['OPEN', 'FROZEN', 'CLOSED'], true), 'posting_period_changed');
+
+        $epoch = $this->exactCounter($gate->fence_epoch);
+        $version = $this->exactCounter($period->version);
+        $expected = app(\App\Support\FinancialClosePolicy::class)->open($scope, $period->month, $gate->timezone);
+        $this->need($period->start_on === $expected['start'] && $period->next_on === $expected['next'], 'posting_period_changed');
+        $digest = hash_init('sha256');
+        hash_update($digest, $this->encode(['format' => 1, 'scope' => $scope, 'period_id' => $periodId, 'month' => $period->month])."\n");
+        $operations = 0;
+        $events = 0;
+        $previous = null;
+        $query = DB::table('financial_posting_operations')->where('period_id', $periodId)->lockForUpdate();
+        foreach ($query->lazyById(250, 'operation_uuid') as $row) {
+            $uuid = $row->operation_uuid;
+            $this->need(is_string($uuid)
+                && preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1
+                && ($previous === null || strcmp($previous, $uuid) < 0)
+                && $row->scope_key === $scope
+                && (string) $row->period_id === (string) $periodId, 'posting_operation_corrupt');
+            $previous = $uuid;
+            $postedEpoch = $this->exactCounter($row->fence_epoch);
+            $postedVersion = $this->exactCounter($row->period_version);
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $row->effective_on, new DateTimeZone('UTC'));
+            $recorded = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s.u\Z', $row->recorded_at_utc, new DateTimeZone('UTC'));
+            $this->need($postedEpoch <= $epoch && $postedVersion <= $version
+                && $date !== false && $date->format('Y-m-d') === $row->effective_on
+                && $row->effective_on >= $period->start_on && $row->effective_on < $period->next_on
+                && $recorded !== false && $recorded->format('Y-m-d\TH:i:s.u\Z') === $row->recorded_at_utc
+                && $row->effective_on <= $recorded->setTimezone(new DateTimeZone($gate->timezone))->format('Y-m-d'), 'posting_operation_corrupt');
+
+            $rawLegs = [];
+            foreach (DB::table('financial_posting_events')->where('operation_uuid', $uuid)->lockForUpdate()->get() as $leg) {
+                $this->need($leg->scope_key === $scope && $leg->operation_uuid === $uuid, 'posting_effect_corrupt');
+                $minor = (string) $leg->amount_minor;
+                $this->need(preg_match('/\A-?[1-9][0-9]*\z/', $minor) === 1
+                    && (string) (int) $minor === $minor && (int) $minor !== PHP_INT_MIN, 'posting_effect_corrupt');
+                $rawLegs[] = ['source_type' => $leg->source_type, 'source_id' => $leg->source_id,
+                    'leg' => $leg->leg, 'amount_minor' => (int) $minor, 'currency' => $leg->currency,
+                    'source_hash' => $leg->source_hash];
+            }
+            $canonical = $this->legs($rawLegs);
+            $bytes = $this->encode([
+                'format' => 1, 'operation_uuid' => $uuid, 'scope' => $scope,
+                'period_id' => $periodId, 'effective_on' => $row->effective_on,
+                'epoch' => $postedEpoch, 'version' => $postedVersion, 'legs' => $canonical,
+            ]);
+            $this->need($row->canonical_payload === $bytes
+                && hash_equals(hash('sha256', $bytes), $row->payload_hash), 'posting_evidence_corrupt');
+            hash_update($digest, $this->encode([$uuid, $row->payload_hash, $row->recorded_at_utc])."\n");
+            $operations++;
+            $events += count($canonical);
+        }
+        return ['operations' => $operations, 'events' => $events,
+            'registry_hash' => hash_final($digest), 'source_coverage_verified' => false];
+    }
+
+    private function exactCounter(mixed $value): int
+    {
+        $this->need(is_int($value) || is_string($value), 'posting_counter');
+        $text = (string) $value;
+        $this->need(preg_match('/\A(?:0|[1-9][0-9]*)\z/', $text) === 1
+            && (string) (int) $text === $text, 'posting_counter');
+        return (int) $text;
+    }
+
+    private function encode(array $value): string
+    {
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
     private function legs(array $legs): array
     {
         $this->need(array_is_list($legs) && count($legs) > 0 && count($legs) <= 10000, 'posting_legs');

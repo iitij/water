@@ -151,4 +151,55 @@ final class FinancialPostingRegistryTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_operations')->count());
         $this->assertSame('11', (string) DB::table('financial_posting_events')->value('amount_minor'));
     }
+
+    public function test_period_evidence_digest_is_deterministic_and_never_claims_source_coverage(): void
+    {
+        $registry = app(FinancialPostingRegistry::class);
+        $period = (int) DB::table('financial_periods')->value('id');
+        $read = fn () => $this->gate(fn (array $context) => $registry->verifyPeriod('water', $period));
+        $empty = $read();
+        $this->assertSame(0, $empty['operations']);
+        $this->assertSame(0, $empty['events']);
+        $this->assertFalse($empty['source_coverage_verified']);
+        $this->assertMatchesRegularExpression('/\A[0-9a-f]{64}\z/', $empty['registry_hash']);
+        $this->gate(fn (array $context) => $this->record($context, self::OTHER, [$this->leg('20', 'bank', -PHP_INT_MAX)]));
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [
+            $this->leg('10', 'subscriber', 1025), $this->leg('10', 'bank', 1025),
+        ]));
+        $complete = $read();
+        $this->assertSame(2, $complete['operations']);
+        $this->assertSame(3, $complete['events']);
+        $this->assertNotSame($empty['registry_hash'], $complete['registry_hash']);
+        $this->assertSame($complete, $read());
+        $this->assertFalse($complete['source_coverage_verified']);
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [
+            $this->leg('10', 'bank', 1025), $this->leg('10', 'subscriber', 1025),
+        ]));
+        $this->assertSame($complete, $read());
+        // Freeze advances the fence/version; old evidence remains valid.
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN', 'version' => 3]);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['fence_epoch' => 6, 'active_freeze_uuid' => self::OTHER]);
+        $this->assertSame($complete, DB::transaction(fn () => $registry->verifyPeriod('water', $period)));
+    }
+
+    public function test_period_evidence_rejects_tampering_even_when_hash_column_is_unchanged(): void
+    {
+        $registry = app(FinancialPostingRegistry::class);
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
+        $period = (int) DB::table('financial_periods')->value('id');
+        DB::table('financial_posting_events')->update(['amount_minor' => 11]);
+        try {
+            $this->gate(fn (array $context) => $registry->verifyPeriod('water', $period));
+            $this->fail('Corrupt evidence accepted.');
+        } catch (DomainException $e) {
+            $this->assertSame('posting_evidence_corrupt', $e->getMessage());
+        }
+        $this->assertSame('11', (string) DB::table('financial_posting_events')->value('amount_minor'));
+        try {
+            $registry->verifyPeriod('water', $period);
+            $this->fail('Ungated verification accepted.');
+        } catch (DomainException $e) {
+            $this->assertSame('posting_registry_requires_outer_gate', $e->getMessage());
+        }
+    }
 }
