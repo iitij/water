@@ -443,7 +443,7 @@ Future<void> showPaymentAllocations(BuildContext context, PaymentModel payment) 
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(row.billNumber ?? 'رصيد دائن غير مخصص'),
-                    subtitle: row.accountTransferId == null ? null : const Text('تحويل محاسبي'),
+                    subtitle: row.heldCashCreditId != null ? const Text('تسوية فائض محتجز غير نقدية') : (row.accountTransferId == null ? null : const Text('تحويل محاسبي')),
                     trailing: Text((row.amountMinor / 100).toStringAsFixed(2)),
                   ),
                 const Divider(),
