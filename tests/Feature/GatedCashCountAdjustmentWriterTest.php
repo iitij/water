@@ -2855,13 +2855,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
         $writer = app(\App\Services\GatedReceiptVoidWriter::class);
         $reason = 'Independent documented current receipt cancellation';
-        $this->assertTrue($writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt())['pending']);
+        $request = $writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt());
+        $this->assertTrue($request['pending']);
         $before = DB::table('financial_posting_events')->count();
-        $this->assertFalse($writer->decide($reviewer, (int) $receipt->id, false, 'Rejected after review', $this->nowAt())['registry_created']);
+        $reject = fn () => $writer->decide($reviewer, (int) $receipt->id, false, 'Rejected after review', $this->nowAt(), requestId: $request['request_id']);
+        $this->assertFalse($reject()['registry_created']);
+        $auditCount = DB::table('audit_events')->count();
+        $this->assertFalse($reject()['registry_created']);
+        $this->assertSame($auditCount, DB::table('audit_events')->count());
         $this->assertFalse($receipt->fresh()->isVoided());
         $this->assertFalse($receipt->fresh()->hasPendingVoidRequest());
         $this->assertSame($before, DB::table('financial_posting_events')->count());
         $this->assertSame(30, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $new = $writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt());
+        $this->assertNotSame($new['request_id'], $request['request_id']);
+        $this->rejects('gated_void_replay_conflict', $reject);
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
         $legacy = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.50',
             '88888888-8888-4888-8888-888888888888', $this->nowAt())['payment'];
         app(PaymentService::class)->requestVoid($legacy, $reason, $issuer->id);
