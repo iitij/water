@@ -8,11 +8,11 @@
       "scope": "collections, bank reconciliation, treasury and closing",
       "branch_observed": "fix/team-a-noncash-claim-proof",
       "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Publish A-G1A-01 design with state machine, accounting entries, invariants, exact changed paths and acceptance tests in own branch; conditional authorization for isolated new files/tests for bounced checks only, no production call sites, no PaymentService/shared writes before supervisor checks design and D reviews PR62. Other G1A designs and G1B remain gated.",
+      "next": "Round 4A: sole owner of shared payment/treasury write-path changes. Create integration/team-a-round4 from fdb9c53 (descends from 539c4ae); verify base first. Implement ordinary CustomAccountWidget receipt creation through canonical PaymentService, preserve authorization and noncash claim rules, remove form-time final number reservation; demonstrate real action path regression. Deliver checkpoint and inventory affected paths. Then design transactional A01 integration with exact-money field bounds, durable idempotency, ledger reversal, bank evidence, rollback and closed-period constraints; do not activate actual cheque-return posting until supervisor approves design and dependencies. No ACC09/14 global cutover, no main merge.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -26,10 +26,10 @@
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "ACC-09 authorize implementation of pure PHP/Dart exact-money primitives and dedicated shared-vector tests only; no shared call sites or API changes. ACC-14 inventory all number writers, transaction/lock order, unique constraints, historical high-water marks, API/offline/import/correction paths; propose single atomic cutover and no mixed writers. Coordinate scheduler acceptance with D; no Namecheap writes.",
+      "next": "Round 4A: fix QA-D-007 narrowly in fix/accounting-acc-11 at 01fae90: normalize explicit now to UTC; preserve calendar bill_date; same-instant offset boundary tests. Reserve only invoice_accounting.dart and its focused test; no ReadingSettings/shared services edits. Submit actual ACC09/14 integration matrix and ordered atomic cutover plan anchored to A branch, field bounds, every number writer, lock order, migration and rollback; wait for supervisor shared-file handoff. Keep exact money and sequence branches intact.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -54,11 +54,11 @@
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Submit exact final acceptance evidence for bcc63f2. Recheck MySQL restricted TRIGGER privileges and migration recovery after partial DDL, SQLite INSERT OR REPLACE and direct SQL bypass, user deactivation vs concurrent token/session and role changes, protect actor authorization, no schema/production writes. Fix any proved gaps on own branch only. ACC-12/13 read-only audit against a5f2cac/539c4ae; no duplicate period changes.",
+      "next": "Round 4A: preserve ACC10 76eac62; no retry of tool-restricted security checks. Extract ACC12/13 report into versioned branch or PR; produce exact file ownership and acceptance inventory for previous/current reading continuity, fraction precision and negative reading rejection; implement only independently owned reading-specific files/tests if no overlap with A/B. Otherwise report and request supervisor reservation. Record host permissions and specialized checks as open, no production changes.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -71,15 +71,150 @@
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Publish final round-two report on exact SHAs (MySQL concurrency counts, PR62 review, CI, scheduler). Independently review ACC-10 bcc63f2 and ACC-14 7786d84 and ACC-09 4a97b57, prioritize user identity deletion bypass/host privileges and sequence all-writer cutover, distinguish reference vectors from real product behavior. Reproduce failures before any correction. No product edits.",
+      "next": "Round 4A: independent review of B QA-D-007 and A widget checkpoint on exact SHAs; classify QA-D-001/002 against baseline and existing A branch corrections; review MySQL 1553 smoke script vs migration and report root cause, no product edits. Recover evidence before reruns, no repeat restricted checks. No merge or certification of full integration until supervisor candidate. Local exclusive slot allocated only by supervisor; cloud ordinary tests only once relevant environment validated.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
-        "next": "Exclusive local slot released by C; resume recovery under 30cfd85. Retrieve logs first, independently review final ACC10 SHA 76eac62 and latest A/B deliverables, run only unfinished ordinary regression tests and justified changed-code checks sequentially. Record security checks limited by tool as blocked, do not retry them through another tool. No product edits, main merge or production changes."
+        "next": "Exclusive local slot released by C; resume recovery under 30cfd85. Retrieve logs first, independently review final ACC10 SHA 76eac62 and latest A/B deliverables, run only unfinished ordinary regression tests and justified changed-code checks sequentially. Record security checks limited by tool as blocked, do not retry them through another tool. No product edits, main merge or production changes.",
+        "final_report": "Independent final comments retrieved in PR62/63/64/65/66/67; all assigned recovery reports delivered, scope acceptance only; HOLD MERGE.",
+        "evidence": {
+          "pr62": "https://github.com/iitij/water/pull/62#issuecomment-7146635797",
+          "acc09": "https://github.com/iitij/water/pull/64#issuecomment-7148024333",
+          "acc14": "https://github.com/iitij/water/pull/63#issuecomment-7148024841",
+          "acc11": "https://github.com/iitij/water/pull/65#issuecomment-7147309781",
+          "acc10": "https://github.com/iitij/water/pull/66#issuecomment-7148023185",
+          "periods": "https://github.com/iitij/water/pull/66#issuecomment-7147903813",
+          "a01": "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
+        },
+        "pr62": {
+          "sha": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
+          "sqlite": [
+            281,
+            0,
+            17,
+            4391
+          ],
+          "mysql": [
+            297,
+            0,
+            1,
+            4547
+          ],
+          "concurrency": [
+            16,
+            0,
+            0,
+            156
+          ],
+          "ledger": [
+            1,
+            0,
+            0,
+            12
+          ],
+          "flutter": [
+            759,
+            0,
+            25
+          ],
+          "caveat": "Flutter offline dependency resolution changed 8 dependencies in disposable checkout."
+        },
+        "acc10": {
+          "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
+          "sqlite_focused": [
+            25,
+            0,
+            1,
+            99
+          ],
+          "mysql_focused": [
+            25,
+            0,
+            1,
+            144
+          ],
+          "related_sqlite": [
+            16,
+            0,
+            0,
+            256
+          ],
+          "related_mysql": [
+            16,
+            0,
+            0,
+            256
+          ],
+          "sqlite_full": [
+            245,
+            1,
+            7,
+            3658
+          ],
+          "caveat": "No full new-head MySQL or Flutter. Mobile source unchanged from bcc63f2, prior Flutter full 759 pass/1 fail/25 skip retained only at prior SHA. Restricted checks not independently repeated."
+        },
+        "acc09": {
+          "sha": "2f4ac2bf430441f73dd5001346900e6876f5b87d",
+          "php": [
+            6,
+            0,
+            0,
+            10128
+          ],
+          "dart_checks": 10107,
+          "independent_oracle_cases": 3725
+        },
+        "acc14": {
+          "sha": "c2c0305829873b3c654c5341878dd75f43423c14",
+          "code_tested_sha": "7786d843184364d4543bcaf667259aeacf412888",
+          "mysql": [
+            6,
+            0,
+            0,
+            39
+          ],
+          "sqlite": [
+            5,
+            0,
+            1,
+            27
+          ],
+          "concurrent_reservations": 240,
+          "code_blobs_identical": true
+        },
+        "acc11": {
+          "sha": "01fae90660fd88efd69f16f3a384e850b6f9a585",
+          "mysql_concurrency": [
+            6,
+            0,
+            0,
+            53
+          ],
+          "focused": [
+            3,
+            0,
+            0,
+            17
+          ],
+          "local_scheduler_mutex": "PASS",
+          "timezone_parity": "FAIL QA-D-007",
+          "hosting_cron_cache": "UNVERIFIED"
+        },
+        "a01": {
+          "sha": "fdb9c535bf71909c3323543d806e7d5eb343b14f",
+          "unit": [
+            63,
+            0,
+            0,
+            153
+          ],
+          "criteria_unit": 9,
+          "criteria_total": 13
+        }
       }
     }
   },
@@ -127,45 +262,47 @@
     {
       "id": "ACC-09",
       "owner": "B",
-      "status": "IN_PROGRESS",
-      "gate": "Pure primitives and tests authorized; shared integration gated",
-      "evidence": "2f4ac2b product-independent primitives implemented; integration and independent acceptance pending"
+      "status": "REVIEW",
+      "gate": "Shared integration gated on A write-path checkpoint and supervisor file reservations",
+      "evidence": "D exact SHA 2f4ac2b: PHP 6 pass/10128 assertions and Dart 10107 checks; 3725 independent oracle cases; isolated primitives accepted only"
     },
     {
       "id": "ACC-10",
       "owner": "C",
       "status": "REVIEW",
       "next": "read-only audit and file reservation",
-      "evidence": "Verified remote head 76eac62; team C reports recovery complete and saved; independent full acceptance outstanding."
+      "evidence": "D scoped acceptance 76eac62 focused SQLite/MySQL each 25 pass/1 engine-specific skip; related each 16 pass; full SQLite 245 pass/1 fail/7 skip. Full MySQL and broader hosting/CI acceptance open."
     },
     {
       "id": "ACC-11",
       "owner": "B",
-      "status": "REVIEW",
-      "evidence": "01fae90 team B focused SQLite/MySQL and Flutter pass; D independent report agrees focused; full suite has failures; scheduler hosting/CI and concurrency pending"
+      "status": "IN_PROGRESS",
+      "evidence": "D 01fae90 local scheduler/mutex and 6 MySQL concurrency pass; QA-D-007 timezone parity failure confirmed; B narrow correction authorized; hosting cron/cache/CI pending"
     },
     {
       "id": "ACC-12",
       "owner": "C",
-      "status": "BLOCKED",
-      "gate": "coordinate existing observation-period changes with A; verify instead of duplicate"
+      "status": "REVIEW",
+      "gate": "coordinate existing observation-period changes with A; verify instead of duplicate",
+      "evidence": "C period tests 36 pass/194 assertions SQLite a5f2cac and 539c4ae; MySQL 36/194 and Flutter 23 pass at 539c4ae; D retained prior PR62 full evidence; continuity and legacy calendar gaps pending."
     },
     {
       "id": "ACC-13",
       "owner": "C",
-      "status": "OPEN",
-      "gate": "after ACC-10 scope review; coordinate reading changes"
+      "status": "REVIEW",
+      "gate": "after ACC-10 scope review; coordinate reading changes",
+      "evidence": "C read-only review and shared period tests reported; field-specific precision, negative rejection and full client/DB acceptance not separately established."
     },
     {
       "id": "ACC-14",
       "owner": "B",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW",
       "gate": "No mixed number writers; all-path inventory and single atomic cutover after independent review",
-      "evidence": "7786d84 isolated allocator + c2c0305 cutover inventory/design; integration pending"
+      "evidence": "D isolated acceptance 7786d84; c2c0305 only documentation, code blobs unchanged; MySQL 6 pass/39 assertions, 240 concurrent reservations; no all-writer integration."
     }
   ],
   "supervisor_review": {
-    "decision": "HOLD_ROUND_4_C_HANDOFF_ACCEPTED_D_RECOVERY_AUTHORIZED",
+    "decision": "ROUND_3_HANDOFF_ACCEPTED_ROUND_4A_SCOPED_AUTHORIZATION_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -174,13 +311,16 @@
     ],
     "integration_gate": "Hold main; independent D acceptance, baseline QA failures classified/fixed, MySQL concurrency evidence, shared ReadingSettings preserved, ACC10 trigger privileges and migration recovery, ACC14 one writer cutover, ACC09 exact product integration. All on exact integrated SHA with no live DB changes.",
     "source_urls": [
-      "https://github.com/iitij/water/commit/fdb9c535bf71909c3323543d806e7d5eb343b14f",
-      "https://github.com/iitij/water/commit/2f4ac2bf430441f73dd5001346900e6876f5b87d",
-      "https://github.com/iitij/water/commit/c2c0305829873b3c654c5341878dd75f43423c14",
-      "https://github.com/iitij/water/commit/bcc63f2ef4078b8d00eef1a2df602632c7f5c65e"
+      "https://github.com/iitij/water/pull/62#issuecomment-7146635797",
+      "https://github.com/iitij/water/pull/64#issuecomment-7148024333",
+      "https://github.com/iitij/water/pull/63#issuecomment-7148024841",
+      "https://github.com/iitij/water/pull/65#issuecomment-7147309781",
+      "https://github.com/iitij/water/pull/66#issuecomment-7148023185",
+      "https://github.com/iitij/water/pull/66#issuecomment-7147903813",
+      "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
-    "limitations": "GitHub C head verified; C test evidence from owner screenshots and cloud counts from owner report; no independent execution by supervisor. D final report pending. Round four still held.",
-    "round": 3,
+    "limitations": "D reports verified via GitHub comments; no supervisor rerun. Baseline QA failures and incomplete host/security/CI checks remain. Cloud publish and network retest not confirmed. Round four A scope only; no release.",
+    "round": 4,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -237,6 +377,22 @@
         "No integrated candidate or latest team branch acceptance established by baseline results"
       ],
       "next": "Review restricted network settings and save/publish private environment; validate on fresh cloud task, including exact versions, Vite, locked Flutter dependency resolution and representative tests. Preserve all blockers and no production data/secrets. Do not use ordinary Codex to circumvent restricted security checks."
+    },
+    "round4a": {
+      "phase": "Scoped integration prerequisites, not release",
+      "file_ownership": "A exclusive shared payment/treasury write paths; B only Flutter invoice accounting timezone + dedicated tests, pure docs; C reading-specific independent paths after overlap check; D read-only QA. No parallel edits to PaymentService/InvoiceService/TransactionService/ReadingSettings.",
+      "local_test_queue": "No concurrent heavy local tests. D has completed previous slot; all new heavy local runs require sequential supervisor reservation. Prefer published and validated Codex cloud for ordinary supported tests; cloud final readiness not confirmed.",
+      "merge_policy": "No main merge, no production data, no issue closure. A checkpoint before shared integration handoff; later supervisor-controlled candidate with exact SHA.",
+      "gates": [
+        "QA-D-007 fix independent parity test",
+        "CustomAccountWidget canonical receipt path and runtime regression",
+        "ACC09 and ACC14 integrated field bounds and all-writer cutover",
+        "A01 actual transactional acceptance criteria 10-13",
+        "ACC12/13 continuity and precision evidence",
+        "QA-D-001/002 baseline corrections verified in candidate, MySQL 1553 classification",
+        "CI exact candidate and full PHP/Flutter regression with explicit skips",
+        "Actual hosting cron/cache and permitted DB privileges; specialized restricted tests remain open"
+      ]
     }
   }
 }
