@@ -55,7 +55,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
                 attemptCount: item.attempts,
                 createdAt: item.createdAt.toUtc().toIso8601String(),
                 lastError: item.lastError,
-                ownerUserId: item.ownerUserId ?? fallbackOwnerUserId,
+                ownerUserId: item.ownerUserId,
               );
             }
           }
@@ -94,7 +94,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
               state: 'pending',
               attemptCount: 0,
               createdAt: createdAt.toUtc().toIso8601String(),
-              ownerUserId: payload['owner_user_id']?.toString() ?? fallbackOwnerUserId,
+              ownerUserId: null,
             );
           }
         }
@@ -107,63 +107,76 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
 
   @override
   Future<List<SyncQueueItem>> loadAll() async {
-    final rows = await _database.getActiveSyncActions();
+    final rows = await _database.getActiveSyncActions(limit: null);
     return rows.map(_fromRow).toList(growable: true);
   }
 
   @override
   Future<void> saveAll(List<SyncQueueItem> items) async {
-    final existingRows = await _database.getActiveSyncActions();
-    final incomingIds = items.map((item) => item.id).toSet();
-
-    for (final row in existingRows) {
-      final existingId = row['id']?.toString() ?? '';
-      if (existingId.isNotEmpty && !incomingIds.contains(existingId)) {
-        await _database.updateSyncAction(
-          id: existingId,
-          state: 'synced',
-          lastError: null,
-        );
+    // A partial snapshot is not an acknowledgement. Only explicit verified
+    // mark*Synced calls may mark a durable row as synchronized.
+    await _database.transaction(() async {
+      for (final item in items) {
+        await upsert(item);
       }
-    }
-
-    for (final item in items) {
-      await upsert(item);
-    }
+    });
   }
 
   @override
   Future<void> upsert(SyncQueueItem item) async {
-    final payload = _normalizePayload(item.type, item.payload, item.id);
-    final existing = await _database.getSyncAction(item.id);
-    if (existing == null) {
-      await _database.enqueueAction(
+    await _database.transaction(() async {
+      final payload = _normalizePayload(item.type, item.payload, item.id);
+      final existing = await _database.getSyncAction(item.id);
+      if (existing == null) {
+        await _database.enqueueAction(
+          id: item.id,
+          type: _wireActionType(item.type, payload),
+          payloadJson: jsonEncode(payload),
+          state: _wireState(item.status),
+          attemptCount: item.attempts,
+          createdAt: item.createdAt.toUtc().toIso8601String(),
+          lastError: item.lastError,
+          ownerUserId: item.ownerUserId,
+          ownerServer: item.ownerServer,
+          nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
+        );
+        return;
+      }
+      if (existing['owner_user_id'] != item.ownerUserId ||
+          existing['owner_server'] != item.ownerServer ||
+          existing['action_type'] != _wireActionType(item.type, payload) ||
+          existing['state'] == 'synced' || existing['state'] == 'discarded') {
+        throw StateError('Offline action identity or state conflict.');
+      }
+      final stored = jsonDecode(existing['payload_json'] as String);
+      if (jsonEncode(stored) != jsonEncode(payload)) {
+        throw StateError('Offline action payload conflict.');
+      }
+      await _database.updateSyncAction(
         id: item.id,
-        type: _wireActionType(item.type, payload),
-        payloadJson: jsonEncode(payload),
         state: _wireState(item.status),
         attemptCount: item.attempts,
-        createdAt: item.createdAt.toUtc().toIso8601String(),
         lastError: item.lastError,
-        ownerUserId: item.ownerUserId,
         nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
+        clearNextAttempt: item.nextAttemptAt == null,
+        lastStatusCode: item.lastStatusCode,
+        clearLastStatusCode: item.lastStatusCode == null,
       );
-      return;
-    }
+    });
+  }
 
-    await _database.updateSyncActionPayload(
-      id: item.id,
-      payloadJson: jsonEncode(payload),
-    );
-    await _database.updateSyncAction(
-      id: item.id,
-      state: _wireState(item.status),
-      attemptCount: item.attempts,
-      lastError: item.lastError,
-      ownerUserId: item.ownerUserId,
-      nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
-      clearNextAttempt: item.nextAttemptAt == null,
-    );
+  Future<void> discardOwned(SyncQueueItem item) async {
+    await _database.transaction(() async {
+      final row = await _database.getSyncAction(item.id);
+      if (row == null || item.ownerUserId == null || item.ownerServer == null ||
+          row['owner_user_id'] != item.ownerUserId ||
+          row['owner_server'] != item.ownerServer ||
+          row['state'] == 'syncing' || row['state'] == 'synced') {
+        throw StateError('Cannot discard this offline action.');
+      }
+      // Retain evidence; discarding is not a server acknowledgement.
+      await _database.updateSyncAction(id: item.id, state: 'discarded');
+    });
   }
 
   @override
@@ -204,18 +217,29 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
     required String error,
     DateTime? retryAt,
   }) async {
-    await _database.updateSyncAction(
-      id: item.id,
-      state: retryAt == null ? 'failed' : 'retrying',
-      attemptCount: item.attempts,
-      lastError: error,
-      ownerUserId: item.ownerUserId,
-      nextAttemptAt: retryAt?.toUtc().toIso8601String(),
-      clearNextAttempt: retryAt == null,
-    );
-    if (item.type == SyncQueueType.reading) {
-      await _database.setReadingSyncError(item.id, error);
-    }
+    await _database.transaction(() async {
+      final existing = await _database.getSyncAction(item.id);
+      if (existing == null || existing['state'] == 'synced' ||
+          existing['state'] == 'discarded' ||
+          existing['owner_user_id'] != item.ownerUserId ||
+          existing['owner_server'] != item.ownerServer) {
+        throw StateError('Cannot change failure state of this action.');
+      }
+      await _database.updateSyncAction(
+        id: item.id,
+        state: retryAt != null && item.status == SyncQueueStatus.queued
+            ? 'retrying' : _wireState(item.status),
+        attemptCount: item.attempts,
+        lastError: error,
+        nextAttemptAt: retryAt?.toUtc().toIso8601String(),
+        clearNextAttempt: retryAt == null,
+        lastStatusCode: item.lastStatusCode,
+        clearLastStatusCode: item.lastStatusCode == null,
+      );
+      if (item.type == SyncQueueType.reading) {
+        await _database.setReadingSyncError(item.id, error);
+      }
+    });
   }
 
   SyncQueueItem _fromRow(Map<String, Object?> row) {
@@ -236,8 +260,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
     final status = _parseStatus(row['state']?.toString());
     final createdAt = DateTime.tryParse(row['created_at']?.toString() ?? '') ??
         DateTime.now();
-    final ownerUserId = row['owner_user_id']?.toString() ??
-        payload['owner_user_id']?.toString();
+    final ownerUserId = row['owner_user_id']?.toString();
     final attempts = int.tryParse(row['attempt_count']?.toString() ?? '') ?? 0;
     final lastError = row['last_error']?.toString();
 
@@ -248,6 +271,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
       status: status,
       createdAt: createdAt,
       ownerUserId: (ownerUserId != null && ownerUserId.isEmpty) ? null : ownerUserId,
+      ownerServer: row['owner_server']?.toString(),
       attempts: attempts,
       lastError: (lastError != null && lastError.isEmpty) ? null : lastError,
       nextAttemptAt: DateTime.tryParse(row['next_attempt_at']?.toString() ?? ''),
