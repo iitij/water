@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 101,
+    "round": 102,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4514,6 +4514,57 @@
       "scope": "Import W18 from frozen d65a2196 into existing held-liability candidate; verify actual registered treasury opening and negative collector funding, reconstruct expected physical cash from opening plus registered original cash receipts, compare exact cash/noncash approval totals. Mixed verified bank collection or separately received same-date cash requires actual matched treasury source, registered account opening, exact paired operation under source UUID, no increase to original counted surplus. Unsupported legacy/corrected sources fail closed. Independent read-only session and scoped approved-allocation coverage checks rederive sequence, source proof and capacity, detect missing/orphan allocation audit; no new treasury posting from already-counted cash. Seven frozen W18 feature methods plus three added focused methods (funded, unregistered funding, actual mixed late bank clearance), existing 24 held-liability cases retained. Combined existing isolated workflow targets 34 cases per engine.",
       "limits": "New exact runtime pending unless recorded as success. Mixed late bank fixture is actual same-day approved clearance manually registered in synthetic gate, not activation of W16; direct historical noncash receipts and separate handover branches not independently exercised. Corrected/voided receipts and unregistered legacy funding/allocations deliberately refused. W17 dual-date group registry not integrated; distinct-date mixed proof remains unsupported. Independent coverage scoped to approved counted allocations only, not all cash custody and no global verifier integration. Cross-period history, full allocation/report/API/mobile regressions, database immutability, pre-disbursement authorization, liquidity reservation for unapplied subscriber credit, UUID integration, concurrency and closure remain open. No main, production, real DB or live financial changes.",
       "next": "Read combined CI exact results, correct proven defects; complete pre-disbursement independent authorization and subscriber-credit liquidity reserve, then changed-path regressions and independent review before task-one acceptance."
+    },
+    "round102": {
+      "phase": "W18 test helper compatibility correction",
+      "status": "SOURCE_CORRECTED_CI_PENDING",
+      "base": "fa4df63cfda15243b728649807cbde2a1f94e851",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "f6b81c43f889197c08903ec5988170b80428cf57",
+      "runs": [
+        {
+          "id": 45641295271,
+          "head_sha": "fa4df63cfda15243b728649807cbde2a1f94e851",
+          "conclusion": "sqlite_failure_before_test_execution",
+          "jobs": [
+            {
+              "id": 139300332963,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "failure"
+            },
+            {
+              "id": 139300333594,
+              "engine": "mysql",
+              "status": "completed",
+              "conclusion": "failure"
+            }
+          ],
+          "diagnosis": "SQLite PHP fatal before suite: private post() helper collided with inherited public Laravel TestCase::post(); exit 255. No accounting assertions executed in SQLite."
+        },
+        {
+          "id": 45641463825,
+          "head_sha": "f6b81c43f889197c08903ec5988170b80428cf57",
+          "conclusion": "pending",
+          "jobs": [
+            {
+              "id": 139300935630,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            },
+            {
+              "id": 139300936139,
+              "engine": "sqlite",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "scope": "Rename imported test helper post() to postCounted() and all calls, no product code, financial logic or assertion changed. Re-run same combined 34 test cases per engine.",
+      "limits": "Corrected suite still pending; no claim of W18 acceptance. All round101 limits remain. No production, main, or real financial data changes.",
+      "next": "Read exact corrected CI results and address proven failures; continue pre-disbursement authorization and subscriber credit liquidity reserve."
     }
   }
 }
