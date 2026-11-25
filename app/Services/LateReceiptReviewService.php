@@ -75,12 +75,20 @@ final class LateReceiptReviewService
             // Submitted meter is provenance only; never move money to a different subscriber.
             $id = DB::table('late_receipt_reviews')->insertGetId($claim + ['status' => 'pending',
                 'created_at' => now(), 'updated_at' => now()]);
-            app(AuditLogger::class)->recordRequired('late_receipt.submitted', [
+            $this->requiredAudit('late_receipt.submitted', [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'after' => $claim,
                 'actor_user_id' => $collector->id,
             ]);
             return (array) DB::table('late_receipt_reviews')->find($id);
         }, 3);
+    }
+
+    private function requiredAudit(string $event, array $context): void
+    {
+        $record = app(AuditLogger::class)->recordRequired($event, $context);
+        if (! $record->exists || $record->getKey() === null) {
+            throw new \RuntimeException('Late receipt operation requires a persisted audit event.');
+        }
     }
 
     private function receiptMinor(mixed $raw): int
@@ -190,7 +198,7 @@ final class LateReceiptReviewService
                 'decided_at' => now(), 'settlement_method' => $method,
                 'evidence_reference' => $reference, 'evidence' => $evidence, 'updated_at' => now()];
             DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
-            app(AuditLogger::class)->recordRequired('late_receipt.'.$status, [
+            $this->requiredAudit('late_receipt.'.$status, [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'before' => (array) $review,
                 'after' => $decision + ['new_cash_movement' => false,
                     'counted_cash_allocation' => $approve && $method === 'already_counted'], 'actor_user_id' => $actor->id,
@@ -258,7 +266,7 @@ final class LateReceiptReviewService
             ]);
             $posting = DB::table('treasury_postings')->find($postingId);
             if (! $this->checkCashPosting($posting)) throw new \LogicException('Late cash receipt posting inconsistent.');
-            app(AuditLogger::class)->recordRequired('treasury.late_cash_received', [
+            $this->requiredAudit('treasury.late_cash_received', [
                 'entity_type' => 'treasury_late_cash_receipt', 'entity_id' => $receiptId, 'actor_user_id' => $actor->id,
                 'after' => $record + ['payment_id' => $approved['payment_id'], 'posting_id' => $postingId, 'original_till_changed' => false],
             ]);
