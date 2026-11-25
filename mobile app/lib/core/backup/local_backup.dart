@@ -422,14 +422,7 @@ class LocalBackupService {
   }
 
   static DateTime? _dateFromFileName(String name) {
-    final match = RegExp(r'^water-backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d{4})?\.json)
-        .firstMatch(name);
-    if (match == null) return null;
-    int part(int index) => int.tryParse(match.group(index) ?? '') ?? 0;
-    return DateTime.utc(part(1), part(2), part(3), part(4), part(5), part(6));
-  }
-}
-)
+    final match = RegExp(r'^water-backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d{4})?\.json$')
         .firstMatch(name);
     if (match == null) return null;
     int part(int index) => int.tryParse(match.group(index) ?? '') ?? 0;
