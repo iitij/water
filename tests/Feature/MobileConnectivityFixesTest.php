@@ -98,36 +98,49 @@ class MobileConnectivityFixesTest extends TestCase
     {
         [$meter] = $this->meterFixture();
         $uuid = (string) Str::uuid();
+        $date = now()->toDateString();
+        $recordedAt = now()->toIso8601String();
 
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'meter_locked',
                 'notes' => 'باب مغلق والمشترك خارج المدينة',
-                'recorded_at' => now()->toIso8601String(),
+                'recorded_at' => $recordedAt,
                 'sync_uuid' => $uuid,
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', false)
             ->assertJsonPath('fault.fault_type', 'meter_locked');
 
-        // نفس sync_uuid مرة أخرى → يُعاد نفس السجل دون تكرار.
+        // إعادة الطلب المطابق فقط: المعرّف لا يجيز تغيير الدليل الأصلي.
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'meter_locked',
+                'notes' => 'باب مغلق والمشترك خارج المدينة',
+                'recorded_at' => $recordedAt,
                 'sync_uuid' => $uuid,
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', true);
+
+        // حذف الملاحظات الأصلية ليس إعادة مطابقة للطلب.
+        $this->postJson('/api/readings/faults', [
+            'meter_id' => $meter->id,
+            'reading_date' => $date,
+            'fault_type' => 'meter_locked',
+            'sync_uuid' => $uuid,
+        ])->assertConflict()->assertJsonMissingPath('fault');
 
         $this->assertSame(1, ReadingFault::count());
         $fault = ReadingFault::first();
         $this->assertSame($meter->subscriber->square_id, $fault->square_id);
         $this->assertSame($meter->subscriber->id, $fault->subscriber_id);
         $this->assertSame($this->admin->id, $fault->user_id);
+        $this->assertSame('باب مغلق والمشترك خارج المدينة', $fault->notes);
     }
 
     public function test_reading_faults_sync_batch_and_index(): void
