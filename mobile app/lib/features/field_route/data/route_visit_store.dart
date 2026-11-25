@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/field_operations/field_session_scope.dart';
+
 /// حفظ «أي عدادات أُنجزت» في جولة اليوم لكل مربع.
 ///
 /// التخزين محلي بحت لأن الجولة قد تستمر بلا شبكة؛ والمفتاح يحمل التاريخ حتى
@@ -28,7 +30,10 @@ abstract interface class RouteVisitStore {
 }
 
 class SharedPreferencesRouteVisitStore implements RouteVisitStore {
-  SharedPreferencesRouteVisitStore({SharedPreferences? prefs}) : _prefs = prefs;
+  SharedPreferencesRouteVisitStore({SharedPreferences? prefs, this.scope}) : _prefs = prefs;
+
+  final FieldSessionScope? scope;
+  String _ownedKey(int squareId, DateTime day) => '${scope?.prefix ?? ''}${keyFor(squareId, day)}';
 
   SharedPreferences? _prefs;
 
@@ -45,7 +50,10 @@ class SharedPreferencesRouteVisitStore implements RouteVisitStore {
 
   @override
   Future<Set<int>> visited({required int squareId, required DateTime day}) async {
-    final raw = (await _store).getStringList(keyFor(squareId, day)) ?? const <String>[];
+    scope?.ensureCurrent();
+    final store = await _store;
+    scope?.ensureCurrent();
+    final raw = store.getStringList(_ownedKey(squareId, day)) ?? const <String>[];
     return raw.map(int.tryParse).whereType<int>().toSet();
   }
 
@@ -55,18 +63,26 @@ class SharedPreferencesRouteVisitStore implements RouteVisitStore {
     required DateTime day,
     required Set<int> meterIds,
   }) async {
-    await (await _store).setStringList(
-      keyFor(squareId, day),
+    scope?.ensureCurrent();
+    final store = await _store;
+    scope?.ensureCurrent();
+    final saved = await store.setStringList(
+      _ownedKey(squareId, day),
       meterIds.map((id) => id.toString()).toList(growable: false),
     );
+    if (!saved) throw StateError('Unable to persist route visits.');
   }
 
   @override
   Future<List<RouteVisitKey>> keys() async {
+    scope?.ensureCurrent();
     final store = await _store;
+    scope?.ensureCurrent();
+    final prefix = scope?.prefix ?? '';
     final result = <RouteVisitKey>[];
     for (final key in store.getKeys()) {
-      final parsed = _parseKey(key);
+      if (!key.startsWith(prefix)) continue;
+      final parsed = _parseKey(key.substring(prefix.length));
       if (parsed != null) result.add(parsed);
     }
     return result;
