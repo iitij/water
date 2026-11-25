@@ -2191,7 +2191,7 @@
     },
     "round19": {
       "phase": "Corrected V3 integrated G02",
-      "status": "SQLITE_FULL_PASS_MYSQL_PENDING_SKIP_CLASSIFICATION_REQUIRED",
+      "status": "BOTH_ORDINARY_FULL_PASS_SKIP_GATES_OPEN",
       "branch": "integration/accounting-candidate-v3-corrected",
       "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
       "workflow": "44c1d38fe48b9c13d102cb85cd9687457b1b5be6",
@@ -2213,9 +2213,16 @@
         },
         "mysql": {
           "job": 139012848855,
-          "status": "in_progress"
+          "tests": 480,
+          "assertions": 16235,
+          "passed": 474,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 6,
+          "exit": 0
         }
-      }
+      },
+      "skips": "Engine-specific cases covered where applicable, except held ACC10 opt-in race, privileged guard presence, historical inventory and legacy migration gates. No elevation or restricted retry. Ordinary inventory and migration skips addressed separately in round22."
     },
     "round20": {
       "phase": "ACC09 P3 exact financial reporting",
@@ -2248,6 +2255,61 @@
         }
       },
       "limits": "Source and actual hosted focused logs inspected; no broad integration or P3 completion. Cross-query snapshot coherence, scale performance, Filament/export/mobile, G11/G12, ACC14, L01 and closing remain open."
+    },
+    "round21": {
+      "phase": "P3 exact XLSX exports and dashboard",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "b1c146c9201aa641f70e7c90e0af04e0cae7d01b",
+      "source": "117f159990b24491953427caa7a44dd45768b63c",
+      "workflow": "6bc9534f8769f047fdf4b7715bbbc137670516e0",
+      "pr": 97,
+      "run": 45558027996,
+      "results": {
+        "sqlite": {
+          "job": 139014718537,
+          "tests": 9,
+          "assertions": 148,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139014718781,
+          "tests": 9,
+          "assertions": 148,
+          "exit": 0
+        }
+      },
+      "limits": "Zero failures/errors/skips. Exact numeric cells, conservative 15-digit XLSX bound and partial-file cleanup; widget regression. No final all-gate acceptance."
+    },
+    "round22": {
+      "phase": "Ordinary skipped V3 acceptance",
+      "status": "QUEUED",
+      "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
+      "pr": 98,
+      "workflow": "319f9439e809e715a3ea50168ce1fdca1ec795e7",
+      "run": 45558383753,
+      "scope": "Historical inventory with exact reviewed refs, and two historical migration cases separately per engine on isolated empty databases.",
+      "limits": "Initial workflow interpolation corrupted regex; corrected workflow only. No result yet, no previously restricted or privileged cases."
+    },
+    "round23": {
+      "phase": "G11 Flutter and writer inventory",
+      "status": "INVENTORY_PASS_ANALYZER_FAIL",
+      "source": "117f159990b24491953427caa7a44dd45768b63c",
+      "workflow": "140fd7c84ac0458047c63a65c4ed77a5812a4f3b",
+      "pr": 99,
+      "run": 45558319008,
+      "inventory_job": 139015661342,
+      "flutter_job": 139015701634,
+      "findings": "Three real number issuance callsites: InvoiceService, HistoricalInvoiceCorrectionService, PaymentService. Two Filament default previews, two model generators; one test generator call. L01 current pending-review guard has no matching index and earlier EXPLAIN primary scan; observed wait at row select or insert but causal lock classification remains inconclusive. Flutter analyzer: 16 errors in two vector scripts, 67 issues total; full Flutter suite not reached."
+    },
+    "round24": {
+      "phase": "G11 strict Dart typing correction",
+      "status": "DRAFT_RUNTIME_PENDING",
+      "base": "117f159990b24491953427caa7a44dd45768b63c",
+      "source": "a879ad2b2c827061192e181a2367a3e8cd36cc23",
+      "workflow": "5ed5297da4d3c13a3cb86cfde003cebc83d56b45",
+      "pr": 100,
+      "scope": "Explicit JSON vector list types; keep expectations and strict analyzer. Locked Flutter, vector scripts and full unit/widget checks.",
+      "limits": "No acceptance until actual logs."
     }
   }
 }
