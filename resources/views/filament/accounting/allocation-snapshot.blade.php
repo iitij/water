@@ -11,7 +11,7 @@
                 <tbody>
                 @forelse ($snapshot['rows'] as $row)
                     <tr class="border-t">
-                        <td class="p-2">{{ $row['account_transfer_id'] ? 'تحويل محاسبي' : 'سند قبض' }} {{ $row['receipt_number'] }}</td>
+                        <td class="p-2">@if ($row['held_cash_credit_id'] ?? null) تسوية فائض محتجز #{{ $row['held_cash_credit_id'] }} @else {{ $row['account_transfer_id'] ? 'تحويل محاسبي' : 'سند قبض' }} {{ $row['receipt_number'] }} @endif</td>
                         <td class="p-2">{{ $row['bill_number'] ?? 'رصيد دائن غير مخصص' }}</td>
                         <td class="p-2">{{ number_format($row['amount_minor'] / 100, 2) }}</td>
                     </tr>
