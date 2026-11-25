@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Round142: read-only settlement diagnostic for continuous bank statement coverage, unmatched items even when net zero, and current-period approved counted-cash proof. No history mutation or closure authorization.",
+  "next": "Verify exact round142 CI. Extend evidence for remaining cash custody and per-subscriber allocation conservation; design trusted cutover/closure proof and review all entrypoints.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -628,5 +628,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round142": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "74d0f8b7b9f34bdcf0d9ca5e320f406ba582cc46",
+    "branch": "qa/settlement-coverage-round142",
+    "source": "d286b07a1b1725e60fbc18b62fd58be70c1236b5",
+    "run": 45701173426,
+    "scope": "Read-only settlement diagnostic for continuous bank statement coverage through explicit date in selected period, import audit hash and reconciliation integrity, gaps/overlaps/boundaries, unresolved entries even at zero net; independently verify sessions with approved already-counted cash and detect orphan allocation audits. Three new synthetic cases on both engines.",
+    "limits": "Runtime pending. Not a complete proof of period cash custody, allocation, balances or closure. Cross-boundary statements deliberately report unresolved boundary proof. No production activation, real data, historical remediation, main merge or actual reserve release.",
+    "next": "Verify exact round142 CI. Extend evidence for remaining cash custody and per-subscriber allocation conservation; design trusted cutover/closure proof and review all entrypoints."
   }
 }
