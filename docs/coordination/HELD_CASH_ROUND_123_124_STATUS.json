@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify corrected MySQL result; complete direct request/offline replay contract and actual receipt writer entrypoints.",
+  "next": "Complete direct mobile void request and offline retry policy, then actual receipt writer entrypoints.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,13 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-void-mobile-decision-sdk",
-      "commit": "cae2f05417694c2bf96115b90923ed3d7aa1bcf8",
-      "run": 45708028058,
-      "sqlite": "2 tests, 38 assertions at product-identical 54b74b64",
-      "mysql": "2 tests, 38 assertions at product-identical 54b74b64",
-      "flutter": "4 tests pass, locked SDK 3.44.0, 2 informational lint notices",
-      "scope": "Mobile bound decision contract preserves request_id from selected row, deterministic UUID v5 per approval, captured session, verifies response identity and void state; explicit null request cannot fall back. API rejects bound request if candidate disabled, echoes request/operation ID. Three new Dart cases, affected list regression and two HTTP tests per engine."
+      "branch": "release/prospective-void-service-fence-corrected",
+      "commit": "4ca488c21714dfe767715672b5178cdf0f0fabf8",
+      "run": 45708651666,
+      "sqlite": "9 accepted cases across original and corrected fixture",
+      "mysql": "9 accepted cases across original and corrected fixture",
+      "scope": "All three PaymentService void entry methods reject registered receipt or gated request outside private mutation scope of final GatedReceiptVoidWriter, independent of flag, audit marker or source-label spoof. Check after issuance and receipt lock; nested legitimate immediate/approved reversal receives scoped writer. Two new targeted tests and directly affected backend/Filament void regressions on both engines."
     }
   },
   "round146": {
@@ -915,13 +914,13 @@
     }
   },
   "release_void_service_fence": {
-    "status": "EIGHT_UNAFFECTED_CASES_PASS_BOTH_ENGINES_CORRECTED_FIXTURE_SQLITE_PASS_MYSQL_PENDING",
+    "status": "TARGETED_BOTH_ENGINES_PASS_WITH_UNAFFECTED_PRIOR_CASES",
     "base": "cae2f05417694c2bf96115b90923ed3d7aa1bcf8",
     "branch": "release/prospective-void-service-fence-corrected",
     "source": "4ca488c21714dfe767715672b5178cdf0f0fabf8",
     "run": 45708651666,
     "scope": "All three PaymentService void entry methods reject registered receipt or gated request outside private mutation scope of final GatedReceiptVoidWriter, independent of flag, audit marker or source-label spoof. Check after issuance and receipt lock; nested legitimate immediate/approved reversal receives scoped writer. Two new targeted tests and directly affected backend/Filament void regressions on both engines.",
-    "limits": "Eight cases on each engine passed at product-identical first commit. Corrected fixture MySQL pending. Only service void paths protected; other financial writers and raw mutations remain separate. Legacy unregistered receipts retain current behavior, no historical adoption. No production activation or main merge.",
+    "limits": "Nine distinct cases on each engine accepted; eight unchanged cases per engine from first run, corrected fixture one per engine. Other writers and raw mutations remain separate. No production activation or historical adoption.",
     "next": "Verify targeted CI and correct confirmed failures. Then complete mobile direct void request and offline queue policy; actual receipt writer entrypoints and release integration.",
     "first_attempt": {
       "source": "55a5b80e0a29c1bc3812f53413f5d005efbbda03",
@@ -951,6 +950,13 @@
       {
         "id": 139537045227,
         "engine": "sqlite",
+        "tests": 1,
+        "assertions": 17,
+        "exit": 0
+      },
+      {
+        "id": 139537045812,
+        "engine": "mysql",
         "tests": 1,
         "assertions": 17,
         "exit": 0
