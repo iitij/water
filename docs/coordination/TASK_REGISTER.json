@@ -4226,21 +4226,24 @@
     },
     "round97": {
       "phase": "Focused GitHub Actions held cash acceptance requested by owner",
-      "status": "CI_RUN_STARTED_PENDING_RESULT",
+      "status": "CI_TEST_HELPER_COLLISION_FIXED_RETEST_STARTED",
       "base": "44908f9339fdf4e1b32725436ecd5b60cdd0c79f",
       "branch": "fix/central-g1a-surplus-liability",
-      "source": "32215e1bf7fa8821dc1c98fb71dd20b76b24760b",
+      "source": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
       "runs": [
         {
           "id": 45634489268,
           "url": "https://github.com/iitij/water/actions/runs/45634489268",
           "head_sha": "32215e1bf7fa8821dc1c98fb71dd20b76b24760b",
-          "status": "in_progress",
+          "status": "sqlite_failed_mysql_pending_at_observation",
           "jobs": [
             {
               "id": 139276168964,
               "engine": "sqlite",
-              "status": "in_progress"
+              "status": "completed",
+              "conclusion": "failure",
+              "exit": 255,
+              "reason": "Private helper post() conflicts with inherited Laravel public TestCase::post(); test methods never ran. Composer installation and locked dependency check passed."
             },
             {
               "id": 139276169482,
@@ -4248,11 +4251,17 @@
               "status": "in_progress"
             }
           ]
+        },
+        {
+          "id": 45634630889,
+          "url": "https://github.com/iitij/water/actions/runs/45634630889",
+          "head_sha": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
+          "status": "in_progress"
         }
       ],
-      "scope": "Added branch-scoped workflow only, read-only permissions, exact checkout and Composer lock validation, disposable SQLite in memory and MySQL 8.0 water_test service database. Each job runs GatedCashCountAdjustmentWriterTest.php (16 test methods) with fail-on-skipped and fail-on-empty-test-suite. Confirmed real push-triggered run and both jobs started on GitHub-hosted runners; local machine used only for read-only status retrieval. No product source changes.",
-      "limits": "At observation both jobs in progress; SQLite installing dependencies, MySQL initializing service container. No test pass/fail evidence yet. No production database, main merge or deploy. Surplus discharge, W18 proof and other open items remain.",
-      "next": "Read final job conclusions and logs, record actual tests/assertions/exit status, address any proven failure on isolated branch before further accounting acceptance."
+      "scope": "Added branch-scoped workflow only, read-only permissions, exact checkout and Composer lock validation, disposable SQLite in memory and MySQL 8.0 water_test service database. Each job runs GatedCashCountAdjustmentWriterTest.php (16 test methods) with fail-on-skipped and fail-on-empty-test-suite. Confirmed real push-triggered run and both jobs started on GitHub-hosted runners; local machine used only for read-only status retrieval. No product source changes. Renamed private helper post() to postAdjustment() and all internal calls only; no assertions or accounting logic changed. Confirmed fresh push-triggered run.",
+      "limits": "Initial SQLite failed before test execution, not evidence of accounting failure or success. Initial MySQL still pending at observation; new exact commit run in progress. No acceptance until both conclude and logs reviewed.",
+      "next": "Read final conclusions and exact test logs for replacement run, fix any proven defects, then resume discharge and W18 proof."
     }
   }
 }
