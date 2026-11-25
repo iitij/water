@@ -324,7 +324,12 @@ class SyncQueueManager extends ChangeNotifier {
     if (_isSyncing || !_session.isReady || !_session.isAuthenticated) return;
     // Lock before the first await so manual, automatic, and enqueue-triggered syncs
     // cannot submit the same UUID concurrently.
-    final scope = _scope();
+    FieldSessionScope? scope;
+    try {
+      scope = _scope();
+    } on StateError {
+      return;
+    }
     final startingUser = _session.user?['id']?.toString();
     if (startingUser == null || startingUser.isEmpty) return;
     _isSyncing = true;
@@ -464,6 +469,7 @@ class SyncQueueManager extends ChangeNotifier {
     }
 
     final itemId = _ensureUuid(preferredId);
+    payload = {...payload, 'sync_uuid': itemId};
     final existing = (await _repository.loadAll()).where((row) => row.id == itemId).firstOrNull;
     scope?.ensureCurrent();
     if (existing != null) {
