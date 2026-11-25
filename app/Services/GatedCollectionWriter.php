@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCollectionWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private PaymentService $payments,
@@ -34,14 +36,14 @@ final class GatedCollectionWriter
         string $effectiveOn, string $reference, string $evidence, string $uuid, DateTimeImmutable $now): array
     {
         return $this->write($actor, 'claim', $id, $statementId, $lineId, $effectiveOn, $uuid, $now,
-            fn (User $locked) => $this->payments->clearNonCashClaim($locked, $id, $statementId, $lineId, $reference, $evidence));
+            fn (User $locked) => $this->payments->clearNonCashClaim($locked, $id, $statementId, $lineId, $reference, $evidence, $this));
     }
 
     public function clearLateBank(User $actor, int $id, int $statementId, int $lineId,
         string $effectiveOn, string $reviewReference, string $bankReference, string $evidence, string $uuid, DateTimeImmutable $now): array
     {
         return $this->write($actor, 'late_bank', $id, $statementId, $lineId, $effectiveOn, $uuid, $now,
-            fn (User $locked) => $this->payments->clearLateNonCash($locked, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence));
+            fn (User $locked) => $this->payments->clearLateNonCash($locked, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $this));
     }
 
     public function receiveLateCash(User $actor, int $id, int $accountId, string $receivedOn,
@@ -108,7 +110,7 @@ final class GatedCollectionWriter
                     'gated_collection_operation_conflict');
                 $balance = app(TransactionService::class);
                 $before = $balance->accountBalanceMinor($subscriber);
-                $result = $action($actor);
+                $result = $this->mutate($kind, $id, $uuid, fn () => $action($actor));
                 $decision = $kind === 'claim' ? $result['claim'] : $result['review'];
                 $posting = $kind === 'late_cash' ? $result['posting'] : $result['bank']['posting'];
                 $payment = Payment::query()->lockForUpdate()->findOrFail($decision['payment_id']);
@@ -136,6 +138,23 @@ final class GatedCollectionWriter
                 $this->need($created === ! $replay, 'gated_collection_operation_conflict');
                 return $result + ['transaction_id' => (int) $entry->id, 'registry_created' => $created];
             });
+    }
+
+    /** The exact verified claim is authorized only inside the scope-first write. */
+    public function allowsMutation(string $kind, int $id, string $uuid): bool
+    {
+        return $this->mutationIdentity === [$kind, $id, $uuid] && DB::transactionLevel() > 0;
+    }
+
+    private function mutate(string $kind, int $id, string $uuid, callable $action): array
+    {
+        $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_collection_mutation_scope');
+        $this->mutationIdentity = [$kind, $id, $uuid];
+        try {
+            return $action();
+        } finally {
+            $this->mutationIdentity = null;
+        }
     }
 
     private function registered(array $leg, string $date): object
