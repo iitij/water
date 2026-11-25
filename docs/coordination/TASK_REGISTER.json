@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 59,
+    "round": 60,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3484,6 +3484,18 @@
           "skipped": 0
         }
       }
+    },
+    "round60": {
+      "phase": "Treasury registry source and effective date verification",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "d9d607166413db1ee7490c41c2e609ae0430bb3b",
+      "source": "495bf08e607fb29b6c7a00dd5cd0b7f800e30b7a",
+      "workflow": "5d6c484df33d63bf6000d0f34821c82dfd3784b0",
+      "branch": "fix/central-g1b-treasury-registry-verification",
+      "pr": 137,
+      "runs": [],
+      "scope": "Mixed subscriber ledger and actual treasury transfer registry verifier; issuance lock before source locks, treasury effective date must equal registry date, missing sources fail, other existing treasury kinds explicitly unverified, coverage false. Four new and three changed verifier regressions per engine.",
+      "limits": "No other treasury family evidence, complete writer coverage, production activation, final closure or main merge. Pending runtime."
     }
   }
 }
