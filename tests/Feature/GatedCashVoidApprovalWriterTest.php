@@ -142,6 +142,8 @@ final class GatedCashVoidApprovalWriterTest extends TestCase
         [, $reviewer, $subscriber, $payment, $session] = $this->fixture(withTill: true);
         $this->assertSame(1025, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
         $original = DB::table('financial_posting_events')->where('operation_uuid', self::UUID)->sole();
+        // A later threshold change does not remove the pending approval requirement.
+        Setting::set('void_approval_threshold', '0');
         $result = $this->post($reviewer, $payment);
         $this->assertTrue($result['registry_created']);
         $this->assertTrue($result['payment']->isVoided());
@@ -220,6 +222,24 @@ final class GatedCashVoidApprovalWriterTest extends TestCase
         $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
         $this->assertDatabaseCount('transactions', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
+    }
+
+    public function test_closed_till_cannot_be_rewritten_by_ordinary_void_approval(): void
+    {
+        [, $reviewer, $subscriber, $payment, $session] = $this->fixture(withTill: true);
+        $closed = app(CashSessionService::class)->close($session->fresh(), '10.25');
+        try {
+            $this->post($reviewer, $payment);
+            $this->fail('Closed till void accepted.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertArrayHasKey('cash_session', $error->errors());
+        }
+        $this->assertTrue($payment->fresh()->hasPendingVoidRequest());
+        $this->assertSame('10.25', $closed->fresh()->counted_amount);
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+        $this->assertDatabaseCount('treasury_postings', 0);
     }
 
     public function test_registry_failure_restores_request_ledger_allocation_and_audit(): void
