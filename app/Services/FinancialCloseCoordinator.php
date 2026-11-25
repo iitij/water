@@ -55,7 +55,7 @@ final class FinancialCloseCoordinator
             $capability = $action === 'freeze' ? 'request' : $action;
             $this->need($this->proof->authorize($scope, $capability, $actorId), 'close_unauthorized');
 
-            [$state, $previousHash, $history] = $this->load($period, $base);
+            [$state, $previousHash, $history] = app(FinancialCloseJournalReader::class)->load($period, $base);
             if ($state['state'] === 'FROZEN') {
                 $this->need($gate->active_freeze_uuid === $state['attempt']['uuid']
                     && $epoch === $state['attempt']['epoch'], 'close_fence_corrupt');
@@ -124,61 +124,6 @@ final class FinancialCloseCoordinator
             }
             return ['replayed' => false, 'result' => $next, 'current_state' => $next['state']];
         }, 1);
-    }
-
-    /** Verify stored bytes, chain, version and closure projection before any transition. */
-    private function load(object $period, array $base): array
-    {
-        $state = $base;
-        $previousHash = hash('sha256', $this->encode($base));
-        $history = [];
-        $rows = DB::table('financial_close_commands')->where('period_id', $period->id)
-            ->orderBy('result_version')->lockForUpdate()->get();
-        foreach ($rows as $row) {
-            $this->need(hash_equals($previousHash, $row->previous_state_hash)
-                && hash_equals(hash('sha256', $row->command_bytes), $row->command_hash)
-                && hash_equals(hash('sha256', $row->result_state_bytes), $row->result_state_hash), 'close_journal_hash');
-            $cmd = json_decode($row->command_bytes, true, flags: JSON_THROW_ON_ERROR);
-            $next = json_decode($row->result_state_bytes, true, flags: JSON_THROW_ON_ERROR);
-            $this->need(is_array($cmd) && is_array($next)
-                && $this->encode($cmd) === $row->command_bytes && $this->encode($next) === $row->result_state_bytes
-                && ($cmd['format'] ?? null) === 1 && ($cmd['scope'] ?? null) === $base['scope']
-                && ($cmd['month'] ?? null) === $base['month'] && ($cmd['action'] ?? null) === $row->action
-                && (string) ($cmd['actor'] ?? '') === (string) $row->actor_id
-                && ($cmd['command']['uuid'] ?? null) === $row->command_uuid
-                && ($cmd['command']['version'] ?? null) === $state['version']
-                && ($next['version'] ?? null) === $state['version'] + 1
-                && (string) $next['version'] === (string) $row->result_version, 'close_journal_identity');
-            foreach (['scope', 'month', 'timezone', 'start', 'next'] as $field) {
-                $this->need(($next[$field] ?? null) === $base[$field], 'close_journal_period');
-            }
-            $transition = $state['state'].'>'.$next['state'];
-            $this->need($transition === match ($row->action) {
-                'freeze' => 'OPEN>FROZEN', 'prepare' => 'FROZEN>FROZEN',
-                'approve' => 'FROZEN>CLOSED', 'abort' => 'FROZEN>OPEN',
-                default => '',
-            }, 'close_journal_transition');
-            $state = $next;
-            $previousHash = $row->result_state_hash;
-            $history[$row->command_uuid] = $state;
-        }
-        $this->need($state['state'] === $period->state && $state['version'] === $this->counter($period->version), 'close_period_projection');
-        $stored = DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first();
-        if ($state['state'] === 'CLOSED') {
-            $closure = $state['closure'];
-            $body = $closure;
-            unset($body['hash']);
-            $this->need($stored && $stored->approval_uuid === $closure['approval']['uuid']
-                && $stored->closure_bytes === $this->encode($closure)
-                && $stored->closure_hash === $closure['hash']
-                && hash_equals(hash('sha256', $this->encode($body)), $closure['hash'])
-                && $stored->predecessor_hash === $closure['snapshot']['predecessor_hash']
-                && $stored->snapshot_hash === $closure['approval']['snapshot_hash']
-                && hash_equals(hash('sha256', $this->encode($closure['snapshot'])), $stored->snapshot_hash), 'close_snapshot_corrupt');
-        } else {
-            $this->need($stored === null, 'close_unexpected_snapshot');
-        }
-        return [$state, $previousHash, $history];
     }
 
     private function counter(mixed $raw): int
