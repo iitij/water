@@ -181,7 +181,7 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
         if (repository is! BoundVoidRequestsRepository ||
             request.requestId == null ||
             request.requestId! <= 0) {
-          throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.');
+          throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.', <String, List<String>>{});
         }
         ok = await (repository as BoundVoidRequestsRepository).decideBoundVoidRequest(
           request,
