@@ -51,25 +51,37 @@ final class HeldCashReleaseDocumentProtection
         return true;
     }
 
-    /** Journal triggers are installed by the journal migration, not the proposal installer. */
+    /** Verify the migration-defined journal guards, including the SQLite collision predicate. */
     public function journalActive(): bool
     {
         $driver = DB::getDriverName();
         if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) return false;
-        $events = ['release_journal_reject_update' => 'UPDATE', 'release_journal_reject_delete' => 'DELETE'];
-        if ($driver === 'sqlite') $events['release_journal_reject_replace'] = 'INSERT';
-        foreach ($events as $name => $event) {
-            if ($driver === 'sqlite') {
+        $sqlite = $driver === 'sqlite';
+        $body = $sqlite ? "BEGIN SELECT RAISE(ABORT, 'Held release journal is immutable'); END"
+            : "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Held release journal is immutable'";
+        $table = 'held_cash_release_journal';
+        $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', rtrim(trim($sql), ';'));
+        foreach (['UPDATE', 'DELETE'] as $event) {
+            $name = 'release_journal_reject_'.strtolower($event);
+            if ($sqlite) {
                 $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)
-                    ->where('tbl_name', 'held_cash_release_journal')->first();
-                if ($trigger === null || ! preg_match('/\\bBEFORE\\s+'. $event .'\\s+ON\\s+held_cash_release_journal\\b/i', $trigger->sql)
-                    || ! str_contains($trigger->sql, 'Held release journal is immutable')) return false;
+                    ->where('tbl_name', $table)->first();
+                $expected = "CREATE TRIGGER {$name} BEFORE {$event} ON {$table} {$body}";
+                if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
             } else {
                 $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
-                    ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', 'held_cash_release_journal')
+                    ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
                     ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
-                if ($trigger === null || ! str_contains($trigger->ACTION_STATEMENT, 'Held release journal is immutable')) return false;
+                if ($trigger === null || $normalize($trigger->ACTION_STATEMENT) !== $normalize($body)) return false;
             }
+        }
+        if ($sqlite) {
+            $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', 'release_journal_reject_replace')
+                ->where('tbl_name', $table)->first();
+            $expected = "CREATE TRIGGER release_journal_reject_replace BEFORE INSERT ON held_cash_release_journal
+                FOR EACH ROW WHEN EXISTS (SELECT 1 FROM held_cash_release_journal j WHERE j.id = NEW.id
+                OR j.operation_uuid = NEW.operation_uuid OR j.proposal_uuid = NEW.proposal_uuid) {$body}";
+            if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
         }
         return true;
     }
