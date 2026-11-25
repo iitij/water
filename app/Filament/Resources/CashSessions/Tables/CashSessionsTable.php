@@ -5,6 +5,7 @@ namespace App\Filament\Resources\CashSessions\Tables;
 use App\Models\CashSession;
 use App\Services\CashSessionService;
 use App\Services\ProspectiveSettlementEntry;
+use App\Services\ProspectiveHandoverEntry;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -124,6 +125,19 @@ class CashSessionsTable
                             && in_array($service->summary($record)['status'], ['pending', 'partial'], true);
                     })
                     ->form([
+                        \Filament\Forms\Components\Hidden::make('operation_uuid')
+                            ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                            ->dehydrated(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->required(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->rules(['nullable', 'uuid']),
+                        \Filament\Forms\Components\Select::make('treasury_account_id')
+                            ->label('الخزينة المستلمة')
+                            ->options(fn (): array => \Illuminate\Support\Facades\DB::table('treasury_accounts')
+                                ->where('channel', 'cash')->orderBy('id')->get()
+                                ->mapWithKeys(fn ($account) => [$account->id => $account->code.' — '.$account->name])->all())
+                            ->visible(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->dehydrated(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->required(fn () => app(ProspectiveHandoverEntry::class)->enabled()),
                         \Filament\Forms\Components\TextInput::make('amount')
                             ->label('النقد المستلم فعلياً')->numeric()->minValue(0.01)->required()
                             ->helperText(fn (CashSession $record): string => 'المتبقي للتسليم: '.(app(\App\Services\CashHandoverService::class)->summary($record)['remaining_amount'] ?? '—')),
@@ -135,8 +149,11 @@ class CashSessionsTable
                     ])
                     ->requiresConfirmation()
                     ->action(function (CashSession $record, array $data): void {
-                        app(\App\Services\CashHandoverService::class)->record($record, Auth::user(),
-                            $data['amount'], $data['reference'], $data['received_on'], $data['evidence']);
+                        try {
+                            app(ProspectiveHandoverEntry::class)->receive(Auth::user(), $record, $data);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
                         Notification::make()->title('تم توثيق الاستلام الفعلي')->success()->send();
                     }),
                 Action::make('late_receipt_review')
