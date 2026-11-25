@@ -118,6 +118,43 @@ class PaymentsRemoteDataSource {
     return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
   }
 
+  /// Explicit online intent: no message-only or receipt-only acknowledgement.
+  Future<VoidPaymentOutcome> requestBoundVoid(
+    int id, {
+    required String reason,
+    required String intentUuid,
+    Map<String, dynamic>? sessionExtra,
+  }) async {
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoid(id),
+      body: <String, dynamic>{
+        'reason': reason.trim(),
+        'intent_uuid': intentUuid,
+      },
+      sessionExtra: sessionExtra,
+    );
+    final map = JsonUtils.asMap(response);
+    final payment = JsonUtils.asMap(map?['payment']);
+    final pending = map?['pending_approval'];
+    final requestId = JsonUtils.asIntOrNull(map?['request_id']);
+    if (map == null ||
+        map['intent_uuid'] != intentUuid ||
+        pending is! bool ||
+        payment == null ||
+        JsonUtils.asIntOrNull(payment['id']) != id ||
+        !payment.containsKey('voided_at') ||
+        (payment['voided_at'] != null) == pending ||
+        (pending && (requestId == null || requestId <= 0))) {
+      throw const UnexpectedFailure(
+        'لم يؤكد الخادم نتيجة طلب الإلغاء. حدّث السند قبل أي محاولة جديدة.',
+      );
+    }
+    return VoidPaymentOutcome(
+      payment: PaymentModel.fromJson(payment),
+      pendingApproval: pending,
+    );
+  }
+
   /// `GET /api/payments/void-requests` — طلبات الإلغاء بانتظار اعتماد المشرف.
   Future<List<PaymentVoidRequest>> voidRequests({
     int page = 1,
