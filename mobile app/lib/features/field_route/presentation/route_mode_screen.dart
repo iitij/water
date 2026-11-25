@@ -36,7 +36,8 @@ class RouteModeScreen extends StatefulWidget {
 
 class _RouteModeScreenState extends State<RouteModeScreen> {
   late final RouteVisitStore _visits =
-      widget.visitStore ?? SharedPreferencesRouteVisitStore();
+      widget.visitStore ?? (GetIt.I.isRegistered<RouteVisitStore>()
+          ? GetIt.I<RouteVisitStore>() : SharedPreferencesRouteVisitStore());
 
   final Stopwatch _session = Stopwatch()..start();
 
