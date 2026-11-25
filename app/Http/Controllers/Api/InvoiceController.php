@@ -165,6 +165,7 @@ class InvoiceController extends ApiController
             'meter_id' => ['nullable', 'integer', 'exists:meters,id'],
             'invoice_type' => ['sometimes', 'in:meter'],
             'notes' => ['nullable', 'string'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         $meter = ! empty($data['meter_id'])
@@ -174,11 +175,9 @@ class InvoiceController extends ApiController
 
         // Legacy payloads may include financial fields; these are never used.
         // The server issues from locked, unbilled readings and approved tariffs.
-        return $this->generateResponse(fn () => app(\App\Services\InvoiceService::class)->generateInvoice(
-            subscriber: $subscriber,
-            meter: $meter,
-            notes: $data['notes'] ?? null,
-        ));
+        return $this->generateResponse(fn () => app(\App\Services\ProspectiveInvoiceEntry::class)->issue(
+            $request->user(), $subscriber, $meter, $data['notes'] ?? null, $data['operation_uuid'] ?? null
+        ), config('financial_candidate.invoices') === true || isset($data['operation_uuid']));
     }
 
     public function update(Request $request, int $id)
@@ -289,9 +288,10 @@ class InvoiceController extends ApiController
     public function cancel(Request $request, int $id)
     {
         $this->authorizeApi(Invoice::class, 'delete');
-        $data = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000']]);
-        $invoice = app(\App\Services\InvoiceCancellationService::class)->cancel(
-            Invoice::findOrFail($id), $data['reason'], $request->user()?->id,
+        $data = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'operation_uuid' => ['nullable', 'uuid']]);
+        $invoice = app(\App\Services\ProspectiveInvoiceEntry::class)->cancel(
+            $request->user(), Invoice::findOrFail($id), $data['reason'], $data['operation_uuid'] ?? null,
             $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api'
         );
         return response()->json(['message' => 'تم إلغاء الفاتورة بحركة عكسية.', 'invoice' => $this->decorate($invoice)]);
@@ -382,20 +382,19 @@ class InvoiceController extends ApiController
         return response()->json(['deleted_count' => $deleted]);
     }
 
-    public function generateMeterInvoice(Request $request, InvoiceService $invoiceService)
+    public function generateMeterInvoice(Request $request)
     {
         $this->authorizeApi(Invoice::class, 'create');
         $data = $request->validate([
             'subscriber_id' => ['required', 'integer', 'exists:subscribers,id'],
             'meter_id' => ['required', 'integer', 'exists:meters,id'],
             'notes' => ['nullable', 'string'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
         $meter = Meter::with('subscriber')->where('subscriber_id', $data['subscriber_id'])->findOrFail($data['meter_id']);
-        return $this->generateResponse(fn () => $invoiceService->generateInvoice(
-            subscriber: $meter->subscriber,
-            meter: $meter,
-            notes: $data['notes'] ?? null,
-        ));
+        return $this->generateResponse(fn () => app(\App\Services\ProspectiveInvoiceEntry::class)->issue(
+            $request->user(), $meter->subscriber, $meter, $data['notes'] ?? null, $data['operation_uuid'] ?? null
+        ), config('financial_candidate.invoices') === true || isset($data['operation_uuid']));
     }
 
     public function pay(Request $request, int $id, PaymentService $paymentService)
@@ -565,7 +564,7 @@ class InvoiceController extends ApiController
         }
     }
 
-    private function generateResponse(callable $callback)
+    private function generateResponse(callable $callback, bool $protected = false)
     {
         try {
             $invoice = $callback();
@@ -576,6 +575,7 @@ class InvoiceController extends ApiController
                 'pdf_url' => url('/api/invoices/'.$invoice->id.'/pdf'),
             ], 201);
         } catch (\Throwable $exception) {
+            if ($protected) throw $exception;
             return response()->json(['message' => $exception->getMessage()], 422);
         }
     }
