@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCashReceiptWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private PaymentService $payments,
@@ -69,10 +71,10 @@ final class GatedCashReceiptWriter
                 $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
 
                 // Do not silently infer a till on behalf of the caller.
-                $payment = $this->payments->collectPayment($subscriber, $amount, invoiceId: $invoiceId,
+                $payment = $this->mutate($subscriberId, $uuid, fn () => $this->payments->collectPayment($subscriber, $amount, invoiceId: $invoiceId,
                     paymentMethod: 'cash', referenceNumber: $reference, notes: $notes, reason: $reason, userId: (int) $actor->id,
                     paymentDate: $context['effective_on'], requestedMeterId: $meterId,
-                    syncUuid: $uuid, requestedCashSessionId: $cashSessionId, deferred: $deferred);
+                    syncUuid: $uuid, requestedCashSessionId: $cashSessionId, deferred: $deferred, gatedWriter: $this));
                 $this->need((int) ($payment->cash_session_id ?? 0) === (int) ($cashSessionId ?? 0)
                     && $payment->payment_date->toDateString() === $context['effective_on']
                     && (int) $payment->subscriber_id === $subscriberId
@@ -89,6 +91,24 @@ final class GatedCashReceiptWriter
                 return ['payment' => $payment, 'transaction_id' => (int) $entry->id,
                     'registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
             });
+    }
+
+    /** A caller cannot grant itself the private verified receipt scope. */
+    public function allowsMutation(int $subscriberId, ?string $uuid): bool
+    {
+        return $uuid !== null && $this->mutationIdentity === [$subscriberId, $uuid]
+            && DB::transactionLevel() > 0;
+    }
+
+    private function mutate(int $subscriberId, string $uuid, callable $action): Payment
+    {
+        $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_cash_mutation_scope');
+        $this->mutationIdentity = [$subscriberId, $uuid];
+        try {
+            return $action();
+        } finally {
+            $this->mutationIdentity = null;
+        }
     }
 
     private function entry(Payment $payment): Transaction
