@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 39,
+    "round": 41,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2740,7 +2740,7 @@
     },
     "round38": {
       "phase": "V5 secure cumulative Flutter composition",
-      "status": "HOSTED_FULL_PENDING",
+      "status": "ORDINARY_FLUTTER_FULL_PASS",
       "base": "f50143b985a5e70b4728c1b9a53b03b83e82f06d",
       "flutter_source": "f925916d2032f257e5c63d89a48a58fac408cc4a",
       "source": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
@@ -2749,11 +2749,21 @@
       "pr": 115,
       "run": 45562767739,
       "scope": "Exactly 37 accepted Flutter/hygiene path changes, all blob hashes and 12 symlink deletions verified, intermediate workflow excluded. Full Flutter on locked secure PHP deps, named skips, clean source.",
-      "limits": "Backend code equals secure accepted V4, closing not composed, G11 actual full result pending."
+      "limits": "Backend code equals secure accepted V4, closing not composed, G11 actual full result pending.",
+      "results": {
+        "run": 45562767739,
+        "job": 139030237453,
+        "passed": 786,
+        "skipped": 25,
+        "failed": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,26 infos",
+        "clean_source": true
+      }
     },
     "round39": {
       "phase": "G1B durable close command journal",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "e7da82b0ccd4801c4bfefa88430aa919aa085d4e",
       "source": "b5ecf32d2d55f82f424039f15be3b77e496a3472",
       "workflow": "07bc93c1d1c93bbba99c7ea3276fa1158faa768c",
@@ -2761,12 +2771,78 @@
       "pr": 116,
       "run": 45563040097,
       "scope": "Canonical command journal and hash-chained state, closure bytes and snapshot hash. Freeze/prepare/approve/abort transaction and replay; no production proof binding; four synthetic tests per engine.",
-      "limits": "No trusted actual source coverage/predecessor/opening/carry/actor adapter, no writer calls, no DB immutable enforcement, no activation or return. Results pending."
+      "limits": "No trusted actual source coverage/predecessor/opening/carry/actor adapter, no writer calls, no DB immutable enforcement, no activation or return. Results pending.",
+      "results": {
+        "sqlite": {
+          "job": 139031072745,
+          "tests": 4,
+          "assertions": 45,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139031073068,
+          "tests": 4,
+          "assertions": 45,
+          "exit": 0
+        },
+        "total": {
+          "tests": 8,
+          "assertions": 90,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      }
     },
     "l01_source_followup": {
       "status": "INCONCLUSIVE_NO_RESTRICTED_RETRY",
       "source": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
       "findings": "Pending guard locking current read filters submitted_meter_id/status and order id; no matching index in prior evidence. LateReceiptReviewService::submit locks subscriber and issuance, not submitted meter, deliberately treats submitted meter as provenance; cannot infer it is current meter of subscriber. Removing current read or narrowing by subscriber could allow stale/foreign provenance deletion; index alone not proof of insert independence under REPEATABLE READ gap locking. No lock diagnostic escalation, product change or repeated baseline."
+    },
+    "round40": {
+      "phase": "Backend field replay owner and exact payload",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
+      "source": "e52c3431bcbf3c5fa475ddb974c1507eb75ae2a7",
+      "workflow": "5e36ed671ec8a09d6cb7b58ea38f45d3a199a6ff",
+      "branch": "fix/central-field-server-replay",
+      "pr": 117,
+      "run": 45563336565,
+      "scope": "Atomic field fault/visit batch, check original authenticated owner and immutable payload on replay, exact route collected amount D12, preserve historic source metadata and existing permissions.",
+      "results": {
+        "sqlite": {
+          "job": 139032068856,
+          "tests": 4,
+          "assertions": 38,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139032069228,
+          "tests": 4,
+          "assertions": 38,
+          "exit": 0
+        },
+        "total": {
+          "tests": 8,
+          "assertions": 76,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "limits": "Case-variant UUID legacy cleanup and actual full Drift financial queue isolation remain open. No new permission or schema changes."
+    },
+    "round41": {
+      "phase": "Flutter explicit payment account context",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
+      "source": "e01e6f3ad3e3716ec6132143dc70aa760554d995",
+      "workflow": "b65a66c57d41d994d7f46213b22aebdb5092b5fa",
+      "branch": "fix/central-flutter-payment-context",
+      "pr": 118,
+      "run": 45563559839,
+      "scope": "Request-generation guard even for same subscriber, verify response owner and invoice identity, no route meter override, reset account-specific details, reject unverified or completed submission; four new ordinary cases.",
+      "limits": "Runtime result pending; original quarantined diagnostics not enabled, no global skipped-test closure claim."
     }
   }
 }
