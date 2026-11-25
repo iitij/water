@@ -30,6 +30,22 @@ class PaymentResource extends Resource
             \Filament\Schemas\Components\Section::make('بيانات الدفع')
                 ->columns(2)
                 ->schema([
+                    Forms\Components\Hidden::make('sync_uuid')
+                        ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                        ->dehydrated(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->required(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->rules(['nullable', 'uuid']),
+
+                    Forms\Components\Select::make('cash_session_id')
+                        ->label('صندوق التحصيل الأصلي')
+                        ->placeholder('بدون صندوق محصّل')
+                        ->options(fn () => \App\Models\CashSession::query()->open()
+                            ->where('user_id', auth()->id())->orderBy('id')
+                            ->get()->mapWithKeys(fn ($session) => [$session->id => '#'.$session->id.' — '.$session->session_date->toDateString()])->all())
+                        ->visible(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->dehydrated(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->helperText('إذا كان لديك صندوق مفتوح، يجب اختياره صراحةً. لا يتم نقل السند إلى صندوق آخر.'),
+
                     Forms\Components\Select::make('subscriber_id')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('المشترك')
@@ -115,17 +131,15 @@ class PaymentResource extends Resource
                     Forms\Components\DatePicker::make('payment_date')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('تاريخ الدفع')
-                        ->default(now())
+                        ->default(fn () => now('Asia/Aden')->toDateString())
                         ->required(),
 
                     Forms\Components\Select::make('payment_method')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('طريقة الدفع')
-                        ->options([
-                            'cash' => 'نقدي',
-                            'bank_transfer' => 'تحويل بنكي',
-                            'check' => 'شيك',
-                        ])
+                        ->options(fn (?Payment $record) => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled()
+                            ? ['cash' => 'نقدي']
+                            : ['cash' => 'نقدي', 'bank_transfer' => 'تحويل بنكي', 'check' => 'شيك'])
                         ->default('cash')
                         ->required(),
 
