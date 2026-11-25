@@ -3190,4 +3190,79 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
         $this->assertDatabaseCount('payment_refunds', 1);
     }
+
+    public function test_round141_collection_and_handover_documents_match_exact_operation_membership(): void
+    {
+        [, , $cash, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-R141-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-R141-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, (int) $bank['id'], [
+            'reference' => 'QA-R141-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '0.00', 'closing_amount' => '0.30', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-R141-IN', 'booked_on' => $date, 'amount' => '0.30']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $bankUuid = '88888888-8888-4888-8888-888888888888';
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+            'sync_uuid' => $bankUuid, 'subscriber_id' => $subscriber->id, 'amount' => '0.30',
+            'payment_method' => 'check', 'instrument_reference' => 'QA-R141-CHECK', 'instrument_on' => $date,
+        ]);
+        $writer = app(\App\Services\GatedCollectionWriter::class);
+        $writer->clearClaim($reviewer, (int) $claim['id'], $statementId, $lineId, $date,
+            'QA-R141-BANK-PROOF', self::EVIDENCE, $bankUuid, $this->nowAt());
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $cash['id'],
+            '1.00', 'QA-R141-HANDOVER', $date, self::EVIDENCE, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+        $lateUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $late = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
+            'sync_uuid' => $lateUuid, 'cash_session_id' => $session->id, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.50', 'payment_method' => 'cash', 'payment_date' => $date,
+        ]);
+        $writer->receiveLateCash($reviewer, (int) $late['id'], (int) $cash['id'], $date,
+            'QA-R141-LATE', self::EVIDENCE, $lateUuid, $this->nowAt());
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
+        $this->assertSame([], $result['issues']);
+        $this->assertTrue($result['scanned_sources_match']);
+        $this->assertSame(9, $result['expected_legs']);
+        $this->assertSame(9, $result['matched_legs']);
+        $this->assertSame(9, $result['registry_events']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_round141_rejects_unrelated_receipts_combined_into_valid_registry_operation(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $payments = app(PaymentService::class);
+        $first = $payments->collectPayment($subscriber, '1.00');
+        $second = $payments->collectPayment($subscriber, '2.00');
+        $entries = DB::table('transactions')->where('reference_type', Payment::class)
+            ->whereIn('reference_id', [$first->id, $second->id])->orderBy('id')->get();
+        $this->assertCount(2, $entries);
+        $this->gate(function (array $context) use ($entries): void {
+            $ledger = app(\App\Services\FinancialLedgerEvidence::class);
+            $legs = $entries->map(fn ($row) => $ledger->leg((int) $row->id))->all();
+            $this->assertTrue(app(FinancialPostingRegistry::class)->record($context,
+                '66666666-6666-4666-8666-666666666666', $legs, $this->nowAt()));
+        });
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['scanned_sources_match']);
+        $this->assertSame($result['expected_legs'], $result['matched_legs']);
+        foreach ($entries as $entry) {
+            $this->assertContains(['code' => 'operation_membership_mismatch', 'source' => 'operation_group',
+                'id' => 'single:ledger_transaction|'.$entry->id.'|subscriber'], $result['issues']);
+        }
+        $this->assertFalse($result['closure_authorized']);
+    }
 }
