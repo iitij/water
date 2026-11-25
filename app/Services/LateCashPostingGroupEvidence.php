@@ -26,21 +26,44 @@ final class LateCashPostingGroupEvidence
 
     public function derive(int $reviewId, array $contexts): array
     {
+        return $this->deriveWithPeriodPolicy($reviewId, $contexts, false);
+    }
+
+    /**
+     * Reconstruct existing evidence using original posting counters. This
+     * read-only path is not an authorization to insert, replay or reopen.
+     * Unsupported later source transitions still fail closed.
+     */
+    public function deriveHistorical(int $reviewId, array $contexts): array
+    {
+        return $this->deriveWithPeriodPolicy($reviewId, $contexts, true);
+    }
+
+    private function deriveWithPeriodPolicy(int $reviewId, array $contexts, bool $historical): array
+    {
         $this->need(DB::transactionLevel() > 0 && $reviewId > 0, 'late_cash_group_requires_gate');
         $this->need(count($contexts) === 2, 'late_cash_group_requires_two_dates');
         $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
-        $this->need($scope !== null && $scope->mode === 'ACTIVE' && $scope->active_freeze_uuid === null
+        $this->need($scope !== null && $scope->mode === 'ACTIVE' && ($historical || $scope->active_freeze_uuid === null)
             && $scope->currency === 'YER' && $scope->timezone === 'Asia/Aden'
             && (string) $scope->calendar_version === '1', 'late_cash_group_scope');
         ksort($contexts, SORT_STRING);
         foreach ($contexts as $date => $context) {
             $this->need(is_array($context) && ($context['scope'] ?? null) === 'water'
                 && ($context['effective_on'] ?? null) === $date && is_int($context['period_id'] ?? null)
-                && (string) ($context['epoch'] ?? '') === (string) $scope->fence_epoch, 'late_cash_group_context');
+                && is_int($context['epoch'] ?? null) && $context['epoch'] >= 0
+                && is_int($context['version'] ?? null) && $context['version'] >= 0
+                && ($historical ? $context['epoch'] <= $this->counter($scope->fence_epoch)
+                    : $context['epoch'] === $this->counter($scope->fence_epoch)), 'late_cash_group_context');
             $period = DB::table('financial_periods')->where('id', $context['period_id'])->lockForUpdate()->first();
-            $this->need($period !== null && $period->scope_key === 'water' && $period->state === 'OPEN'
-                && (string) $period->version === (string) ($context['version'] ?? '')
+            $this->need($period !== null && $period->scope_key === 'water'
+                && ($historical ? in_array($period->state, ['OPEN', 'FROZEN', 'CLOSED'], true) : $period->state === 'OPEN')
+                && ($historical ? $context['version'] <= $this->counter($period->version)
+                    : $context['version'] === $this->counter($period->version))
                 && $date >= $period->start_on && $date < $period->next_on, 'late_cash_group_context');
+            $expected = app(\App\Support\FinancialClosePolicy::class)->open('water', $period->month, $scope->timezone);
+            $this->need($period->start_on === $expected['start'] && $period->next_on === $expected['next'],
+                'late_cash_group_context');
         }
         $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
             'late_cash_group_issuance_lock');
@@ -77,6 +100,15 @@ final class LateCashPostingGroupEvidence
         return $this->group->build($review->sync_uuid, $reviewId, (int) $payment->id, (int) $receipt->id,
             $contexts[$review->payment_date], $contexts[$receipt->received_on],
             $this->ledger->leg((int) $entries->first()->id), $this->treasury->leg((int) $posting->id));
+    }
+
+    private function counter(mixed $value): int
+    {
+        $this->need(is_int($value) || is_string($value), 'late_cash_group_counter');
+        $text = (string) $value;
+        $this->need(preg_match('/\A(?:0|[1-9][0-9]*)\z/', $text) === 1
+            && (string) (int) $text === $text, 'late_cash_group_counter');
+        return (int) $text;
     }
 
     private function need(bool $ok, string $reason): void
