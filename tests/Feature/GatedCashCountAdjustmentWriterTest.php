@@ -668,4 +668,39 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage()));
     }
 
+    public function test_unapplied_subscriber_credit_remains_protected_even_after_held_liability_is_zero(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $this->creditHeld($actor, 25);
+        $register = app(TreasuryRegisterService::class);
+        $report = $register->inspect($actor, (int) $account['id']);
+        $this->assertSame(0, $report['held_cash_outstanding_minor']);
+        $this->assertSame(25, $report['held_cash_subscriber_credit_reserve_minor']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+        $this->assertFalse($report['held_cash_credit_release_verified']);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 10000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
+    public function test_missing_preapproval_audit_blocks_credit_and_cash_execution(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $executor = $this->actor();
+        $this->authorizeHeld($this->actor(), $executor, 25);
+        DB::table('audit_events')->where('event', 'treasury.held_cash_payout_authorized')->delete();
+        $this->rejects('held_cash_authorization_audit', fn () => $this->payoutHeld($executor, 25, authorize: false));
+        $this->rejects('held_cash_authorization_audit', fn () =>
+            $this->creditHeld($executor, 1, '55555555-5555-4555-8555-555555555555'));
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
+        $this->assertDatabaseCount('treasury_held_cash_credits', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
 }
