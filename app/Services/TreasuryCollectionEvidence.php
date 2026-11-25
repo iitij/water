@@ -44,6 +44,28 @@ final class TreasuryCollectionEvidence
                 'payment_method' => $doc->payment_method, 'payment_reference' => $doc->payment_reference,
                 'receipt_number' => $doc->receipt_number, 'evidence' => $doc->evidence,
             ];
+            // The existing bank validator checks the decision linkage. Bind the
+            // actual decision identity and original claim date into its proof.
+            $claims = DB::table('noncash_collection_claims')->where('payment_id', $payment->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            $reviews = DB::table('late_receipt_reviews')->where('payment_id', $payment->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            $this->need($claims->count() + $reviews->count() <= 1, 'collection_evidence_decision_conflict');
+            if ($claims->isNotEmpty()) {
+                $claim = $claims->first();
+                $source['claim'] = ['id' => (string) $claim->id, 'sync_uuid' => $claim->sync_uuid,
+                    'submitted_by' => (string) $claim->submitted_by, 'decided_by' => (string) $claim->decided_by,
+                    'instrument_on' => $claim->instrument_on, 'instrument_reference' => $claim->instrument_reference,
+                    'decided_at' => (string) $claim->decided_at, 'evidence' => $claim->decision_evidence];
+            }
+            if ($reviews->isNotEmpty()) {
+                $review = $reviews->first();
+                $source['late_review'] = ['id' => (string) $review->id, 'sync_uuid' => $review->sync_uuid,
+                    'session_id' => (string) $review->cash_session_id, 'collector_id' => (string) $review->collector_id,
+                    'decided_by' => (string) $review->decided_by, 'decided_at' => (string) $review->decided_at,
+                    'payment_date' => $review->payment_date, 'evidence_reference' => $review->evidence_reference,
+                    'bank_clearance_reference' => $review->bank_clearance_reference, 'evidence' => $review->evidence];
+            }
         } elseif ($posting->kind === 'late_cash_receipt') {
             $doc = $this->row('treasury_late_cash_receipts', (int) $posting->treasury_late_cash_receipt_id);
             $review = $this->row('late_receipt_reviews', (int) $doc->late_receipt_review_id);
