@@ -98,7 +98,7 @@ void main() {
     expect(canSyncForUser(old, '10'), isTrue);
     expect(canSyncForUser(old, null), isFalse);
     expect(canSyncForUser(old, ''), isFalse);
-    expect(canSyncForUser(legacy, '11'), isTrue);
+    expect(canSyncForUser(legacy, '11'), isFalse);
     expect(canSyncForUser(legacy, null), isFalse);
     expect(eligibleForSync([old, legacy], baseTime).length, 2,
         reason: 'ownership must be enforced by the manager');
