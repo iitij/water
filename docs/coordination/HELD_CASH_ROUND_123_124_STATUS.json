@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify both jobs before promoting candidate; then bind request identity in API and Filament on integrated release candidate and validate clients, authorization and gate-first source registration.",
+  "next": "Integrate prospective void route request identity on isolated release candidate with API and Filament tests; no historical remediation or partial production activation.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-void-retry",
-      "commit": "8297e7da6b62c4418c8a4e10a39356c9656f3922",
-      "run": 45704316711,
-      "sqlite": "2 tests, 48 assertions",
-      "mysql": "2 tests, 48 assertions",
-      "scope": "Request-bound retry of a rejected cash receipt void, stale decision refused after a new request. Candidate service only."
+      "branch": "release/prospective-void-decision-binding",
+      "commit": "77118254c988a121252362b3a913bbff2c98b784",
+      "run": 45706026398,
+      "sqlite": "3 tests, 78 assertions",
+      "mysql": "3 tests, 78 assertions",
+      "scope": "All supervised void decisions require exact gated request audit ID. Reject stale approval and rejection, verify exact decision replay including actor, notes and source audit, keep registry reversal atomic. New stale approval case and two affected void regressions."
     }
   },
   "round146": {
@@ -785,13 +785,30 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_void_decision_binding": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "8297e7da6b62c4418c8a4e10a39356c9656f3922",
     "branch": "release/prospective-void-decision-binding",
     "source": "77118254c988a121252362b3a913bbff2c98b784",
     "run": 45706026398,
     "scope": "All supervised void decisions require exact gated request audit ID. Reject stale approval and rejection, verify exact decision replay including actor, notes and source audit, keep registry reversal atomic. New stale approval case and two affected void regressions.",
     "limits": "No route activation; release branch and round146 diagnostic branch diverged at round145; preserve both accepted evidence sets, do not overwrite parallel release branch. Historical remediation and independent pre-system opening evidence excluded per delivery_goal.",
-    "next": "Verify both jobs before promoting candidate; then bind request identity in API and Filament on integrated release candidate and validate clients, authorization and gate-first source registration."
+    "next": "Verify both jobs before promoting candidate; then bind request identity in API and Filament on integrated release candidate and validate clients, authorization and gate-first source registration.",
+    "jobs": [
+      {
+        "id": 139528092873,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 78,
+        "exit": 0
+      },
+      {
+        "id": 139528092566,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 78,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
