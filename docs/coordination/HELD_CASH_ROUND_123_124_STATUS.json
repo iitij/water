@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Complete prospective writer behavior and connect verified entry points on a release candidate. First close the receipt void rejection replay gap. Preserve original decision audit and prevent duplicate effects.",
+  "next": "Integrate the verified request identity through PaymentController and Filament VoidRequestsTable, preserving authorization, compatibility and pending-request identity from display to submission. Test both normal entry points before activation.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -746,6 +746,14 @@
       "Verify changed paths on SQLite and MySQL, then validate end-to-end on staging.",
       "Verify deployment configuration, backup and restore, smoke tests and rollback before scheduling production cutover."
     ],
-    "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery."
+    "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
+    "last_verified": {
+      "branch": "release/prospective-void-retry",
+      "commit": "8297e7da6b62c4418c8a4e10a39356c9656f3922",
+      "run": 45704316711,
+      "sqlite": "2 tests, 48 assertions",
+      "mysql": "2 tests, 48 assertions",
+      "scope": "Request-bound retry of a rejected cash receipt void, stale decision refused after a new request. Candidate service only."
+    }
   }
 }
