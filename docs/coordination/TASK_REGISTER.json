@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 80,
+    "round": 81,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4014,6 +4014,17 @@
       "scope": "Actual debit bank statement line, verified booking date controls open accounting period, registered bank account opening, immutable-content hash and import audit check, independent reviewer, atomic fee document/treasury posting/match/registry, no subscriber ledger effect. Seven cases per engine prepared: actual matching and replay, unmatched credit and incorrect date, reviewer/UUID conflicts, unregistered opening, legacy fee rejection, tampered/closed/frozen rejection, registry failure rollback and retry.",
       "limits": "Independent branch from accepted round69. Rounds70–75 and77–79 remain unaccepted. No runtime evidence or new workflow after earlier tool restriction. Bank statement import remains outside full gate, audit immutability and all-source completeness unproved; actual fee classification requires independent external evidence. No activation, main merge or live data changes.",
       "next": "W14 treasury cash-count adjustments, then W15–W19 collections. Validate pending branches before integrated activation."
+    },
+    "round81": {
+      "phase": "W14 independent inactive gated cash count variance adjustment",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "951f054a051a6fc3a585b031ebb1b1fac33ee09a",
+      "branch": "fix/central-g1b-gated-cash-count-adjustment",
+      "runs": [],
+      "scope": "Registered cash opening and every preceding supported treasury posting, independently accepted physical observation with count and review audit evidence, exact signed variance and snapshot recheck, same-day open period, confirmed_cash_loss or unattributed_cash_held only, atomic adjustment and treasury leg and audit, no subscriber posting or revenue designation. Ten cases per engine prepared: shortage/replay, held surplus after registered funding, zero/self rejection, pending/rejected reviews, unregistered opening and prior funding, changed snapshot, closed/frozen/tamper, legacy adjustment and conflict, registry rollback/retry.",
+      "limits": "Independent branch from accepted round69. Rounds70–75 and77–80 unaccepted. No runtime evidence or new workflow after earlier tool restriction. Source completeness of other accounts and unregistered business effects, physical evidence truth, independent audit immutability, GL classification/liability treatment beyond treasury register, gating count/review and global lock protocol remain open. No production activation, main merge or live data changes.",
+      "next": "W15 noncash claim clearance, then W16–W19 collections; validate pending branches before integration."
     }
   }
 }
