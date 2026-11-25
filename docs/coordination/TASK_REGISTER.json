@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_12_G07_TARGETED_ACCEPTED_L01_INCONCLUSIVE_I02_SQLITE_PASS_MYSQL_PENDING_HOLD_MAIN",
+    "decision": "ROUND_12_I02_SCOPED_RUNTIME_ACCEPTED_I03_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1882,7 +1882,7 @@
     "round12": {
       "phase": "P2-I02 central implementation",
       "base": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
-      "status": "I02_DRAFT_IMPLEMENTED_SQLITE_ACCEPTED_MYSQL_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "scope": "CashCustodyAmounts; exact session opening/funding/expected/close/decision and reports; handover exact bounds/replay; late amount/counted surplus and cash posting match; closed correction exact source identity; API/Filament pass validated raw input. Local persisted audit guards; no global AuditLogger, schema, API shape, lock-order or dependency edits.",
       "branch": "fix/central-p2-i02-cash-custody",
       "product_head": "ef299515f9d599aec4039222c422418518ecb71d",
@@ -1902,10 +1902,30 @@
         },
         "mysql": {
           "job": 139002938509,
-          "status": "in_progress"
+          "tests": 14,
+          "assertions": 247,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "exit": 0,
+          "lint": 8
+        },
+        "total": {
+          "tests": 28,
+          "assertions": 494,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
         }
       },
-      "policy": "Missing finalized expected amount fails closed; preserve stored history. Overallocated counted snapshot not eligible for new approvals. Direct service D14 cap preserved, API existing opening/close cap retained. No product activation or merge until both actual engines accepted and remaining gates assessed."
+      "policy": "Missing finalized expected amount fails closed; preserve stored history. Overallocated counted snapshot not eligible for new approvals. Direct service D14 cap preserved, API existing opening/close cap retained. No product activation or merge until both actual engines accepted and remaining gates assessed.",
+      "acceptance": "Exact product/test head ef299515f9d599aec4039222c422418518ecb71d verified on actual isolated hosted SQLite3.45.1 and MySQL8.0.46; PHP8.4.28 Composer2.9.8 PHPUnit12.5.29, raw logs inspected. Six new tests and eight changed-path API regressions per engine. Scope only; no claim all historical data or P2 complete."
+    },
+    "round13": {
+      "phase": "P2-I03 exact treasury register, transfers and cash counts",
+      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
+      "base": "ef299515f9d599aec4039222c422418518ecb71d",
+      "scope": "Replace unchecked native casts and addition with accepted SignedMinor/MoneyBoundary at authoritative raw amounts; exact D14 document amounts and portable signed accumulated balances, gross inflow/outflow, custody-in-transit, physical counted-minus-recorded variance. Preserve fingerprint serialization and existing evidence, locks, identity, classification, response shapes and validation caps. Audit integrity in touched operations. Test exact bounds, intermediate overflow, transfer conservation, replay, cash adjustment, malformed stored amounts, and changed-path regressions. No bank I04 changes except inventory, no new schema/dependencies or production deployment."
     }
   }
 }
