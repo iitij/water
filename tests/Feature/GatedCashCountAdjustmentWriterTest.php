@@ -371,4 +371,35 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($this->post($reviewer, $count, 'unattributed_cash_held')['registry_created']);
     }
 
+    public function test_held_cash_reservation_rejects_funding_that_would_consume_held_cash(): void
+    {
+        [, , $account, , , ] = $this->held();
+        $issuer = $this->actor();
+        $collector = $this->actor();
+        $this->rejects('held_cash_reserved', fn () => app(CashSessionService::class)->openFunded(
+            $collector, $issuer, (int) $account['id'], '100.01', 'QA-RESERVED-FUND',
+            'Independent physical funding evidence'));
+        $this->assertDatabaseCount('cash_session_fundings', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        app(CashSessionService::class)->openFunded($collector, $issuer, (int) $account['id'],
+            '100.00', 'QA-FREE-FUND', 'Independent physical funding evidence');
+        $this->assertDatabaseCount('cash_session_fundings', 1);
+        $this->assertSame(-9975, (int) DB::table('treasury_postings')->sum('amount_minor'));
+        $this->rejects('held_cash_reserved', fn () => app(CashSessionService::class)->openFunded(
+            $this->actor(), $issuer, (int) $account['id'], '0.01', 'QA-RESERVED-FUND-2',
+            'Independent physical funding evidence'));
+    }
+
+    public function test_assignment_does_not_release_cash_reservation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 10000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
+        $this->rejects('held_cash_outflow_backdated', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-24')));
+    }
+
 }
