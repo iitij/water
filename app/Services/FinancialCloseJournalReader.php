@@ -35,6 +35,7 @@ final class FinancialCloseJournalReader
     /** Verify stored bytes, chain, version and closure projection before any transition. */
     public function load(object $period, array $base): array
     {
+        $this->need(DB::transactionLevel() > 0, 'close_read_requires_gate');
         $state = $base;
         $previousHash = hash('sha256', $this->encode($base));
         $history = [];
