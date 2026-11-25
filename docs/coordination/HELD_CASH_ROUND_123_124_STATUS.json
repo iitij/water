@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Round143: period-scoped subscriber allocation and balance diagnostics, review current FinancialReconciliationService (all-time, not a period closing proof) and authoritative opening/cutover evidence. Keep existing read-only diagnostics noncertifying; no production activation or historic remediation.",
+  "next": "Verify exact round143 CI; resolve first certified opening evidence and subsequent predecessor chain independently of current-balance subtraction. Continue custody and complete writer inventory.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -655,5 +655,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round143": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "d286b07a1b1725e60fbc18b62fd58be70c1236b5",
+    "branch": "qa/subscriber-coverage-round143",
+    "source": "006e9887120f227823f887c3925565ad3026dc05",
+    "run": 45701711079,
+    "scope": "Read-only current-period subscriber reconciliation: exact registered ledger movements per subscriber, all current accounts including inactive, detect deleted accounts with finance history, independent document and allocation replay via FinancialReconciliationService, protect allocation history, distinguish gross debt/credit from net; no opening or period-end inference. Three targeted cases, both engines.",
+    "limits": "Runtime pending. All-time current balances are not historical snapshots; no opening certified, no cutover chosen, no production activation, real data, historical correction, main merge or actual reserve release.",
+    "next": "Verify exact round143 CI; resolve first certified opening evidence and subsequent predecessor chain independently of current-balance subtraction. Continue custody and complete writer inventory."
   }
 }
