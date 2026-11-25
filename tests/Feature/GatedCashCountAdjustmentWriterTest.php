@@ -1920,4 +1920,85 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
     }
+
+    public function test_round130_transfer_destination_failure_rolls_back_both_accounts_and_held_evidence(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic transfer atomicity tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND130-TRANSFER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '0.05', paymentDate: '2026-11-25');
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $release->propose($this->actor(), $accountId, (int) $credit->id, 5, $proposal,
+            'QA-ROUND130-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $release->recordRelease($this->actor(), $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $destination = Subscriber::create(['name' => 'Synthetic transfer destination',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $actor = $this->actor();
+        $ledger = app(\App\Services\TransactionService::class);
+        $inspect = fn () => $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount($accountId));
+        $move = fn () => app(\App\Services\PaymentAccountTransferService::class)->transfer($receipt,
+            (int) $destination->id, $actor, 'Synthetic independently documented receipt transfer', 'Independent evidence of correct subscriber');
+        $this->assertSame(5, $inspect()['applied_minor']);
+        $this->assertSame(15, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(0, $ledger->accountBalanceMinor($destination));
+        $beforeInvoice = $invoice->fresh()->getRawOriginal();
+        $snapshot = fn (string $table) => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['payment_allocation_revisions', 'payment_allocations', 'transactions',
+            'held_cash_release_journal', 'held_cash_shadow_reinstatements', 'treasury_postings', 'audit_events'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $destinationId = (int) $destination->id;
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN NEW.subscriber_id = {$destinationId} BEGIN SELECT RAISE(ABORT, 'qa_destination_revision_failure'); END"
+            : "FOR EACH ROW BEGIN IF NEW.subscriber_id = {$destinationId} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_destination_revision_failure'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_round130_destination_failure BEFORE INSERT ON payment_allocation_revisions {$body}");
+        try {
+            try {
+                $move();
+                $this->fail('Transfer unexpectedly succeeded despite destination revision failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_destination_revision_failure', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
+            $this->assertDatabaseCount('payment_account_transfers', 0);
+            $this->assertSame(15, $ledger->accountBalanceMinor($subscriber));
+            $this->assertSame(0, $ledger->accountBalanceMinor($destination));
+            $this->assertSame(5, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_round130_destination_failure');
+        }
+        $transfer = $move();
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(5, $ledger->accountBalanceMinor($destination));
+        $this->assertSame(10, $inspect()['applied_minor']);
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $journal = $release->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(5, $journal['shadow_released_minor']);
+        $this->assertSame(0, $journal['reinstatement_due_minor']);
+        $this->assertSame(25, $journal['actual_protected_minor']);
+        $this->assertFalse($journal['spending_release_authorized']);
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertDatabaseCount('payment_account_transfers', 1);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($destination)['matches']);
+        $revisionCount = DB::table('payment_allocation_revisions')->count();
+        $transactionCount = DB::table('transactions')->count();
+        $auditCount = AuditEvent::query()->count();
+        $this->assertSame($transfer->id, $move()->id);
+        $this->assertSame($revisionCount, DB::table('payment_allocation_revisions')->count());
+        $this->assertSame($transactionCount, DB::table('transactions')->count());
+        $this->assertSame($auditCount, AuditEvent::query()->count());
+        $this->assertDatabaseCount('payment_account_transfers', 1);
+    }
 }
