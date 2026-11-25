@@ -2731,6 +2731,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(3, $verified['registered_ledger_legs_verified']);
     }
 
+    public function test_release_subscriber_transfer_entry_preserves_original_cash_and_both_balances(): void
+    {
+        [, , $account, , , $from] = $this->held();
+        $to = Subscriber::create(['name' => 'Synthetic correct subscriber', 'square_id' => $from->square_id, 'status' => 'active']);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        foreach (['ViewAny:Payment', 'View:Payment'] as $permission) {
+            $reviewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $from->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['to_subscriber_id' => $to->id, 'reason' => 'Independent verified receipt destination',
+            'evidence' => self::EVIDENCE, 'no_new_cash_movement' => true, 'operation_uuid' => $uuid];
+        $url = '/api/payments/'.$receipt->id.'/transfer-account';
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $service = app(\App\Services\PaymentAccountTransferService::class);
+        $direct = fn (?\App\Services\GatedInvoiceTransferWriter $candidate = null) =>
+            $service->transfer($receipt, (int) $to->id, $reviewer, $data['reason'], $data['evidence'], $candidate);
+        $tables = ['payments', 'transactions', 'payment_account_transfers', 'payment_allocation_revisions',
+            'payment_allocations', 'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.subscriber_transfers' => true]);
+        $this->rejects('gated_subscriber_transfer_writer_required', $direct);
+        $this->rejects('gated_subscriber_transfer_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $this->postJson($url, $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
+        $this->postJson($url, array_replace($data, ['no_new_cash_movement' => false]))->assertUnprocessable();
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($reviewer, 'web');
+        $page = \App\Filament\Resources\PaymentResource\Pages\ListPayments::class;
+        $action = \Filament\Actions\Testing\TestAction::make('transfer_account')->table($receipt);
+        $modal = \Livewire\Livewire::test($page)->mountAction($action)->setActionData($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $modal->assertActionDataSet(['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $transfer = \App\Models\PaymentAccountTransfer::where('payment_id', $receipt->id)->sole();
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(0, $ledger->accountBalanceMinor($from));
+        $this->assertSame(1000, $ledger->accountBalanceMinor($to));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('amount_minor')->get();
+        $this->assertSame([-1000, 1000], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+        $this->assertSame(['subscriber', 'subscriber'], $events->pluck('leg')->all());
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('transfer.id', $transfer->id);
+        $this->postJson($url, array_replace($data, ['reason' => 'Different documented transfer reason']))->assertConflict();
+        config(['financial_candidate.subscriber_transfers' => false]);
+        $this->rejects('gated_subscriber_transfer_writer_required', $direct);
+        $this->postJson($url, $data)->assertConflict();
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay(): void
     {
         [, , $account, , $lot, $from] = $this->held();
