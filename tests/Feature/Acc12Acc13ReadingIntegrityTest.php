@@ -200,7 +200,7 @@ final class Acc12Acc13ReadingIntegrityTest extends TestCase
             'current_reading' => '134.25', 'consumption_units' => '34.25',
         ]);
         $this->assertSame(
-            $first->getRawOriginal('actual_reading_date'),
+            $first->fresh()->getRawOriginal('actual_reading_date'),
             Reading::findOrFail($duplicateId)->getRawOriginal('actual_reading_date')
         );
         $before = $this->readingAndFinancialSnapshot();
