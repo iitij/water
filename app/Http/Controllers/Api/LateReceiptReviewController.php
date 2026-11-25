@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\CashSession;
 use App\Models\Payment;
 use App\Services\LateReceiptReviewService;
+use App\Services\ProspectiveSettlementEntry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -36,7 +37,7 @@ final class LateReceiptReviewController extends ApiController
         return response()->json(DB::table('late_receipt_reviews')->where('cash_session_id', $id)->orderByDesc('id')->paginate(25));
     }
 
-    public function clearCash(Request $request, int $id, LateReceiptReviewService $service)
+    public function clearCash(Request $request, int $id, ProspectiveSettlementEntry $service)
     {
         app(\App\Services\TreasuryRegisterService::class)->authorize($request->user());
         $data = $request->validate([
@@ -46,11 +47,10 @@ final class LateReceiptReviewController extends ApiController
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'amount' => ['prohibited'],
         ]);
-        return response()->json($service->receiveCash($id, $request->user(), (int) $data['treasury_account_id'],
-            $data['received_on'], $data['evidence_reference'], $data['evidence']));
+        return response()->json($service->clearCash($request->user(), $id, $data));
     }
 
-    public function clearBank(Request $request, int $id, \App\Services\PaymentService $service)
+    public function clearBank(Request $request, int $id, ProspectiveSettlementEntry $service)
     {
         app(\App\Services\TreasuryRegisterService::class)->authorize($request->user());
         $data = $request->validate([
@@ -60,8 +60,7 @@ final class LateReceiptReviewController extends ApiController
             'bank_clearance_reference' => ['required', 'string', 'max:150'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        return response()->json($service->clearLateNonCash($request->user(), $id, (int) $data['statement_id'],
-            (int) $data['line_id'], $data['evidence_reference'], $data['bank_clearance_reference'], $data['evidence']));
+        return response()->json($service->clearBank($request->user(), $id, $data));
     }
 
     public function decide(Request $request, int $id, LateReceiptReviewService $service)
@@ -73,6 +72,6 @@ final class LateReceiptReviewController extends ApiController
             'evidence_reference' => ['required_if:approve,true', 'nullable', 'string', 'min:3', 'max:150'],
             'settlement_method' => ['required_if:approve,true', 'nullable', 'in:separate_handover,verified_non_cash,already_counted'],
         ]);
-        return response()->json(['review' => $service->decide($id, $request->user(), $data)]);
+        return response()->json(app(ProspectiveSettlementEntry::class)->decide($request->user(), $id, $data));
     }
 }
