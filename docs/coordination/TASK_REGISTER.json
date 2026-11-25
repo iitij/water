@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 70,
+    "round": 71,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3892,6 +3892,16 @@
         "Original rollback test checked invoice balance but not exact allocation history; strengthened with persisted allocation integrity, revision IDs, fingerprints, row identity and amounts.",
         "Ledger proof currently binds monetary effect, not full invoice tariff/reading/audit content; separate source completeness and database immutability proof required before activation."
       ]
+    },
+    "round71": {
+      "phase": "Independent inactive cash refund writer",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "40092198d2d03130bfc78cd04b45556b5e055025",
+      "branch": "fix/central-g1b-gated-cash-refund",
+      "runs": [],
+      "scope": "Ordinary cash receipt refunds only; requires original receipt and treasury opening registered with matching persisted evidence and date; two signed effects in one operation and transaction; original service enforces actor independence, refund credit limit and approved till when applicable. Exact replay verifies refund actor, reason, evidence, account and both effects. Five cases per engine prepared: two-effect replay, legacy prerequisites, conflict/limit/actor, frozen/closed, allocation and audit rollback with positive retry.",
+      "limits": "Independent branch from accepted round 69, not based on unaccepted invoice source. Round 70 remains unaccepted. No workflow creation attempted after prior tool restriction; no runtime evidence or production activation. Bank refunds, late receipts, complete cash custody/coverage, cross-period replay and global lock order remain open. No main merge."
     }
   }
 }
