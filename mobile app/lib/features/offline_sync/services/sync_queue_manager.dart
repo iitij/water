@@ -431,7 +431,7 @@ class SyncQueueManager extends ChangeNotifier {
       }
     } catch (error) {
       final syncingIndex = _items.indexWhere(
-        (item) => inProgress != null && item.id == inProgress!.id && item.status == SyncQueueStatus.syncing,
+        (item) => inProgress != null && item.id == inProgress.id && item.status == SyncQueueStatus.syncing,
       );
       if (syncingIndex >= 0) {
         final recorded = _applyFailure(_items[syncingIndex], error);
