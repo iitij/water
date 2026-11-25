@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 95,
+    "round": 96,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4211,6 +4211,18 @@
       "scope": "Separate source-linked held-liability table and append-only assignment table; candidate W14 writer recognizes positive investigated surplus in same outer transaction with original registry record, exact replay rejects missing recognition. Gate-first independent assignment of identified subscriber creditor with equal opposite liability registry effects; no receipt, treasury movement, revenue, or discharge. Scoped source-to-liability and assignment-to-registry verification rejects missing recognition, orphan event, inconsistent amount and capacity. Four new feature cases prepared for SQLite/MySQL, including recognition fault rollback.",
       "limits": "No runtime or operational acceptance. Not a complete GL or a discharge/payout/credit-to-subscriber writer; verified owner identification evidence still requires human review. Legacy adoption, independently immutable proof, global UUID ownership integration, cash availability enforcement on all outgoing movements, same-transaction allocation/discharge policy, W18 funded/mixed till and independent allocation proof, cross-period historical reversal and complete source coverage remain open. Independent verifier still reports full source coverage false and no closure authorization. No main merge, real data or production activation. Existing grouped registry branch not integrated. Scope-wide lock strategy needs concurrent review.",
       "next": "Finish held liability discharge and cash reservation protections under explicit accounting contracts, independently verify W18 counted cash allocation; run new isolated tests sequentially without rerunning accepted suites, then full source coverage, writer fencing, race/rollback and permanent closure in requested order."
+    },
+    "round96": {
+      "phase": "Held cash reservation in ordinary treasury outflows",
+      "status": "PARTIAL_SOURCE_CREATED_LINT_PASS_RUNTIME_BLOCKED_DEPENDENCY_MISMATCH",
+      "base": "a96984a7b86bfceddbe6e4371a833e2e060c7b0a",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "44908f9339fdf4e1b32725436ecd5b60cdd0c79f",
+      "runs": [],
+      "syntax_validation": "Five PHP files linted from exact fetched SHA sequentially on msi; git diff --check clean; exit 0. Candidate composer.lock SHA256 62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335; available local installed checkout lock SHA256 eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c, different dependencies. No PHPUnit, SQL or migrations executed; no dependency download initiated.",
+      "scope": "Conservative cash reservation retains all positive held cash adjustment amounts, including unadopted legacy adjustments, validates original adjustment posting, refuses ordinary outflows consuming the reserve or backdating behind newer movements, uses existing issuance lock without acquiring scope after business locks. Integrated on isolated branch into treasury transfer dispatch, collector funding and refund posting after idempotent replay checks. Two feature methods prepared for exact funding boundary and preservation after owner assignment.",
+      "limits": "No release/discharge implementation, no proof of complete treasury balance or all entrypoint fencing. Guard is conservative and not a certified available cash report. Existing outflow methods may record already physically executed events; final design requires explicit authorized pre-disbursement control and separately recorded incident path if physical loss/unauthorized payout already occurred. Cash count shortages and direct SQL must be handled separately, not suppressed. No discharge, new payment method, payout source, W18 funded/mixed till proof, runtime acceptance or production change. Scope-wide lock integration and concurrent tests pending. Do not treat this candidate as production-ready.",
+      "next": "Define and implement explicit owner payout source and liability discharge, with separate actual cash outflow evidence and independent verification. Subscriber credit requires explicit noncash reclassification document and allocation semantics, not a fake ordinary cash receipt. Finish W18 independent proof. Restore exact locked test environment and run isolated tests sequentially. Preserve priority task order; no main merge or live data changes."
     }
   }
 }
