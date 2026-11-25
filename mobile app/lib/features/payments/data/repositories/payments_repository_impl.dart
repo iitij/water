@@ -33,7 +33,8 @@ class PaymentsRepositoryImpl
     implements
         PaymentsRepository,
         PaginatedPaymentsRepository,
-        SortedVoidRequestsRepository {
+        SortedVoidRequestsRepository,
+        BoundVoidRequestsRepository {
   const PaymentsRepositoryImpl({
     required PaymentsRemoteDataSource remote,
     required InvoicesRemoteDataSource invoices,
@@ -338,6 +339,37 @@ class PaymentsRepositoryImpl
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
     );
+    return ok;
+  }
+
+  @override
+  Future<bool> decideBoundVoidRequest(
+    PaymentVoidRequest request, {
+    required bool approve,
+    String? notes,
+  }) async {
+    final requestId = request.requestId;
+    if (!request.requiresBoundDecision || requestId == null || requestId <= 0) {
+      throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.');
+    }
+    final scope = _captureScope?.call();
+    scope?.ensureCurrent();
+    // Stable namespaced UUID: retries cannot create another approval.
+    final operationUuid = approve
+        ? _uuid.v5(
+            '8b1dbcca-196a-46b3-9162-1bbeb480cf37',
+            'water:void-approval:${request.id}:$requestId',
+          )
+        : null;
+    final ok = await _remote.decideBoundVoidRequest(
+      request.id,
+      requestId: requestId,
+      approve: approve,
+      operationUuid: operationUuid,
+      notes: notes,
+      sessionExtra: _sessionExtra(scope),
+    );
+    scope?.ensureCurrent();
     return ok;
   }
 
