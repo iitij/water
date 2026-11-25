@@ -205,7 +205,7 @@ class CustomAccountWidget extends AccountWidget implements HasActions, HasForms
                 // Do not accept a receipt number, actor, meter or session from the form.
                 return app(\App\Services\PaymentService::class)->collectPayment(
                     subscriber: Subscriber::findOrFail($validated['subscriber_id']),
-                    amount: (float) $validated['amount'],
+                    amount: $validated['amount'],
                     invoiceId: isset($validated['invoice_id']) ? (int) $validated['invoice_id'] : null,
                     paymentMethod: $validated['payment_method'],
                     notes: $validated['notes'] ?? null,

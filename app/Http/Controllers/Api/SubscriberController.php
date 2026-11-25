@@ -283,7 +283,7 @@ class SubscriberController extends ApiController
 
         $payment = $paymentService->collectPayment(
             $subscriber,
-            (float) $data['amount'],
+            $data['amount'],
             $data['invoice_id'] ?? null,
             $data['payment_method'],
             $data['reference_number'] ?? null,

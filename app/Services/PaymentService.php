@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\FinancialAmount;
+use App\Support\ExactMoney;
+
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Setting;
@@ -30,14 +33,27 @@ class PaymentService
                 ->whereNull('voided_at')
                 ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
                 ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
-            $refunds = \App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)
-                ->selectRaw('payment_id, SUM(amount) as amount')->groupBy('payment_id')->pluck('amount', 'payment_id');
-            $credits = $payments->map(fn ($payment) => [
-                'amount' => (float) $payment->amount - (float) ($refunds[$payment->id] ?? 0), 'target' => $payment->invoice_id,
-                'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id,
-            ])->all();
+            // Sum individual DECIMAL casts, not an engine-dependent floating SUM.
+            $refunds = [];
+            foreach (\App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)->get(['payment_id', 'amount']) as $refund) {
+                $minor = FinancialAmount::parse($refund->amount)->minor;
+                if ($minor <= 0) {
+                    throw new \LogicException('Invalid refund amount.');
+                }
+                $refunds[$refund->payment_id] = FinancialAmount::add($refunds[$refund->payment_id] ?? 0, $minor);
+            }
+            $credits = $payments->map(function ($payment) use ($refunds) {
+                $minor = FinancialAmount::parse($payment->amount)->minor;
+                $refunded = $refunds[$payment->id] ?? 0;
+                if ($minor < 0 || $refunded > $minor) {
+                    throw new \LogicException('Receipt/refund amounts do not conserve money.');
+                }
+
+                return ['minor' => $minor - $refunded, 'target' => $payment->invoice_id,
+                    'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id];
+            })->all();
             foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
-                $credits[] = ['amount' => $transfer->amount, 'target' => null,
+                $credits[] = ['minor' => FinancialAmount::parse($transfer->amount)->minor, 'target' => null,
                     'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
             }
             usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
@@ -47,7 +63,11 @@ class PaymentService
             $caps = [];
             foreach ($invoices as $invoice) {
                 $paid[$invoice->id] = 0;
-                $caps[$invoice->id] = max(0, (int) round((float) $invoice->total_amount * 100));
+                $cap = FinancialAmount::parse($invoice->total_amount)->minor;
+                if ($cap < 0) {
+                    throw new \LogicException('Negative invoice allocation cap.');
+                }
+                $caps[$invoice->id] = $cap;
             }
 
             $replacements = \App\Models\HistoricalInvoiceCorrection::whereIn('replacement_invoice_id', $invoices->modelKeys())
@@ -56,8 +76,11 @@ class PaymentService
             $availableMinor = 0;
             $sourceAmounts = [];
             foreach ($credits as $credit) {
-                $remaining = max(0, (int) round((float) $credit['amount'] * 100));
-                $availableMinor += $remaining;
+                $remaining = $credit['minor'];
+                if ($remaining < 0) {
+                    throw new \LogicException('Negative allocation source.');
+                }
+                $availableMinor = FinancialAmount::add($availableMinor, $remaining);
                 $sourceKey = ($credit['kind'] === 0 ? 'payment:' : 'transfer:').$credit['id'];
                 if (array_key_exists($sourceKey, $sourceAmounts)) {
                     throw new \LogicException('Duplicate allocation credit source.');
@@ -96,7 +119,7 @@ class PaymentService
 
             // Persist all allocations before deriving any cumulative status.
             foreach ($invoices as $invoice) {
-                $invoice->amount_paid = number_format($paid[$invoice->id] / 100, 2, '.', '');
+                $invoice->amount_paid = ExactMoney::fromMinor($paid[$invoice->id])->decimal();
                 if ($invoice->isDirty('amount_paid')) {
                     $invoice->saveQuietly();
                 }
@@ -376,7 +399,7 @@ class PaymentService
      */
     public function collectPayment(
         Subscriber $subscriber,
-        float $amount,
+        mixed $amount,
         ?int $invoiceId = null,
         string $paymentMethod = 'cash',
         ?string $referenceNumber = null,
@@ -396,7 +419,7 @@ class PaymentService
 
     private function postPayment(
         Subscriber $subscriber,
-        float $amount,
+        mixed $amount,
         ?int $invoiceId = null,
         string $paymentMethod = 'cash',
         ?string $referenceNumber = null,
@@ -415,11 +438,13 @@ class PaymentService
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
             throw ValidationException::withMessages(['sync_uuid' => 'معرّف المزامنة غير صالح.']);
         }
-        return DB::transaction(function () use ($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim) {
+        $money = FinancialAmount::validated($amount);
+        if ($money->minor <= 0) {
+            throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
+        }
+        $amount = $money->decimal();
+        return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim) {
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
-            if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount) {
-                throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
-            }
 
             // Different subscriber/collector locks cannot arbitrate a global UUID
             // or a shared monthly receipt sequence. Hold this row through posting.
@@ -434,7 +459,7 @@ class PaymentService
                     && (int) $review->subscriber_id === (int) $subscriber->id
                     && (int) $review->collector_id === (int) $userId
                     && (int) ($review->invoice_id ?? 0) === (int) ($invoiceId ?? 0)
-                    && (float) $review->amount === $amount
+                    && FinancialAmount::parse($review->amount)->minor === $money->minor
                     && $review->payment_method === $paymentMethod
                     && ($clearedClaim && in_array($paymentMethod, ['bank_transfer', 'check'], true)
                         ? $paymentDate !== null && $paymentDate >= $review->payment_date : $review->payment_date === $paymentDate)
@@ -453,7 +478,7 @@ class PaymentService
                     if ((int) $existing->user_id !== (int) ($userId ?? 0)
                         || (int) $existing->subscriber_id !== (int) $subscriber->id
                         || (int) ($existing->invoice_id ?? 0) !== (int) ($invoiceId ?? 0)
-                        || round((float) $existing->amount, 2) !== round($amount, 2)
+                        || FinancialAmount::parse($existing->amount)->minor !== $money->minor
                         || (! $invoiceId && (int) (($approvedReview ? $review->submitted_meter_id : ($existing->meter_id ?? $existing->retired_meter_id)) ?? 0) !== (int) ($requestedMeterId ?? 0))
                         || ($requestedCashSessionId !== null && (int) ($approvedReview ? $review->cash_session_id : $existing->cash_session_id) !== $requestedCashSessionId)
                         || $existing->payment_method !== $paymentMethod
@@ -585,7 +610,7 @@ class PaymentService
                 || DB::table('late_receipt_reviews')->where('sync_uuid', $claim->sync_uuid)->exists(), 409, 'معرف الطلب مستخدم في سند آخر.');
             // No till assignment. The actual clearance date, not the submission date,
             // determines receipt date. The bank service independently verifies the statement.
-            $payment = $this->postPayment($subscriber, ((int) $claim->amount_minor) / 100,
+            $payment = $this->postPayment($subscriber, ExactMoney::fromMinor((int) $claim->amount_minor)->decimal(),
                 $claim->invoice_id ? (int) $claim->invoice_id : null, $claim->payment_method,
                 $claim->instrument_reference, $claim->notes, null, (int) $claim->submitted_by,
                 $line->booked_on, null, $claim->sync_uuid, null, false, null, true);
@@ -644,7 +669,7 @@ class PaymentService
             }
             $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('id', $lineId)->lockForUpdate()->first();
             abort_unless($line, 404);
-            $minor = (int) round((float) $review->amount * 100);
+            $minor = FinancialAmount::parse($review->amount)->minor;
             if ($minor <= 0 || (int) $line->amount_minor !== $minor || $line->booked_on < $review->payment_date) {
                 throw ValidationException::withMessages(['line_id' => 'يجب مطابقة مبلغ المطالبة وتاريخ تحقق التحصيل.']);
             }
@@ -660,7 +685,7 @@ class PaymentService
                 || DB::table('cash_handovers')->where('reference', $reviewReference)->exists()
                 || DB::table('payment_refunds')->where('disbursement_reference', $reviewReference)->exists(),
                 409, 'مرجع المراجعة مستخدم مسبقاً.');
-            $payment = $this->postPayment($subscriber, $minor / 100,
+            $payment = $this->postPayment($subscriber, ExactMoney::fromMinor($minor)->decimal(),
                 $review->invoice_id ? (int) $review->invoice_id : null, $review->payment_method,
                 $review->reference_number, $review->notes, $review->reason, (int) $review->collector_id,
                 $line->booked_on, null, $review->sync_uuid, null, false, $id, true);

@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\FinancialAmount;
+use App\Support\ExactMoney;
+
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Reading;
@@ -61,24 +64,29 @@ class InvoiceService
             $consumptionFee = $pricing['total'];
 
             // 2. المتأخرات السابقة (فقط فواتير سابقة غير مسددة من نفس النوع)
-            $previousBalance = 0;
+            $previousMinor = 0;
             $unpaidInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
                 ->whereNotIn('status', ['draft', 'cancelled'])
                 ->whereColumn('total_amount', '>', 'amount_paid');
 
             $unpaidInvoices = $unpaidInvoicesQuery->get();
-            $previousBalance = $unpaidInvoices->sum(fn($inv) => $inv->getRemainingAmount());
+            foreach ($unpaidInvoices as $unpaidInvoice) {
+                $billed = FinancialAmount::parse($unpaidInvoice->total_amount)->minor;
+                $paid = FinancialAmount::parse($unpaidInvoice->amount_paid)->minor;
+                if ($billed < 0 || $paid < 0) {
+                    throw new \LogicException('Negative billed or paid amount.');
+                }
+                $previousMinor = FinancialAmount::add($previousMinor, max(0, $billed - $paid));
+            }
+            $previousBalance = FinancialAmount::storageDecimal($previousMinor, 'previous_balance');
 
             // ملاحظة: سيتم استدعاء تحديث حالة الفواتير السابقة في نهاية الدالة لتعمل حسب المنطق الصحيح
             // 5. خصم الرصيد الدائن
-            $subtotal = $consumptionFee;
+            $subtotalMoney = ExactMoney::parse($consumptionFee);
+            $subtotal = $subtotalMoney->decimal();
 
-            $creditApplied = 0;
-            $availableBalance = $subscriber->getAccountCredit();
-            
-            if ($availableBalance > 0 && $subtotal > 0) {
-                $creditApplied = min($availableBalance, (float) $subtotal);
-            }
+            $availableMinor = max(0, app(TransactionService::class)->accountBalanceMinor($subscriber));
+            $creditApplied = ExactMoney::fromMinor(min($availableMinor, $subtotalMoney->minor))->decimal();
 
             // 6. فترة استهلاك المياه؛ وجود قراءة غير مفوترة شرط مؤكد أعلاه
             $billingPeriodStart = $uninvoicedReadings->min('period_start');
@@ -108,7 +116,7 @@ class InvoiceService
             // 8. إنشاء بنود الفاتورة
             $items = [];
 
-            if ($consumptionFee > 0) {
+            if ($subtotalMoney->minor > 0) {
                 $items[] = [
                     'invoice_id' => $invoice->id,
                     'type' => 'consumption',
@@ -117,7 +125,7 @@ class InvoiceService
                 ];
             }
 
-            if ($previousBalance > 0) {
+            if ($previousMinor > 0) {
                 $items[] = [
                     'invoice_id' => $invoice->id,
                     'type' => 'previous_balance',
@@ -148,7 +156,7 @@ class InvoiceService
             $transactionService->recordTransaction(
                 subscriber: $subscriber,
                 type: 'invoice',
-                amount: -$subtotal, // الفاتورة تعتبر دين (Debit)
+                amount: $subtotalMoney->negate()->decimal(), // الفاتورة تعتبر دين (Debit)
                 description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
                 reference: $invoice,
                 meter: $meter
