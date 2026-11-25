@@ -2352,7 +2352,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -2403,6 +2403,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt())
                 : fn () => $writer->clearLateBank($reviewer, $id, $statementId, $lineId, $date,
                     'QA-R134-REVIEW', 'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt());
+            $direct = $kind === 'claim'
+                ? fn (?\App\Services\GatedCollectionWriter $candidate = null) => app(PaymentService::class)->clearNonCashClaim(
+                    $reviewer, $id, $statementId, $lineId, 'QA-R134-PROOF', self::EVIDENCE, $candidate)
+                : fn (?\App\Services\GatedCollectionWriter $candidate = null) => app(PaymentService::class)->clearLateNonCash(
+                    $reviewer, $id, $statementId, $lineId, 'QA-R134-REVIEW', 'QA-R134-PROOF', self::EVIDENCE, $candidate);
             if ($legacy) {
                 app(PaymentService::class)->clearNonCashClaim($reviewer, $id, $statementId, $lineId, 'QA-R134-PROOF', self::EVIDENCE);
                 $this->rejects('gated_collection_operation_conflict', $act);
@@ -2425,6 +2430,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         $beforeOps = $ops();
         $beforeSeq = $seq();
+        if ($fence) {
+            config(['financial_candidate.noncash_settlements' => true]);
+            $this->rejects('gated_collection_writer_required', $direct);
+            $this->rejects('gated_collection_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+            $this->rejects('financial_period_not_open', $act);
+            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeOps, $ops());
+            $this->assertSame($beforeSeq, $seq());
+            $result = $act();
+            $this->assertTrue($result['registry_created']);
+            $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+            $this->assertFalse($writer->allowsMutation($kind, $id, $uuid));
+            $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+            $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+            $committed = [];
+            foreach ($tables as $table) $committed[$table] = $snapshot($table);
+            $committedOps = $ops();
+            $committedSeq = $seq();
+            config(['financial_candidate.noncash_settlements' => false]);
+            $this->rejects('gated_collection_writer_required', $direct);
+            $this->assertFalse($act()['registry_created']);
+            foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($committedOps, $ops());
+            $this->assertSame($committedSeq, $seq());
+            $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+            return;
+        }
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
         $this->rejects('financial_scope_not_active', $act);
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
@@ -2471,6 +2506,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertSame($committedOps, $ops());
         $this->assertSame($committedSeq, $seq());
+    }
+
+    public function test_release_noncash_fence_claim(): void
+    {
+        $this->round134Collection('claim', false, true);
+    }
+
+    public function test_release_noncash_fence_late_bank(): void
+    {
+        $this->round134Collection('late_bank', false, true);
     }
 
     public function test_round134_noncash_claim_registers_both_legs_atomically(): void
