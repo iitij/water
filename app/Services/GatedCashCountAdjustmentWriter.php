@@ -95,9 +95,10 @@ final class GatedCashCountAdjustmentWriter
                 foreach ($query->orderBy('id')->lockForUpdate()->get() as $row) {
                     $this->need(in_array($row->kind, ['internal_transfer_out', 'internal_transfer_in',
                         'cash_handover', 'payment_refund', 'collector_funding', 'cash_count_adjustment',
-                        'late_cash_receipt'], true), 'gated_cash_count_prior_unsupported');
+                        'late_cash_receipt', 'held_cash_payout'], true), 'gated_cash_count_prior_unsupported');
                     $event = DB::table('financial_posting_events')->where('scope_key', 'water')
-                        ->where('source_type', 'treasury_posting')->where('source_id', (string) $row->id)
+                        ->where('source_type', $row->kind === 'held_cash_payout' ? 'held_cash_payout' : 'treasury_posting')
+                        ->where('source_id', $row->kind === 'held_cash_payout' ? $row->held_cash_payout_uuid : (string) $row->id)
                         ->where('leg', 'treasury')->lockForUpdate()->first();
                     $this->need($event !== null && (string) $event->amount_minor === (string) $row->amount_minor
                         && $event->currency === 'YER', 'gated_cash_count_prior_unregistered');
