@@ -11,11 +11,31 @@ class SecureStorageService {
   static const _cachedUserKey = 'water.cached_user';
   final FlutterSecureStorage _storage;
   String? _volatileAccessToken;
+  bool _persistAccessToken = true;
+  int _sessionGeneration = 0;
+  Future<void> _pending = Future<void>.value();
 
-  Future<String?> readAccessToken() async =>
+  /// Changes immediately when a login or logout begins; refresh preserves it.
+  int get sessionGeneration => _sessionGeneration;
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final next = _pending.then((_) => operation());
+    _pending = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return next;
+  }
+
+  Future<String?> _readToken() async =>
       await _storage.read(key: _accessTokenKey) ?? _volatileAccessToken;
 
-  Future<void> writeAccessToken(String token, {bool persist = true}) async {
+  Future<String?> readAccessToken() => _serialize(_readToken);
+
+  Future<void> writeAccessToken(String token, {bool persist = true}) {
+    ++_sessionGeneration;
+    return _serialize(() => _writeToken(token, persist: persist));
+  }
+
+  Future<void> _writeToken(String token, {required bool persist}) async {
+    _persistAccessToken = persist;
     _volatileAccessToken = token;
     if (persist) {
       await _storage.write(key: _accessTokenKey, value: token);
@@ -23,6 +43,20 @@ class SecureStorageService {
       await _storage.delete(key: _accessTokenKey);
     }
   }
+
+  /// Compare-and-replace within the same serialized storage operation.
+  /// A new login/logout invalidates an in-flight rotation, including ABA tokens.
+  Future<bool> replaceAccessTokenIfCurrent({
+    required int generation,
+    required String expected,
+    required String replacement,
+  }) => _serialize(() async {
+    if (generation != _sessionGeneration) return false;
+    final current = await _readToken();
+    if (generation != _sessionGeneration || current != expected) return false;
+    await _writeToken(replacement, persist: _persistAccessToken);
+    return generation == _sessionGeneration;
+  });
 
   Future<void> writeUserId(String id) => _storage.write(key: _userIdKey, value: id);
 
@@ -46,10 +80,14 @@ class SecureStorageService {
     }
   }
 
-  Future<void> clearSession() async {
-    _volatileAccessToken = null;
-    await _storage.delete(key: _accessTokenKey);
-    await _storage.delete(key: _userIdKey);
-    await _storage.delete(key: _cachedUserKey);
+  Future<void> clearSession() {
+    ++_sessionGeneration;
+    return _serialize(() async {
+      _volatileAccessToken = null;
+      _persistAccessToken = true;
+      await _storage.delete(key: _accessTokenKey);
+      await _storage.delete(key: _userIdKey);
+      await _storage.delete(key: _cachedUserKey);
+    });
   }
 }
