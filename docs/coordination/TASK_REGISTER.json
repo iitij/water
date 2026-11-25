@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_11_CENTRAL_G07_DRAFT_IMPLEMENTED_PURE_CHECKS_PASS_RUNTIME_HOLD_MAIN",
+    "decision": "ROUND_11_I01_SCOPED_RUNTIME_ACCEPTED_I02_CENTRAL_IMPLEMENTATION_AUTHORIZED_G07_L01_HOSTED_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1319,7 +1319,7 @@
         "runtime": {
           "A": "Authorized two individually filtered ordinary MySQL tests with embedded controls, distinct fresh isolated instances; mandatory diagnostics OFF; follow PR82 final handoff and D matrix.",
           "C": "Authorized four cases per engine on approved isolated SQLite and MySQL runners; preserve actual outcomes, no product fixes.",
-          "B": "A final concurrence received #7152247474; actual PDO SQLite64 and MySQL63 expected checks now authorized on exact34d48fc, using approved isolated temporary fixture/private credentials, no product table access.",
+          "B": "ACCEPTED scoped actual PDO 64+63 exit0, exact34d48fc, run45553649896 job139000437571, supervisor inspected raw logs. I02 now separately authorized.",
           "expected": "10 PHPUnit parent cases and127 standalone PDO checks, not observed results.",
           "report": "WATER_ROUND11_TARGETED_VALIDATION.md",
           "restrictions": "No repeated prior tests, restricted probes, schema/product edits, merge or deployment. Reuse existing exact-head evidence. Do not infer causal defect from timeout."
@@ -1365,6 +1365,12 @@
           "note": "Local assistant pure tests executed against exact dependency and new file blobs, remotely checked. No Laravel, PDO, database, integrated lint or real runtime execution."
         },
         "remaining": "Original G07 baseline runtime reproduction remains unexecuted. Draft runtime acceptance requires all four original cases per engine on exact new head; review real raw date/types and locks, legacy-only and mixed-basis contract, existing tariff-line provenance (not enforced by new helper beyond invoice_id/flag/retired_meter_id), and integration regressions. No claim G07 closure or release. Keep L01 and I01 actual PDO pending; no merge, no production."
+      },
+      "hosted_qa": {
+        "pr": 86,
+        "head": "e80173f6deebfcb687bdbc853aec9e7dfa918482",
+        "status": "WORKFLOW_CREATED_RUNTIME_PENDING",
+        "scope": "G07 original baseline 4x2 and proposed fix4x2, L01 two MySQL methods separately; total18 new parent case executions expected; no I01 repeat. Each case isolated, no optional diagnostic probes; no merge."
       }
     },
     "operating_model": {
@@ -1762,7 +1768,7 @@
         "remaining": "Round11 G07 and L01 actual ordinary tests and P2-I01 actual PDO remain unexecuted/unverified here. Reuse exact-head reports if already available. I02 remains held for actual I01 acceptance; prepare exact implementation contract only."
       },
       "github_actions_recovery": {
-        "status": "PUBLIC_CONFIRMED_SMOKE_RERUN_REQUEST_ACCEPTED",
+        "status": "HOSTED_RUNNER_RESTORED_VERIFIED",
         "authority": "Owner changed repository visibility to public and requested continuation.",
         "visibility": "public",
         "observed": "GitHub repository metadata confirms public and admin/push permissions.",
@@ -1777,7 +1783,7 @@
         "next": "Verify hosted runner actually starts and probe result. Then prepare narrowly scoped ordinary QA-only workflow for pending round11 exact heads, respecting synthetic isolation, locked dependencies and excluded diagnostics. Avoid deployment and repeated accepted suites.",
         "limits": "No billing settings changed or financial commitments. Public exposure is owner decision; full secrets/privacy/history audit not certified. No fresh application test result yet.",
         "i01_hosted": {
-          "status": "QA_WORKFLOW_AND_DRAFT_PR_CREATED_RESULTS_PENDING",
+          "status": "SCOPED_RUNTIME_ACCEPTED",
           "branch": "qa/central-i01-hosted-pdo",
           "workflow_head": "f13ec16fc51be159335bdfabc0f012f014ac7457",
           "workflow": ".github/workflows/round11-i01-hosted-pdo.yml",
@@ -1792,9 +1798,33 @@
             }
           ],
           "old_probe_latest": [],
-          "limitations": "Workflow created and PR opened, no confirmed runner allocation or test output yet. No repeat of failed job probe; no direct billing changes, no main or frozen source changes. Full public exposure audit pending."
+          "limitations": "Workflow created and PR opened, no confirmed runner allocation or test output yet. No repeat of failed job probe; no direct billing changes, no main or frozen source changes. Full public exposure audit pending.",
+          "results": {
+            "run": 45553649896,
+            "job": 139000437571,
+            "exact_source": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
+            "php": "8.4.28",
+            "sqlite": "3.45.1",
+            "mysql": "8.0.46",
+            "sqlite_checks": 64,
+            "mysql_checks": 63,
+            "exits": [
+              0,
+              0
+            ],
+            "lock_digests": "all three expected hashes OK",
+            "raw_types": "SQLite decimal null/int/float, MySQL decimal null/string, both raw BIGINT int/null for valid tested values",
+            "isolation": "SQLite memory, pinned MySQL container network none, private socket water_test, generated masked credentials; raw log directly inspected",
+            "limits": "No Laravel call-site runtime acceptance; setup-php tag mutable, checkout Node20 deprecation warning; no previous suites rerun."
+          }
         }
       }
+    },
+    "round12": {
+      "phase": "P2-I02 central implementation",
+      "base": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
+      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
+      "scope": "Begin exact session monetary operations and handover, then late reviews/closed corrections with focused tests. Use accepted boundary types, raw values, exact source/destination caps, checked sums and required persisted audit at close/decision. Preserve existing API wire and limits, lock order, no schema/dependency changes. I03–I06 remain separately gated. No merge until runtime acceptance."
     }
   }
 }
