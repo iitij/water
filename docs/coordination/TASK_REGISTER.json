@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Final source decisions received PR79 #7151180357 and PR80 #7151181168. No further routine source review. Review actual outstanding runtime evidence and A-C-09-L01 operational lock breadth only if new evidence or a demonstrated defect; no activation or edits.",
+      "next": "Source and scoped runtime acceptance complete for P1/C. Review only new V2 composition or actual demonstrated lock/financial issue. No duplicate tests or product edits; P2 integration held.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -64,7 +64,7 @@
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "P2 pure source accepted by A/D at37ee7ea; integration plan received PR79 #7151182531. Preserve frozen P1 and foundation; no more routine design or pure suite reruns. Hold runtime P2 integration until accepted V2 and explicit scope for I01 boundary adapters.",
+      "next": "P1 scoped runtime accepted at8f52bdc; foundation37ee7ea pure source accepted, integration plan received. Freeze; P2 excluded from V2. Start I01 only after exact V2 acceptance and supervisor scope.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -134,7 +134,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "PR80 source accepted by A/D at e79c3b4 for A-C-08-01/02/03. Freeze; actual 13 planned runtime results outstanding. A-C-09-L01 lock breadth is open operational risk, not reproduced defect; no schema change or new product edit. Review actual evidence when available.",
+      "next": "Scoped C runtime acceptance complete at3572bf4 and e79c3b4. A-C-08-01/02/03 closed within scope. Preserve all source/financial/audit/operational tests. No live data, no repeated suites or schema change. A-C-09-L01 operational lock breadth and G07 open separately.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -192,11 +192,11 @@
     },
     "D": {
       "scope": "independent QA, CI, MySQL and Flutter",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Final source decisions and 27-path V2 matrix c47d9e794e9ae280117cf43f1b95cfd48bb751dc received. No duplicate review or test reruns. Reconcile missing original Codex evidence only, distinguish 14 command exits from actual tests and skips, document A-C-09-L01 ordinary MySQL operational evidence separately; no new merge until authorization.",
+      "next": "Round10: reconcile owner Codex export 137/1219 on exact heads; after Codex composition review G00 on new V2 SHA (27 paths plus manifest, 26 exact exclusive blobs/modes, 20 concurrency methods and C bounded helper, ancestry, locks); identify only integration-specific tests; preserve G07 and A-C-09-L01 operational limits. No duplicate suites or product edits/main merge.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_9_SCOPED_SOURCE_ACCEPTED_RUNTIME_EVIDENCE_HOLD_V2_AND_MAIN",
+    "decision": "ROUND_9_SCOPED_RUNTIME_ACCEPTED_ROUND_10_V2_COMPOSITION_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -961,7 +961,7 @@
       },
       "final_acceptance_checkpoint": {
         "source": "Supervisor direct GitHub review of current c04319a2 register, PR79/80 bodies, exact heads and diffs; user reports all completed but no later exact runtime report supplied.",
-        "decision": "SOURCE_ACCEPTANCE_COMPLETE_RUNTIME_EVIDENCE_HOLD",
+        "decision": "SCOPED_SOURCE_AND_RUNTIME_ACCEPTED_OWNER_EXPORT",
         "B": {
           "sha": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
           "status": "A_D_SCOPED_PURE_SOURCE_ACCEPTED",
@@ -979,8 +979,177 @@
           "manifest": "c47d9e794e9ae280117cf43f1b95cfd48bb751dc",
           "status": "SOURCE_MATRIX_COMPLETE",
           "evidence": "PR72 #7151200647. Supervisor independently compared cumulative deltas B14/C13/G10 1, union27, only overlap tests/Feature/FinancialConcurrencyTest.php; preserve C bounded helper and 20 methods."
-        }
+        },
+        "runtime_evidence": {
+          "source": "Owner supplied consolidated Codex final evidence export; reports state recovery of 17 suite logs,17 JUnit XML and both ledgers. Supervisor read export, verified remote refs and reconciled counts; did not directly inspect original cloud files or rerun.",
+          "rows": [
+            {
+              "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+              "round": 8,
+              "pass": 40,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 525,
+              "suites": [
+                [
+                  15,
+                  138
+                ],
+                [
+                  15,
+                  138
+                ],
+                [
+                  4,
+                  113
+                ],
+                [
+                  4,
+                  113
+                ],
+                [
+                  2,
+                  23
+                ]
+              ],
+              "report_sha256": "5549336e2442c784f736a4d1d01f55e85b2147bbdab7c4713f82e27bdddffb28"
+            },
+            {
+              "sha": "3572bf4f9968821651c7621cbce725e7da542788",
+              "round": 8,
+              "pass": 84,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 570,
+              "suites": [
+                [
+                  39,
+                  237
+                ],
+                [
+                  39,
+                  237
+                ],
+                [
+                  1,
+                  25
+                ],
+                [
+                  1,
+                  9
+                ],
+                [
+                  1,
+                  25
+                ],
+                [
+                  1,
+                  9
+                ],
+                [
+                  2,
+                  28
+                ]
+              ],
+              "report_sha256": "70d222dc1c6dc10ba64fe27c4440cf333e935ae7495481e5331c031a3269d2c5"
+            },
+            {
+              "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+              "round": 9,
+              "pass": 13,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 124,
+              "suites": [
+                [
+                  5,
+                  49
+                ],
+                [
+                  1,
+                  6
+                ],
+                [
+                  5,
+                  49
+                ],
+                [
+                  1,
+                  6
+                ],
+                [
+                  1,
+                  14
+                ]
+              ],
+              "report_sha256": "83619dbf80ace61b8098a663997b9559ee8c8ae8a527cf6cc39064f2d4f26774"
+            }
+          ],
+          "total": {
+            "pass": 137,
+            "fail": 0,
+            "error": 0,
+            "skip": 0,
+            "assertions": 1219,
+            "suites": 17,
+            "setup_exits": 3,
+            "all_parent_exits": 0
+          },
+          "environment": {
+            "round8": "cecfgver_6b06437281c0819c865f27e7c04c0caf / spec23",
+            "round9": "cecfgver_6b064885f874819c92428906bafe6fbc / spec27",
+            "php": "8.4.28",
+            "composer": "2.9.8",
+            "phpunit": "12.5.29",
+            "sqlite": "3.46.1",
+            "mysql": "8.0.46 Community Server GPL",
+            "isolation": "reported fresh network-disabled MySQL private socket/synthetic schema per invocation, SQLite :memory:, legacy empty schemas individually, FK/unique checks enabled"
+          },
+          "locks": {
+            "composer.lock": "eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c",
+            "package-lock.json": "e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a",
+            "mobile app/pubspec.lock": "1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d"
+          },
+          "race_notes": "Intermediate fork child no tests messages reconciled by export against final parent/JUnit. Not independent direct log verification. Prior standalone 2052 checks separate; no raw logs for them."
+        },
+        "remaining": "A-C-09-L01 query lock breadth and cross-account contention not established by same-account race; G07 stored ambiguity; already-applied migrations and live cleanup; hosted CI/full suites/production. No claim global deadlock freedom or full release."
       }
+    },
+    "round10": {
+      "phase": "QA-only V2 composition",
+      "candidate": {
+        "branch": "integration/accounting-candidate-v2",
+        "seed_sha": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+        "status": "SEED_CREATED_VERIFIED_NOT_COMPOSED",
+        "components": [
+          {
+            "name": "B complete P1",
+            "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+            "base": "833cae2d0c97e00604622b365f5efc7a319a8d50"
+          },
+          {
+            "name": "C cumulative meter policy",
+            "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+            "base": "f043851ed7d372a1187581e36aa6ac29f3fb8f94"
+          },
+          {
+            "name": "G10 fixture only",
+            "sha": "123fe5c6935110248c84d0e83e2aa53c886ce066",
+            "base": "f043851ed7d372a1187581e36aa6ac29f3fb8f94"
+          }
+        ],
+        "manifest": "c47d9e794e9ae280117cf43f1b95cfd48bb751dc",
+        "path_count": 27,
+        "exclusive_paths": 26,
+        "shared": "tests/Feature/FinancialConcurrencyTest.php",
+        "concurrency_methods": 20
+      },
+      "composition": "Owner-mediated Codex may integrate exact approved components on V2 only. Preserve ancestry, 26 source blobs/modes and 20 test method bodies with C bounded helper; only shared semantic resolution; no superseded case; verify V1 unchanged paths and all locks, add/update one integration manifest. Exclude P2 foundation, D latest docs-only delta, ACC14 activation, optional A, P3/closing/returns. No product changes outside exact composition, no new schema changes, no main merge or deployment.",
+      "validation": "Static G00 first, freeze resulting exact SHA before targeted integration tests. D independent review. Only integration-justified cases after authorization; preserve prior successful reports. Operational A-C-09-L01 and G07 separate acceptance gates, no schema change without approved scope. G02/G11/G12 held. P2 I01 only after V2 targeted acceptance.",
+      "limits": "No test executed by supervisor, no direct raw cloud file access. Seed branch created and verified only; no integration yet. main verified c877e9feae9a077d0b8d6e170b5ddeeab20f29f6."
     }
   }
 }
