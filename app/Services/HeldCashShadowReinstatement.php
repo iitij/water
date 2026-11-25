@@ -22,6 +22,8 @@ final class HeldCashShadowReinstatement
         $this->need(DB::transactionLevel() > 0, 'shadow_restore_requires_transaction');
         $creditIds = DB::table('treasury_held_cash_credits')->where('subscriber_id', $subscriber->id)->pluck('id');
         if ($creditIds->isEmpty()) return;
+        $protection = app(HeldCashReleaseDocumentProtection::class);
+        $this->need($protection->journalActive() && $protection->reinstatementActive(), 'held_release_protection_missing');
         $anchors = DB::table('held_cash_release_journal')->whereIn('credit_id', $creditIds)
             ->orderByDesc('id')->lockForUpdate()->get()->unique('credit_id');
         foreach ($anchors as $anchor) {
