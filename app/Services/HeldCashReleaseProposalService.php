@@ -224,7 +224,9 @@ final class HeldCashReleaseProposalService
                     && $after === min($before, $applied) && $after === SignedMinor::subtract($before, $minor),
                     'held_release_journal_chain');
             }
-            $state[$credit['credit_id']] = $after;
+            $source = DB::table('treasury_held_cash_credits')->where('id', $credit['credit_id'])->first();
+            $this->need($source !== null, 'held_release_journal_chain');
+            $state[$credit['credit_id']] = app(HeldCashShadowReinstatement::class)->afterAnchor($row, $source, $credit['revision_id']);
         }
         return $state;
     }

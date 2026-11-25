@@ -1361,15 +1361,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['spending_release_authorized']);
         $this->rejects('held_release_journal_duplicate', fn () => $record($reviewer));
         $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
-        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
-        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['reinstatement_due_minor']);
-        $result = $service->recordReinstatement($reviewer, $accountId, (int) $credit->id, $restore,
-            'Independent review of changed allocation evidence', $this->nowAt());
-        $this->assertSame(10, $result['amount_minor']);
-        $this->assertSame(0, $result['after_minor']);
+        // Inject failure only in the new atomic evidence write.
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_shadow_restore_failure BEFORE INSERT ON held_cash_shadow_reinstatements BEGIN SELECT RAISE(ABORT, 'synthetic_shadow_restore_failure'); END"
+            : "CREATE TRIGGER qa_shadow_restore_failure BEFORE INSERT ON held_cash_shadow_reinstatements FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_shadow_restore_failure'";
+        DB::unprepared($trigger);
+        $revision = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id');
+        try {
+            app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
+            $this->fail('Cancellation committed without reinstatement evidence.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_shadow_restore_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_shadow_restore_failure');
+        }
+        $this->assertNotSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame($revision, DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id'));
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice->fresh(), 'Synthetic independently documented cancellation', $reviewer->id);
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
         $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['reinstatement_due_minor']);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $this->rejects('held_release_journal_no_reinstatement', fn () => $service->recordReinstatement(
+            $reviewer, $accountId, (int) $credit->id, $restore, 'Independent review of changed allocation evidence', $this->nowAt()));
+        app(PaymentService::class)->recalculateInvoices($subscriber);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
         $this->assertSame(25, $service->inspectJournal($accountId, $this->nowAt())['actual_protected_minor']);
-        $this->assertDatabaseCount('held_cash_release_journal', 2);
+        $this->assertDatabaseCount('held_cash_release_journal', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
         try {
             DB::transaction(fn () => DB::table('held_cash_release_journal')->where('operation_uuid', $release)->update(['amount_minor' => 1]));

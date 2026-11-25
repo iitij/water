@@ -1,7 +1,7 @@
-name: Held cash incremental release journal acceptance
+name: Held cash incremental atomic reinstatement acceptance
 on:
   push:
-    branches: ['qa/held-cash-release-journal-round119']
+    branches: ['qa/held-cash-atomic-reinstatement-round120']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_journal_|test_release_proposal_|test_release_coverage_|test_release_preview_|test_release_policy_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_journal_|test_release_preview_|test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,4 +97,4 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_journal_|test_release_proposal_|test_release_coverage_|test_release_preview_|test_release_policy_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_journal_|test_release_preview_|test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
