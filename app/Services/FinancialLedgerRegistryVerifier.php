@@ -19,6 +19,7 @@ final class FinancialLedgerRegistryVerifier
         private FinancialPostingRegistry $registry,
         private FinancialLedgerEvidence $ledger,
         private TreasuryTransferEvidence $treasury,
+        private TreasuryCustodyEvidence $custody,
     ) {}
 
     public function verifyPeriod(string $scope, int $periodId): array
@@ -63,11 +64,14 @@ final class FinancialLedgerRegistryVerifier
                 if ($posting->effective_on !== $event->operation_effective_on) {
                     throw new DomainException('treasury_registry_effective_date_mismatch');
                 }
-                if (! in_array($posting->kind, ['internal_transfer_out', 'internal_transfer_in'], true)) {
+                if (in_array($posting->kind, ['internal_transfer_out', 'internal_transfer_in'], true)) {
+                    $actual = $this->treasury->leg((int) $id);
+                } elseif (in_array($posting->kind, ['cash_handover', 'payment_refund'], true)) {
+                    $actual = $this->custody->leg((int) $id);
+                } else {
                     $unverified++;
                     continue;
                 }
-                $actual = $this->treasury->leg((int) $id);
             } else {
                 $actual = $this->ledger->leg((int) $id);
             }
