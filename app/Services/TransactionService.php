@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAccountTransfer;
 use App\Models\PaymentRefund;
+use App\Models\TreasuryHeldCashCredit;
 use App\Models\Subscriber;
 use Illuminate\Validation\ValidationException;
 use App\Models\Transaction;
@@ -41,9 +42,9 @@ class TransactionService
     private function validateDocument(Subscriber $subscriber, string $type, string $amount, ?Model $reference, ?\App\Models\Meter $meter): ?Model
     {
         $minor = $this->minor($amount);
-        $documentTypes = ['invoice', 'invoice_reversal', 'payment', 'payment_reversal', 'payment_transfer_in', 'payment_refund'];
+        $documentTypes = ['invoice', 'invoice_reversal', 'payment', 'payment_reversal', 'payment_transfer_in', 'payment_refund', 'held_cash_credit'];
         $isDocument = $reference instanceof Invoice || $reference instanceof Payment
-            || $reference instanceof PaymentAccountTransfer || $reference instanceof PaymentRefund;
+            || $reference instanceof PaymentAccountTransfer || $reference instanceof PaymentRefund || $reference instanceof TreasuryHeldCashCredit;
         if (! $isDocument) {
             if (in_array($type, $documentTypes, true)) {
                 $this->reject('الحركة المالية تتطلب مستنداً معتمداً من النوع المطابق.');
@@ -81,6 +82,12 @@ class TransactionService
             $owner = $doc->to_subscriber_id;
             $meterId = null;
             $expected = $this->stored($doc);
+        } elseif ($doc instanceof TreasuryHeldCashCredit) {
+            if ($type !== 'held_cash_credit' || $this->stored($doc) <= 0) {
+                $this->reject('Invalid held cash credit document.');
+            }
+            $meterId = null;
+            $expected = $this->stored($doc);
         } else {
             if ($type !== 'payment_refund' || $this->stored($doc) <= 0) {
                 $this->reject('نوع حركة الاسترداد أو مبلغها غير صالح.');
@@ -113,7 +120,7 @@ class TransactionService
 
             if ($reference instanceof \App\Models\Invoice || $reference instanceof \App\Models\Payment
                 || $reference instanceof \App\Models\PaymentAccountTransfer
-                || $reference instanceof \App\Models\PaymentRefund) {
+                || $reference instanceof \App\Models\PaymentRefund || $reference instanceof TreasuryHeldCashCredit) {
                 $existing = Transaction::withTrashed()
                     ->where('reference_type', get_class($reference))
                     ->where('reference_id', $reference->id)
