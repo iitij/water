@@ -116,13 +116,29 @@ Future<void> configureDependencies({String? appVersion}) async {
   getIt.registerSingleton<AppThemeController>(AppThemeController());
   getIt.registerFactory<AuthCubit>(() => AuthCubit(session));
 
+  FieldSessionScope captureFieldScope() {
+    final userId = session.user?['id']?.toString();
+    final server = dioClient.dio.options.baseUrl;
+    final generation = secureStorage.sessionGeneration;
+    if (!session.isAuthenticated || userId == null || userId.isEmpty) {
+      throw StateError('Field data requires an authenticated owner.');
+    }
+    return FieldSessionScope(
+      server: server, userId: userId, generation: generation,
+      isCurrent: () => session.isAuthenticated &&
+          session.user?['id']?.toString() == userId &&
+          secureStorage.sessionGeneration == generation &&
+          dioClient.dio.options.baseUrl == server,
+    );
+  }
+
   // Dev 2: Field Operations & Shared Drift SQLite Database (`AppDatabase`).
   // `autoStartSync: false` ensures only the unified `SyncQueueManager` below
   // listens to connectivity and replays readings + payments in strict FIFO order.
   final fieldModule = await FieldOperationsModule.initialize(
     dio: dioClient.dio,
     autoStartSync: false,
-    ownerUserIdProvider: () => session.user?['id']?.toString(),
+    captureScope: captureFieldScope,
     // S5-02: مفتاح SQLCipher من المخزن الآمن للنظام. يعيد `null` تلقائياً
     // عندما لا يكون البناء بـ`--dart-define=ENCRYPT_LOCAL_DB=true`.
     keyProvider: getIt.isRegistered<DatabaseKeyProvider>()
@@ -157,16 +173,15 @@ Future<void> configureDependencies({String? appVersion}) async {
   final queueRepository = DriftSyncQueueRepository(
     database: fieldModule.database,
   );
-  final cachedUser = await secureStorage.readCachedUser();
-  await queueRepository.migrateLegacyQueuesIfNeeded(
-    fallbackOwnerUserId: cachedUser?['id']?.toString(),
-  );
+  // Legacy preference queues lack verified server provenance. Preserve them
+  // untouched for explicit recovery, not automatic adoption.
   getIt.registerSingleton<SyncQueueRepository>(queueRepository);
   final syncManager = SyncQueueManager(
     dio: dioClient.dio,
     repository: queueRepository,
     networkInfo: getIt<NetworkInfo>(),
     session: session,
+    captureScope: captureFieldScope,
   );
   getIt.registerSingleton<SyncQueueManager>(syncManager);
 
@@ -222,22 +237,6 @@ Future<void> configureDependencies({String? appVersion}) async {
 
   // مزامنة بيانات الميدان المحلية (أعطال القراءة + زيارات الجولة) — كانت
   // محلية فقط وتموت بفقدان الجهاز؛ الآن تُرفع فور التسجيل وعند عودة الاتصال.
-  FieldSessionScope captureFieldScope() {
-    final userId = session.user?['id']?.toString();
-    final server = dioClient.dio.options.baseUrl;
-    final generation = secureStorage.sessionGeneration;
-    if (!session.isAuthenticated || userId == null || userId.isEmpty) {
-      throw StateError('Field data requires an authenticated owner.');
-    }
-    return FieldSessionScope(
-      server: server, userId: userId, generation: generation,
-      isCurrent: () => session.isAuthenticated &&
-          session.user?['id']?.toString() == userId &&
-          secureStorage.sessionGeneration == generation &&
-          dioClient.dio.options.baseUrl == server,
-    );
-  }
-
   final fieldDataSync = FieldDataSyncService.scoped(
     dio: dioClient.dio,
     captureScope: captureFieldScope,
