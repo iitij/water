@@ -3478,4 +3478,100 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['period_closing_verified']);
         $this->assertFalse($result['closure_authorized']);
     }
+
+    private function round146TransitAccounts(): array
+    {
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-10', 'start_on' => '2026-10-01',
+            'next_on' => '2026-11-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $issuer = $this->actor();
+        $receiver = $this->actor();
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $accounts = [];
+        foreach (['A' => '100.00', 'B' => '0.00'] as $key => $amount) {
+            $accounts[] = $writer->open($issuer, [
+                'code' => 'QA-R146-'.$key, 'name' => 'Synthetic transit account '.$key, 'channel' => 'cash',
+                'opening_on' => '2026-10-31', 'opening_amount' => $amount,
+                'opening_reference' => 'QA-R146-OPEN-'.$key, 'opening_evidence' => self::EVIDENCE,
+            ], $key === 'A' ? self::UUID : self::OTHER, $this->nowAt())['account'];
+        }
+        return [$issuer, $receiver, (int) $accounts[0]['id'], (int) $accounts[1]['id']];
+    }
+
+    public function test_round146_transit_at_period_boundaries_uses_actual_dispatch_and_receipt_dates(): void
+    {
+        [$issuer, $receiver, $from, $to] = $this->round146TransitAccounts();
+        $writer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $first = $writer->dispatch($issuer, ['from_account_id' => $from, 'to_account_id' => $to,
+            'amount' => '10.25', 'reference' => 'QA-R146-OUT-1', 'dispatched_on' => '2026-10-31', 'evidence' => self::EVIDENCE],
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $second = $writer->dispatch($issuer, ['from_account_id' => $from, 'to_account_id' => $to,
+            'amount' => '5.00', 'reference' => 'QA-R146-OUT-2', 'dispatched_on' => '2026-11-24', 'evidence' => self::EVIDENCE],
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $writer->receive($receiver, (int) $first['transfer']['id'], ['amount' => '10.25',
+            'reference' => 'QA-R146-IN-1', 'received_on' => '2026-11-25', 'evidence' => self::EVIDENCE],
+            '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $inspect = fn (string $day) => app(FinancialWriteGate::class)->withinOpenPeriod('water', $day, $this->nowAt(),
+            fn (array $context) => app(\App\Services\FinancialTransitCoverageDiagnostic::class)->inspect($context['period_id'], $day));
+        $tables = ['treasury_transfers', 'treasury_transfer_receipts', 'treasury_postings',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $october = $inspect('2026-10-31');
+        $this->assertSame([], $october['issues']);
+        $this->assertSame(['opening_minor' => 0, 'dispatch_minor' => 1025, 'receipt_minor' => 0,
+            'closing_minor' => 1025], $october['verified_row_totals']);
+        $this->assertNull($october['rows'][0]['received_on']);
+        $early = $inspect('2026-11-24');
+        $this->assertSame([], $early['issues']);
+        $this->assertSame(['opening_minor' => 1025, 'dispatch_minor' => 500, 'receipt_minor' => 0,
+            'closing_minor' => 1525], $early['verified_row_totals']);
+        $current = $inspect('2026-11-25');
+        $this->assertSame([], $current['issues']);
+        $this->assertSame(['opening_minor' => 1025, 'dispatch_minor' => 500, 'receipt_minor' => 1025,
+            'closing_minor' => 500], $current['verified_row_totals']);
+        $this->assertTrue($current['scanned_transfers_match']);
+        $this->assertSame('99999999-9999-4999-8999-999999999999', $current['rows'][0]['receipt_operation_uuid']);
+        $this->assertSame((int) $second['transfer']['id'], $current['rows'][1]['transfer_id']);
+        $this->assertNull($current['rows'][1]['receipt_operation_uuid']);
+        $this->assertFalse($current['opening_certified']);
+        $this->assertFalse($current['source_coverage_verified']);
+        $this->assertFalse($current['closure_authorized']);
+        $this->assertSame($current, $inspect('2026-11-25'));
+        foreach ($before as $table => $records) $this->assertSame($records, $snapshot($table), $table);
+    }
+
+    public function test_round146_unregistered_dispatch_and_conflicting_audit_are_not_certified(): void
+    {
+        [$issuer, $receiver, $from, $to] = $this->round146TransitAccounts();
+        $registered = app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($issuer, [
+            'from_account_id' => $from, 'to_account_id' => $to, 'amount' => '5.00',
+            'reference' => 'QA-R146-REGISTERED', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE],
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $legacy = app(TreasuryTransferService::class)->dispatch($issuer, [
+            'from_account_id' => $from, 'to_account_id' => $to, 'amount' => '3.00',
+            'reference' => 'QA-R146-UNREGISTERED', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE]);
+        $inspect = fn () => $this->gate(fn (array $context) => app(\App\Services\FinancialTransitCoverageDiagnostic::class)
+            ->inspect($context['period_id'], '2026-11-25'));
+        $first = $inspect();
+        $this->assertFalse($first['scanned_transfers_match']);
+        $this->assertSame(500, $first['verified_row_totals']['closing_minor']);
+        $this->assertContains(['code' => 'transit_registry_leg_missing_or_conflicting', 'transfer_id' => (int) $legacy['id']], $first['issues']);
+        $audit = AuditEvent::query()->where('event', 'treasury.transfer_dispatched')
+            ->where('entity_id', (string) $registered['transfer']['id'])->sole();
+        $changed = $audit->after;
+        $changed['amount_minor'] = 501;
+        DB::table('audit_events')->where('id', $audit->id)->update(['after' => json_encode($changed, JSON_THROW_ON_ERROR)]);
+        $result = $inspect();
+        $this->assertFalse($result['scanned_transfers_match']);
+        $this->assertSame([], $result['rows']);
+        $this->assertSame(0, $result['verified_row_totals']['closing_minor']);
+        $this->assertContains(['code' => 'transit_audit_missing_or_conflicting',
+            'transfer_id' => (int) $registered['transfer']['id']], $result['issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('treasury_transfers', 2);
+        $this->assertDatabaseCount('treasury_transfer_receipts', 0);
+    }
 }
