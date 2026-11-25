@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 99,
+    "round": 100,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4404,6 +4404,62 @@
       "scope": "Dedicated identified owner cash payout document and single negative treasury posting, same outer gated transaction as liability reduction and mandatory audit; independently approved, positive exact minor amount, no excess over identified assignment, original account and current date, replay, preserve other held claims and reject insufficient recorded cash. Reservation now subtracts only source-matched audited registered payouts; canonical payload reconstructed without scope lock acquisition from legacy issuance lock path. Count snapshot compatibility preserves old null-field bytes. Treasury report exposes outstanding amount. Three additional feature cases prepared for actual partial payout/replay, rollback/retry and audit corruption.",
       "limits": "New source has not passed runtime yet. No subscriber credit settlement or prior physical cash authorization workflow; recorded evidence is not proof of actual receipt. No global verifier integration, protection of all entrypoints, immutable DB enforcement, complete UUID integration, W18 funded/mixed allocation proof or cross-period tests. New payout source still unsupported by general ledger registry verifier and subsequent gated cash count adjustment writer; deliberate fail-closed/unverified handling requires reviewed integration. No production, real DB or main changes.",
       "next": "Verify final workflow on exact new SHA, correct any failures. Extend held liability discharge to independently authorized noncash subscriber settlement without new cash movement, handle cash count after payout and general independent verifier, then W18 and all-writer coverage."
+    },
+    "round100": {
+      "phase": "Identified held cash credit settlement to subscriber ledger and invoice allocation",
+      "status": "PRIOR_PAYOUT_BOTH_ENGINES_PASS_CREDIT_SQLITE_PASS_MYSQL_PENDING",
+      "base": "8c7fff8e48517a915acd058dd479f712e9fa7e6f",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "9b22c5b526fc5d34b388451071d91e5436d8806b",
+      "runs": [
+        {
+          "id": 45638355750,
+          "head_sha": "8c7fff8e48517a915acd058dd479f712e9fa7e6f",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139289811051,
+              "engine": "sqlite",
+              "tests": 21,
+              "assertions": 167,
+              "exit": 0
+            },
+            {
+              "id": 139289810382,
+              "engine": "mysql",
+              "tests": 21,
+              "assertions": 167,
+              "exit": 0
+            }
+          ]
+        },
+        {
+          "id": 45639631317,
+          "head_sha": "9b22c5b526fc5d34b388451071d91e5436d8806b",
+          "conclusion": "pending_or_unaccepted",
+          "jobs": [
+            {
+              "id": 139294352070,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success",
+              "tests": 24,
+              "assertions": 200,
+              "exit": 0
+            },
+            {
+              "id": 139294352110,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "syntax_validation": "13 changed PHP files at exact source linted on msi, exit 0; existing working tree not checked out or modified.",
+      "scope": "Dedicated immutable-model held credit document, same identified subscriber only; same-day gate-first independent authority, exact D12 amount, combined payout/credit capacity and replay. Actual subscriber ledger credit, corresponding identified liability reduction and mandatory audit in one transaction without receipt or treasury cash movement. Allocation engine treats credit as third distinct source; existing allocation hash bytes preserved when new source absent. Reconciliation and read projection understand new source; general registered-leg verifier invokes scoped held coverage and recognizes held source legs, and cash count writer can resolve prior payout treasury leg. Three focused feature methods added: actual mixed receipt and credit invoice allocation with prior hash preservation and mixed payout/credit cap; allocation insert failure rollback and retry; missing credit audit blocks release.",
+      "limits": "Focused tests only. Not full affected regression acceptance or global source coverage. New credit releases specifically held reserve, but unused subscriber credit is a separate subscriber liability, not free distributable cash; general liquidity/credit reserve policy still requires review. Existing read API now exposes optional held credit source; mobile/reporting projections and existing allocator/reconciliation/ledger suites need changed-path validation. No prior physical payout authorization workflow, full DB immutability, W18 funded/mixed till independent proof, global UUID integration, all-writer fencing, cross-period replay or race acceptance. General held verifier relies on scoped reconstruction, not globally complete closure proof. No main merge, live data, production changes.",
+      "next": "Complete exact MySQL result if still pending; run changed-path allocation/reconciliation/registry regressions, independently exercise later count following payout, review remaining owner consent and pre-disbursement authorization, W18 funded/mixed till and cash-credit liquidity protection before declaring task one complete."
     }
   }
 }
