@@ -2079,4 +2079,107 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
+
+    public function test_round132_noncash_final_audit_failure_rolls_back_both_ledgers_and_shadow_evidence(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic noncash atomicity tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND132-BANK']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $release->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-ROUND132-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $release->recordRelease($this->actor(), $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(TreasuryRegisterService::class)->open($issuer, [
+            'code' => 'QA-R132-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank', 'opening_on' => '2026-11-25',
+            'opening_amount' => '0.00', 'opening_reference' => 'QA-R132-OPEN', 'opening_evidence' => 'Independent opening statement',
+        ]);
+        $bankService = app(\App\Services\BankReconciliationService::class);
+        $statement = $bankService->import($issuer, (int) $bank['id'], [
+            'reference' => 'QA-R132-STATEMENT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+            'opening_amount' => '0.00', 'closing_amount' => '0.30', 'evidence' => 'Independent actual bank statement',
+            'lines' => [['bank_reference' => 'QA-R132-IN', 'booked_on' => '2026-11-25', 'amount' => '0.30']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+            'sync_uuid' => '88888888-8888-4888-8888-888888888888', 'subscriber_id' => $subscriber->id,
+            'amount' => '0.30', 'payment_method' => 'check', 'instrument_reference' => 'QA-R132-CHECK', 'instrument_on' => '2026-11-25',
+        ]);
+        $clear = fn () => app(PaymentService::class)->clearNonCashClaim($reviewer, (int) $claim['id'],
+            $statementId, $lineId, 'QA-R132-PROOF', 'Independent verified bank collection evidence');
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $this->assertSame(30, $bankService->inspect($reviewer, $statementId)['bank_unmatched_minor']);
+        $snapshot = fn (string $table) => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $sequence = fn () => DB::table('document_sequences')->orderBy('kind')->orderBy('period')->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'held_cash_release_journal', 'held_cash_shadow_reinstatements', 'treasury_postings', 'audit_events',
+            'noncash_collection_claims', 'treasury_bank_collections', 'bank_statement_matches', 'bank_statement_lines'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $beforeSequence = $sequence();
+        $beforeInvoice = $invoice->fresh()->getRawOriginal();
+        $condition = "NEW.event = 'noncash_claim.cleared' AND EXISTS (SELECT 1 FROM held_cash_shadow_reinstatements)
+            AND EXISTS (SELECT 1 FROM bank_statement_matches) AND EXISTS (SELECT 1 FROM treasury_bank_collections)";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_noncash_final_audit_after_both_ledgers'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_noncash_final_audit_after_both_ledgers'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_round132_final_audit BEFORE INSERT ON audit_events {$body}");
+        try {
+            try {
+                $clear();
+                $this->fail('Noncash clearance unexpectedly committed despite required final audit failure.');
+            } catch (\Throwable $error) {
+                $chain = '';
+                for ($current = $error; $current !== null; $current = $current->getPrevious()) $chain .= $current->getMessage().' ';
+                $this->assertStringContainsString('qa_noncash_final_audit_after_both_ledgers', $chain);
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeSequence, $sequence());
+            $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
+            $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+            $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+            $this->assertSame(30, $bankService->inspect($reviewer, $statementId)['bank_unmatched_minor']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_round132_final_audit');
+        }
+        $result = $clear();
+        $this->assertSame('cleared', $result['claim']['status']);
+        $this->assertSame(30, (int) $result['bank']['posting']['amount_minor']);
+        $this->assertTrue($result['bank']['reconciliation']['fully_matched']);
+        $this->assertSame(40, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertSame('REC-202611-0001', DB::table('payments')->where('id', $result['payment_id'])->value('receipt_number'));
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $journal = $release->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(0, $journal['shadow_released_minor']);
+        $this->assertSame(25, $journal['actual_protected_minor']);
+        $this->assertFalse($journal['spending_release_authorized']);
+        $this->assertSame(1, DB::table('treasury_postings')->where('treasury_account_id', $accountId)->count());
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $committedSequence = $sequence();
+        $this->assertSame($result['payment_id'], $clear()['payment_id']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($committedSequence, $sequence());
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_bank_collections', 1);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
+    }
 }
