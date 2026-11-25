@@ -127,6 +127,27 @@ class FinancialConcurrencyTest extends TestCase
         }
     }
 
+    public function test_parallel_distinct_accounts_issue_unique_invoice_sequence_numbers(): void
+    {
+        $a = $this->fixture();
+        $b = $this->fixture();
+        $issue = fn (Meter $meter) => app(InvoiceService::class)->generateInvoice(
+            Subscriber::findOrFail($meter->subscriber_id), Meter::findOrFail($meter->id)
+        )->bill_number;
+        $results = $this->race(fn () => $issue($a), fn () => $issue($b));
+        $this->assertTrue($results[0]['ok'], json_encode($results));
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        $numbers = [$results[0]['value'], $results[1]['value']];
+        sort($numbers);
+        $prefix = 'INV-'.now()->format('Ym').'-';
+        $this->assertSame([$prefix.'0001', $prefix.'0002'], $numbers);
+        $this->assertSame(2, Invoice::count());
+        $this->assertSame(2, Transaction::count());
+        $this->assertSame(2, (int) DB::table('document_sequences')->where('kind', 'INV')->value('last_number'));
+        $this->assertSame(-600000, app(TransactionService::class)->accountBalanceMinor($a->subscriber));
+        $this->assertSame(-600000, app(TransactionService::class)->accountBalanceMinor($b->subscriber));
+    }
+
     public function test_parallel_observations_on_same_date_commit_only_once(): void
     {
         $meter = $this->fixture();
