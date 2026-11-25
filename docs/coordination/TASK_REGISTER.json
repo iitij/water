@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 61,
+    "round": 62,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3562,6 +3562,18 @@
           "skipped": 0
         }
       }
+    },
+    "round62": {
+      "phase": "Actual treasury opening and collector funding evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "f1c5b85806db87bdd99eb364b9397dfd6de11898",
+      "source": "0830bb75b6e7f4401b82a0c9c90ba6056352a092",
+      "workflow": "269ab38f6a230b3b9b2d3a2b4c204e6e2d991283",
+      "branch": "fix/central-g1b-treasury-opening-funding",
+      "pr": 139,
+      "runs": [],
+      "scope": "Opening identity distinct from movements including zero; exact D14 boundary, actual collector funding matches source, account, opening amount, issuer/collector, effective date. Three new cases per engine plus directly changed registry and verifier regressions.",
+      "limits": "No complete treasury coverage, actor authorization proof binding, reconciliation, writer activation or closure. Runtime pending."
     }
   }
 }
