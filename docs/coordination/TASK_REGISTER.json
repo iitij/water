@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_13_I03_SCOPED_RUNTIME_ACCEPTED_I04_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_14_I04_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1952,8 +1952,12 @@
     "round14": {
       "phase": "P2-I04 exact bank reconciliation and clearing",
       "base": "9c803d0e32e48d097691c0e6f3f12de22219f158",
-      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
-      "scope": "Exact statement and line D14, raw receipt D12, checked signed aggregates, statement integrity and existing canonical hashes, source matching, clearing identity, persisted audit. Preserve lock order, API, schema and existing evidence; no automatic balancing, main or production change. Targeted tests on both engines before acceptance."
+      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
+      "scope": "BankReconciliationService exact signed D14 input/identity, raw positive D12 receipt/ledger and late review, signed running sums and gaps, canonical hash, required persisted audit; PaymentService claim and late noncash clearing raw amounts and required audit. No schema, dependency or main changes.",
+      "product_test_head": "3c9bf0eeb9274d66e18e3f43accaf14ea08b3c8c",
+      "workflow_head": "c3b1a454bd252d83d7b12317b6839434255d3377",
+      "pr": 89,
+      "tests": "4 new exact bank cases and 9 changed-path regression cases per engine. No runtime result yet."
     }
   }
 }
