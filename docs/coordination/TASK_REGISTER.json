@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 77,
+    "round": 78,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3981,6 +3981,17 @@
       "scope": "Registered current-meter observation invoice only; original monetary leg and historical pricing evidence, preserve invoice/pricing/items/receipt rows, reverse exact amount, release original readings and verify complete pending observation suffix to prevent irreparable billing gaps. Exact replay with audit pricing fingerprint and reading identity, including after subsequent rebilling. Six cases per engine prepared: cancellation/rebill, zero identity, older invoice chain-gap rollback, legacy/closed/frozen rejection, replay/tamper conflicts, registry failure restoring credit and allocation history.",
       "limits": "Independent branch from accepted round 69; synthetic prerequisite invoice explicitly registered via actual InvoiceService, not the unaccepted round70 writer. No runtime execution; previous workflow creation restriction respected. Current-meter observation scope only; retired and legacy-calendar corrections separate, multi-invoice correction policy open. Pricing fingerprint in audit not independently immutable; all-writer coverage and global lock protocol unproved. No activation, main merge or production data changes.",
       "next": "W11 closed-cash duplicate correction, then W12 cash handover; validate pending independent branches."
+    },
+    "round78": {
+      "phase": "W11 independent inactive gated closed-cash duplicate correction",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "9e39d59d055d9b2f51ae04f051e67c6b5563f752",
+      "branch": "fix/central-g1b-gated-closed-cash-duplicate",
+      "runs": [],
+      "scope": "Both original and duplicate registered ordinary cash receipts of same subscriber and same independently approved physical-cash session, equal exact amounts and documented reason/evidence, preserve original receipt and approved custody snapshot and physical summary; reverse duplicate once, validate audit and exact replay; no treasury or refund movement. Six cases per engine prepared: actual duplicate correction and replay, authority/identity/evidence conflicts, unregistered source, unequal amounts, unapproved/closed/frozen rejection, registry fault with allocation and audit rollback/retry.",
+      "limits": "Independent branch from accepted round69; rounds70–75 and77 remain unaccepted. No runtime execution; earlier workflow creation restriction respected. Same-till scope narrower than legacy service; evidence truth requires independent human verification, no automatic duplicate inference. Cross-till and noncash corrections, complete immutable decision proof, global fencing/concurrency and source coverage remain open. No production activation, main merge or live data changes.",
+      "next": "W12 atomic cash handover and treasury posting; validate pending branches before integrated activation."
     }
   }
 }
