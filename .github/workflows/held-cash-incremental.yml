@@ -1,7 +1,7 @@
-name: Prospective void Filament integration
+name: Prospective void mobile decision integration
 on:
   push:
-    branches: ['release/prospective-void-filament']
+    branches: ['release/prospective-void-mobile-decision']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify actual Filament void modal integration
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_filament_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify bound mobile API and affected API regression
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_mobile_decision_|test_release_void_api_uses_exact_request_identity' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,5 +96,32 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify actual Filament void modal integration
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_filament_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify bound mobile API and affected API regression
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_mobile_decision_|test_release_void_api_uses_exact_request_identity' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: "mobile app"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Verify source and resolve dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          flutter --version
+          sha256sum pubspec.lock
+          flutter pub get
+          git diff --exit-code -- pubspec.lock
+      - name: Analyze changed modules
+        run: dart analyze --no-fatal-warnings lib/features/payments/data/models/payment_model.dart lib/features/payments/data/datasources/payments_remote_datasource.dart lib/features/payments/data/repositories/payments_repository_impl.dart lib/features/payments/domain/repositories/payments_repository.dart lib/features/payments/presentation/sheets/void_requests_sheet.dart test/features/payments/bound_void_decision_test.dart
+      - name: Verify bound decisions and affected list widget
+        run: flutter test test/features/payments/bound_void_decision_test.dart test/features/payments/void_requests_pagination_test.dart
