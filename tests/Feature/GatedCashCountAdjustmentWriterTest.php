@@ -1515,4 +1515,79 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
     }
+
+    public function test_round125_actual_loss_keeps_full_held_reserve_and_blocks_outflow(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic current loss tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND125-LOSS']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $preview = app(\App\Services\HeldCashReleaseReadiness::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 5, $proposal,
+            'QA-LOSS-SHADOW', 'Independent review of current allocation evidence', $this->nowAt());
+        $service->recordRelease($this->actor(), $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $before = $preview->preview($accountId, $this->nowAt());
+        $this->assertSame(10025, $before['recorded_balance_minor']);
+        $this->assertSame(25, $before['protected_minor']);
+        $this->assertSame(0, $before['shortfall_minor']);
+        $this->assertSame(5, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $revision = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id');
+        $ledger = app(\App\Services\TransactionService::class);
+        $subscriberBalance = $ledger->accountBalanceMinor($subscriber);
+        $counts = app(TreasuryCashCountService::class);
+        $counter = $this->actor();
+        $reviewer = $this->actor();
+        $observation = $counts->record($counter, $accountId, '0.24', 'QA-ROUND125-COUNT', self::EVIDENCE);
+        $countId = (int) $observation['count']['id'];
+        $counts->review($reviewer, $countId, true, 'Independent review of newly observed physical loss');
+        $lossUuid = '88888888-8888-4888-8888-888888888888';
+        $post = fn () => app(GatedCashCountAdjustmentWriter::class)->adjust($reviewer, $countId,
+            'QA-ROUND125-ADJUST', 'confirmed_cash_loss', self::REASON, self::EVIDENCE, $lossUuid, $this->nowAt());
+        $loss = $post();
+        $this->assertTrue($loss['registry_created']);
+        $this->assertSame(-10001, (int) $loss['posting']['amount_minor']);
+        $this->assertSame(24, $loss['observation']['current_recorded_minor']);
+        $after = $preview->preview($accountId, $this->nowAt());
+        $this->assertSame(24, $after['recorded_balance_minor']);
+        $this->assertSame(5, $after['outstanding_minor']);
+        $this->assertSame(20, $after['credited_minor']);
+        $this->assertSame(25, $after['protected_minor']);
+        $this->assertSame(1, $after['shortfall_minor']);
+        $this->assertSame(0, $after['candidate_additional_release_minor']);
+        $this->assertFalse($after['spending_release_authorized']);
+        $journal = $service->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(5, $journal['shadow_released_minor']);
+        $this->assertSame(25, $journal['actual_protected_minor']);
+        $this->assertFalse($journal['spending_release_authorized']);
+        $report = app(TreasuryRegisterService::class)->inspect($reviewer, $accountId);
+        $this->assertSame(1, $report['held_cash_possible_shortfall_minor']);
+        $this->assertContains(['code' => 'held_cash_possible_liquidity_shortfall', 'amount_minor' => 1], $report['issues']);
+        $this->rejects('held_release_proposal_capacity', fn () => $service->propose($this->actor(), $accountId,
+            (int) $credit->id, 1, '99999999-9999-4999-8999-999999999999',
+            'QA-LOSS-NEW-RELEASE', 'Independent review after actual loss', $this->nowAt()));
+        $this->rejects('held_cash_reserved', fn () => app(CashSessionService::class)->openFunded(
+            $this->actor(), $reviewer, $accountId, '0.01', 'QA-LOSS-FUND', 'Independent physical funding evidence'));
+        $this->assertDatabaseCount('cash_session_fundings', 0);
+        $again = $post();
+        $this->assertFalse($again['registry_created']);
+        $this->assertSame($loss['posting']['id'], $again['posting']['id']);
+        $this->assertSame($subscriberBalance, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertSame($revision, DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id'));
+        $this->assertDatabaseCount('held_cash_release_journal', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertDatabaseCount('treasury_cash_adjustments', 2);
+        $this->assertDatabaseCount('treasury_postings', 2);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $lossUuid,
+            'source_type' => 'treasury_posting', 'source_id' => (string) $loss['posting']['id'], 'amount_minor' => -10001]);
+    }
 }
