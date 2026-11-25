@@ -1,7 +1,7 @@
-name: Prospective void API integration
+name: Prospective void Filament integration
 on:
   push:
-    branches: ['release/prospective-void-api']
+    branches: ['release/prospective-void-filament']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify authenticated void API entry points
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify actual Filament void modal integration
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_filament_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,5 +96,5 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify authenticated void API entry points
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify actual Filament void modal integration
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_filament_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
