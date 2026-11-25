@@ -1,0 +1,108 @@
+name: G11 backup and local PIN safety
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round34-flutter-backup-lock-safety.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/central-flutter-backup-lock-safety'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e33b54ba7499c7bb92055aa8d982bcdb95a42763
+          persist-credentials: false
+      - name: Exact source and ordinary writer inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'e33b54ba7499c7bb92055aa8d982bcdb95a42763'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          echo "SEQUENCE_CALLS"
+          git grep -n -E 'generateBillNumber|generateReceiptNumber|Invoice::create\(|Payment::create\(|new Invoice\(|new Payment\(' -- app routes database || test "$?" -eq 1
+          echo "DOCUMENT_IDENTIFIER_WRITER_FILES"
+          git grep -l -E 'bill_number|receipt_number' -- app routes database || test "$?" -eq 1
+          echo "LATE_RECEIPT_REVIEW_REFERENCES"
+          git grep -l 'late_receipt_reviews' -- app routes database || test "$?" -eq 1
+          echo "TEST_GENERATOR_CALLS"
+          git grep -n -E 'generateBillNumber|generateReceiptNumber' -- tests || test "$?" -eq 1
+          git diff --exit-code
+  flutter:
+    needs: inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e33b54ba7499c7bb92055aa8d982bcdb95a42763
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          ini-values: serialize_precision=-1
+          coverage: none
+          tools: composer:2.9.8
+      - name: Verify exact source and locked Laravel translation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'e33b54ba7499c7bb92055aa8d982bcdb95a42763'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            'eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c  composer.lock' \
+            'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/logs
+          composer install --no-interaction --no-progress --prefer-dist --no-scripts
+          composer check-platform-reqs
+          php artisan package:discover --ansi
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: false
+      - name: Enforce Flutter and Dart versions and locked dependencies
+        working-directory: 'mobile app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version --machine > "$RUNNER_TEMP/flutter-version.json"
+          cat "$RUNNER_TEMP/flutter-version.json"
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["frameworkVersion"]=="3.44.0" and d["dartSdkVersion"]=="3.12.0"' "$RUNNER_TEMP/flutter-version.json"
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+      - name: Verify regenerated plugin links are ignored and source remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-files 'mobile app/linux/flutter/ephemeral/**')"
+          git check-ignore 'mobile app/linux/flutter/ephemeral/.plugin_symlinks/connectivity_plus'
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+          echo 'FLUTTER_GENERATED_HYGIENE_PASS'
+      - name: Strict analyzer and directly affected backup/PIN tests
+        working-directory: 'mobile app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub --no-fatal-infos
+          flutter test --no-pub --concurrency=1 test/core/backup/local_backup_test.dart test/core/security/app_lock_service_test.dart
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
