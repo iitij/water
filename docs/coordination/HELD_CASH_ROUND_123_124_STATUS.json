@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify targeted run and address only confirmed failures. Then add source coverage for approved counted cash and bank statement unresolved evidence without claiming closure.",
+  "next": "Round142: read-only settlement diagnostic for continuous bank statement coverage, unmatched items even when net zero, and current-period approved counted-cash proof. No history mutation or closure authorization.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -603,13 +603,30 @@
     "acceptance": "Two unaffected cases passed initial run on both engines; corrected split-refund/date case passed on both engines, six distinct engine/case combinations. MySQL affected regression repeated due changed source. All runtime evidence exact to recorded SHAs; not a complete source coverage certification."
   },
   "round141": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "2f402e4168f444a9b8837dba260b34f20514623d",
     "branch": "qa/source-membership-round141",
     "source": "74d0f8b7b9f34bdcf0d9ca5e320f406ba582cc46",
     "run": 45700757630,
     "scope": "Exact registry membership for singleton and multi-leg document groups, detect merged unrelated operations even if all individual hashes match; independently scan approved collection decisions; fix late cash receipt lookup via late_receipt_review_id and handover date normalization. Two new tests plus two directly affected round140 regressions.",
     "limits": "Candidate diagnostic only; no activation, historical correction, real data, main merge, or close authorization. Cross-period approval requires separate proof. Full custody, allocation, cutover and writer fences remain unproved.",
-    "next": "Verify targeted run and address only confirmed failures. Then add source coverage for approved counted cash and bank statement unresolved evidence without claiming closure."
+    "next": "Verify targeted run and address only confirmed failures. Then add source coverage for approved counted cash and bank statement unresolved evidence without claiming closure.",
+    "jobs": [
+      {
+        "id": 139509920576,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 43,
+        "exit": 0
+      },
+      {
+        "id": 139509920260,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 43,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
