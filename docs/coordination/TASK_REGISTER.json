@@ -969,12 +969,12 @@
         },
         "C": {
           "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
-          "status": "A_D_SCOPED_SOURCE_ACCEPTED_RUNTIME_HOLD",
-          "evidence": "A PR80 #7151181168, D #7151198389; 13 planned, actual counts/exit/skip not supplied; A-C-09-L01 unindexed current-read lock breadth open, not demonstrated defect. No schema change. Same-account race and callback tests scope limitations retained."
+          "status": "A_D_SCOPED_SOURCE_AND_RUNTIME_ACCEPTED",
+          "evidence": "A PR80 #7151181168, D #7151198389 and owner-supplied Codex export: exact e79c3b4 13 passed/124 assertions, no fail/error/skip, all final exits0. A-C-09-L01 remains operational lock breadth risk, not reproduced defect. Same-account and callback coverage limits retained."
         },
-        "cloud": "Existing Round8 exit ledger 14/14 (2 setup,12 test commands) accepted as reported command success. D confirms no actual counts/skips/raw hashes. Original reports not recovered from Library or prior context; Round9 report absent. Request one consolidated evidence export from existing Codex session; no repeat successful suites. If Round9 not run only approved 13 cases from PR80 exact SHA, no previously restricted checks.",
-        "next": "No new routine assignments to A/B/C/D. Once runtime gate reconciles and any demonstrated defect handled, authorize V2 composition from f043851 using B8f52bdc, Ce79c3b4 and G10 123fe5c, manifest c47d9e7. G00 verify 27 paths + manifest, exclusive blobs/modes, all20 shared methods and lockfiles; exact candidate targeted QA then P2 I01. No P2 foundation in V2, no main merge.",
-        "limits": "No product changes/test runs/branch creation or composition. G07 stored-reading ambiguity, G02/G11 full suites, G12 hosted CI and hosting open. User report completion does not substitute for actual runtime evidence.",
+        "cloud": "Owner export reconciles all 17 suite outcomes: 137/1219, zero fail/error/skip. No raw cloud access by supervisor; no reruns. Earlier evidence gaps superseded for scoped acceptance.",
+        "next": "V2 composition authorized by round10; freeze exact composed head after G00. P2 held until V2 acceptance.",
+        "limits": "No supervisor test execution, product edit or main merge. Existing V2 seed verified, not composed. G07, A-C-09-L01, full suites, CI/hosting and actual-data rollout remain open.",
         "D": {
           "manifest": "c47d9e794e9ae280117cf43f1b95cfd48bb751dc",
           "status": "SOURCE_MATRIX_COMPLETE",
@@ -1113,7 +1113,16 @@
             "package-lock.json": "e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a",
             "mobile app/pubspec.lock": "1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d"
           },
-          "race_notes": "Intermediate fork child no tests messages reconciled by export against final parent/JUnit. Not independent direct log verification. Prior standalone 2052 checks separate; no raw logs for them."
+          "race_notes": "Intermediate fork child no tests messages reconciled by export against final parent/JUnit. Not independent direct log verification. Prior standalone 2052 checks separate; no raw logs for them.",
+          "pr_comments": {
+            "P1": 7151583272,
+            "C": 7151583819
+          },
+          "git_lock_blobs_verified": {
+            "composer.lock": "39443fbd93fa583ec26230e43f907060c570ba0e",
+            "package-lock.json": "c5a25f6c6144d0da38e15ee82c23664f6ebf9556",
+            "mobile app/pubspec.lock": "3c5c1b1e623454293bf3da68021e51563e3aa999"
+          }
         },
         "remaining": "A-C-09-L01 query lock breadth and cross-account contention not established by same-account race; G07 stored ambiguity; already-applied migrations and live cleanup; hosted CI/full suites/production. No claim global deadlock freedom or full release."
       }
