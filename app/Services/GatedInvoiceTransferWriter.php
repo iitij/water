@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedInvoiceTransferWriter
 {
+    private ?array $transferIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private FinancialLedgerEvidence $ledger,
@@ -130,7 +132,13 @@ final class GatedInvoiceTransferWriter
             $balance = app(TransactionService::class);
             $beforeFrom = $balance->accountBalanceMinor($from);
             $beforeTo = $balance->accountBalanceMinor($to);
-            $transfer = app(PaymentAccountTransferService::class)->transfer($payment, $destinationId, $actor, $reason, $evidence);
+            $this->need($this->transferIdentity === null && DB::transactionLevel() > 0, 'gated_subscriber_transfer_mutation_scope');
+            $this->transferIdentity = [$paymentId, $destinationId, (int) $actor->id];
+            try {
+                $transfer = app(PaymentAccountTransferService::class)->transfer($payment, $destinationId, $actor, $reason, $evidence, $this);
+            } finally {
+                $this->transferIdentity = null;
+            }
             $out = $this->ledger->leg((int) $this->entry(Payment::class, $paymentId, 'payment_reversal')->id);
             $in = $this->ledger->leg((int) $this->entry(PaymentAccountTransfer::class, (int) $transfer->id, 'payment_transfer_in')->id);
             $minor = AccountMoney::stored($payment);
@@ -142,6 +150,11 @@ final class GatedInvoiceTransferWriter
             $this->need($created === ! $replay, 'gated_transfer_operation_conflict');
             return ['transfer' => $transfer, 'registry_created' => $created];
         });
+    }
+
+    public function allowsTransfer(int $paymentId, int $destinationId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->transferIdentity === [$paymentId, $destinationId, $actorId];
     }
 
     private function within(User $actor, string $uuid, DateTimeImmutable $now, callable $action): array
