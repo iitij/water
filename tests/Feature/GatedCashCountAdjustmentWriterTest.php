@@ -2803,6 +2803,73 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
 
+    public function test_release_funding_entry_preserves_cash_custody_and_registered_replay(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $collector = $this->actor();
+        $date = '2026-11-25';
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $treasury = app(TreasuryRegisterService::class);
+        $sessions = app(CashSessionService::class);
+        $accountId = (int) $account['id'];
+        $opening = ['code' => 'QA-NEW-TREASURY', 'name' => 'Synthetic prospective account', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-NEW-OPENING', 'opening_evidence' => self::EVIDENCE];
+        $openUuid = '66666666-6666-4666-8666-666666666666';
+        $fundUuid = '88888888-8888-4888-8888-888888888888';
+        $fund = ['collector_id' => $collector->id, 'amount' => '4.00', 'reference' => 'QA-NEW-FUNDING',
+            'evidence' => self::EVIDENCE];
+        $directFund = fn (?GatedTreasuryOpeningFundingWriter $candidate = null) =>
+            $sessions->openFunded($collector, $issuer, $accountId, $fund['amount'], $fund['reference'],
+                $fund['evidence'], null, null, $candidate);
+        $url = '/api/treasury/accounts';
+        $fundUrl = $url.'/'.$accountId.'/fund-collector';
+        $tables = ['treasury_accounts', 'cash_sessions', 'cash_session_fundings', 'treasury_postings',
+            'payments', 'transactions', 'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.treasury_opening_funding' => true]);
+        $this->rejects('gated_treasury_opening_writer_required', fn () => $treasury->open($issuer, $opening));
+        $this->rejects('gated_treasury_opening_writer_required', fn () =>
+            DB::transaction(fn () => $treasury->open($issuer, $opening, $writer)));
+        $this->rejects('gated_collector_funding_writer_required', $directFund);
+        $this->rejects('gated_collector_funding_writer_required', fn () => DB::transaction(fn () => $directFund($writer)));
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $this->postJson($url, $opening)->assertUnprocessable();
+        $this->postJson($fundUrl, $fund)->assertUnprocessable();
+        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid, 'issued_on' => $date])->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertConflict();
+        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertConflict();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $opened = $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertOk();
+        $newId = (int) $opened->json('account.id');
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $openUuid,
+            'leg' => 'opening', 'source_id' => (string) $newId, 'amount_minor' => 100]);
+        $this->postJson($fundUrl, array_replace($fund, ['collector_id' => $issuer->id, 'operation_uuid' => $fundUuid]))->assertForbidden();
+        $this->postJson($fundUrl, array_replace($fund, ['amount' => '100.01', 'operation_uuid' => $fundUuid]))->assertConflict();
+        $funded = $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertOk();
+        $sessionId = (int) $funded->json('cash_session.id');
+        $this->assertSame('4.00', \App\Models\CashSession::findOrFail($sessionId)->opening_amount);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $fundUuid,
+            'leg' => 'treasury', 'amount_minor' => -400]);
+        $this->assertSame(9625, $treasury->inspect($issuer, $accountId)['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertOk()->assertJsonPath('account.id', $newId);
+        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertOk()->assertJsonPath('cash_session.id', $sessionId);
+        config(['financial_candidate.treasury_opening_funding' => false]);
+        $this->postJson($url, $opening)->assertConflict();
+        $this->postJson($fundUrl, $fund)->assertConflict();
+        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+    }
+
     public function test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt(): void
     {
         [, , $account, , , $subscriber] = $this->held();
