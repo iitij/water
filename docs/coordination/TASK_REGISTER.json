@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 103,
+    "round": 104,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4621,6 +4621,92 @@
       "scope": "Independent prior authorization names one executor, assignment, original cash account, exact amount, current effective day and separate durable evidence. Prior approval has no posting/discharge, reserves assignment capacity against competing credit/authorizations; payout consumes exact approval, distinct executor and evidence, earlier approval audit ID bound into posting hash. Independent evidenced cancellation releases authorization capacity but never original liability; no cancelled UUID reuse. Bidirectional authorization audit coverage, source actor segregation and exact replay. Conservative source-account liquidity reserve retains the full amount reclassified into subscriber credit, separately from held liability; ordinary outflows and authorized payout preserve both. Migration refuses historical payouts without independent review rather than fabricating approvals. Four new tests for approval, cancellation, reserve after discharge and missing audit; existing payout tests now use required pre-approval path.",
       "limits": "No final runtime acceptance until exact jobs pass. Authorization and cancellation are candidate internal services, not activated web/API endpoints. Human evidence must prove consent, non-disbursement and actual delivery; no physical control claim. Credit reserve deliberately over-reserves even applied credit until all invoice/correction/refund writers fenced and independent proof of release exists; no global liquidity certification or reserve for unrelated subscriber credit. Legacy writer UUID collisions and full DB immutability still open. W18 distinct date, unsupported corrections and global source proof pending. Changed-path allocation, account reconciliation, reporting/mobile and registry suites plus concurrency and permanent close are not fully accepted. No production/main/live database modification.",
       "next": "Obtain exact CI result, fix confirmed failures; independently review prior authorization and cancellation, establish fenced exact release policy for applied credit and physical custody reconciliation, run affected regression suites without repeating unrelated baselines before task-one acceptance."
+    },
+    "round104": {
+      "phase": "MySQL migration compatibility, independent credit allocation proof and affected projections/regressions",
+      "status": "MYSQL_FK_NAME_FIXED_SQLITE_FOCUSED_PASS_ALLOCATION_TRIGGER_REGRESSION_FIXED_RETEST_PENDING",
+      "base": "45f0a0c3d444bdccd358f1228e8cb4563245b61e",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "647312ae112fcd6a80f1e39e0da9be4120d90874",
+      "runs": [
+        {
+          "id": 45642476390,
+          "head_sha": "45f0a0c3d444bdccd358f1228e8cb4563245b61e",
+          "jobs": [
+            {
+              "id": 139304545084,
+              "engine": "sqlite",
+              "tests": 38,
+              "assertions": 335,
+              "exit": 0
+            },
+            {
+              "id": 139304544492,
+              "engine": "mysql",
+              "tests": 38,
+              "assertions": 0,
+              "errors": 38,
+              "exit": 2,
+              "diagnosis": "MySQL error 1059: auto-generated foreign key name exceeds 64 characters; migration fails before assertions"
+            }
+          ]
+        },
+        {
+          "id": 45644782509,
+          "head_sha": "8671db4aa7dd6f6ccb25b454ab672520c2ab0034",
+          "conclusion": "sqlite_success_mysql_pending_at_check"
+        },
+        {
+          "id": 45645210211,
+          "head_sha": "f347bc11e51c9adbb32beb56c02a410b7f80518a",
+          "jobs": [
+            {
+              "id": 139314229212,
+              "engine": "sqlite",
+              "focused": {
+                "tests": 38,
+                "assertions": 348,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 16,
+                "assertions": 146,
+                "failures": 1,
+                "exit": 1,
+                "diagnosis": "PaymentAllocationHistoryTest::test_database_rejects_rewriting_or_deleting_saved_allocations: allocation protection inactive after SQLite table rebuild"
+              },
+              "registry": "skipped_due_to_prior_failure"
+            },
+            {
+              "id": 139314229705,
+              "engine": "mysql",
+              "status": "in_progress_at_check"
+            }
+          ]
+        },
+        {
+          "id": 45645372663,
+          "head_sha": "647312ae112fcd6a80f1e39e0da9be4120d90874",
+          "conclusion": "pending_at_check",
+          "jobs": [
+            {
+              "id": 139314825682,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "id": 139314826224,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "scope": "Use explicitly short FK names, preserving restrict-on-delete constraints. Add isolated scope-first, read-only HeldCashCreditAllocationEvidence, validating source coverage, reconciliation, revision hash and exact per-credit applied/unapplied conservation; no cash release. Distinguish held-credit reclassification from cash receipt in reporting, Filament and Flutter detail model/labels; add Flutter serialization/label test (not yet executed). Expand existing workflow to directly affected allocation/report and ledger verifier tests. SQLite regression exposed rebuild dropping append-only triggers; restore original protection and require active after credit allocation schema migration. No assertion weakened. Thirteen files changed. Five non-Blade PHP files linted at intermediate f347bc1 (all pass); final trigger fix not yet runtime verified.",
+      "limits": "Final exact SHA workflow pending; no full acceptance. Flutter runtime and view verification pending. MySQL regression excludes allocation corruption/trigger-specific fixtures whose setup requires engine-specific handling; retain existing protection tests, do not claim full MySQL regression coverage. Conservative reserve remains entire credit, even if allocated, until fenced correction/refund/invoice flows prove safe release. Read-only allocation proof is not spending authority or global certification. No new live endpoints, production/main/live database modification.",
+      "next": "Check run 45645372663 exact final source, resolve failures without weakening constraints, run focused Flutter tests and review all affected entrypoints. Establish durable protection against reopening paid credit before release. Continue task-one acceptance, then global coverage, all-writer fencing, concurrency and closure."
     }
   }
 }
