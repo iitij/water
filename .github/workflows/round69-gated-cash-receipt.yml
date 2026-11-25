@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         include:
           - { case: gated-cash-receipt-sqlite, engine: sqlite, sha: c542312de9573bb56b6b448b7559aaea9ae8bbd2 }
