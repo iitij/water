@@ -16,9 +16,12 @@ return new class extends Migration {
             $table->uuid('operation_uuid')->primary();
             $table->uuid('assignment_uuid');
             $table->foreign('assignment_uuid', 'held_auth_assignment_fk')->references('operation_uuid')->on('treasury_held_cash_assignments')->restrictOnDelete();
-            $table->foreignId('treasury_account_id')->constrained()->restrictOnDelete();
-            $table->foreignId('authorized_by')->constrained('users')->restrictOnDelete();
-            $table->foreignId('executor_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('treasury_account_id');
+            $table->foreign('treasury_account_id', 'held_auth_account_fk')->references('id')->on('treasury_accounts')->restrictOnDelete();
+            $table->foreignId('authorized_by');
+            $table->foreign('authorized_by', 'held_auth_authorizer_fk')->references('id')->on('users')->restrictOnDelete();
+            $table->foreignId('executor_id');
+            $table->foreign('executor_id', 'held_auth_executor_fk')->references('id')->on('users')->restrictOnDelete();
             $table->bigInteger('amount_minor');
             $table->date('effective_on');
             $table->string('authorized_at_utc', 32);
@@ -28,7 +31,8 @@ return new class extends Migration {
         Schema::create('treasury_held_cash_payout_cancellations', function (Blueprint $table) {
             $table->uuid('operation_uuid')->primary();
             $table->foreign('operation_uuid', 'held_cancel_auth_fk')->references('operation_uuid')->on('treasury_held_cash_payout_authorizations')->restrictOnDelete();
-            $table->foreignId('cancelled_by')->constrained('users')->restrictOnDelete();
+            $table->foreignId('cancelled_by');
+            $table->foreign('cancelled_by', 'held_cancel_actor_fk')->references('id')->on('users')->restrictOnDelete();
             $table->date('effective_on');
             $table->text('evidence');
         });
