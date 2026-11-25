@@ -613,7 +613,8 @@ class CollectSubmitButton extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) return;
 
-    final payment = state.outcome?.payment;
+    final outcome = cubit.state.outcome;
+    final payment = outcome?.payment;
     if (payment == null) {
       onSubmitted(true);
       return;
@@ -622,9 +623,9 @@ class CollectSubmitButton extends StatelessWidget {
     await ReceiptSuccessSheet.show(
       context,
       payment: payment,
-      receiptData: state.outcome?.receiptData,
+      receiptData: outcome?.receiptData,
       invoice: invoice,
-      queuedOffline: state.outcome?.queuedOffline ?? false,
+      queuedOffline: outcome?.queuedOffline ?? false,
       onDone: () => onSubmitted(true),
     );
   }
