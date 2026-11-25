@@ -343,10 +343,19 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         [, , , , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 20);
         $verify = fn () => $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage());
-        DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->update(['amount_minor' => 19]);
-        $this->rejects('held_cash_registry_mismatch', $verify);
-        DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->delete();
-        $this->rejects('held_cash_coverage_orphan_event', $verify);
+        // Deliberately simulate an administrator bypass of the source triggers
+        // in this disposable fixture only; independent reconstruction must
+        // still detect corruption even if storage protections are defeated.
+        DB::unprepared('DROP TRIGGER held_assignment_reject_update');
+        DB::unprepared('DROP TRIGGER held_assignment_reject_delete');
+        try {
+            DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->update(['amount_minor' => 19]);
+            $this->rejects('held_cash_registry_mismatch', $verify);
+            DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->delete();
+            $this->rejects('held_cash_coverage_orphan_event', $verify);
+        } finally {
+            app(\App\Services\HeldCashDocumentProtection::class)->install();
+        }
     }
 
     public function test_held_cash_recognition_failure_rolls_back_cash_and_registry(): void
@@ -719,6 +728,90 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
         $this->assertDatabaseCount('treasury_held_cash_credits', 0);
         $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
+    public function test_held_source_documents_are_append_only_even_through_raw_database_writes(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $executor = $this->actor();
+        $authorizer = $this->actor();
+        $cancelUuid = '77777777-7777-4777-8777-777777777777';
+        $this->authorizeHeld($authorizer, $executor, 5, $cancelUuid);
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->cancelPayoutAuthorization($authorizer, $cancelUuid,
+            'Independent proof that this cash authorization was not executed', '2026-11-25', $this->nowAt());
+        $this->payoutHeld($executor, 5);
+        $this->creditHeld($authorizer, 20, '55555555-5555-4555-8555-555555555555');
+        $protection = app(\App\Services\HeldCashDocumentProtection::class);
+        $this->assertTrue($protection->active());
+
+        foreach ([
+            'treasury_held_cash_liabilities' => 'id',
+            'treasury_held_cash_assignments' => 'operation_uuid',
+            'treasury_held_cash_payout_authorizations' => 'operation_uuid',
+            'treasury_held_cash_payout_cancellations' => 'operation_uuid',
+            'treasury_held_cash_payouts' => 'operation_uuid',
+            'treasury_held_cash_credits' => 'id',
+        ] as $table => $key) {
+            $before = DB::table($table)->orderBy($key)->get()->map(fn ($row) => (array) $row)->all();
+            $this->assertNotEmpty($before);
+            $row = $before[0];
+            $attempts = [
+                fn () => DB::table($table)->where($key, $row[$key])->update([$key => $row[$key]]),
+                fn () => DB::table($table)->where($key, $row[$key])->delete(),
+            ];
+            if (DB::getDriverName() === 'sqlite') {
+                $columns = implode(', ', array_keys($row));
+                $placeholders = implode(', ', array_fill(0, count($row), '?'));
+                $attempts[] = fn () => DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$placeholders})", array_values($row));
+            }
+            foreach ($attempts as $attempt) {
+                try {
+                    $attempt();
+                    $this->fail("Direct mutation succeeded for {$table}");
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Held cash document is immutable', $error->getMessage());
+                }
+            }
+            $this->assertSame($before, DB::table($table)->orderBy($key)->get()->map(fn ($item) => (array) $item)->all());
+        }
+        $this->assertSame(0, $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->inspect($lot))['outstanding_minor']);
+    }
+
+    public function test_cancelling_a_paid_invoice_restores_credit_without_releasing_or_duplicating_cash(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic cancellation tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-CANCEL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $this->creditHeld($actor, 25);
+        $inspect = fn () => $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $before = $inspect();
+        $this->assertSame(10, $before['applied_minor']);
+        $this->assertSame(15, $before['unapplied_minor']);
+        $this->assertSame(25, $before['protected_minor']);
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $cash = DB::table('treasury_postings')->orderBy('id')->get()->toArray();
+        $oldRevision = DB::table('payment_allocation_revisions')->where('id', $before['credits'][0]['revision_id'])->sole();
+
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice->fresh(), 'Synthetic independently documented invoice cancellation', (int) $actor->id);
+        $after = $inspect();
+        $this->assertSame(0, $after['applied_minor']);
+        $this->assertSame(25, $after['unapplied_minor']);
+        $this->assertSame(25, $after['protected_minor']);
+        $this->assertFalse($after['spending_release_authorized']);
+        $this->assertNotSame($before['credits'][0]['revision_id'], $after['credits'][0]['revision_id']);
+        $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($oldRevision));
+        $this->assertEquals($cash, DB::table('treasury_postings')->orderBy('id')->get()->toArray());
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
     }
 
 }
