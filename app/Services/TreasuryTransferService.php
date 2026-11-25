@@ -81,17 +81,39 @@ final class TreasuryTransferService
             'issues' => $issues];
     }
 
-    public function dispatch(User $actor, array $data): array
+    private function registered(string $column, int $id): bool
+    {
+        $ids = DB::table('treasury_postings')->where($column, $id)->pluck('id');
+        foreach ($ids as $postingId) {
+            if (DB::table('financial_posting_events')->where('scope_key', 'water')
+                ->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists()) return true;
+        }
+        return false;
+    }
+
+    private function requireWriter(string $kind, string $identity, User $actor,
+        ?GatedTreasuryTransferWriter $writer, bool $registered): void
+    {
+        if (! ($writer !== null && $writer->allowsMutation($kind, $identity, (int) $actor->id))
+            && ($writer !== null || $registered || config('financial_candidate.treasury_transfers') === true)) {
+            throw new \DomainException('gated_treasury_transfer_writer_required');
+        }
+    }
+
+    public function dispatch(User $actor, array $data, ?GatedTreasuryTransferWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $record = $this->evidence($data, 'dispatched_on') + [
             'from_account_id' => (int) $data['from_account_id'], 'to_account_id' => (int) $data['to_account_id'],
             'dispatched_by' => $actor->id,
         ];
-        return DB::transaction(function () use ($actor, $record): array {
+        return DB::transaction(function () use ($actor, $record, $gatedWriter): array {
             $this->lock();
             [$from, $to] = $this->accounts($record['from_account_id'], $record['to_account_id']);
             $existing = DB::table('treasury_transfers')->where('reference', $record['reference'])->lockForUpdate()->first();
+            $this->requireWriter('dispatch', $record['reference'], $actor, $gatedWriter,
+                $existing !== null && $this->registered('treasury_transfer_id', (int) $existing->id));
             if ($existing) {
                 $this->same($existing, $record);
                 $result = $this->result($existing);
@@ -118,17 +140,20 @@ final class TreasuryTransferService
         }, 3);
     }
 
-    public function receive(User $actor, int $id, array $data): array
+    public function receive(User $actor, int $id, array $data, ?GatedTreasuryTransferWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $record = $this->evidence($data, 'received_on') + ['treasury_transfer_id' => $id, 'received_by' => $actor->id];
-        return DB::transaction(function () use ($actor, $id, $record): array {
+        return DB::transaction(function () use ($actor, $id, $record, $gatedWriter): array {
             $this->lock();
             $transfer = DB::table('treasury_transfers')->where('id', $id)->lockForUpdate()->first();
             abort_unless($transfer, 404);
             [$from, $to] = $this->accounts((int) $transfer->from_account_id, (int) $transfer->to_account_id);
             abort_if((int) $transfer->dispatched_by === (int) $actor->id, 403, 'يجب أن يثبت الاستلام مسؤول مستقل عن المرسل.');
             $existing = DB::table('treasury_transfer_receipts')->where('treasury_transfer_id', $id)->lockForUpdate()->first();
+            $this->requireWriter('receive', (string) $id, $actor, $gatedWriter,
+                $this->registered('treasury_transfer_id', $id)
+                    || ($existing !== null && $this->registered('treasury_transfer_receipt_id', (int) $existing->id)));
             if ($existing) {
                 $this->same($existing, $record);
                 $result = $this->result($transfer);
