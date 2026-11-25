@@ -60,6 +60,7 @@ final class FinancialPostingRegistry
                 && $context['effective_on'] >= $period->start_on && $context['effective_on'] < $period->next_on
                 && $context['effective_on'] <= $recordedAt->setTimezone(new DateTimeZone($gate->timezone))->format('Y-m-d'), 'posting_period_changed');
 
+            app(FinancialOperationIdentity::class)->assertRegistryReservation($context, $uuid, $canonicalLegs);
             $existing = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
             if ($existing) {
                 $this->need($existing->operation_uuid === $uuid && $existing->scope_key === $context['scope']
