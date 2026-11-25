@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 55,
+    "round": 56,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3328,6 +3328,18 @@
         },
         "flutter": "V8 evidence only: 809 pass, 25 skips; no changed mobile paths"
       }
+    },
+    "round56": {
+      "phase": "Actual ledger correction evidence validation",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
+      "source": "10c8f24575a6527b5e40c5399a55e0bc9f293e19",
+      "workflow": "59982ae95fda3a914a6a977d02394e657dca275d",
+      "branch": "qa/central-g1b-ledger-correction-evidence",
+      "pr": 133,
+      "runs": [],
+      "scope": "Three new actual payment service cases on each isolated engine: refund exact cents, two transfer legs conserve money and registry rolls back atomically, void preserves stable original evidence. Registry remains not a complete source coverage verifier.",
+      "limits": "No runtime acceptance yet; test-only source, no production callers, no historical invoice correction or retirement proof in this slice, no close activation or main merge."
     }
   }
 }
