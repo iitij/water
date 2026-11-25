@@ -1,0 +1,46 @@
+{
+  "round108": {
+    "source": "b4c737e6b3da08baedb7cd819b360607a71b458f",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45650816194,
+    "status": "BOTH_ENGINES_PASS_FOCUSED_AND_SELECTED_REGRESSIONS",
+    "jobs": [
+      {
+        "id": 139334496529,
+        "engine": "sqlite",
+        "tests": 77,
+        "assertions": 773,
+        "exit": 0
+      },
+      {
+        "id": 139334496751,
+        "engine": "mysql",
+        "tests": 74,
+        "assertions": 733,
+        "exit": 0
+      }
+    ],
+    "total": {
+      "tests": 151,
+      "assertions": 1506
+    }
+  },
+  "round109": {
+    "base": "b4c737e6b3da08baedb7cd819b360607a71b458f",
+    "source": "962d4f64c177c24e750233e85e0d29d515f5d9fb",
+    "branch": "qa/held-cash-issuance-order-round109",
+    "status": "STAGED_UNVERIFIED",
+    "changes": "Nine existing issuance-after-subscriber lock acquisitions reordered in PaymentService (3), PaymentRefundService (1), LateReceiptReviewService (3), NonCashClaimService (1), BankReconciliationService (1). Add deterministic query-order proof for payment/refund and affected claim and bank regressions. No new release authority.",
+    "checks": {
+      "retired_feature_gate": {
+        "run": 45651592727,
+        "conclusion": "success"
+      },
+      "focused_workflow": "Not started; branch filter excludes staged branch and workflow update/create timed out; confirm before claiming acceptance.",
+      "lint": "Not executed; remote device timeout."
+    },
+    "limits": "Fast-forward on original branch failed; staging branch verified identical to exact commit. No claim of all-writer lock ordering or concurrent safety. Do not promote until lint and isolated SQLite/MySQL acceptance."
+  },
+  "coordination": "TASK_REGISTER.json remains round107 because direct updates failed; independent receipt HELD_CASH_ROUND_107_108_RECEIPT_AR.md and this status preserve evidence without overwriting. Sync into register on recovery.",
+  "release": "Keep full reserve. Read-only release policy and acceptance matrix in receipt; no implementation or activation. No main, production or real data modifications."
+}
