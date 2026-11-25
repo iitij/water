@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Resolve exact CI runs for both late cash and counted cash; fix confirmed failures only, then integrate actual settlement entrypoints and review custody/other writers.",
+  "next": "Verify exact new SQLite/MySQL CI and fix confirmed failures only; then wire Filament settlement actions and inspect direct bank confirmation, custody and disbursement paths.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-noncash-settlement-fence",
-      "commit": "ceff61814d61fffb69b9139f0208f6924e4ed1de",
-      "run": 45712781785,
-      "sqlite": "2 tests, 86 assertions",
-      "mysql": "2 tests, 86 assertions",
-      "scope": "Private kind/claim ID/UUID mutation scope in GatedCollectionWriter; PaymentService ordinary noncash and late bank clearance require scope when isolated default-off noncash_settlements flag enabled; registered UUID protected even flag off. Two targeted new tests cover rejection, closed period, exact dual-leg registration and replay with unchanged cash reserve."
+      "branch": "release/prospective-counted-cash-settlement-fence",
+      "commit": "a56d5cc9c942854d2bf46a2a74a8ef42e33c0b27",
+      "run": 45713881489,
+      "sqlite": "1 test, 40 assertions",
+      "mysql": "1 test, 40 assertions",
+      "scope": "Reuse existing GatedCountedCashWriter verified session and allocation proof, with private exact review/UUID scope distinct from separate late-cash handover. Wire through LateReceiptReviewService and PaymentService fence. Enforce registry created versus replay; new test exercises direct/inactive writer rejection, closed period, capacity 1025 minor, allocation 412, remaining 613, reject 614, exactly one subscriber leg, unchanged original till and treasury, replay with flag off."
     }
   },
   "round146": {
@@ -1162,22 +1162,58 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_late_cash_settlement_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "ceff61814d61fffb69b9139f0208f6924e4ed1de",
     "branch": "release/prospective-late-cash-settlement-fence",
     "source": "e2d85d402909d394e341b3e5df5e2e7af4baa1e7",
     "scope": "Pass private late_cash kind/claim/UUID writer scope through separate handover receiveCash and decideInternal into PaymentService::collectPayment. Guard under issuance lock; registered UUIDs protected with switch off; new default-off late_cash_settlements switch refuses unverified direct issuance and already-counted approvals until distinct single-leg contract available. Targeted case covers direct and inactive-writer bypass, closed period, dual-leg replay, exact unchanged held cash.",
-    "limits": "CI pending. Already-counted approvals intentionally fail closed when candidate flag enabled; default-off legacy behavior retained. Same-day separate handover only. Actual HTTP/Filament routes, full writer inventory and direct bank mutations remain open. No main merge, production activation or historical remediation. Run discovery through remote GitHub API timed out during TLS handshake; exact CI results not yet available. No tests rerun.",
-    "next": "Verify exact targeted SQLite/MySQL CI; correct confirmed failures only; then implement independently verified already-counted settlement source contract without duplicating treasury cash, and wire actual settlement routes."
+    "limits": "Exact commit, raw logs and lockfile hash verified. Targeted cases only; same-day late cash contract and counted cash proof restrictions remain; actual routes need acceptance. No production activation, historical remediation or main merge.",
+    "next": "Integrate actual settlement entrypoints and verify affected routes.",
+    "run": 45713105073,
+    "jobs": [
+      {
+        "id": 139552234778,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 48,
+        "exit": 0
+      },
+      {
+        "id": 139552235415,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 48,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_counted_cash_settlement_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "e2d85d402909d394e341b3e5df5e2e7af4baa1e7",
     "branch": "release/prospective-counted-cash-settlement-fence",
     "source": "a56d5cc9c942854d2bf46a2a74a8ef42e33c0b27",
     "scope": "Reuse existing GatedCountedCashWriter verified session and allocation proof, with private exact review/UUID scope distinct from separate late-cash handover. Wire through LateReceiptReviewService and PaymentService fence. Enforce registry created versus replay; new test exercises direct/inactive writer rejection, closed period, capacity 1025 minor, allocation 412, remaining 613, reject 614, exactly one subscriber leg, unchanged original till and treasury, replay with flag off.",
-    "limits": "Candidate only, based on preceding unverified late cash candidate. CI acceptance required for both branches; no production activation, historical remediation or main merge. Handover with variance and full actual settlement route coverage remain open.",
-    "next": "Resolve exact CI runs for both late cash and counted cash; fix confirmed failures only, then integrate actual settlement entrypoints and review custody/other writers."
+    "limits": "Exact commit, raw logs and lockfile hash verified. Targeted cases only; same-day late cash contract and counted cash proof restrictions remain; actual routes need acceptance. No production activation, historical remediation or main merge.",
+    "next": "Integrate actual settlement entrypoints and verify affected routes.",
+    "run": 45713881489,
+    "jobs": [
+      {
+        "id": 139554898796,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 40,
+        "exit": 0
+      },
+      {
+        "id": 139554898425,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 40,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_settlement_api_inventory": {
     "status": "SOURCE_REVIEW_COMPLETE_FOR_FOUR_API_APPROVAL_ROUTES",
@@ -1215,5 +1251,14 @@
       "Inspect actual Filament settlement actions and direct bank confirmation separately; this inventory is not exhaustive."
     ],
     "limits": "No route modifications yet; latest two prerequisite CI results remain unavailable due remote output timeout. No tests repeated. Do not mark either as accepted without exact logs. No production or main changes."
+  },
+  "release_settlement_api": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "a56d5cc9c942854d2bf46a2a74a8ef42e33c0b27",
+    "branch": "release/prospective-settlement-api",
+    "source": "603ebe91a8afbb7eb69a5bd692d3f5c0a546c764",
+    "scope": "Shared ProspectiveSettlementEntry for four actual API approval routes: ordinary noncash, late bank, separate cash, counted cash. Persisted claim UUID and bank booked date or review/explicit receipt date; gate revalidates. Preserve old response shape, authorization and default-off compatibility; domain conflicts HTTP 409 without fallback, including registered sources when disabled. Four new HTTP integration cases target closed period, actor independence, exact replay, no duplicate cash, protected reserve.",
+    "limits": "New candidate CI not verified. No actual Filament wiring, direct bank confirmation fence, distinct-date late cash contract, full inventory or production activation. No real data or main change.",
+    "next": "Verify exact new SQLite/MySQL CI and fix confirmed failures only; then wire Filament settlement actions and inspect direct bank confirmation, custody and disbursement paths."
   }
 }
