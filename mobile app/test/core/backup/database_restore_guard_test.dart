@@ -68,7 +68,7 @@ void main() {
       ],
     }), throwsStateError);
     expect(await db.exportFieldData(), before);
-    await db.importFieldData({'pending_actions': []});
+    await db.importFieldData({'pending_actions': <Object>[]});
     expect(await db.exportFieldData(), before);
   });
 
