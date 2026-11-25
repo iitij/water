@@ -220,10 +220,12 @@ class _QuickCollectorBodyState extends State<_QuickCollectorBody> {
     QuickCollectorCubit cubit,
     InvoiceModel invoice,
   ) async {
-    final saved = await CollectPaymentSheet.show(context, invoice: invoice);
-    if (!saved || !context.mounted) return;
-    cubit.markCollected(invoice);
-    AppFeedback.success(context, 'تم تحصيل ${invoice.beneficiaryName}.');
+    final outcome = await CollectPaymentSheet.showOutcome(context, invoice: invoice);
+    if (outcome == null || !outcome.isSuccess || !context.mounted) return;
+    cubit.markCollected(invoice, queuedOffline: outcome.queuedOffline);
+    AppFeedback.success(context, outcome.queuedOffline
+        ? 'حُفظت دفعة ${invoice.beneficiaryName} بانتظار المزامنة.'
+        : 'تم تحصيل ${invoice.beneficiaryName}.');
   }
 
   String? _squareLabel(QuickCollectorState state) {

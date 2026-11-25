@@ -14,6 +14,18 @@ class AuthInterceptor extends Interceptor {
         _retryClient = retryClient;
 
   static const String retriedFlag = 'authRetried';
+  static const String sessionGenerationKey = 'authSessionGeneration';
+
+  bool _isStale(RequestOptions options) {
+    final generation = options.extra[sessionGenerationKey];
+    return generation != null && generation != _storage.sessionGeneration;
+  }
+
+  DioException _staleError(RequestOptions options) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.cancel,
+    message: 'Session changed while the request was pending.',
+  );
 
   final SecureStorageService _storage;
   final TokenRefreshService? _refreshService;
@@ -24,12 +36,21 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    if (_isStale(options)) {
+      handler.reject(_staleError(options));
+      return;
+    }
     if (options.extra['skipAuth'] == true) {
       handler.next(options);
       return;
     }
 
+    options.extra[sessionGenerationKey] = _storage.sessionGeneration;
     final token = await _storage.readAccessToken();
+    if (_isStale(options)) {
+      handler.reject(_staleError(options));
+      return;
+    }
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
@@ -38,11 +59,24 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
+  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+    if (_isStale(response.requestOptions)) {
+      handler.reject(_staleError(response.requestOptions));
+      return;
+    }
+    handler.next(response);
+  }
+
+  @override
   Future<void> onError(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
     final options = err.requestOptions;
+    if (_isStale(options)) {
+      handler.reject(_staleError(options));
+      return;
+    }
     final canRefresh = err.response?.statusCode == 401 &&
         _refreshService != null &&
         _retryClient != null &&
@@ -56,6 +90,10 @@ class AuthInterceptor extends Interceptor {
     }
 
     final token = await _refreshService.refresh();
+    if (_isStale(options)) {
+      handler.reject(_staleError(options));
+      return;
+    }
     if (token == null || token.isEmpty) {
       handler.next(err);
       return;
@@ -76,8 +114,16 @@ class AuthInterceptor extends Interceptor {
           },
         ),
       );
+      if (_isStale(options)) {
+        handler.reject(_staleError(options));
+        return;
+      }
       handler.resolve(retried);
     } on DioException catch (retryError) {
+      if (_isStale(options)) {
+        handler.reject(_staleError(options));
+        return;
+      }
       handler.next(retryError);
     }
   }
