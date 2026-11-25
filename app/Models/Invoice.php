@@ -221,7 +221,8 @@ class Invoice extends Model
 
     /**
      * Invoice payment status is independent of cumulative account debt.
-     * Retain the existing grace/strict policy until the overdue audit (ACC-11).
+     * Overdue takes priority over partial payment when an own debt remains.
+     * The grace deadline is inclusive of the whole calendar day.
      */
     public function updateStatus(): void
     {
@@ -230,16 +231,16 @@ class Invoice extends Model
         }
 
         $remaining = round($this->getRemainingAmount(), 2);
-        $gracePeriod = (int) Setting::get('grace_period', '14');
+        $gracePeriod = max(0, min(365, (int) Setting::get('grace_period', '14')));
         $strictOverdue = Setting::get('strict_overdue_on_new_invoice', '0') === '1';
 
         if ($remaining <= 0) {
             $status = 'paid';
+        } elseif (($strictOverdue && ! $this->isLatestInvoice())
+            || ($this->bill_date && today()->gt($this->bill_date->copy()->startOfDay()->addDays($gracePeriod)))) {
+            $status = 'overdue';
         } elseif ((float) $this->amount_paid > 0) {
             $status = 'partially_paid';
-        } elseif (($strictOverdue && ! $this->isLatestInvoice())
-            || ($this->bill_date && now()->isAfter($this->bill_date->copy()->addDays($gracePeriod)))) {
-            $status = 'overdue';
         } else {
             $status = 'issued';
         }

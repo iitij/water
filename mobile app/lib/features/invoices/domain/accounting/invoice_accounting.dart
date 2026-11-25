@@ -83,15 +83,21 @@ class InvoiceAccounting {
     if (invoice.isDeleted || invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.cancelled) {
       return invoice.status;
     }
-    final reference = now ?? DateTime.now();
-    final billDate = invoice.billDate ?? invoice.createdAt ?? reference;
-    final dueDeadline = billDate.add(Duration(days: gracePeriodDays));
+    // The reference is an instant; billDate below is a calendar date.
+    final reference = (now ?? DateTime.now()).toUtc();
+    final billDate = invoice.billDate;
+    final grace = gracePeriodDays.clamp(0, 365).toInt();
+    final referenceDay = DateTime.utc(reference.year, reference.month, reference.day);
+    final dueDay = billDate == null
+        ? null
+        : DateTime.utc(billDate.year, billDate.month, billDate.day + grace);
     final remaining = ownRemaining(invoice);
     if (remaining <= 0.004999999) return InvoiceStatus.paid;
-    if (invoice.amountPaid > 0) return InvoiceStatus.partiallyPaid;
-    if ((strictOverdueOnNewInvoice && !isLatestInvoice(invoice, siblings)) || reference.isAfter(dueDeadline)) {
+    if ((strictOverdueOnNewInvoice && !isLatestInvoice(invoice, siblings)) ||
+        (dueDay != null && referenceDay.isAfter(dueDay))) {
       return InvoiceStatus.overdue;
     }
+    if (invoice.amountPaid > 0) return InvoiceStatus.partiallyPaid;
     return InvoiceStatus.issued;
   }
 
