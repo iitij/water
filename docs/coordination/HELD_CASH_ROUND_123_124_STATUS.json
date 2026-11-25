@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact new CI and fix confirmed failures. Continue invoice issue/cancel writer fences and actual single/bulk entrypoints, then reserve discharge, liquidity and Flutter inventory; integrated release checks.",
+  "next": "Verify exact targeted CI; fix confirmed failures. Inventory actual invoice issue/cancel callers including direct model creation, batch and reading-driven issue; wire them with stable per-operation identity and protect remaining mutation paths. Continue prospective reserve discharge, liquidity and Flutter inventory, integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-funding-entry",
-      "commit": "49f0ee366e8fed1a7f4900424c1a26b3b61aece1",
-      "run": 45723318995,
-      "sqlite": "1 test, 46 assertions",
-      "mysql": "1 test, 46 assertions",
-      "scope": "Private opening/code/actor and funding/account/collector/issuer/reference mutation scopes in GatedTreasuryOpeningFundingWriter; service fences under issuance lock and registered replay protected with switch off. Actual POST /api/treasury/accounts and /{id}/fund-collector route via gated writer in staging/testing with explicit UUID, server-derived funding date, preserved response contract. New targeted test checks direct and inactive bypass, closed period, independent issuer, reserve limit, opening event for new synthetic account, -400 treasury funding, exact till opening, replay and unchanged subscriber ledger."
+      "branch": "release/prospective-subscriber-transfer-entry",
+      "commit": "fffb90b05ca11f6ab18f83bb06ae884fde9dc2fb",
+      "run": 45723949155,
+      "sqlite": "1 test, 44 assertions",
+      "mysql": "1 test, 44 assertions",
+      "scope": "Private exact payment/destination/actor scope on GatedInvoiceTransferWriter transfer; fence PaymentAccountTransferService under issuance lock including registered correction replay. Shared prospective API/Filament entry with stable UUID and confirmation of no new cash; staging/testing only. New targeted UI/API test checks closed period, independent approval, direct/idle scope rejection, two equal opposite subscriber legs, conserved balances, unchanged original receipt and treasury, replay and disabled switch protection."
     }
   },
   "round146": {
@@ -1610,12 +1610,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_subscriber_transfer_entry": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "49f0ee366e8fed1a7f4900424c1a26b3b61aece1",
     "branch": "release/prospective-subscriber-transfer-entry",
     "source": "fffb90b05ca11f6ab18f83bb06ae884fde9dc2fb",
     "scope": "Private exact payment/destination/actor scope on GatedInvoiceTransferWriter transfer; fence PaymentAccountTransferService under issuance lock including registered correction replay. Shared prospective API/Filament entry with stable UUID and confirmation of no new cash; staging/testing only. New targeted UI/API test checks closed period, independent approval, direct/idle scope rejection, two equal opposite subscriber legs, conserved balances, unchanged original receipt and treasury, replay and disabled switch protection.",
-    "limits": "CI pending. Existing eligibility excludes bank collection sources and other unsupported receipt corrections. Invoice issue/cancel, reserve discharge, general liquidity, broader entrypoint and mobile coverage remain open. No historical adoption or data repair, production activation or main merge.",
-    "next": "Verify exact new CI and fix confirmed failures. Continue invoice issue/cancel writer fences and actual single/bulk entrypoints, then reserve discharge, liquidity and Flutter inventory; integrated release checks."
+    "limits": "Exact source, raw logs and lockfile verified for actual subscriber transfer HTTP/Filament entrypoints. Supported current receipt corrections only; no historical adoption or production activation.",
+    "next": "Fence invoice issue and cancellation services.",
+    "run": 45723949155,
+    "jobs": [
+      {
+        "id": 139588916119,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 44,
+        "exit": 0
+      },
+      {
+        "id": 139588916585,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 44,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_invoice_service_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "fffb90b05ca11f6ab18f83bb06ae884fde9dc2fb",
+    "branch": "release/prospective-invoice-service-fence",
+    "source": "7b376788acf29268c9ddb58b7ce7d3ae9910c3ee",
+    "scope": "Private issue subscriber/meter and cancellation invoice/actor scopes in GatedInvoiceTransferWriter; protect InvoiceService and InvoiceCancellationService under issuance lock. Default-off candidate switch, registered original or reversal blocks direct cancellation even when disabled. Targeted test checks closed period, direct and idle writer rejection, exact invoice debt and reversal, original ledger unchanged, reading released, replay and unchanged cash/held reserve.",
+    "limits": "CI pending. Actual single/bulk issue and cancel API/Filament/Flutter entrypoints and direct model-level creation/cancellation/other writers not yet fenced or verified. No production activation or main merge; no historical repairs.",
+    "next": "Verify exact targeted CI; fix confirmed failures. Inventory actual invoice issue/cancel callers including direct model creation, batch and reading-driven issue; wire them with stable per-operation identity and protect remaining mutation paths. Continue prospective reserve discharge, liquidity and Flutter inventory, integrated release checks."
   }
 }
