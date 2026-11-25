@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 72,
+    "round": 73,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3912,6 +3912,16 @@
       "runs": [],
       "scope": "Narrow approval of pending ordinary cash receipt void requests only; actual original registered receipt and request audit threshold evidence, separate approver, open-period gate, exact reversal and original identity preservation, approval audit verification, stable UUID replay. Six cases per engine prepared: equal threshold and later config change, actor/reason/UUID conflicts, unregistered/absent request, closed/frozen period, closed till rejection, fault rollback of request, ledger, allocation and audit.",
       "limits": "Independent branch from accepted round 69, not based on unaccepted rounds 70/71. No execution evidence; previous workflow creation restriction respected. Immediate below-threshold void and request creation/rejection paths not integrated; closed till correction, noncash/late receipts, complete immutable decision provenance and global lock protocol remain open. No production activation or main merge."
+    },
+    "round73": {
+      "phase": "Independent inactive direct ordinary cash void writer",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "1d9c879d1c54245d2289b57f4bb3a0b76d8b9f2a",
+      "branch": "fix/central-g1b-gated-direct-void",
+      "runs": [],
+      "scope": "Direct ordinary cash void only, super_admin-only candidate; positive explicit threshold required, exact locked amount strictly below threshold; zero/missing/invalid threshold fail closed, never bypass pending request, use actual requestVoid service. Verify registered original and reversal, durable threshold audit and exact replay even after threshold changes. Six cases per engine prepared: boundary/replay, fail-closed thresholds, pending request, legacy source rejection, closed/frozen/till, atomic rollback and retry.",
+      "limits": "Independent branch from accepted round 69. Rounds 70-72 remain unaccepted. No runtime evidence; previous workflow creation restriction respected. Candidate stricter than existing policy for zero/missing threshold and permissions; explicit product decision before activation. Global writer fencing, audit immutability, cross-period replay and remaining correction paths open. Account transfer source reviewed but adapter not implemented. No production activation or main merge."
     }
   }
 }
