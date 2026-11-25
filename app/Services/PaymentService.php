@@ -226,20 +226,37 @@ class PaymentService
      * حدّ الإلغاء المالي: السند الذي يبلغ هذا المبلغ أو يتجاوزه يحتاج اعتماد مشرف.
      * القيمة صفر تعني أن الخاصية معطّلة (سلوك v1 متوافق).
      */
+    private function voidApprovalThresholdMinor(): int
+    {
+        // Only an explicitly valid zero disables approval. A malformed setting
+        // or failed DB read must not silently remove an approval requirement.
+        $minor = FinancialAmount::validated(Setting::get('void_approval_threshold', 0), 'void_approval_threshold')->minor;
+        if ($minor < 0) {
+            throw ValidationException::withMessages(['void_approval_threshold' => 'حد اعتماد الإلغاء غير صالح.']);
+        }
+
+        return $minor;
+    }
+
     public function voidApprovalThreshold(): float
     {
-        try {
-            return max(0.0, (float) Setting::get('void_approval_threshold', 0));
-        } catch (\Throwable) {
-            return 0.0;
+        // Keep the existing public numeric presentation contract.
+        return (float) ($this->voidApprovalThresholdMinor() / 100);
+    }
+
+    private function exceedsVoidThreshold(Payment $payment, int $threshold): bool
+    {
+        $minor = FinancialAmount::validated($payment->amount, 'amount')->minor;
+        if ($minor <= 0) {
+            throw ValidationException::withMessages(['amount' => 'مبلغ السند غير صالح.']);
         }
+
+        return $threshold > 0 && $minor >= $threshold;
     }
 
     public function requiresVoidApproval(Payment $payment): bool
     {
-        $threshold = $this->voidApprovalThreshold();
-
-        return $threshold > 0 && (float) $payment->amount >= $threshold;
+        return $this->exceedsVoidThreshold($payment, $this->voidApprovalThresholdMinor());
     }
 
     /**
@@ -270,17 +287,18 @@ class PaymentService
                 ]);
             }
 
-            if (! $this->requiresVoidApproval($payment)) {
-                return ['payment' => $this->voidPayment($payment, $reason, $userId, $source), 'pending' => false];
-            }
-
-            // طلب معلّق سابق: نُعيده كما هو (idempotent) بدل تكرار الطلب.
+            // An existing pending approval must not be bypassed by a later
+            // change to the configuration. Replays retain their prior state.
             if ($payment->hasPendingVoidRequest()) {
                 return ['payment' => $payment, 'pending' => true];
             }
-
             if ($payment->isVoided()) {
                 return ['payment' => $payment, 'pending' => false];
+            }
+
+            $thresholdMinor = $this->voidApprovalThresholdMinor();
+            if (! $this->exceedsVoidThreshold($payment, $thresholdMinor)) {
+                return ['payment' => $this->voidPayment($payment, $reason, $userId, $source), 'pending' => false];
             }
 
             $payment->forceFill([
@@ -299,7 +317,8 @@ class PaymentService
                     'receipt_number' => $payment->receipt_number,
                     'amount' => (float) $payment->amount,
                     'reason' => $reason,
-                    'threshold' => $this->voidApprovalThreshold(),
+                    'threshold' => (float) ($thresholdMinor / 100),
+                    'threshold_minor' => $thresholdMinor,
                 ],
                 'actor_user_id' => $userId,
                 'source' => $source,

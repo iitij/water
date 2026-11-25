@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\ExactMoney;
+use App\Support\FinancialAmount;
+
 use App\Models\CashSession;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -28,7 +31,7 @@ final class PaymentRefundService
         $reason = trim($reason);
         $evidence = trim($evidence);
         if (! preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', $amount)
-            || (float) $amount <= 0 || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
+            || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
             || ! in_array($method, ['treasury_cash', 'bank_transfer'], true)
             || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
             || ! checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))
@@ -38,7 +41,13 @@ final class PaymentRefundService
             throw ValidationException::withMessages(['refund' => 'بيانات الصرف المثبت ومبلغ الاسترداد غير صالحة.']);
         }
 
-        return DB::transaction(function () use ($payment, $actor, $amount, $reference, $method, $date, $reason, $evidence) {
+        $money = FinancialAmount::validated($amount, 'refund');
+        if ($money->minor <= 0) {
+            throw ValidationException::withMessages(['refund' => 'بيانات الصرف المثبت ومبلغ الاسترداد غير صالحة.']);
+        }
+        $amount = $money->decimal();
+
+        return DB::transaction(function () use ($payment, $actor, $amount, $money, $reference, $method, $date, $reason, $evidence) {
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             abort_unless((int) $subscriber->id === (int) $payment->subscriber_id, 409);
@@ -51,8 +60,8 @@ final class PaymentRefundService
                 }
             }
 
-            $minor = static fn ($value): int => (int) round((float) $value * 100);
-            $requested = $minor($amount);
+            $minor = static fn ($value): int => FinancialAmount::parse($value)->minor;
+            $requested = $money->minor;
             $existing = PaymentRefund::where('disbursement_reference', $reference)->lockForUpdate()->first();
             if ($existing) {
                 abort_unless((int) $existing->payment_id === (int) $payment->id
@@ -87,9 +96,19 @@ final class PaymentRefundService
                     ->where('type', 'payment_reversal')->exists()) {
                 throw ValidationException::withMessages(['payment' => 'لا يوجد قيد قبض أصلي مطابق وسارٍ.']);
             }
-            $prior = $minor(PaymentRefund::where('payment_id', $payment->id)->sum('amount'));
-            $before = $minor($subscriber->getAccountBalance());
-            if ($requested > $minor($payment->amount) - $prior || $requested > $before) {
+            $prior = 0;
+            foreach (PaymentRefund::where('payment_id', $payment->id)->orderBy('id')->get(['amount']) as $previousRefund) {
+                $priorMinor = $minor($previousRefund->amount);
+                if ($priorMinor <= 0) {
+                    throw new \LogicException('Invalid stored refund amount.');
+                }
+                $prior = FinancialAmount::add($prior, $priorMinor);
+            }
+            $receiptMinor = $minor($payment->amount);
+            $ledger = app(TransactionService::class);
+            $before = $ledger->accountBalanceMinor($subscriber);
+            if ($receiptMinor <= 0 || $prior > $receiptMinor
+                || $requested > $receiptMinor - $prior || $requested > $before) {
                 throw ValidationException::withMessages(['amount' => 'يتجاوز الاسترداد الرصيد الدائن أو المبلغ المتبقي من السند.']);
             }
 
@@ -105,11 +124,11 @@ final class PaymentRefundService
                 'amount' => $amount, 'disbursement_reference' => $reference, 'method' => $method,
                 'disbursed_on' => $date, 'reason' => $reason, 'evidence' => $evidence,
             ]);
-            $movement = app(TransactionService::class)->recordTransaction($subscriber, 'payment_refund',
-                -($requested / 100), 'استرداد رصيد دائن - '.$reference, $refund);
+            $movement = $ledger->recordTransaction($subscriber, 'payment_refund',
+                $money->negate()->decimal(), 'استرداد رصيد دائن - '.$reference, $refund);
             $allocator->recalculateInvoices($subscriber);
-            $after = $minor($subscriber->getAccountBalance());
-            if ($after !== $before - $requested || $after < 0 || $openInvoices()) {
+            $after = $ledger->accountBalanceMinor($subscriber);
+            if ($after !== FinancialAmount::add($before, -$requested) || $after < 0 || $openInvoices()) {
                 throw ValidationException::withMessages(['amount' => 'الاسترداد سيؤثر على تسوية الفواتير؛ العملية مرفوضة.']);
             }
             app(AuditLogger::class)->recordRequired('payment.refunded', [
