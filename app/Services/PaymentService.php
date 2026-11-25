@@ -7,6 +7,8 @@ use App\Support\ExactMoney;
 use App\Support\DecimalDomain;
 use App\Support\MoneyBoundary;
 use App\Support\CashCustodyAmounts;
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
 
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -36,27 +38,31 @@ class PaymentService
                 ->whereNull('voided_at')
                 ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
                 ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
-            // Sum individual DECIMAL casts, not an engine-dependent floating SUM.
+            // Sum individual raw DECIMAL amounts, not an engine-dependent floating SUM.
             $refunds = [];
             foreach (\App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)->get(['payment_id', 'amount']) as $refund) {
-                $minor = FinancialAmount::parse($refund->amount)->minor;
+                $minor = AccountMoney::stored($refund);
                 if ($minor <= 0) {
                     throw new \LogicException('Invalid refund amount.');
                 }
-                $refunds[$refund->payment_id] = FinancialAmount::add($refunds[$refund->payment_id] ?? 0, $minor);
+                $refunds[$refund->payment_id] = SignedMinor::add($refunds[$refund->payment_id] ?? 0, $minor);
             }
             $credits = $payments->map(function ($payment) use ($refunds) {
-                $minor = FinancialAmount::parse($payment->amount)->minor;
+                $minor = AccountMoney::stored($payment);
                 $refunded = $refunds[$payment->id] ?? 0;
-                if ($minor < 0 || $refunded > $minor) {
+                if ($minor <= 0 || $refunded > $minor) {
                     throw new \LogicException('Receipt/refund amounts do not conserve money.');
                 }
 
-                return ['minor' => $minor - $refunded, 'target' => $payment->invoice_id,
+                return ['minor' => SignedMinor::subtract($minor, $refunded), 'target' => $payment->invoice_id,
                     'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id];
             })->all();
             foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
-                $credits[] = ['minor' => FinancialAmount::parse($transfer->amount)->minor, 'target' => null,
+                $minor = AccountMoney::stored($transfer);
+                if ($minor <= 0) {
+                    throw new \LogicException('Invalid incoming transfer amount.');
+                }
+                $credits[] = ['minor' => $minor, 'target' => null,
                     'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
             }
             usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
@@ -66,7 +72,7 @@ class PaymentService
             $caps = [];
             foreach ($invoices as $invoice) {
                 $paid[$invoice->id] = 0;
-                $cap = FinancialAmount::parse($invoice->total_amount)->minor;
+                $cap = AccountMoney::stored($invoice, 'total_amount');
                 if ($cap < 0) {
                     throw new \LogicException('Negative invoice allocation cap.');
                 }
@@ -83,7 +89,7 @@ class PaymentService
                 if ($remaining < 0) {
                     throw new \LogicException('Negative allocation source.');
                 }
-                $availableMinor = FinancialAmount::add($availableMinor, $remaining);
+                $availableMinor = SignedMinor::add($availableMinor, $remaining);
                 $sourceKey = ($credit['kind'] === 0 ? 'payment:' : 'transfer:').$credit['id'];
                 if (array_key_exists($sourceKey, $sourceAmounts)) {
                     throw new \LogicException('Duplicate allocation credit source.');
@@ -101,9 +107,9 @@ class PaymentService
                 $target = $credit['target'];
                 $target = $target === null ? null : ($replacements[$target] ?? $target);
                 if ($target !== null && isset($caps[$target])) {
-                    $applied = min($remaining, $caps[$target] - $paid[$target]);
-                    $paid[$target] += $applied;
-                    $remaining -= $applied;
+                    $applied = min($remaining, SignedMinor::subtract($caps[$target], $paid[$target]));
+                    $paid[$target] = SignedMinor::add($paid[$target], $applied);
+                    $remaining = SignedMinor::subtract($remaining, $applied);
                     $record((int) $target, $applied);
                 }
                 foreach ($invoices as $invoice) {
@@ -111,9 +117,9 @@ class PaymentService
                         break;
                     }
                     $id = $invoice->id;
-                    $applied = min($remaining, $caps[$id] - $paid[$id]);
-                    $paid[$id] += $applied;
-                    $remaining -= $applied;
+                    $applied = min($remaining, SignedMinor::subtract($caps[$id], $paid[$id]));
+                    $paid[$id] = SignedMinor::add($paid[$id], $applied);
+                    $remaining = SignedMinor::subtract($remaining, $applied);
                     $record((int) $id, $applied);
                 }
                 $record(null, $remaining);
@@ -122,9 +128,9 @@ class PaymentService
 
             // Persist all allocations before deriving any cumulative status.
             foreach ($invoices as $invoice) {
-                $invoice->amount_paid = ExactMoney::fromMinor($paid[$invoice->id])->decimal();
-                if ($invoice->isDirty('amount_paid')) {
-                    $invoice->saveQuietly();
+                $invoice->amount_paid = MoneyBoundary::writeDecimal($paid[$invoice->id], DecimalDomain::D12);
+                if ($invoice->isDirty('amount_paid') && ! $invoice->saveQuietly()) {
+                    throw new \RuntimeException('Invoice allocation was not persisted.');
                 }
             }
             foreach ($invoices as $invoice) {
