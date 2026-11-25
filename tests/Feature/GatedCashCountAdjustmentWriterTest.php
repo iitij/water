@@ -2659,6 +2659,78 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_invoice_service_fence_preserves_original_and_reversal(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic invoice fence tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-INVOICE-FENCE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $service = app(\App\Services\InvoiceService::class);
+        $cancellation = app(\App\Services\InvoiceCancellationService::class);
+        $issueUuid = '66666666-6666-4666-8666-666666666666';
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $notes = 'Synthetic prospective invoice';
+        $reason = 'Independent prospective invoice cancellation';
+        $issue = fn () => $writer->issue($actor, (int) $subscriber->id, (int) $meter->id, $issueUuid, $this->nowAt(), $notes);
+        $directIssue = fn (?\App\Services\GatedInvoiceTransferWriter $candidate = null) =>
+            $service->generateInvoice($subscriber, $meter, $notes, true, 'meter', $candidate);
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions', 'payments',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => true]);
+        $this->rejects('gated_invoice_writer_required', $directIssue);
+        $this->rejects('gated_invoice_writer_required', fn () => DB::transaction(fn () => $directIssue($writer)));
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $issue);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $result = $issue();
+        $this->assertTrue($result['registry_created']);
+        $invoice = $result['invoice'];
+        $this->assertFalse($issue()['registry_created']);
+        $original = DB::table('transactions')->where('reference_type', \App\Models\Invoice::class)
+            ->where('reference_id', $invoice->id)->where('type', 'invoice')->sole();
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(-10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $issueUuid, 'source_id' => (string) $original->id, 'amount_minor' => -10]);
+        $directCancel = fn (?\App\Services\GatedInvoiceTransferWriter $candidate = null) =>
+            $cancellation->cancel($invoice, $reason, (int) $actor->id, 'api', $candidate);
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id, $reason, $cancelUuid, $this->nowAt());
+        $this->rejects('gated_invoice_writer_required', $directCancel);
+        $this->rejects('gated_invoice_writer_required', fn () => DB::transaction(fn () => $directCancel($writer)));
+        config(['financial_candidate.invoices' => false]);
+        $this->rejects('gated_invoice_writer_required', $directCancel);
+        $issued = [];
+        foreach ($tables as $table => $rows) $issued[$table] = $snapshot($table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $cancel);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($issued as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        config(['financial_candidate.invoices' => true]);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(0, $ledger->accountBalanceMinor($subscriber));
+        $this->assertEquals($original, DB::table('transactions')->find($original->id));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'leg' => 'subscriber', 'amount_minor' => 10]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $cancelUuid)->count());
+        $this->assertDatabaseHas('readings', ['meter_id' => $meter->id, 'invoice_id' => null, 'is_invoiced' => false]);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->assertFalse($cancel()['registry_created']);
+        config(['financial_candidate.invoices' => false]);
+        $this->rejects('gated_invoice_writer_required', $directCancel);
+        $this->assertFalse($cancel()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_round135_invoice_issue_cancel_register_exact_legs_and_rollback(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
