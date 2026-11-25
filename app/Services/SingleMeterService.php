@@ -135,7 +135,24 @@ class SingleMeterService
                 ]);
             }
 
+            validator(['removed_at' => $removedAt, 'reason' => $reason, 'new_meter' => $newMeterData], [
+                'removed_at' => ['required', 'date', 'before_or_equal:today'],
+                'reason' => ['required', 'string', 'min:3', 'max:500'],
+                'new_meter.unique_code' => ['required', 'string', 'max:50', 'unique:meters,unique_code'],
+                'new_meter.initial_reading' => ['sometimes', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
+                'new_meter.path_number' => ['nullable', 'integer', 'min:0'],
+                'new_meter.installed_at' => ['nullable', 'date'],
+                'new_meter.status' => ['sometimes', 'in:active,inactive'],
+            ])->validate();
+            if ($old->installed_at && \Carbon\Carbon::parse($removedAt)->startOfDay()->lt($old->installed_at->startOfDay())) {
+                throw ValidationException::withMessages(['removed_at' => 'تاريخ النزع لا يمكن أن يكون قبل تركيب العداد القديم.']);
+            }
+            // Do not accept a client-supplied balance or retired identity in replacement data.
+            $newMeterData = array_intersect_key($newMeterData, array_flip([
+                'unique_code', 'path_number', 'initial_reading', 'installed_at', 'status',
+            ]));
             $newMeterData['subscriber_id'] = $subscriber->id;
+            $newMeterData['balance'] = '0.00';
             $newMeterData['removed_at'] = null;
             $newMeterData['status'] ??= 'active';
             $newMeterData['installed_at'] ??= $removedAt;
@@ -148,21 +165,21 @@ class SingleMeterService
                 $old->id
             );
 
-            $beforeBalance = $subscriber->getAccountBalance();
-            $hasFinancialHistory = $old->invoices()->withTrashed()->exists()
-                || $old->payments()->withTrashed()->exists()
-                || $old->transactions()->withTrashed()->exists();
+            $beforeBalance = app(TransactionService::class)->accountBalanceMinor($subscriber);
+            $hasFinancialHistory = $old->invoices()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null
+                || $old->payments()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null
+                || $old->transactions()->withTrashed()->orderBy('id')->lockForUpdate()->first(['id']) !== null;
             if ($hasFinancialHistory) {
-                app(FinancialMeterRetirementService::class)->retire($old, $subscriber);
+                $discarded = app(FinancialMeterRetirementService::class)->retireForReplacement($old, $subscriber);
             } else {
-                app(MeterDataPurger::class)->purge((int) $old->id);
+                $discarded = app(MeterDataPurger::class)->purgeForReplacement((int) $old->id, (int) $subscriber->id);
             }
             $replacement = $this->create($newMeterData);
-            if ($beforeBalance !== $subscriber->getAccountBalance()) {
+            if ($beforeBalance !== app(TransactionService::class)->accountBalanceMinor($subscriber)) {
                 throw new \RuntimeException('Meter replacement changed the subscriber financial balance.');
             }
 
-            AuditEvent::create([
+            $audit = AuditEvent::create([
                 'actor_user_id' => $actorId,
                 'event' => 'meter.replaced',
                 'entity_type' => 'meter',
@@ -173,6 +190,7 @@ class SingleMeterService
                     'reason' => $reason,
                     'old_meter_data_purged' => ! $hasFinancialHistory,
                     'financial_history_preserved' => $hasFinancialHistory,
+                    'discarded_unbilled_readings' => $discarded,
                     'old_meter_id' => $old->id,
                     'old_meter_code' => $old->unique_code,
                     'removed_at' => $removedAt,
@@ -180,6 +198,9 @@ class SingleMeterService
                 'source' => 'api',
                 'occurred_at' => now(),
             ]);
+            if (! $audit->exists || $audit->getKey() === null) {
+                throw new \RuntimeException('Required meter replacement audit was not persisted.');
+            }
 
             return [
                 'current_meter' => $replacement->load('subscriber.square'),
@@ -233,9 +254,6 @@ class SingleMeterService
 
     private function hasHistory(Meter $meter): bool
     {
-        return $meter->readings()->withTrashed()->exists()
-            || $meter->payments()->withTrashed()->exists()
-            || $meter->transactions()->withTrashed()->exists()
-            || $meter->invoices()->withTrashed()->exists();
+        return app(MeterDataPurger::class)->hasOrdinaryHistoryLocked((int) $meter->id);
     }
 }

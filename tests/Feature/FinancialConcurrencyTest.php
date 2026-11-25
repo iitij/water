@@ -94,11 +94,24 @@ class FinancialConcurrencyTest extends TestCase
                 usleep(1000);
             }
             touch("$dir/start");
-            foreach ($pids as $pid) {
-                pcntl_waitpid($pid, $status);
-                $this->assertSame(0, pcntl_wexitstatus($status));
+            $deadline = microtime(true) + 30;
+            while ($pids !== []) {
+                foreach ($pids as $key => $pid) {
+                    $waited = pcntl_waitpid($pid, $status, WNOHANG);
+                    if ($waited === $pid) {
+                        unset($pids[$key]);
+                        $this->assertTrue(pcntl_wifexited($status));
+                        $this->assertSame(0, pcntl_wexitstatus($status));
+                    } elseif ($waited === -1) {
+                        unset($pids[$key]);
+                        throw new \RuntimeException('Could not join a concurrency worker.');
+                    }
+                }
+                if ($pids !== [] && microtime(true) > $deadline) {
+                    throw new \RuntimeException('Concurrency workers did not finish within the bound.');
+                }
+                usleep(1000);
             }
-            $pids = [];
             DB::purge();
             return [
                 json_decode(file_get_contents("$dir/result-0"), true, 512, JSON_THROW_ON_ERROR),
@@ -213,7 +226,7 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(0, Transaction::count());
     }
 
-    public function test_parallel_first_observation_and_replacement_never_erase_committed_usage(): void
+    public function test_parallel_first_observation_and_explicit_replacement_discard_only_unbilled_old_usage(): void
     {
         $subscriber = Subscriber::create([
             'name' => 'Replacement race',
@@ -228,19 +241,131 @@ class FinancialConcurrencyTest extends TestCase
             fn () => app(\App\Services\SingleMeterService::class)->replace($meter,
                 ['unique_code' => 'RACE-REPLACE-NEW'], '2026-02-02', 'Synthetic concurrent replacement')['current_meter']->id,
         );
-        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertTrue($results[1]['ok'], json_encode($results));
         $this->assertSame(1, Meter::where('subscriber_id', $subscriber->id)->count());
-        if ($results[0]['ok']) {
-            $this->assertSame(ValidationException::class, $results[1]['error']);
-            $this->assertSame($meter->id, $subscriber->fresh()->currentMeter->id);
-            $this->assertSame('7.25', Reading::findOrFail($results[0]['value'])->consumption_units);
-        } else {
-            $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
-            $this->assertSame($results[1]['value'], $subscriber->fresh()->currentMeter->id);
-            $this->assertSame(0, Reading::count());
+        if (! $results[0]['ok']) {
+            $this->assertContains($results[0]['error'], [
+                ValidationException::class, \Illuminate\Database\Eloquent\ModelNotFoundException::class,
+            ], json_encode($results));
         }
+        $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+        $this->assertSame($results[1]['value'], $subscriber->fresh()->currentMeter->id);
+        $this->assertSame(0, Reading::count());
         $this->assertSame(0, Invoice::count());
         $this->assertSame(0, Transaction::count());
+    }
+
+    public function test_parallel_invoice_and_explicit_replacement_preserve_any_committed_financial_document(): void
+    {
+        $meter = $this->fixture();
+        $subscriber = $meter->subscriber;
+        $readingId = $meter->readings()->firstOrFail()->id;
+        $results = $this->race(
+            fn () => app(InvoiceService::class)->generateInvoice($subscriber, $meter)->id,
+            fn () => app(\App\Services\SingleMeterService::class)->replace($meter,
+                ['unique_code' => 'RACE-BILL-NEW'], '2026-03-02', 'Synthetic concurrent replacement')['current_meter']->id,
+        );
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+        $this->assertSame($results[1]['value'], $subscriber->fresh()->currentMeter->id);
+        $this->assertSame(1, Meter::where('subscriber_id', $subscriber->id)->count());
+        if ($results[0]['ok']) {
+            $invoiceId = $results[0]['value'];
+            $this->assertDatabaseHas('invoices', ['id' => $invoiceId, 'meter_id' => null,
+                'retired_meter_id' => $meter->id, 'total_amount' => '6000.00']);
+            $this->assertDatabaseHas('readings', ['id' => $readingId, 'meter_id' => null,
+                'retired_meter_id' => $meter->id, 'invoice_id' => $invoiceId]);
+            $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $invoiceId, 'reading_id' => $readingId]);
+            $this->assertDatabaseHas('transactions', ['subscriber_id' => $subscriber->id,
+                'meter_id' => null, 'retired_meter_id' => $meter->id, 'amount' => '-6000.00']);
+            $this->assertSame(-600000, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        } else {
+            $this->assertContains($results[0]['error'], [
+                ValidationException::class, \Illuminate\Database\Eloquent\ModelNotFoundException::class,
+            ], json_encode($results));
+            $this->assertDatabaseMissing('readings', ['id' => $readingId]);
+            $this->assertDatabaseCount('invoices', 0);
+            $this->assertDatabaseCount('invoice_tariff_lines', 0);
+            $this->assertDatabaseCount('transactions', 0);
+        }
+    }
+
+    public function test_round9_pending_review_committed_after_snapshot_blocks_meter_deletion(): void
+    {
+        $subscriber = Subscriber::create([
+            'name' => 'Synthetic current-read guard',
+            'square_id' => Square::create(['name' => 'Current read guard'])->id,
+            'status' => 'active',
+        ]);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'REVIEW-SNAPSHOT']);
+        $collector = User::factory()->create(['role' => 'admin']);
+        $sessionId = DB::table('cash_sessions')->insertGetId([
+            'user_id' => $collector->id, 'session_date' => '2026-02-01', 'state' => 'closed',
+            'opening_amount' => 0, 'expected_amount' => 0, 'counted_amount' => 0, 'variance_amount' => 0,
+        ]);
+        $uuid = (string) Str::uuid();
+        $dir = sys_get_temp_dir().'/water-review-current-read-'.Str::uuid();
+        mkdir($dir, 0700);
+        $await = static function (string $path): void {
+            $deadline = microtime(true) + 10;
+            while (! is_file($path)) {
+                if (microtime(true) > $deadline) {
+                    throw new \RuntimeException('Current-read coordination timed out.');
+                }
+                usleep(1000);
+            }
+        };
+        try {
+            $results = $this->race(
+                function () use ($meter, $dir, $await): array {
+                    // Connection-local isolation only; never change global settings.
+                    DB::statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+                    return DB::transaction(function () use ($meter, $dir, $await): array {
+                        $old = Meter::findOrFail($meter->id);
+                        $before = DB::table('late_receipt_reviews')->where('submitted_meter_id', $meter->id)->count();
+                        touch($dir.'/snapshot');
+                        $await($dir.'/committed');
+                        // Prove the ordinary consistent read still sees the old snapshot.
+                        $stale = DB::table('late_receipt_reviews')->where('submitted_meter_id', $meter->id)->count();
+                        try {
+                            $old->delete();
+                            return ['before' => $before, 'stale' => $stale, 'rejected' => false];
+                        } catch (ValidationException $e) {
+                            return ['before' => $before, 'stale' => $stale, 'rejected' => array_key_exists('meter_id', $e->errors())];
+                        }
+                    });
+                },
+                function () use ($subscriber, $meter, $collector, $sessionId, $uuid, $dir, $await): int {
+                    $await($dir.'/snapshot');
+                    $id = DB::transaction(function () use ($subscriber, $meter, $collector, $sessionId, $uuid) {
+                        Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+                        Meter::query()->lockForUpdate()->findOrFail($meter->id);
+                        // A synthetic ordinary pending review, no financial posting.
+                        return DB::table('late_receipt_reviews')->insertGetId([
+                            'sync_uuid' => $uuid, 'cash_session_id' => $sessionId,
+                            'collector_id' => $collector->id, 'subscriber_id' => $subscriber->id,
+                            'submitted_meter_id' => $meter->id, 'amount' => '20.00',
+                            'payment_date' => '2026-02-01', 'payment_method' => 'cash', 'status' => 'pending',
+                        ]);
+                    });
+                    touch($dir.'/committed');
+                    return $id;
+                }
+            );
+            $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+            $this->assertSame(['before' => 0, 'stale' => 0, 'rejected' => true], $results[0]['value']);
+            $this->assertDatabaseHas('meters', ['id' => $meter->id, 'deleted_at' => null]);
+            $this->assertDatabaseHas('late_receipt_reviews', ['id' => $results[1]['value'], 'sync_uuid' => $uuid, 'status' => 'pending']);
+            $this->assertDatabaseCount('readings', 0);
+            $this->assertDatabaseCount('invoices', 0);
+            $this->assertDatabaseCount('payments', 0);
+            $this->assertDatabaseCount('transactions', 0);
+        } finally {
+            foreach (glob($dir.'/*') as $file) {
+                unlink($file);
+            }
+            rmdir($dir);
+        }
     }
 
     public function test_parallel_observation_and_invoice_preserve_quantity_and_ledger(): void

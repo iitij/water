@@ -58,14 +58,31 @@ class Meter extends Model
         }, 3);
     }
 
+    /** Serialize ordinary Eloquent deletion with reading and replacement writers. */
+    public function delete()
+    {
+        if (! $this->exists) {
+            return parent::delete();
+        }
+        return \Illuminate\Support\Facades\DB::transaction(function () {
+            Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
+            $locked = self::withTrashed()->lockForUpdate()->findOrFail($this->getKey());
+            if ((int) $locked->subscriber_id !== (int) $this->subscriber_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'meter_id' => 'تغير مالك العداد؛ حدّث البيانات.',
+                ]);
+            }
+
+            return parent::delete();
+        }, 3);
+    }
+
     protected static function booted(): void
     {
         static::deleting(function (Meter $meter): void {
-            if ($meter->invoices()->withTrashed()->exists()
-                || $meter->payments()->withTrashed()->exists()
-                || $meter->transactions()->withTrashed()->exists()) {
+            if (app(\App\Services\MeterDataPurger::class)->hasOrdinaryHistoryLocked((int) $meter->id)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'meter_id' => 'لا يجوز حذف عداد مرتبط بسجل مالي.',
+                    'meter_id' => 'لا يجوز حذف عداد له قراءات أو سجل مالي أو مراجعة قبض معلقة مباشرةً.',
                 ]);
             }
         });

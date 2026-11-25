@@ -273,7 +273,7 @@ class StrictSingleMeterPurgeTest extends TestCase
         $this->assertDatabaseHas('payments', ['receipt_number' => 'OPEN-CASH-REC', 'meter_id' => null, 'retired_meter_id' => $old->id]);
     }
 
-    public function test_plain_meter_deletion_removes_fault_visit_and_meter_audit_rows_permanently(): void
+    public function test_plain_meter_deletion_removes_operational_rows_but_preserves_audit_history(): void
     {
         $square = Square::create(['name' => 'Delete cleanup square']);
         $subscriber = Subscriber::create(['name' => 'Delete cleanup subscriber', 'square_id' => $square->id]);
@@ -298,10 +298,11 @@ class StrictSingleMeterPurgeTest extends TestCase
         ]);
         $this->deleteJson('/api/meters/'.$meter->id)->assertOk();
 
-        foreach (['meters', 'reading_faults', 'route_visits', 'audit_events'] as $table) {
+        foreach (['meters', 'reading_faults', 'route_visits'] as $table) {
             $this->assertDatabaseCount($table, 0);
         }
         $this->assertDatabaseHas('subscribers', ['id' => $subscriber->id]);
+        $this->assertDatabaseHas('audit_events', ['event' => 'meter.old', 'entity_id' => (string) $meter->id]);
     }
 
     public function test_bulk_delete_purges_obsolete_field_records_but_skips_financial_meters(): void

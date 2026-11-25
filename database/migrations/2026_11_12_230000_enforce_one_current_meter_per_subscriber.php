@@ -28,6 +28,7 @@ return new class extends Migration
                 ->whereNull('deleted_at')
                 ->groupBy('subscriber_id')
                 ->havingRaw('COUNT(*) > 1')
+                ->orderBy('subscriber_id')
                 ->pluck('subscriber_id');
 
             $purger = app(\App\Services\MeterDataPurger::class);
@@ -39,7 +40,7 @@ return new class extends Migration
                     ->orderByDesc('id')
                     ->pluck('id');
                 foreach ($ids->skip(1) as $obsoleteId) {
-                    $purger->purge((int) $obsoleteId);
+                    $purger->purgeLegacyObsolete((int) $obsoleteId, (int) $ids->first());
                 }
             }
         });

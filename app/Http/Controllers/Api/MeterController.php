@@ -166,14 +166,17 @@ class MeterController extends ApiController
     {
         $this->authorizeApi(Meter::class, 'delete');
 
-        return DB::transaction(function () use ($id, $purger) {
+        $candidate = Meter::findOrFail($id);
+        return DB::transaction(function () use ($id, $purger, $candidate) {
+            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $meter = Meter::query()->lockForUpdate()->findOrFail($id);
-            if ($this->hasHistory($meter)) {
-                return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
+            abort_unless((int) $meter->subscriber_id === (int) $candidate->subscriber_id, 409, 'تغير مالك العداد.');
+            if ($purger->hasOrdinaryHistoryLocked((int) $meter->id)) {
+                return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو مستندات مالية أو مراجعة قبض معلقة.'], 409);
             }
             // ForceDelete alone nullifies the meter IDs in fault/route rows;
             // purge them before the record so no hidden meter history remains.
-            $purger->purge((int) $meter->id);
+            $purger->purge((int) $meter->id, (int) $meter->subscriber_id);
 
             return response()->json(['message' => 'تم حذف العداد نهائياً.']);
         });
@@ -185,14 +188,25 @@ class MeterController extends ApiController
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:meters,id']]);
         $deleted = 0;
         $skipped = [];
-        DB::transaction(function () use ($data, &$deleted, &$skipped, $purger) {
-            foreach (Meter::whereIn('id', $data['ids'])->lockForUpdate()->get() as $meter) {
-                if ($this->hasHistory($meter)) {
+        $candidates = Meter::whereIn('id', $data['ids'])->get()->keyBy('id');
+        // Revalidate every selected live row before performing any bulk deletion.
+        DB::transaction(function () use ($candidates, &$deleted, &$skipped, $purger) {
+            $ownerIds = $candidates->pluck('subscriber_id')->unique()->values();
+            $owners = Subscriber::query()->whereIn('id', $ownerIds)->orderBy('id')->lockForUpdate()->get();
+            abort_unless($owners->count() === $ownerIds->count(), 409, 'تغير المشترك المرتبط بالعداد.');
+            $meters = Meter::whereIn('id', $candidates->keys())->orderBy('id')->lockForUpdate()->get();
+            abort_unless($meters->count() === $candidates->count(), 409, 'تغيرت العدادات المحددة؛ حدّث البيانات.');
+            foreach ($meters as $meter) {
+                abort_unless((int) $meter->subscriber_id === (int) $candidates[$meter->id]->subscriber_id,
+                    409, 'تغير مالك العداد.');
+            }
+            foreach ($meters as $meter) {
+                if ($purger->hasOrdinaryHistoryLocked((int) $meter->id)) {
                     $skipped[] = $meter->id;
 
                     continue;
                 }
-                $purger->purge((int) $meter->id);
+                $purger->purge((int) $meter->id, (int) $meter->subscriber_id);
                 $deleted++;
             }
         });
@@ -235,13 +249,5 @@ class MeterController extends ApiController
             ->when($ignoreMeterId, fn ($q) => $q->where('id', '!=', $ignoreMeterId))
             ->whereHas('subscriber', fn ($q) => $q->where('square_id', $squareId))
             ->exists();
-    }
-
-    private function hasHistory(Meter $meter): bool
-    {
-        return $meter->readings()->withTrashed()->exists()
-            || $meter->payments()->withTrashed()->exists()
-            || $meter->invoices()->withTrashed()->exists()
-            || $meter->transactions()->withTrashed()->exists();
     }
 }
