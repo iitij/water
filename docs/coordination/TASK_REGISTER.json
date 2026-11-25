@@ -3526,7 +3526,7 @@
     },
     "round61": {
       "phase": "Actual cash handover and refund treasury evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "495bf08e607fb29b6c7a00dd5cd0b7f800e30b7a",
       "source": "f1c5b85806db87bdd99eb364b9397dfd6de11898",
       "workflow": "775d4c87a68190a8d6ce7c16c1a0f0dfe6c51657",
@@ -3535,13 +3535,33 @@
       "runs": [
         {
           "id": 45613880319,
-          "name": "Treasury custody source evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Cash custody source adapter and registry integration: exact amount, signed direction, source identity, date, channel and refund ledger hash. Two new cases and seven changed verifier regressions per engine.",
-      "limits": "No proof of complete source chain, all-writer coverage, concurrency, other treasury families, activation or final closure. Runtime pending."
+      "limits": "Scoped custody source evidence and registry integration accepted. Complete source chains, all-writer coverage, concurrency, other treasury families and activation remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139204147053,
+          "tests": 9,
+          "assertions": 70,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139204146590,
+          "tests": 9,
+          "assertions": 70,
+          "exit": 0
+        },
+        "total": {
+          "tests": 18,
+          "assertions": 140,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
