@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact SQLite/MySQL CI and fix confirmed failures. Continue internal treasury transfers and funding/opening fences and actual entrypoints; complete reserve discharge and Flutter inventory, then integrated production readiness.",
+  "next": "Verify exact SQLite/MySQL CI and fix confirmed failures only. Continue opening/funding service and API fences, then remaining account-transfer/invoice writers, reserve discharge and Flutter inventory, integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-refund-service-fence",
-      "commit": "7bfb989e27396c61ee94179153405f2e5cb4e1cf",
-      "run": 45721808941,
-      "sqlite": "1 test, 37 assertions",
-      "mysql": "1 test, 37 assertions",
-      "scope": "Private exact payment/reference/account/actor scope in GatedRefundWriter covers refund recording and treasury post atomically; direct service calls refused when candidate flag enabled or either refund leg registered even after flag disabled. Treasury inspection now reports handover surplus reserve and includes it in protected totals. Targeted test checks direct/inactive scope, closed period, idempotent replay, two exact debit legs, unchanged snapshots, preserved original cash surplus reserve and accurate report."
+      "branch": "release/prospective-refund-entrypoints",
+      "commit": "6942d38582e9eaca232a4ba1b60f166ff37157b9",
+      "run": 45722566187,
+      "sqlite": "1 test, 41 assertions",
+      "mysql": "1 test, 41 assertions",
+      "scope": "Shared prospective refund entry routes actual POST payments/{id}/refund and PaymentResource record_refund modal through atomic GatedRefundWriter in staging/testing. Explicit treasury account and operation UUID, channel-filtered account selection, independently evidenced completed disbursement only, no fallback on protected requests, exact amount validation, original response refund retained plus posting. New targeted case checks independent actor, missing account, confirmation, closed-period refusal, exact two debit legs, replay across UI/API, direct posting refusal and protected reserve."
     }
   },
   "round146": {
@@ -1529,12 +1529,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_refund_entrypoints": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "7bfb989e27396c61ee94179153405f2e5cb4e1cf",
     "branch": "release/prospective-refund-entrypoints",
     "source": "6942d38582e9eaca232a4ba1b60f166ff37157b9",
     "scope": "Shared prospective refund entry routes actual POST payments/{id}/refund and PaymentResource record_refund modal through atomic GatedRefundWriter in staging/testing. Explicit treasury account and operation UUID, channel-filtered account selection, independently evidenced completed disbursement only, no fallback on protected requests, exact amount validation, original response refund retained plus posting. New targeted case checks independent actor, missing account, confirmation, closed-period refusal, exact two debit legs, replay across UI/API, direct posting refusal and protected reserve.",
-    "limits": "CI pending, default-off. Mobile callsites not exhaustively reviewed. No prior disbursement authorization or payment gateway added; incident handling and other disbursement eligibility remain open. No production activation, main merge or historical data changes.",
-    "next": "Verify exact SQLite/MySQL CI and fix confirmed failures. Continue internal treasury transfers and funding/opening fences and actual entrypoints; complete reserve discharge and Flutter inventory, then integrated production readiness."
+    "limits": "Exact source, raw logs and lockfile verified for actual refund HTTP and Filament entrypoints. Recording completed independently evidenced disbursement only; no prior authorization, client rollout or production activation.",
+    "next": "Protect actual treasury dispatch/receive services and API.",
+    "run": 45722566187,
+    "jobs": [
+      {
+        "id": 139584231439,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 41,
+        "exit": 0
+      },
+      {
+        "id": 139584231128,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 41,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_treasury_transfer_entry": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "6942d38582e9eaca232a4ba1b60f166ff37157b9",
+    "branch": "release/prospective-treasury-transfer-entry",
+    "source": "4fc8261b831ddeb075a915df46033b978af535e5",
+    "scope": "Private dispatch/reference/actor and receipt/transfer/actor scopes in existing GatedTreasuryTransferWriter; service mutation fence under issuance lock, including refusal to receive registered dispatch through legacy path even switch off. Actual POST /api/treasury/transfers and /{id}/receive route via gate in staging/testing with explicit UUID per phase, preserved response contract. Targeted test checks closed period, direct bypass, independent receiver, exact amount and transit conservation, separate -400/+400 treasury legs, idempotent replay, unchanged subscriber ledger and held reserve.",
+    "limits": "CI pending. No Filament treasury-transfer named path in recursive tree; full callsite search still needed. Transfer opening prerequisites, general liquidity when no reserve, incident/partial receipt policy, other entrypoints and client rollout remain open; no production activation, historical correction or real data changes.",
+    "next": "Verify exact SQLite/MySQL CI and fix confirmed failures only. Continue opening/funding service and API fences, then remaining account-transfer/invoice writers, reserve discharge and Flutter inventory, integrated release checks."
   }
 }
