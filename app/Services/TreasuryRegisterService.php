@@ -337,7 +337,8 @@ final class TreasuryRegisterService
             $heldOutstanding = app(HeldCashReservation::class)->outstandingForAccount($accountId);
             $creditReserve = app(HeldCashReservation::class)->subscriberCreditReserveForAccount($accountId);
             $pendingCashRefund = $account->channel === 'cash' ? app(HeldCashReservation::class)->unpostedCashRefundMinor() : 0;
-            $protected = SignedMinor::add($heldOutstanding, $creditReserve);
+            $handoverReserve = app(HandoverSurplusReservation::class)->forAccount($accountId);
+            $protected = SignedMinor::add(SignedMinor::add($heldOutstanding, $creditReserve), $handoverReserve);
             $shortfall = max(0, SignedMinor::subtract(SignedMinor::add($protected, $pendingCashRefund), $balance));
             if ($protected > 0 && $shortfall > 0) $issues[] = ['code' => 'held_cash_possible_liquidity_shortfall', 'amount_minor' => $shortfall];
             $unpostedCollections = DB::table('treasury_bank_collections')->where('treasury_account_id', $accountId)
@@ -369,6 +370,7 @@ final class TreasuryRegisterService
                 'unattributed_cash_held_minor' => $held,
                 'held_cash_outstanding_minor' => $heldOutstanding,
                 'held_cash_subscriber_credit_reserve_minor' => $creditReserve,
+                'held_cash_handover_surplus_reserve_minor' => $handoverReserve,
                 'held_cash_total_protected_minor' => $protected,
                 'channel_unposted_cash_refund_minor' => $pendingCashRefund,
                 'held_cash_possible_shortfall_minor' => $protected > 0 ? $shortfall : 0,
