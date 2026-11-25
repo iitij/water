@@ -1,7 +1,7 @@
-name: Carry continuity acceptance
+name: Cash void rejection retry
 on:
   push:
-    branches: ['qa/carry-continuity-round145']
+    branches: ['release/prospective-void-retry']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: New carry and affected adjacent continuity tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round14[45]_' tests/Feature/FinancialCloseCoordinatorTest.php
+      - name: Verify rejection replay and approval regression
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round137_(rejected_request|void_immediate)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,5 +96,5 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: New carry and affected adjacent continuity tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round14[45]_' tests/Feature/FinancialCloseCoordinatorTest.php
+      - name: Verify rejection replay and approval regression
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round137_(rejected_request|void_immediate)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
