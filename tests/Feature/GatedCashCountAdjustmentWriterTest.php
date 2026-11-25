@@ -1515,4 +1515,75 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
     }
+    public function test_round124_historical_correction_restores_shadow_reserve_and_rolls_back_on_failure(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic historical release tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-SHADOW-HISTORICAL']);
+        $reading = $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => '0.00', 'current_reading' => '1.00']);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assertSame('0.10', $invoice->total_amount);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $accountId = (int) $account['id'];
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-HISTORY-RELEASE', 'Independent review of allocation evidence', $this->nowAt());
+        $reviewer = $this->actor();
+        $service->recordRelease($reviewer, $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        app(\App\Services\SingleMeterService::class)->replace($meter, ['unique_code' => 'QA-SHADOW-HISTORICAL-NEW'],
+            '2026-11-25', 'Synthetic replacement after billing');
+        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $before = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id');
+        $correct = fn () => app(\App\Services\HistoricalInvoiceCorrectionService::class)->correct(
+            $invoice->fresh(), $reviewer, '0.50', '0.10', 'Synthetic independently evidenced historical correction',
+            'Independent measured historical evidence');
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_shadow_history_failure BEFORE INSERT ON held_cash_shadow_reinstatements BEGIN SELECT RAISE(ABORT, 'synthetic_history_restore_failure'); END"
+            : "CREATE TRIGGER qa_shadow_history_failure BEFORE INSERT ON held_cash_shadow_reinstatements FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_history_restore_failure'";
+        DB::unprepared($trigger);
+        try {
+            $correct();
+            $this->fail('Historical correction committed without restoration evidence.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_history_restore_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_shadow_history_failure');
+        }
+        $this->assertNotSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame($before, DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id'));
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('transactions', 2);
+        $result = $correct();
+        $replacement = \App\Models\Invoice::findOrFail($result->replacement_invoice_id);
+        $this->assertSame('0.05', $replacement->total_amount);
+        $this->assertSame('0.05', $replacement->amount_paid);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame('0.10', $invoice->fresh()->total_amount);
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
+        $this->assertSame(15, $ledger->accountBalanceMinor($subscriber));
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $report = $service->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(0, $report['shadow_released_minor']);
+        $this->assertSame(0, $report['reinstatement_due_minor']);
+        $this->assertSame(25, $report['actual_protected_minor']);
+        $this->assertFalse($report['spending_release_authorized']);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $this->assertSame($result->id, $correct()->id);
+        $this->assertDatabaseCount('historical_invoice_corrections', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('transactions', 4);
+    }
 }
