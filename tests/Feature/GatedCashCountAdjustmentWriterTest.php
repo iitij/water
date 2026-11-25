@@ -3382,4 +3382,100 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $this->assertDatabaseHas('late_receipt_reviews', ['id' => $claim['id'], 'status' => 'approved']);
     }
+
+    public function test_round143_current_subscriber_balances_and_allocations_do_not_certify_period_opening(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic subscriber diagnostic tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-R143-CREDIT']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $writer->issue($issuer, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $debtor = Subscriber::create(['name' => 'Synthetic current debtor', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $meter2 = \App\Models\Meter::create(['subscriber_id' => $debtor->id, 'unique_code' => 'QA-R143-DEBT']);
+        $this->createMeasuredReading(['meter_id' => $meter2->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 3]);
+        $writer->issue($issuer, (int) $debtor->id, (int) $meter2->id,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $idle = Subscriber::create(['name' => 'Synthetic idle', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $deleted = Subscriber::create(['name' => 'Synthetic empty deleted account', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $deleted->delete();
+        $inspect = fn () => $this->gate(fn (array $context) => app(\App\Services\FinancialSubscriberCoverageDiagnostic::class)->inspect($context['period_id']));
+        $tables = ['subscribers', 'transactions', 'invoices', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_events', 'financial_posting_operations', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $result = $inspect();
+        $this->assertSame([], $result['issues']);
+        $this->assertSame([], $result['period_source_issues']);
+        $this->assertTrue($result['scanned_accounts_match']);
+        $this->assertFalse($result['opening_verified']);
+        $this->assertFalse($result['period_closing_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $rows = collect($result['rows'])->keyBy('subscriber_id');
+        $this->assertSame(10, $rows[$subscriber->id]['current_ledger_minor']);
+        $this->assertSame(20, $rows[$subscriber->id]['current_available_minor']);
+        $this->assertSame(10, $rows[$subscriber->id]['current_allocated_minor']);
+        $this->assertSame(10, $rows[$subscriber->id]['current_surplus_minor']);
+        $this->assertSame(-30, $rows[$debtor->id]['current_ledger_minor']);
+        $this->assertSame(0, $rows[$idle->id]['current_ledger_minor']);
+        $this->assertFalse($rows->has($deleted->id));
+        foreach ($rows as $row) {
+            $this->assertNull($row['opening_minor']);
+            $this->assertNull($row['period_closing_minor']);
+        }
+        $this->assertSame(-20, $result['totals']['registered_movement_minor']);
+        $this->assertSame(-20, $result['totals']['current_ledger_minor']);
+        $this->assertSame(30, $result['totals']['current_debt_minor']);
+        $this->assertSame(10, $result['totals']['current_credit_minor']);
+        $this->assertSame($result, $inspect());
+        foreach ($before as $table => $records) $this->assertSame($records, $snapshot($table), $table);
+    }
+
+    public function test_round143_unregistered_current_receipt_is_not_hidden_by_matching_account_totals(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        app(PaymentService::class)->collectPayment($subscriber, '1.00');
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSubscriberCoverageDiagnostic::class)->inspect($context['period_id']));
+        $row = collect($result['rows'])->firstWhere('subscriber_id', $subscriber->id);
+        $this->assertTrue($row['matches']);
+        $this->assertSame(100, $row['current_ledger_minor']);
+        $this->assertSame(100, $row['current_document_balance_minor']);
+        $this->assertSame(0, $row['registered_movement_minor']);
+        $this->assertFalse($result['scanned_accounts_match']);
+        $this->assertContains('subscriber_period_sources_unmatched', array_column($result['issues'], 'code'));
+        $this->assertContains('required_registry_leg_missing_or_duplicate', array_column($result['period_source_issues'], 'code'));
+        $this->assertNull($row['opening_minor']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_round143_invoice_paid_projection_mismatch_is_detected_without_repair(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic stale allocation tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-R143-STALE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.50',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $this->assertSame('0.50', $invoice->fresh()->amount_paid);
+        DB::table('invoices')->where('id', $invoice->id)->update(['amount_paid' => '0.25']);
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSubscriberCoverageDiagnostic::class)->inspect($context['period_id']));
+        $this->assertSame([], $result['period_source_issues']);
+        $this->assertFalse($result['scanned_accounts_match']);
+        $this->assertContains('allocation_invoice_mismatch', array_column(array_column($result['issues'], 'detail'), 'code'));
+        $this->assertSame('0.25', $invoice->fresh()->amount_paid);
+        $this->assertFalse($result['period_closing_verified']);
+        $this->assertFalse($result['closure_authorized']);
+    }
 }
