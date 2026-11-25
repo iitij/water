@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Payment;
+use App\Models\AuditEvent;
+use App\Support\TreasuryMoney;
 use App\Models\Transaction;
 use App\Support\AccountMoney;
 use DomainException;
@@ -89,12 +91,96 @@ final class RegisteredBankCollectionProof
         foreach (array_unique([(int) $bankOp->period_id, (int) $openingOp->period_id]) as $periodId) {
             $this->registry->verifyPeriod('water', $periodId);
         }
+        // The registered hashes prove the source rows, not the separate
+        // mandatory audit records. Require both independent evidence trails.
+        $line = DB::table('bank_statement_lines')->where('id', $document->bank_statement_line_id)->lockForUpdate()->first();
+        $this->need($line !== null, 'bank_pair_audit_source_missing');
+        $statement = DB::table('bank_statements')->where('id', $line->bank_statement_id)->lockForUpdate()->first();
+        $match = DB::table('bank_statement_matches')->where('bank_statement_line_id', $line->id)->lockForUpdate()->first();
+        $this->need($statement !== null && $match !== null, 'bank_pair_audit_source_missing');
+        $lineCount = DB::table('bank_statement_lines')->where('bank_statement_id', $statement->id)
+            ->orderBy('id')->lockForUpdate()->get(['id'])->count();
+        $import = $this->audit('bank_statement.imported', 'bank_statement', (int) $statement->id);
+        $this->need((int) $import->actor_user_id === (int) $statement->imported_by, 'bank_pair_import_audit_mismatch');
+        $this->matches($import, [
+            'treasury_account_id' => (int) $account->id, 'reference' => $statement->reference,
+            'from_date' => $statement->from_date, 'to_date' => $statement->to_date,
+            'opening_minor' => TreasuryMoney::signed($statement->opening_minor),
+            'closing_minor' => TreasuryMoney::signed($statement->closing_minor),
+            'evidence' => $statement->evidence, 'imported_by' => (int) $statement->imported_by,
+            'content_hash' => $statement->content_hash, 'line_count' => $lineCount,
+        ], 'bank_pair_import_audit_mismatch');
+        $confirmation = $this->audit('treasury.bank_collection_confirmed', 'treasury_bank_collection', (int) $document->id);
+        $this->need((int) $confirmation->actor_user_id === (int) $document->approved_by, 'bank_pair_confirmation_audit_mismatch');
+        $this->matches($confirmation, [
+            'treasury_account_id' => (int) $account->id, 'bank_statement_line_id' => (int) $line->id,
+            'payment_id' => $paymentId, 'subscriber_id' => (int) $payment->subscriber_id,
+            'receipt_number' => $payment->receipt_number, 'payment_reference' => $payment->reference_number,
+            'payment_method' => $payment->payment_method, 'amount_minor' => $minor, 'cleared_on' => $date,
+            'reference' => $document->reference, 'evidence' => $document->evidence,
+            'approved_by' => (int) $document->approved_by, 'posting_id' => (int) $posting->id,
+            'match_id' => (int) $match->id, 'subscriber_posting_created' => false,
+        ], 'bank_pair_confirmation_audit_mismatch');
+        if ($claims->isNotEmpty()) {
+            $submission = $this->audit('noncash_claim.submitted', 'noncash_collection_claim', (int) $claim->id);
+            $this->need((int) $submission->actor_user_id === (int) $claim->submitted_by, 'bank_pair_submission_audit_mismatch');
+            $this->matches($submission, [
+                'sync_uuid' => $claim->sync_uuid, 'subscriber_id' => (int) $claim->subscriber_id,
+                'invoice_id' => $claim->invoice_id === null ? null : (int) $claim->invoice_id,
+                'submitted_by' => (int) $claim->submitted_by, 'amount_minor' => $minor,
+                'payment_method' => $claim->payment_method, 'instrument_reference' => $claim->instrument_reference,
+                'instrument_on' => $claim->instrument_on, 'notes' => $claim->notes,
+            ], 'bank_pair_submission_audit_mismatch');
+            $decision = $this->audit('noncash_claim.cleared', 'noncash_collection_claim', (int) $claim->id);
+            $this->need((int) $decision->actor_user_id === (int) $claim->decided_by, 'bank_pair_decision_audit_mismatch');
+            $this->matches($decision, [
+                'status' => 'cleared', 'payment_id' => $paymentId, 'decided_by' => (int) $claim->decided_by,
+                'decision_evidence' => $claim->decision_evidence, 'bank_collection_id' => (int) $document->id,
+            ], 'bank_pair_decision_audit_mismatch');
+        } else {
+            $submission = $this->audit('late_receipt.submitted', 'late_receipt_review', (int) $review->id);
+            $this->need((int) $submission->actor_user_id === (int) $review->collector_id, 'bank_pair_submission_audit_mismatch');
+            $this->matches($submission, [
+                'sync_uuid' => $review->sync_uuid, 'cash_session_id' => (int) $review->cash_session_id,
+                'collector_id' => (int) $review->collector_id, 'subscriber_id' => (int) $review->subscriber_id,
+                'invoice_id' => $review->invoice_id === null ? null : (int) $review->invoice_id,
+                'submitted_meter_id' => $review->submitted_meter_id === null ? null : (int) $review->submitted_meter_id,
+                'amount' => \App\Support\SignedMinor::decimal($minor), 'payment_date' => $review->payment_date,
+                'payment_method' => $review->payment_method, 'reference_number' => $review->reference_number,
+                'reason' => $review->reason, 'notes' => $review->notes,
+            ], 'bank_pair_submission_audit_mismatch');
+            $decision = $this->audit('late_receipt.approved', 'late_receipt_review', (int) $review->id);
+            $this->need((int) $decision->actor_user_id === (int) $review->decided_by, 'bank_pair_decision_audit_mismatch');
+            $this->matches($decision, [
+                'status' => 'approved', 'payment_id' => $paymentId, 'decided_by' => (int) $review->decided_by,
+                'settlement_method' => 'verified_non_cash', 'evidence_reference' => $review->evidence_reference,
+                'bank_clearance_reference' => $review->bank_clearance_reference, 'evidence' => $review->evidence,
+                'new_cash_movement' => false, 'bank_collection_id' => (int) $document->id,
+            ], 'bank_pair_decision_audit_mismatch');
+        }
+
         return [
             'operation_uuid' => $payment->sync_uuid, 'payment_id' => $paymentId,
             'transaction_id' => (int) $subscriberLeg['source_id'], 'posting_id' => (int) $bankLeg['source_id'],
             'amount_minor' => $minor, 'effective_on' => $date,
             'pair_verified' => true, 'source_coverage_verified' => false, 'certified_balance' => false,
         ];
+    }
+
+    private function audit(string $event, string $type, int $id): AuditEvent
+    {
+        $rows = AuditEvent::query()->where('event', $event)->where('entity_type', $type)
+            ->where('entity_id', (string) $id)->lockForUpdate()->get();
+        $this->need($rows->count() === 1, 'bank_pair_audit_missing_or_duplicate');
+        return $rows->first();
+    }
+
+    private function matches(AuditEvent $audit, array $expected, string $reason): void
+    {
+        $actual = $audit->after ?? [];
+        foreach ($expected as $key => $value) {
+            $this->need(array_key_exists($key, $actual) && $actual[$key] === $value, $reason);
+        }
     }
 
     private function registered(array $leg, string $date): object
