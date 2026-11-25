@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Support\ReadingQuantity;
 use Carbon\CarbonImmutable;
+use InvalidArgumentException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -34,14 +36,35 @@ final class AuditObservationIntervals extends Command
                     }
                     continue;
                 }
-                if ($row->period_basis !== 'observation' || ! $start || ! $end || ! $observed
+                if ($row->period_basis !== 'observation' || ! $row->actual_reading_date || ! $start || ! $end || ! $observed
                     || $start >= $end || $end !== $observed || $observed > today()->toDateString()) {
                     $blocked++;
                     $this->error("INVALID_OBSERVATION reading #{$row->id}");
                     continue;
                 }
+                try {
+                    $previousQuantity = ReadingQuantity::hundredths($row->previous_reading);
+                    $currentQuantity = ReadingQuantity::hundredths($row->current_reading);
+                    $units = ReadingQuantity::hundredths($row->consumption_units);
+                    if ($currentQuantity < $previousQuantity || $units !== $currentQuantity - $previousQuantity) {
+                        throw new InvalidArgumentException('Inconsistent consumption.');
+                    }
+                } catch (InvalidArgumentException) {
+                    $blocked++;
+                    $this->error("INVALID_OBSERVATION_QUANTITY reading #{$row->id}");
+                    continue;
+                }
                 // Retired meter records deliberately retain only historical financial provenance.
                 if (! $row->meter_id) {
+                    continue;
+                }
+                // A strict predecessor query alone misses two observations on
+                // the same day, both of which can appear to share a valid anchor.
+                if (DB::table('readings')->where('meter_id', $row->meter_id)
+                    ->whereNull('deleted_at')->where('id', '!=', $row->id)
+                    ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) = ?', [$observed])->exists()) {
+                    $blocked++;
+                    $this->error("DUPLICATE_OBSERVATION_DATE reading #{$row->id}");
                     continue;
                 }
                 $previous = DB::table('readings')->where('meter_id', $row->meter_id)
@@ -57,7 +80,12 @@ final class AuditObservationIntervals extends Command
                     $anchor = $date($meter->installed_at ?? $service);
                     $value = $meter->initial_reading ?? null;
                 }
-                if ($anchor !== $start || $value === null || round((float) $value, 2) !== round((float) $row->previous_reading, 2)) {
+                try {
+                    $anchorMatches = $anchor === $start && ReadingQuantity::hundredths($value) === $previousQuantity;
+                } catch (InvalidArgumentException) {
+                    $anchorMatches = false;
+                }
+                if (! $anchorMatches) {
                     $blocked++;
                     $this->error("BROKEN_OBSERVATION_ANCHOR reading #{$row->id}");
                 }
