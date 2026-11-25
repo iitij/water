@@ -27,7 +27,6 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     CashSessionService? cashSessionService,
   }) : _payments = paymentsRepository,
        _references = references,
-       _meterId = meterId,
        _cashSessions = cashSessionService,
        super(CollectPaymentState(paymentDate: DateTime.now()));
 
@@ -38,107 +37,121 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
   /// الشاشات القديمة، لكنه مربوط في كل مسارات الإنتاج عبر DI.
   final CashSessionService? _cashSessions;
 
-  /// معرّف العداد مرجع للعملية فقط، وليس حساباً مالياً مستقلاً.
-  final int? _meterId;
+  // A route meter hint is not authorization to target an invoice. The actual
+  // selected invoice determines its own meter reference.
+  int _accountLoadSequence = 0;
+  bool _contextUsable = false;
 
-  /// فتح من فاتورة محددة (`SCR-13`/`SCR-15`/ودجة الفواتير المتأخرة).
+  /// Explicit invoice entry: never replace the caller's selection with the latest invoice.
   Future<void> openForInvoice(InvoiceModel invoice) async {
-    emit(
-      state.copyWith(
-        subscriberId: invoice.subscriberId,
-        subscriberName: invoice.beneficiaryName,
-        invoiceId: invoice.id,
-        dueAmount: invoice.payableAmount,
-        amount: invoice.payableAmount,
-        openInvoices: <InvoiceModel>[invoice],
-        clearValidation: true,
-      ),
-    );
-    await _loadAccountInvoices(invoice.subscriberId, invoice.meterId);
+    if (isClosed || state.submitting) return;
+    final sequence = ++_accountLoadSequence;
+    _contextUsable = false;
+    emit(CollectPaymentState(
+      subscriberId: invoice.subscriberId,
+      subscriberName: invoice.beneficiaryName,
+      invoiceId: invoice.id,
+      dueAmount: invoice.payableAmount,
+      amount: invoice.payableAmount,
+      openInvoices: [invoice],
+      paymentDate: DateTime.now(),
+      loadingInvoices: true,
+    ));
+    await _loadAccountInvoices(invoice.subscriberId, sequence, explicitInvoice: invoice);
   }
 
-  /// فتح عام (`SCR-18`): المستخدم يختار المشترك، فنجلب استحقاقه تلقائياً.
   Future<void> openForSubscriber(int subscriberId, {String? name}) async {
-    emit(
-      state.copyWith(
-        subscriberId: subscriberId,
-        subscriberName: name,
-        clearInvoice: true,
-        openInvoices: const [],
-        dueAmount: 0,
-        amount: 0,
-        loadingInvoices: true,
-        clearValidation: true,
-      ),
-    );
-    await _loadAccountInvoices(subscriberId, _meterId, autoSelectLatest: true);
+    if (isClosed || state.submitting) return;
+    final sequence = ++_accountLoadSequence;
+    _contextUsable = false;
+    // A different account must not inherit an invoice, reference, amount,
+    // note, name or successful outcome from the previous account.
+    emit(CollectPaymentState(
+      subscriberId: subscriberId,
+      subscriberName: name,
+      paymentDate: DateTime.now(),
+      loadingInvoices: true,
+    ));
+    await _loadAccountInvoices(subscriberId, sequence);
   }
+
+  bool _currentAccount(int subscriberId, int sequence) =>
+      !isClosed && sequence == _accountLoadSequence && state.subscriberId == subscriberId;
 
   Future<void> _loadAccountInvoices(
     int subscriberId,
-    int? meterId, {
-    bool autoSelectLatest = false,
+    int sequence, {
+    InvoiceModel? explicitInvoice,
   }) async {
     try {
       final summary = await _references.dueSummary(subscriberId);
-      final invoice = await _payments.latestUnpaidInvoice(subscriberId);
-      if (isClosed || state.subscriberId != subscriberId) return;
-      // Use all outstanding invoices supplied by the account summary.
-      final open = InvoiceAccounting.openInvoicesForAccount(
-        invoices: summary?.invoices.isNotEmpty == true
-            ? summary!.invoices
-            : <InvoiceModel>[if (invoice != null && invoice.subscriberId == subscriberId) invoice],
-        subscriberId: subscriberId,
-      );
-      // Refreshing account context must not replace the invoice the user opened.
-      if (!autoSelectLatest) {
-        final selected = state.openInvoices
-            .where((item) => item.id == state.invoiceId)
-            .firstOrNull;
-        if (selected != null) {
-          final refreshed = open.where((item) => item.id == selected.id).firstOrNull ??
-              (invoice?.id == selected.id && invoice?.subscriberId == subscriberId && invoice?.meterId == selected.meterId
-                  ? invoice! : selected);
-          final accountInvoices = <InvoiceModel>[
-            ...open.where((item) => item.id != refreshed.id),
-            refreshed,
-          ];
-          final due = refreshed.payableAmount;
-          emit(
-            state.copyWith(
-              loadingInvoices: false,
-              openInvoices: accountInvoices,
-              dueAmount: due,
-              amount: state.amount == state.dueAmount ? due : state.amount,
-            ),
-          );
-          return;
-        }
+      if (!_currentAccount(subscriberId, sequence)) return;
+      final latest = await _payments.latestUnpaidInvoice(subscriberId);
+      if (!_currentAccount(subscriberId, sequence)) return;
+
+      if ((summary != null && (summary.subscriberId != subscriberId ||
+              summary.invoices.any((item) => item.subscriberId != subscriberId))) ||
+          (latest != null && latest.subscriberId != subscriberId)) {
+        throw const ValidationFailure('تعذر التحقق من حساب المشترك.', <String, List<String>>{});
       }
-      final selected = invoice != null && invoice.subscriberId == subscriberId
-          ? invoice
-          : InvoiceAccounting.latestUnpaidOf(subscriberId, open);
+
+      final invoices = summary?.invoices.isNotEmpty == true
+          ? summary!.invoices
+          : <InvoiceModel>[if (latest != null) latest];
+      final open = InvoiceAccounting.openInvoicesForAccount(
+        invoices: invoices, subscriberId: subscriberId,
+      );
+
+      if (explicitInvoice != null) {
+        final candidates = <InvoiceModel>[
+          ...invoices.where((item) => item.id == explicitInvoice.id),
+          if (latest?.id == explicitInvoice.id) latest!,
+        ];
+        if (candidates.any((item) => item.meterId != explicitInvoice.meterId)) {
+          throw const ValidationFailure('تعذر التحقق من هوية الفاتورة.', <String, List<String>>{});
+        }
+        final selected = candidates.firstOrNull ?? explicitInvoice;
+        if (selected.isDeleted || selected.status == InvoiceStatus.draft ||
+            selected.status == InvoiceStatus.cancelled) {
+          throw const ValidationFailure('الفاتورة غير صالحة للتحصيل.', <String, List<String>>{});
+        }
+        final due = selected.payableAmount;
+        _contextUsable = true;
+        emit(state.copyWith(
+          loadingInvoices: false,
+          invoiceId: selected.id,
+          openInvoices: [...open.where((item) => item.id != selected.id), selected],
+          dueAmount: due,
+          amount: state.amount == state.dueAmount ? due : state.amount,
+        ));
+        return;
+      }
+
+      final selected = InvoiceAccounting.latestUnpaidOf(subscriberId, open);
       final due = summary?.invoices.isNotEmpty == true
           ? summary!.dueAmount
           : (selected?.payableAmount ?? summary?.dueAmount ?? 0);
-
-      emit(
-        state.copyWith(
-          loadingInvoices: false,
-          openInvoices: open,
-          clearInvoice: selected == null,
-          invoiceId: selected?.id,
-          dueAmount: due,
-          amount: due,
-        ),
-      );
+      _contextUsable = true;
+      emit(state.copyWith(
+        loadingInvoices: false,
+        openInvoices: open,
+        clearInvoice: selected == null,
+        invoiceId: selected?.id,
+        dueAmount: due,
+        amount: state.amount == state.dueAmount ? due : state.amount,
+      ));
     } catch (error) {
-      if (isClosed || state.subscriberId != subscriberId) return;
-      emit(state.copyWith(loadingInvoices: false, validationMessage: '$error'));
+      if (!_currentAccount(subscriberId, sequence)) return;
+      _contextUsable = false;
+      emit(state.copyWith(
+        loadingInvoices: false,
+        validationMessage: error is AppFailure ? error.message : '$error',
+      ));
     }
   }
 
   void selectInvoice(int? invoiceId) {
+    if (isClosed || state.submitting || !_contextUsable) return;
     if (invoiceId == null) {
       emit(
         state.copyWith(
@@ -167,6 +180,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
 
   /// خيار «تطبيق على الأقدم تلقائياً (FIFO)».
   void useFifoAutomatically() {
+    if (isClosed || state.submitting || !_contextUsable) return;
     final due = _totalDueOfOpen();
     emit(state.copyWith(clearInvoice: true, dueAmount: due, amount: due));
   }
@@ -216,11 +230,18 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
         <String, List<String>>{},
       );
     }
+    if (!_contextUsable || state.loadingInvoices) {
+      throw const ValidationFailure('لم يتم التحقق من حساب المشترك بعد.', <String, List<String>>{});
+    }
+    final selected = state.openInvoices.where((i) =>
+        i.id == state.invoiceId && i.subscriberId == subscriberId).firstOrNull;
+    if (state.invoiceId != null && selected == null) {
+      throw const ValidationFailure('الفاتورة لا تنتمي إلى حساب المشترك.', <String, List<String>>{});
+    }
     return CollectPaymentRequest(
       subscriberId: subscriberId,
       invoiceId: state.invoiceId,
-      meterId: state.openInvoices.where((i) => i.id == state.invoiceId).firstOrNull?.meterId ??
-          (state.invoiceId == null ? null : _meterId),
+      meterId: selected?.meterId,
       amount: state.amount,
       method: state.method,
       referenceNumber: state.referenceNumber.trim().isEmpty
@@ -234,6 +255,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
 
   /// يعيد `true` عند نجاح الحفظ (أو الإدراج في طابور المزامنة).
   Future<bool> submit() async {
+    if (isClosed || state.submitting || state.isSubmitted || state.loadingInvoices) return false;
     final validation = state.validationMessage;
     if (validation != null) return false;
 
@@ -261,14 +283,17 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     emit(state.copyWith(submitting: true, clearValidation: true));
     try {
       final outcome = await _payments.collect(request);
+      if (isClosed) return outcome.isSuccess;
       emit(state.copyWith(submitting: false, outcome: outcome));
       return outcome.isSuccess;
     } on AppFailure catch (failure) {
+      if (isClosed) return false;
       emit(
         state.copyWith(submitting: false, validationMessage: failure.message),
       );
       return false;
     } catch (error) {
+      if (isClosed) return false;
       emit(
         state.copyWith(
           submitting: false,
