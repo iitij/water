@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 60,
+    "round": 61,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3523,6 +3523,18 @@
           "skipped": 0
         }
       }
+    },
+    "round61": {
+      "phase": "Actual cash handover and refund treasury evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "495bf08e607fb29b6c7a00dd5cd0b7f800e30b7a",
+      "source": "f1c5b85806db87bdd99eb364b9397dfd6de11898",
+      "workflow": "775d4c87a68190a8d6ce7c16c1a0f0dfe6c51657",
+      "branch": "fix/central-g1b-treasury-custody-evidence",
+      "pr": 138,
+      "runs": [],
+      "scope": "Cash custody source adapter and registry integration: exact amount, signed direction, source identity, date, channel and refund ledger hash. Two new cases and seven changed verifier regressions per engine.",
+      "limits": "No proof of complete source chain, all-writer coverage, concurrency, other treasury families, activation or final closure. Runtime pending."
     }
   }
 }
