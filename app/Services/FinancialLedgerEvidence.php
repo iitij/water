@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAccountTransfer;
 use App\Models\PaymentRefund;
+use App\Models\TreasuryHeldCashCredit;
 use App\Models\Transaction;
 use App\Support\AccountMoney;
 use DomainException;
@@ -32,6 +33,7 @@ final class FinancialLedgerEvidence
             'payment', 'payment_reversal' => Payment::class,
             'payment_transfer_in' => PaymentAccountTransfer::class,
             'payment_refund' => PaymentRefund::class,
+            'held_cash_credit' => TreasuryHeldCashCredit::class,
             default => throw new DomainException('ledger_source_type_unsupported'),
         };
         $this->need($entry->reference_type === $expectedClass && (int) $entry->reference_id > 0, 'ledger_document_identity');
