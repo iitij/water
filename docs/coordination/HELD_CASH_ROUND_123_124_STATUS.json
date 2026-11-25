@@ -1178,5 +1178,42 @@
     "scope": "Reuse existing GatedCountedCashWriter verified session and allocation proof, with private exact review/UUID scope distinct from separate late-cash handover. Wire through LateReceiptReviewService and PaymentService fence. Enforce registry created versus replay; new test exercises direct/inactive writer rejection, closed period, capacity 1025 minor, allocation 412, remaining 613, reject 614, exactly one subscriber leg, unchanged original till and treasury, replay with flag off.",
     "limits": "Candidate only, based on preceding unverified late cash candidate. CI acceptance required for both branches; no production activation, historical remediation or main merge. Handover with variance and full actual settlement route coverage remain open.",
     "next": "Resolve exact CI runs for both late cash and counted cash; fix confirmed failures only, then integrate actual settlement entrypoints and review custody/other writers."
+  },
+  "release_settlement_api_inventory": {
+    "status": "SOURCE_REVIEW_COMPLETE_FOR_FOUR_API_APPROVAL_ROUTES",
+    "reviewed_source": "a56d5cc9c942854d2bf46a2a74a8ef42e33c0b27",
+    "routes": [
+      {
+        "route": "POST /api/noncash-claims/{id}/clear",
+        "current": "NonCashClaimController::clear -> PaymentService::clearNonCashClaim",
+        "target": "GatedCollectionWriter::clearClaim",
+        "identity": "Persisted claim sync_uuid, exact selected statement line booked_on"
+      },
+      {
+        "route": "POST /api/late-receipt-reviews/{id}/clear-bank",
+        "current": "LateReceiptReviewController::clearBank -> PaymentService::clearLateNonCash",
+        "target": "GatedCollectionWriter::clearLateBank",
+        "identity": "Persisted review sync_uuid, exact selected statement line booked_on"
+      },
+      {
+        "route": "POST /api/late-receipt-reviews/{id}/clear-cash",
+        "current": "LateReceiptReviewController::clearCash -> LateReceiptReviewService::receiveCash",
+        "target": "GatedCollectionWriter::receiveLateCash",
+        "identity": "Persisted review sync_uuid and explicit received_on; existing writer requires same payment date, differing date must not be silently rewritten"
+      },
+      {
+        "route": "POST /api/late-receipt-reviews/{id}/decide",
+        "current": "LateReceiptReviewController::decide -> LateReceiptReviewService::decide",
+        "target": "GatedCountedCashWriter::allocate only for approved already_counted; rejection remains existing nonposting path",
+        "identity": "Persisted review sync_uuid and payment_date"
+      }
+    ],
+    "required": [
+      "Preserve endpoint authorization and response shapes; derive source identity only from persisted claim and validated selected line, recheck under gate.",
+      "Staging/testing-only flags, no legacy fallback when a gate rejects. Convert domain conflicts to HTTP 409 even for registered replay with flag off.",
+      "Test exact replay, wrong destination/closed period, authorization, no duplicated treasury leg, and disabled-switch behavior on affected routes.",
+      "Inspect actual Filament settlement actions and direct bank confirmation separately; this inventory is not exhaustive."
+    ],
+    "limits": "No route modifications yet; latest two prerequisite CI results remain unavailable due remote output timeout. No tests repeated. Do not mark either as accepted without exact logs. No production or main changes."
   }
 }
