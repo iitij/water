@@ -512,7 +512,29 @@ final class BankReconciliationService
     }
 
     /** Records full bank clearance of a previously posted receipt, never another subscriber credit. */
-    public function confirmCollection(User $actor, int $id, int $lineId, int $paymentId, string $reference, string $evidence): array
+    /** New bank confirmations belong to the same scoped transaction as the subscriber credit. */
+    private function assertCollectionWriter(Payment $payment, ?GatedCollectionWriter $writer): void
+    {
+        $uuid = $payment->sync_uuid;
+        if ($writer !== null && is_string($uuid)) {
+            $claim = DB::table('noncash_collection_claims')->where('payment_id', $payment->id)
+                ->where('sync_uuid', $uuid)->lockForUpdate()->first();
+            $late = DB::table('late_receipt_reviews')->where('payment_id', $payment->id)
+                ->where('sync_uuid', $uuid)->lockForUpdate()->first();
+            if ($claim !== null && $late === null && $claim->status === 'cleared'
+                && $writer->allowsMutation('claim', (int) $claim->id, $uuid)) return;
+            if ($late !== null && $claim === null && $late->status === 'approved'
+                && $late->settlement_method === 'verified_non_cash'
+                && $writer->allowsMutation('late_bank', (int) $late->id, $uuid)) return;
+        }
+        $registered = is_string($uuid) && DB::table('financial_posting_operations')
+            ->where('scope_key', 'water')->where('operation_uuid', $uuid)->exists();
+        if ($writer !== null || $registered || config('financial_candidate.noncash_settlements') === true) {
+            throw new \DomainException('gated_bank_collection_writer_required');
+        }
+    }
+
+    public function confirmCollection(User $actor, int $id, int $lineId, int $paymentId, string $reference, string $evidence, ?GatedCollectionWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reference = mb_strtoupper(trim($reference));
@@ -521,13 +543,14 @@ final class BankReconciliationService
             $this->reject('collection', 'يلزم مرجع فريد وإثبات مستقل لوصول المبلغ.');
         }
         $candidate = Payment::findOrFail($paymentId);
-        return DB::transaction(function () use ($actor, $id, $lineId, $paymentId, $reference, $evidence, $candidate): array {
+        return DB::transaction(function () use ($actor, $id, $lineId, $paymentId, $reference, $evidence, $candidate, $gatedWriter): array {
             // Issuance -> subscriber -> payment -> statement/account. The shared
             // fence serializes these writers before any business-resource lock.
             $this->lock();
             Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($paymentId);
             abort_unless((int) $payment->subscriber_id === (int) $candidate->subscriber_id, 409);
+            $this->assertCollectionWriter($payment, $gatedWriter);
             $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
             abort_unless($statement, 404);
             $account = $this->account((int) $statement->treasury_account_id);
