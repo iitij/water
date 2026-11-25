@@ -690,7 +690,17 @@
       ],
       "gates": "No candidate changes during QA. G02/G11 full suites after focused acceptance review, G04 remaining P1/P2/P3 deferred, G08 ACC14 and G09 persistent close/returns inactive, G12 hosted CI/host/security/device open. No main merge/deploy.",
       "local": "No heavy local tests without supervisor slot. Cloud tasks separate independent sessions and synthetic schemas; avoid duplicate execution by D/C.",
-      "limitations": "No fresh candidate runtime yet. G10 older cloud helper incompatible with revised script. CI startup root cause unresolved. A optional excluded despite scoped evidence. P1 DB tests not run. No supervisor test execution."
+      "limitations": "No fresh candidate runtime yet. G10 older cloud helper incompatible with revised script. CI startup root cause unresolved. A optional excluded despite scoped evidence. P1 DB tests not run. No supervisor test execution.",
+      "g10_owner_decision": {
+        "source": "Owner instructed removal of the synthetic 20-unit pending reading from legacy-clean and stated such readings will be deleted from old and new data.",
+        "candidate": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+        "reported_candidate_qa": "Owner screenshot: G00 and approved focused G01/G03/G05/G06/G07 pass; PHPUnit 292/26209, Flutter27, standalone30048, no reported PHPUnit/Flutter failures/skips; G10 fresh and legacy-financial exit0, legacy-clean exit1. Full report pending.",
+        "fixture_branch": "qa/g10-clean-fixture-round6",
+        "fixture_sha": "123fe5c6935110248c84d0e83e2aa53c886ce066",
+        "scope": "Only synthetic pending reading excluded from legacy-clean; financial scenario unchanged; no changes to current runtime or frozen candidate. Revised fixture must be tested independently. Original failure remains evidence, not converted to pass.",
+        "business_policy_followup": "Owner direction concerns obsolete-meter unbilled observations in legacy and future data. Existing MeterDataPurger rejects active unbilled readings. Review call sites and reconcile explicit deletion contract in a separately approved product slice; do not infer permission to delete active retained-meter readings or financially linked records. Test old/new behavior, pending vs billed, rollback and financial conservation. No actual data deletion or guard removal in this task.",
+        "status": "FIXTURE_PATCH_UNTESTED_PRODUCT_POLICY_OPEN"
+      }
     }
   }
 }
