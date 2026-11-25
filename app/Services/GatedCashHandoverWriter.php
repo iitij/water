@@ -17,9 +17,9 @@ use DateTimeImmutable;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-/** Inactive handover adapter for fully reconciled cash-only tills with zero
- * opening and variance. Complex funding/variance/late settlements need their
- * own verified custody coverage before this can replace existing routes.
+/** Inactive handover adapter for reconciled cash-only tills, including
+ * registered opening funding and registered pre-close ordinary voids.
+ * Variances and late/closed corrections still require separate proof.
  */
 final class GatedCashHandoverWriter
 {
@@ -52,24 +52,39 @@ final class GatedCashHandoverWriter
             $read = fn (string $field, bool $signed = false): ?int =>
                 Cash::stored($session->getRawOriginal($field), $driver, DecimalDomain::D14, $signed, true);
             $counted = $read('counted_amount');
+            $openingMinor = $read('opening_amount');
             $this->need($session->isApproved() && $session->settlement_basis === 'physical_cash'
                 && $session->closed_at !== null && $session->approved_at !== null
                 && $session->closed_at <= $session->approved_at
                 && $date >= $session->closed_at->toDateString()
                 && (int) $session->approved_by > 0 && (int) $session->approved_by !== (int) $session->user_id
-                && $read('opening_amount') === 0 && $read('variance_amount', true) === 0
+                && $openingMinor !== null && $openingMinor >= 0 && $read('variance_amount', true) === 0
                 && $counted !== null && $counted > 0 && $read('expected_amount') === $counted,
                 'gated_handover_session_scope');
-            $this->need(! DB::table('cash_session_fundings')->where('cash_session_id', $sessionId)->exists()
-                && ! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists()
+            $this->need(! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists()
                 && ! DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)->exists(), 'gated_handover_session_scope');
             $approval = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
                 ->where('entity_id', (string) $sessionId)->lockForUpdate()->sole();
-            $this->need((int) $approval->actor_user_id === (int) $session->approved_by, 'gated_handover_approval');
-            $total = 0;
+            $this->need((int) $approval->actor_user_id === (int) $session->approved_by
+                && ($approval->after['expected_amount'] ?? null) === SignedMinor::decimal($counted)
+                && ($approval->after['counted_amount'] ?? null) === SignedMinor::decimal($counted)
+                && ($approval->after['variance_amount'] ?? null) === '0.00', 'gated_handover_approval');
+            $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
+            $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
+            if ($openingMinor > 0) {
+                $funding = $fundings->first();
+                $source = DB::table('treasury_accounts')->where('id', $funding->treasury_account_id)->lockForUpdate()->first();
+                $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->lockForUpdate()->first();
+                $this->need($source !== null && $posting !== null, 'gated_handover_funding_unverified');
+                $this->registered($this->opening->opening((int) $source->id, $source->opening_on), $source->opening_on);
+                $leg = $this->opening->funding((int) $posting->id, $funding->issued_on);
+                $this->need($leg['amount_minor'] === -$openingMinor, 'gated_handover_funding_unverified');
+                $this->registered($leg, $funding->issued_on);
+            }
+            $total = $openingMinor;
             $payments = Payment::withTrashed()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
             foreach ($payments as $payment) {
-                $this->need(! $payment->trashed() && ! $payment->isVoided() && ! $payment->hasPendingVoidRequest()
+                $this->need(! $payment->trashed() && ! $payment->hasPendingVoidRequest()
                     && $payment->payment_method === 'cash' && (int) $payment->user_id === (int) $session->user_id
                     && $payment->payment_date->toDateString() >= $session->session_date->toDateString()
                     && $payment->payment_date->toDateString() <= $session->closed_at->toDateString(), 'gated_handover_session_scope');
@@ -77,6 +92,18 @@ final class GatedCashHandoverWriter
                     ->where('type', 'payment')->lockForUpdate()->sole();
                 $leg = $this->ledger->leg((int) $entry->id);
                 $this->registered($leg, $payment->payment_date->toDateString());
+                $this->need($leg['amount_minor'] > 0, 'gated_handover_count_mismatch');
+                if ($payment->isVoided()) {
+                    $this->need(in_array($payment->voided_via, ['gated', 'approval'], true)
+                        && $payment->voided_at >= $payment->payment_date->copy()->startOfDay()
+                        && $payment->voided_at <= $session->closed_at, 'gated_handover_void_unverified');
+                    $reversal = Transaction::query()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
+                        ->where('type', 'payment_reversal')->lockForUpdate()->sole();
+                    $reverseLeg = $this->ledger->leg((int) $reversal->id);
+                    $this->need($reverseLeg['amount_minor'] === -$leg['amount_minor'], 'gated_handover_void_unverified');
+                    $this->registered($reverseLeg, $payment->voided_at->toDateString());
+                    continue;
+                }
                 $total = SignedMinor::add($total, $leg['amount_minor']);
             }
             $this->need($total === $counted, 'gated_handover_count_mismatch');
