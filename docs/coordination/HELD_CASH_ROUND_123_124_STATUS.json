@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted SQLite/MySQL CI; correct confirmed failures only; then implement independently verified already-counted settlement source contract without duplicating treasury cash, and wire actual settlement routes.",
+  "next": "Resolve exact CI runs for both late cash and counted cash; fix confirmed failures only, then integrate actual settlement entrypoints and review custody/other writers.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1167,7 +1167,16 @@
     "branch": "release/prospective-late-cash-settlement-fence",
     "source": "e2d85d402909d394e341b3e5df5e2e7af4baa1e7",
     "scope": "Pass private late_cash kind/claim/UUID writer scope through separate handover receiveCash and decideInternal into PaymentService::collectPayment. Guard under issuance lock; registered UUIDs protected with switch off; new default-off late_cash_settlements switch refuses unverified direct issuance and already-counted approvals until distinct single-leg contract available. Targeted case covers direct and inactive-writer bypass, closed period, dual-leg replay, exact unchanged held cash.",
-    "limits": "CI pending. Already-counted approvals intentionally fail closed when candidate flag enabled; default-off legacy behavior retained. Same-day separate handover only. Actual HTTP/Filament routes, full writer inventory and direct bank mutations remain open. No main merge, production activation or historical remediation.",
+    "limits": "CI pending. Already-counted approvals intentionally fail closed when candidate flag enabled; default-off legacy behavior retained. Same-day separate handover only. Actual HTTP/Filament routes, full writer inventory and direct bank mutations remain open. No main merge, production activation or historical remediation. Run discovery through remote GitHub API timed out during TLS handshake; exact CI results not yet available. No tests rerun.",
     "next": "Verify exact targeted SQLite/MySQL CI; correct confirmed failures only; then implement independently verified already-counted settlement source contract without duplicating treasury cash, and wire actual settlement routes."
+  },
+  "release_counted_cash_settlement_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "e2d85d402909d394e341b3e5df5e2e7af4baa1e7",
+    "branch": "release/prospective-counted-cash-settlement-fence",
+    "source": "a56d5cc9c942854d2bf46a2a74a8ef42e33c0b27",
+    "scope": "Reuse existing GatedCountedCashWriter verified session and allocation proof, with private exact review/UUID scope distinct from separate late-cash handover. Wire through LateReceiptReviewService and PaymentService fence. Enforce registry created versus replay; new test exercises direct/inactive writer rejection, closed period, capacity 1025 minor, allocation 412, remaining 613, reject 614, exactly one subscriber leg, unchanged original till and treasury, replay with flag off.",
+    "limits": "Candidate only, based on preceding unverified late cash candidate. CI acceptance required for both branches; no production activation, historical remediation or main merge. Handover with variance and full actual settlement route coverage remain open.",
+    "next": "Resolve exact CI runs for both late cash and counted cash; fix confirmed failures only, then integrate actual settlement entrypoints and review custody/other writers."
   }
 }
