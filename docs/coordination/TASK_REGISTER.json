@@ -2127,14 +2127,53 @@
         "branch": "fix/central-v3-g02-regressions",
         "source": "e9869cae5e8acc3bcd8e943f297e1d834c99c722",
         "workflow": "a36d1497b77a5f4249daacedc7aedb10e64e35b1",
-        "scope": "4 changed source/test paths; five directly affected classes each engine"
+        "scope": "4 changed source/test paths; five directly affected classes each engine",
+        "status": "SCOPED_RUNTIME_ACCEPTED",
+        "results": {
+          "run": 45557066042,
+          "sqlite": {
+            "job": 139011570541,
+            "tests": 31,
+            "assertions": 327,
+            "errors": 0,
+            "failures": 0,
+            "skipped": 0,
+            "exit": 0
+          },
+          "mysql": {
+            "job": 139011570788,
+            "tests": 31,
+            "assertions": 327,
+            "errors": 0,
+            "failures": 0,
+            "skipped": 0,
+            "exit": 0
+          }
+        }
       },
       "pr94": {
         "url": "https://github.com/iitij/water/pull/94",
         "branch": "fix/central-v3-g02-mysql-fixtures",
         "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
         "workflow": "9126803519f20d0b2d093d7adf1c7fea27e26abc",
-        "scope": "2 additional fixture paths; two affected classes each engine"
+        "scope": "2 additional fixture paths; two affected classes each engine",
+        "status": "SQLITE_ACCEPTED_MYSQL_PENDING",
+        "results": {
+          "run": 45557161816,
+          "sqlite": {
+            "job": 139011890288,
+            "tests": 6,
+            "assertions": 32,
+            "errors": 0,
+            "failures": 0,
+            "skipped": 0,
+            "exit": 0
+          },
+          "mysql": {
+            "job": 139011890256,
+            "status": "in_progress"
+          }
+        }
       },
       "next": "Retrieve actual PR93/94 hosted logs; investigate all residual failures, including full suite skips. If both targeted suites pass, compose exact corrected product head and obtain justified final integrated full regression. Keep main, V3, prior accepted heads and real data unchanged. Remaining L01, ACC09 P3/report/export/client, ACC14, closing/cheque return, G11/G12 remain open."
     }
