@@ -147,6 +147,7 @@ class CashSessionService
                 || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists()
                 || DB::table('late_receipt_reviews')->where('evidence_reference', $reference)->exists(),
                 409, 'مرجع الإثبات مستخدم مسبقاً.');
+            app(HeldCashReservation::class)->assertOrdinaryOutflow($accountId, $minor, $today);
             $session = $this->createOpenSession($collector, $minor, $squareId, $notes);
             $funding = [
                 'cash_session_id' => $session->id, 'treasury_account_id' => $accountId,
