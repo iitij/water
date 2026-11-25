@@ -31,6 +31,12 @@ SyncQueueItem action(String id, {String? user = '10', String? server = origin,
       status: status, createdAt: DateTime.utc(2026, 11, 25),
       ownerUserId: user, ownerServer: server);
 
+Map<String, dynamic> acknowledgement(String uuid, {String amount = '10.25'}) => {
+  'payment': {'id': 123, 'sync_uuid': uuid, 'subscriber_id': 10, 'user_id': 10,
+    'invoice_id': null, 'receipt_number': 'REC-202611-0001',
+    'amount': amount, 'payment_method': 'cash'},
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
@@ -103,7 +109,7 @@ void main() {
       expect(options.extra[AuthInterceptor.sessionServerKey], origin);
       sent.add((options.data as Map)['sync_uuid'] as String);
       handler.resolve(Response(requestOptions: options, statusCode: 201,
-          data: {'payment': {'id': 123, 'sync_uuid': sent.last}}));
+          data: acknowledgement(sent.last)));
     }));
     final m = manager();
     await m.syncPending();
@@ -126,7 +132,7 @@ void main() {
       started.complete();
       await released.future;
       handler.resolve(Response(requestOptions: options, statusCode: 201,
-          data: {'payment': {'id': 123, 'sync_uuid': firstId}}));
+          data: acknowledgement(firstId)));
     }));
     final m = manager();
     final pending = m.syncPending();
@@ -143,6 +149,25 @@ void main() {
     expect(jsonDecode(preserved['payload_json'] as String)['subscriber_id'], 10);
     expect(await db.getSyncAction(secondId), secondBefore);
     expect(m.items, isEmpty);
+  });
+
+  test('2xx without exact receipt acknowledgement preserves payment for review', () async {
+    await repo.upsert(action(firstId));
+    var attempts = 0;
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      attempts++;
+      handler.resolve(Response(requestOptions: options, statusCode: 201,
+          data: attempts == 1 ? {'message': 'not evidence'} :
+              acknowledgement(firstId, amount: '10.26')));
+    }));
+    final m = manager();
+    await m.syncPending();
+    expect((await db.getSyncAction(firstId))?['state'], isNot('synced'));
+    expect(m.items.single.status, SyncQueueStatus.needsAttention);
+    await m.retry(firstId);
+    expect(attempts, 2);
+    expect((await db.getSyncAction(firstId))?['state'], isNot('synced'));
+    expect(m.items.single.status, SyncQueueStatus.needsAttention);
   });
 
   test('manual discard keeps evidence and cannot erase another server row', () async {
@@ -170,7 +195,7 @@ void main() {
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
       sent.add((options.data as Map)['sync_uuid'] as String);
       handler.resolve(Response(requestOptions: options, statusCode: 201,
-          data: {'payment': {'id': 123, 'sync_uuid': validId}}));
+          data: acknowledgement(validId)));
     }));
     final m = manager();
     await m.syncPending();
