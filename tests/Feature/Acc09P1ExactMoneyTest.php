@@ -274,4 +274,175 @@ final class Acc09P1ExactMoneyTest extends TestCase
         }
         $this->assertDatabaseCount('transactions', 1);
     }
+
+    /** Capture only ordinary synthetic financial state; no protected rows are modified. */
+    private function financialState(): array
+    {
+        $state = [];
+        foreach (['subscribers', 'meters', 'invoices', 'invoice_items', 'invoice_tariff_lines',
+            'payments', 'transactions', 'readings', 'payment_allocation_revisions', 'payment_allocations',
+            'historical_invoice_corrections', 'payment_refunds', 'payment_account_transfers', 'audit_events'] as $table) {
+            $state[$table] = DB::table($table)->orderBy('id')->get()->toArray();
+        }
+
+        return $state;
+    }
+
+    private function historicalFixture(bool $withPayment = false): array
+    {
+        $subscriber = $this->account();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'P1-CORRECTION-OLD']);
+        Tariff::create(['name' => 'P1 correction tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $reading = $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01', 'previous_reading' => '0.00', 'current_reading' => '0.01']);
+        $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $receipt = $withPayment ? app(PaymentService::class)->collectPayment($subscriber, '0.04', $invoice->id) : null;
+        $replacement = app(SingleMeterService::class)->replace($meter, ['unique_code' => 'P1-CORRECTION-NEW'],
+            '2026-02-02', 'Synthetic replacement after billing')['current_meter'];
+
+        return [$subscriber, $reading, $invoice->fresh(), $replacement, $receipt?->fresh(), $meter->id];
+    }
+
+    private function correct(Invoice $invoice, User $actor, string $units = '0.02'): \App\Models\HistoricalInvoiceCorrection
+    {
+        return app(HistoricalInvoiceCorrectionService::class)->correct($invoice, $actor, $units, '1.00',
+            'Synthetic evidenced historical correction', 'Synthetic verified original snapshot evidence');
+    }
+
+    public function test_p1_corrections_refund_valid_retired_receipt_keeps_original_identity(): void
+    {
+        [$subscriber, $reading, $invoice, $current, $receipt, $retiredId] = $this->historicalFixture(true);
+        $actor = $this->supervisor();
+        self::assertNull($receipt->meter_id);
+        self::assertSame($retiredId, (int) $receipt->retired_meter_id);
+        $original = Transaction::where('reference_type', Payment::class)->where('reference_id', $receipt->id)->sole();
+        self::assertSame($retiredId, (int) $original->retired_meter_id);
+        self::assertSame(3, $this->balance($subscriber));
+        $refund = $this->refund($receipt, $actor, '0.03', 'P1-ARCHIVED-REFUND');
+        self::assertSame($refund->id, $this->refund($receipt, $actor, '0.03', 'P1-ARCHIVED-REFUND')->id);
+        self::assertSame(0, $this->balance($subscriber));
+        self::assertSame('0.01', $invoice->fresh()->amount_paid);
+        self::assertSame($retiredId, (int) $receipt->fresh()->retired_meter_id);
+        self::assertSame($retiredId, (int) $original->fresh()->retired_meter_id);
+        self::assertSame($invoice->id, $reading->fresh()->invoice_id);
+        self::assertNotNull($current->fresh());
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('transactions', 3);
+    }
+
+    public function test_p1_corrections_historical_audit_failure_rolls_back_all_records(): void
+    {
+        [$subscriber, , $invoice] = $this->historicalFixture(true);
+        $actor = $this->supervisor();
+        $before = $this->financialState();
+        $this->mock(AuditLogger::class, function ($mock): void {
+            $mock->shouldReceive('recordRequired')->once()->with('invoice.historical_corrected', \Mockery::type('array'))
+                ->andThrow(new \RuntimeException('Synthetic historical audit failure'));
+        });
+        try {
+            $this->correct($invoice, $actor);
+            self::fail('Expected audit failure.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('Synthetic historical audit failure', $e->getMessage());
+        }
+        self::assertEquals($before, $this->financialState());
+        self::assertSame(3, $this->balance($subscriber));
+    }
+
+    public function test_p1_corrections_historical_previous_balance_overflow_rolls_back_reversal(): void
+    {
+        [$subscriber, , $invoice, $meter] = $this->historicalFixture();
+        // A synthetic general-account invoice representing an existing historical debt.
+        // The general and current-meter caches each fit; their unpaid invoice sum does not.
+        $other = Invoice::create(['subscriber_id' => $subscriber->id, 'meter_id' => null,
+            'invoice_type' => 'meter', 'bill_number' => 'P1-BOUND-GENERAL',
+            'bill_date' => '2026-02-02', 'consumption_fee' => '9999999999.98',
+            'total_amount' => '9999999999.98', 'amount_paid' => 0, 'status' => 'issued']);
+        app(TransactionService::class)->recordTransaction($subscriber, 'invoice', '-9999999999.98', reference: $other);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-03-01',
+            'period_start' => '2026-02-02', 'period_end' => '2026-03-01', 'previous_reading' => '0.00', 'current_reading' => '0.02']);
+        app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $actor = $this->supervisor();
+        $before = $this->financialState();
+        self::assertSame(-1000000000001, $this->balance($subscriber));
+        $this->rejected(fn () => $this->correct($invoice, $actor), 'previous_balance');
+        self::assertEquals($before, $this->financialState());
+        self::assertSame(-1000000000001, $this->balance($subscriber));
+    }
+
+    public function test_p1_corrections_intermediate_cache_overflow_rejects_even_if_final_balance_fits(): void
+    {
+        [$subscriber, , $invoice] = $this->historicalFixture();
+        $payments = app(PaymentService::class);
+        $payments->collectPayment($subscriber, '9999999999.99');
+        $payments->collectPayment($subscriber, '0.01');
+        $actor = $this->supervisor();
+        self::assertSame(999999999999, $this->balance($subscriber));
+        $before = $this->financialState();
+        // The reversal alone would exceed the cache before the replacement
+        // restores the final amount. Preserve the current fail-closed policy.
+        $this->rejected(fn () => $this->correct($invoice, $actor, '0.01'), 'subscriber_balance');
+        self::assertEquals($before, $this->financialState());
+        self::assertSame(999999999999, $this->balance($subscriber));
+    }
+
+    public function test_p1_corrections_transfer_audit_failure_rolls_back_both_accounts(): void
+    {
+        $from = $this->account();
+        $to = $this->account();
+        $actor = $this->supervisor();
+        $receipt = app(PaymentService::class)->collectPayment($from, '0.03');
+        $before = $this->financialState();
+        $this->mock(AuditLogger::class, function ($mock): void {
+            $mock->shouldReceive('recordRequired')->once()->with('payment.account_transferred', \Mockery::type('array'))
+                ->andThrow(new \RuntimeException('Synthetic transfer audit failure'));
+        });
+        try {
+            $this->transfer($receipt, $to, $actor);
+            self::fail('Expected audit failure.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('Synthetic transfer audit failure', $e->getMessage());
+        }
+        self::assertEquals($before, $this->financialState());
+        self::assertSame(3, $this->balance($from));
+        self::assertSame(0, $this->balance($to));
+    }
+
+    public function test_p1_corrections_conflicting_transfer_replay_preserves_first_destination(): void
+    {
+        $from = $this->account();
+        $to = $this->account();
+        $different = $this->account();
+        $actor = $this->supervisor();
+        $receipt = app(PaymentService::class)->collectPayment($from, '0.03');
+        $transfer = $this->transfer($receipt, $to, $actor);
+        $before = $this->financialState();
+        try {
+            $this->transfer($receipt, $different, $actor);
+            self::fail('Expected conflicting transfer rejection.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            self::assertSame(409, $e->getStatusCode());
+        }
+        self::assertEquals($before, $this->financialState());
+        self::assertSame($transfer->id, $this->transfer($receipt, $to, $actor)->id);
+        self::assertSame(3, $this->balance($to));
+        self::assertSame(0, $this->balance($different));
+    }
+
+    public function test_p1_corrections_zero_threshold_allows_new_request_but_not_pending_replay(): void
+    {
+        $subscriber = $this->account();
+        $service = app(PaymentService::class);
+        Setting::set('void_approval_threshold', '0.01');
+        $pending = $service->collectPayment($subscriber, '0.01');
+        $other = $service->collectPayment($subscriber, '0.02');
+        $reason = 'Synthetic documented cancellation request';
+        self::assertTrue($service->requestVoid($pending, $reason)['pending']);
+        Setting::set('void_approval_threshold', '0.00');
+        self::assertFalse($service->requestVoid($other, $reason)['pending']);
+        self::assertNotNull($other->fresh()->voided_at);
+        self::assertTrue($service->requestVoid($pending->fresh(), $reason)['pending']);
+        self::assertNull($pending->fresh()->voided_at);
+        self::assertSame(1, $this->balance($subscriber));
+    }
 }

@@ -480,35 +480,48 @@ class FinancialReversalTest extends TestCase
     }
 
 
-    public function test_legacy_correction_requires_approved_historical_coverage(): void
+    public function test_legacy_correction_requires_original_snapshot_even_if_current_catalog_matches(): void
     {
-        [$subscriber, $old, $reading, $invoice] = $this->fixture();
-        // Simulate a pre-ACC-08 invoice with no persisted pricing snapshot.
-        \Illuminate\Support\Facades\DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->delete();
-        $tariff = \App\Models\Tariff::sole();
-        $tariff->update(['is_active' => false]);
-        app(\App\Services\SingleMeterService::class)->replace($old, [
-            'unique_code' => 'LEGACY-CORRECTION-NEW',
-        ], '2026-02-02', 'Synthetic historical meter replacement');
+        // Construct a pre-snapshot synthetic invoice at creation time, without
+        // deleting or changing any protected historical pricing/ledger rows.
+        $subscriber = Subscriber::create(['name' => 'Synthetic pre-snapshot account',
+            'square_id' => Square::create(['name' => 'Pre-snapshot test'])->id, 'status' => 'active']);
+        $old = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'LEGACY-PROOF']);
+        $reading = $this->createMeasuredReading(['meter_id' => $old->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01', 'previous_reading' => 0, 'current_reading' => 10]);
+        $invoice = Invoice::create(['subscriber_id' => $subscriber->id, 'meter_id' => $old->id, 'invoice_type' => 'meter',
+            'bill_number' => 'INV-LEGACY-PROOF', 'bill_date' => '2026-02-01', 'billing_period_start' => '2026-01-01',
+            'billing_period_end' => '2026-02-01', 'consumption_fee' => '6000.00', 'total_amount' => '6000.00',
+            'amount_paid' => 0, 'status' => 'issued']);
+        $reading->update(['is_invoiced' => true, 'invoice_id' => $invoice->id]);
+        app(\App\Services\TransactionService::class)->recordTransaction($subscriber, 'invoice', '-6000.00', reference: $invoice, meter: $old);
+        app(\App\Services\SingleMeterService::class)->replace($old, ['unique_code' => 'LEGACY-PROOF-NEW'],
+            '2026-02-02', 'Synthetic historical meter replacement');
         $admin = User::factory()->create(['role' => 'admin']);
         $admin->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
         $this->actingAs($admin, 'sanctum');
         $payload = ['corrected_units' => '8.00', 'historical_unit_price' => '600.00',
             'reason' => 'Synthetic historical correction reason', 'evidence' => 'Synthetic archived reading evidence'];
         $url = '/api/invoices/'.$invoice->id.'/correct-historical';
-        $this->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('tariff');
+        $state = static fn () => collect(['invoices', 'transactions', 'readings', 'payments', 'invoice_tariff_lines',
+            'payment_allocation_revisions', 'payment_allocations', 'historical_invoice_corrections', 'audit_events',
+            'subscribers', 'meters'])->mapWithKeys(fn ($table) => [$table => \Illuminate\Support\Facades\DB::table($table)->orderBy('id')->get()->toArray()])->all();
+        $before = $state();
+        $this->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('invoice');
+        $this->assertEquals($before, $state());
+        $tariff = \App\Models\Tariff::sole();
+        $tariff->update(['unit_price' => '800.00']);
+        $before = $state();
+        $this->postJson($url, array_replace($payload, ['historical_unit_price' => '800.00']))
+            ->assertUnprocessable()->assertJsonValidationErrors('invoice');
+        $this->assertEquals($before, $state());
         $this->assertDatabaseCount('transactions', 1);
         $this->assertDatabaseCount('historical_invoice_corrections', 0);
+        $this->assertDatabaseCount('invoice_tariff_lines', 0);
         $this->assertSame(6000.0, $subscriber->getAccountDebt());
-
-        $tariff->fresh()->update(['is_active' => true]);
-        $replacementId = $this->postJson($url, $payload)->assertOk()->json('correction.replacement_invoice_id');
-        $this->assertDatabaseHas('invoice_tariff_lines', ['invoice_id' => $replacementId,
-            'reading_id' => $reading->id, 'tariff_id' => $tariff->id, 'units' => 8,
-            'unit_price' => 600, 'amount' => 4800]);
-        $this->assertSame(4800.0, $subscriber->getAccountDebt());
-        $this->assertDatabaseMissing('invoice_tariff_lines', ['invoice_id' => $invoice->id]);
+        $this->assertSame($invoice->id, $reading->fresh()->invoice_id);
     }
+
 
     public function test_aggregate_correction_cannot_allocate_units_across_multiple_readings(): void
     {

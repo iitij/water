@@ -459,4 +459,48 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
         $this->assertTrue($session->fresh()->isClosed());
     }
+
+    public function test_p1_corrections_concurrent_refund_and_void_cannot_both_commit(): void
+    {
+        $subscriber = $this->fixture()->subscriber;
+        $actor = User::factory()->create(['role' => 'admin']);
+        $actor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $payment = app(PaymentService::class)->collectPayment($subscriber, '0.03');
+        $results = $this->race(
+            fn () => app(\App\Services\PaymentRefundService::class)->record(Payment::findOrFail($payment->id),
+                User::findOrFail($actor->id), '0.03', 'P1-RACE-REFUND', 'treasury_cash', today()->toDateString(),
+                'Synthetic verified refund reason', 'Synthetic verified disbursement proof')->id,
+            fn () => app(PaymentService::class)->voidPayment(Payment::findOrFail($payment->id),
+                'Synthetic documented cancellation reason', $actor->id)->id,
+        );
+        $this->assertCount(1, array_filter($results, fn ($r) => $r['ok']), json_encode($results));
+        $this->assertSame(ValidationException::class, collect($results)->firstWhere('ok', false)['error']);
+        $this->assertSame(0, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(2, Transaction::count());
+        $this->assertSame(1, Payment::count());
+        $this->assertSame($results[0]['ok'] ? 1 : 0, DB::table('payment_refunds')->count());
+        $this->assertSame($results[1]['ok'], $payment->fresh()->isVoided());
+    }
+
+    public function test_p1_corrections_reciprocal_transfers_conserve_both_accounts(): void
+    {
+        $first = $this->fixture()->subscriber;
+        $second = $this->fixture()->subscriber;
+        $actor = User::factory()->create(['role' => 'admin']);
+        $actor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $one = app(PaymentService::class)->collectPayment($first, '0.03');
+        $two = app(PaymentService::class)->collectPayment($second, '0.02');
+        $transfer = fn (int $id, int $destination) => app(\App\Services\PaymentAccountTransferService::class)->transfer(
+            Payment::findOrFail($id), $destination, User::findOrFail($actor->id),
+            'Synthetic correction of receipt account', 'Synthetic verified payer identity proof')->id;
+        $results = $this->race(fn () => $transfer($one->id, $second->id), fn () => $transfer($two->id, $first->id));
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(2, app(TransactionService::class)->accountBalanceMinor($first));
+        $this->assertSame(3, app(TransactionService::class)->accountBalanceMinor($second));
+        $this->assertSame(2, Payment::count());
+        $this->assertSame(6, Transaction::count());
+        $this->assertSame(2, DB::table('payment_account_transfers')->count());
+        $this->assertSame($first->id, $one->fresh()->subscriber_id);
+        $this->assertSame($second->id, $two->fresh()->subscriber_id);
+    }
 }
