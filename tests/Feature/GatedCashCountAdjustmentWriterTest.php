@@ -3603,4 +3603,46 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(200, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['operation_uuid'], 'amount_minor' => -100]);
     }
+
+    public function test_release_void_filament_mounts_exact_request_and_refuses_stale_modal(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        foreach ([$issuer, $reviewer] as $user) {
+            $user->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('ViewAny:Payment', 'web'));
+            $user->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('View:Payment', 'web'));
+        }
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        config(['financial_candidate.void_api' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $page = \App\Filament\Resources\PaymentResource\Pages\ListPayments::class;
+        $action = fn (string $name) => \Filament\Actions\Testing\TestAction::make($name)->table($receipt);
+        $reason = 'Independent documented receipt cancellation';
+        $this->actingAs($issuer, 'web');
+        \Livewire\Livewire::test($page)->callAction($action('prospective_void_request'), data: ['reason' => $reason])
+            ->assertHasNoActionErrors();
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $first = (int) AuditEvent::query()->where('event', 'financial.void_request_gated')->where('entity_id', (string) $receipt->id)->latest('id')->value('id');
+        $this->assertGreaterThan(0, $first);
+        $this->actingAs($reviewer, 'web');
+        $modal = \Livewire\Livewire::test($page)->mountAction($action('prospective_void_approve'))
+            ->assertActionDataSet(['request_id' => $first]);
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $writer->decide($reviewer, (int) $receipt->id, false, 'Independent rejection', $this->nowAt(), requestId: $first);
+        $second = $writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt())['request_id'];
+        $this->assertNotSame($first, $second);
+        $before = DB::table('financial_posting_events')->count();
+        $modal->callMountedAction()->assertHasActionErrors();
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertSame($before, DB::table('financial_posting_events')->count());
+        \Livewire\Livewire::test($page)->mountAction($action('prospective_void_approve'))
+            ->assertActionDataSet(['request_id' => $second])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertTrue($receipt->fresh()->isVoided());
+        $this->assertSame($before + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
 }
