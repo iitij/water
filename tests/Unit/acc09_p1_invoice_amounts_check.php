@@ -31,7 +31,7 @@ $reject = static function (callable $action, string $exception) use (&$count): v
 };
 
 foreach ([
-    ['0.30', '0.29', 1], ['0.29', '0.30', 0], ['0.00', '0.00', 0],
+    ['0.30', '0.29', 1], ['0.30', '0.30', 0], ['0.00', '0.00', 0],
     ['9999999999.99', '9999999999.98', 1],
     [0.30, 0.29, 1], ['0.30', '0.10', 20],
 ] as [$total, $paid, $remaining]) {
@@ -41,6 +41,8 @@ $reject(static fn () => InvoiceAmounts::remainingMinor('-0.01', '0.00'), LogicEx
 $reject(static fn () => InvoiceAmounts::remainingMinor('1.00', '-0.01'), LogicException::class);
 $reject(static fn () => InvoiceAmounts::remainingMinor('1.001', '0'), InvalidArgumentException::class);
 $reject(static fn () => InvoiceAmounts::remainingMinor('10000000000.00', '0'), OverflowException::class);
+$reject(static fn () => InvoiceAmounts::remainingMinor('0.29', '0.30'), LogicException::class);
+$reject(static fn () => InvoiceAmounts::outstandingMinor([(object) ['total_amount' => '0.29', 'amount_paid' => '0.30']]), LogicException::class);
 $equal(InvoiceAmounts::outstandingMinor([]), 0);
 $equal(InvoiceAmounts::outstandingMinor([(object) ['total_amount' => '0.30', 'amount_paid' => '0.29'],
     (object) ['total_amount' => '0.30', 'amount_paid' => '0.10']]), 21);
@@ -50,7 +52,7 @@ for ($i = 0; $i <= 1000; ++$i) {
     $total = ExactMoney::fromMinor(ExactMoney::MAX_MINOR - $i)->decimal();
     $paid = ExactMoney::fromMinor(ExactMoney::MAX_MINOR - $i - 1)->decimal();
     $equal(InvoiceAmounts::remainingMinor($total, $paid), 1);
-    $equal(InvoiceAmounts::remainingMinor($paid, $total), 0);
+    $reject(static fn () => InvoiceAmounts::remainingMinor($paid, $total), LogicException::class);
 }
 $equal(FinancialAmount::add(9007199254740993, -1), 9007199254740992);
 $equal(FinancialAmount::add(-9007199254740993, 1), -9007199254740992);
