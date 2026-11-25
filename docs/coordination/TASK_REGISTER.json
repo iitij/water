@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_17_V3_COMPOSITION_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_17_V3_COMPOSED_FROZEN_REGRESSION_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -2050,11 +2050,17 @@
     },
     "round17": {
       "phase": "V3 integration of scoped P2 slices and G07",
-      "status": "AUTHORIZED_COMPOSITION_ONLY",
+      "status": "COMPOSED_FROZEN_INTEGRATED_REGRESSION_PENDING",
       "base": "1a55c40e0219706d5942aa525c82660e218e1aa8",
       "g07": "0583e2161a491445c2e597793cfa91377cb7a87f",
       "branch": "integration/accounting-candidate-v3",
-      "scope": "Copy exact four G07 file blobs onto frozen P2 product/test head. Verify no overlapping paths versus V2, no other modifications except composition manifest and separately scoped hosted workflow; targeted integrated G07/I06 and broad backend regression where isolated and applicable. No change to main, existing accepted branches, schema or production; no claim P2/P3 full acceptance. L01, historical tariff anchors, legacy mixed observations, remaining projections, ACC14, closing and client contracts remain open."
+      "scope": "Copy exact four G07 file blobs onto frozen P2 product/test head. Verify no overlapping paths versus V2, no other modifications except composition manifest and separately scoped hosted workflow; targeted integrated G07/I06 and broad backend regression where isolated and applicable. No change to main, existing accepted branches, schema or production; no claim P2/P3 full acceptance. L01, historical tariff anchors, legacy mixed observations, remaining projections, ACC14, closing and client contracts remain open.",
+      "product_test_head": "87b1b06f478ddb8b5bfb6fac8464d1e89363c124",
+      "manifest_head": "5e276faaba5671356f0d1bf60dc6be6645e0cc9a",
+      "workflow_head": "f3ae0f2df42dbfe41ba706ad2cff57e164c0fc84",
+      "pr": 92,
+      "verified": "V2→product delta40 paths, P2→product exact four G07 paths; no overlap, zero behind. Four blob IDs verified equal exact G07 source. Existing workflow-only branch commits excluded. Manifest records scope and exclusions.",
+      "runtime": "Full Unit and Feature regression both isolated engines, 37 PHP lint checks and G07 standalone chain; workflow created, no runtime claim yet."
     }
   }
 }
