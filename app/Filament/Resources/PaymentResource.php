@@ -197,6 +197,7 @@ class PaymentResource extends Resource
                     ]),
             ])
             ->actions([
+                ...\App\Filament\Actions\ProspectiveReceiptVoidActions::make(),
                 \Filament\Actions\Action::make('view_allocations')
                     ->label('تخصيصات السند')
                     ->icon('heroicon-o-list-bullet')
