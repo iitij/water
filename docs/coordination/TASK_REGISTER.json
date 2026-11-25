@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 79,
+    "round": 80,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4003,6 +4003,17 @@
       "scope": "Approved physical cash session and matching approval audit; registered receiving treasury opening, registered original ordinary uncorrected cash receipts and funding when present, previous handover postings registered; exact expected and counted custody, partial/full receipts, one positive treasury leg and no new subscriber credit. Eight cases per engine prepared: partial/full replay, funded till conservation, unregistered receipt/opening, prior unposted handover, excess/self/UUID conflicts, unapproved/closed/frozen, registry fault atomic rollback/retry.",
       "limits": "Independent branch from accepted round69. Rounds70–75,77–78 remain unaccepted; no runtime evidence or new workflow after earlier tool restriction. Corrected/voided/late or noncash till receipts excluded; custody proof for those flows, prior account-opening lineage across all partial destinations, immutable approval audit, cross-period replay, global locking and all-writer activation remain open. No production data changes or main merge.",
       "next": "W13 gated bank fee then W14 treasury cash-count adjustment; prioritize validation of pending branches before integration."
+    },
+    "round80": {
+      "phase": "W13 independent inactive gated bank fee writer",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "db26a32c6eadf90164ed7dcb62795c0d9d4d920b",
+      "branch": "fix/central-g1b-gated-bank-fee",
+      "runs": [],
+      "scope": "Actual debit bank statement line, verified booking date controls open accounting period, registered bank account opening, immutable-content hash and import audit check, independent reviewer, atomic fee document/treasury posting/match/registry, no subscriber ledger effect. Seven cases per engine prepared: actual matching and replay, unmatched credit and incorrect date, reviewer/UUID conflicts, unregistered opening, legacy fee rejection, tampered/closed/frozen rejection, registry failure rollback and retry.",
+      "limits": "Independent branch from accepted round69. Rounds70–75 and77–79 remain unaccepted. No runtime evidence or new workflow after earlier tool restriction. Bank statement import remains outside full gate, audit immutability and all-source completeness unproved; actual fee classification requires independent external evidence. No activation, main merge or live data changes.",
+      "next": "W14 treasury cash-count adjustments, then W15–W19 collections. Validate pending branches before integrated activation."
     }
   }
 }
