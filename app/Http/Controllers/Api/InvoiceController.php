@@ -522,7 +522,10 @@ class InvoiceController extends ApiController
             'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         try {
-            $payment = $paymentService->collectPayment(
+            $entry = app(\App\Services\ProspectiveCashReceiptEntry::class);
+            $payment = $entry->enabled()
+                ? $entry->collect($request->user(), $invoice->subscriber, $data, (int) $invoice->id)
+                : $paymentService->collectPayment(
                 $invoice->subscriber,
                 $data['amount'],
                 $invoice->id,
