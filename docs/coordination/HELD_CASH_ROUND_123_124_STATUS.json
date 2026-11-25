@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Use existing verified held liability and allocation evidence for prospective held reserve/obligation proof, then finish writer cutover and actual source coverage; do not remediate historical data or manufacture initial balances. Transit totals are source-backed for verified rows only, not an independently certified opening.",
+  "next": "Verify both jobs before promoting candidate; then bind request identity in API and Filament on integrated release candidate and validate clients, authorization and gate-first source registration.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -783,5 +783,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_decision_binding": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "8297e7da6b62c4418c8a4e10a39356c9656f3922",
+    "branch": "release/prospective-void-decision-binding",
+    "source": "77118254c988a121252362b3a913bbff2c98b784",
+    "run": 45706026398,
+    "scope": "All supervised void decisions require exact gated request audit ID. Reject stale approval and rejection, verify exact decision replay including actor, notes and source audit, keep registry reversal atomic. New stale approval case and two affected void regressions.",
+    "limits": "No route activation; release branch and round146 diagnostic branch diverged at round145; preserve both accepted evidence sets, do not overwrite parallel release branch. Historical remediation and independent pre-system opening evidence excluded per delivery_goal.",
+    "next": "Verify both jobs before promoting candidate; then bind request identity in API and Filament on integrated release candidate and validate clients, authorization and gate-first source registration."
   }
 }
