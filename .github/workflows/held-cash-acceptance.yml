@@ -1,7 +1,7 @@
-name: Held cash allocation replay acceptance
+name: Held cash release policy acceptance
 on:
   push:
-    branches: ['qa/held-cash-allocation-replay-round115', 'fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-release-policy-round116', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read

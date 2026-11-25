@@ -1190,4 +1190,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_preview_distinguishes_applied_credit_from_authorized_cash(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic release preview tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RELEASE-PREVIEW']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $this->creditHeld($actor, 20);
+        $preview = app(\App\Services\HeldCashReleaseReadiness::class);
+        $before = DB::table('treasury_postings')->orderBy('id')->get()->toArray();
+        $result = $preview->preview((int) $account['id'], $this->nowAt());
+        $this->assertSame(10025, $result['recorded_balance_minor']);
+        $this->assertSame(5, $result['outstanding_minor']);
+        $this->assertSame(20, $result['credited_minor']);
+        $this->assertSame(10, $result['applied_minor']);
+        $this->assertSame(10, $result['unapplied_minor']);
+        $this->assertSame(25, $result['protected_minor']);
+        $this->assertSame(10000, $result['margin_minor']);
+        $this->assertSame(10, $result['candidate_additional_release_minor']);
+        $this->assertSame(15, $result['candidate_protected_minor']);
+        $this->assertSame(10010, $result['candidate_margin_minor']);
+        $this->assertFalse($result['spending_release_authorized']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $actor->id);
+        $after = $preview->preview((int) $account['id'], $this->nowAt());
+        $this->assertSame(0, $after['candidate_additional_release_minor']);
+        $this->assertSame(25, $after['protected_minor']);
+        $this->assertSame(10000, $after['margin_minor']);
+        $this->assertEquals($before, DB::table('treasury_postings')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_release_policy_restores_per_credit_and_never_nets_unrelated_allocations(): void
+    {
+        $policy = app(\App\Support\HeldCashReleasePolicy::class);
+        $before = [
+            ['credit_id' => 1, 'amount_minor' => 25, 'applied_minor' => 20, 'released_minor' => 15],
+            ['credit_id' => 2, 'amount_minor' => 25, 'applied_minor' => 5, 'released_minor' => 0],
+        ];
+        $after = [
+            ['credit_id' => 1, 'amount_minor' => 25, 'applied_minor' => 10],
+            ['credit_id' => 2, 'amount_minor' => 25, 'applied_minor' => 15],
+        ];
+        $result = $policy->reinstate(40, 0, 0, $before, $after);
+        $this->assertSame(5, $result['restored_reserve_minor']);
+        $this->assertSame(10, $result['released_minor']);
+        $this->assertSame(40, $result['protected_minor']);
+        $this->assertSame(0, $result['margin_minor']);
+        $this->assertTrue($result['optional_change_has_liquidity']);
+        $this->assertSame(0, $result['credits'][1]['released_minor']);
+        $deficit = $policy->reinstate(39, 0, 0, $before, $after);
+        $this->assertSame(1, $deficit['shortfall_minor']);
+        $this->assertFalse($deficit['optional_change_has_liquidity']);
+        $this->assertTrue($deficit['actual_event_must_be_recorded']);
+        $this->assertSame(0, $deficit['candidate_additional_release_minor']);
+        $this->assertFalse($deficit['spending_release_authorized']);
+        $this->rejects('held_release_credit_bound', fn () => $policy->evaluate(100, 0, 0,
+            [['credit_id' => 1, 'amount_minor' => 25, 'applied_minor' => 10, 'released_minor' => 11]]));
+        $this->rejects('held_release_credit_identity', fn () => $policy->reinstate(100, 0, 0, $before, [$after[0]]));
+        $this->assertSame(0, $policy->evaluate(100, 101, 0, [])['candidate_additional_release_minor']);
+    }
 }
