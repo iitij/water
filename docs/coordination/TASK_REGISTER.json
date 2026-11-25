@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_15_I05_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
+    "decision": "ROUND_15_I05_SCOPED_RUNTIME_ACCEPTED_I06_AUTHORIZED_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1985,12 +1985,41 @@
     "round15": {
       "phase": "P2-I05 exact account aggregation and reconciliation",
       "base": "3c9bf0eeb9274d66e18e3f43accaf14ea08b3c8c",
-      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "scope": "Raw DECIMAL12 financial document and ledger values; checked signed sums and reconciliation; immutable allocation hash validation, exact account balance and read projections; preserve ownership, provenance, locks and API shapes. No historical repair, schema/dependency changes, privileged diagnostics or main merge. Test new cases and changed paths on both engines.",
       "product_test_head": "d1b630d65b9a47b13db0e5e558e97787f998ced7",
       "workflow_head": "4faf0879df7493f5e70c5a2f501b7dd007e6a299",
       "pr": 90,
-      "tests": "4 new tests, 8 changed-path regressions per engine; raw in-memory malformed decimal explicitly not a MySQL storage claim. No result yet."
+      "tests": "4 new tests, 8 changed-path regressions per engine; raw in-memory malformed decimal explicitly not a MySQL storage claim. No result yet.",
+      "run": 45555897190,
+      "results": {
+        "sqlite": {
+          "job": 139007728975,
+          "tests": 12,
+          "assertions": 107,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139007728830,
+          "tests": 12,
+          "assertions": 106,
+          "exit": 0
+        },
+        "total": {
+          "tests": 24,
+          "assertions": 213,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "limits": "Exact frozen source, directly inspected hosted logs. Four new and eight directly affected regression cases per engine. No production or full regression acceptance."
+    },
+    "round16": {
+      "phase": "P2-I06 invoice amounts and financial report projections",
+      "base": "d1b630d65b9a47b13db0e5e558e97787f998ced7",
+      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
+      "scope": "Exact invoice remaining/cumulative/collectible/status arithmetic and subscriber API summary, statement, running balance and refund/transfer aggregation; preserve output keys and numeric types at checked presentation boundary. No printing-engine changes or closing policy activation; remaining report inventory and closing integration independently gated. No schema/dependency/main changes."
     }
   }
 }
