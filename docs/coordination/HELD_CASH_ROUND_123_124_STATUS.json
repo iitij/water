@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Integrate prospective void route request identity on isolated release candidate with API and Filament tests; no historical remediation or partial production activation.",
+  "next": "Verify both CI jobs; then integrate Filament and Flutter request/operation identity contract and complete gated receipt entrypoints on same release candidate.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -810,5 +810,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_api": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "77118254c988a121252362b3a913bbff2c98b784",
+    "branch": "release/prospective-void-api",
+    "source": "57dcd61ee15565a6b45d216931ce2983cc210f2b",
+    "run": 45706702360,
+    "scope": "Existing authenticated API void request/list/decision endpoints use GatedReceiptVoidWriter when isolated candidate switch enabled; mandatory request_id, stable operation_uuid for approval, list returns request identity, gate conflicts return 409 without legacy fallback. Two real HTTP integration tests on both engines.",
+    "limits": "Default-off switch restricted to testing/staging; no production activation, complete receipt entrypoint cutover, Filament or Flutter integration yet. Registered synthetic receipts only; historical remediation excluded.",
+    "next": "Verify both CI jobs; then integrate Filament and Flutter request/operation identity contract and complete gated receipt entrypoints on same release candidate."
   }
 }
