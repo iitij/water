@@ -29,6 +29,10 @@ final class ClosedCashCorrectionService
         }
 
         return DB::transaction(function () use ($payment, $originalId, $actor, $reason, $evidence) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payments = Payment::query()->where('subscriber_id', $subscriber->id)
                 ->whereIn('id', [$payment->id, $originalId])->orderBy('id')->lockForUpdate()->get()->keyBy('id');

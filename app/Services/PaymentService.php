@@ -172,6 +172,10 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
@@ -287,6 +291,10 @@ class PaymentService
         string $source = 'api',
     ): array {
         return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
@@ -358,6 +366,10 @@ class PaymentService
         string $source = 'api',
     ): Payment {
         return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()

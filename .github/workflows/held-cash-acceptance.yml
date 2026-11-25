@@ -1,7 +1,7 @@
-name: Held cash liability focused acceptance
+name: Held cash correction fence acceptance
 on:
   push:
-    branches: ['fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-corrections-round111', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read
@@ -50,6 +50,7 @@ jobs:
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -88,7 +89,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, pdo_mysql, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          extensions: pcntl, posix, mbstring, pdo_mysql, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
           coverage: none
       - name: Verify source and install locked dependencies
         run: |
@@ -122,3 +123,7 @@ jobs:
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
+      - name: Actual MySQL concurrency on changed correction paths
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round111_|test_round110_|test_p1_corrections_concurrent_refund_and_void_cannot_both_commit|test_p1_corrections_reciprocal_transfers_conserve_both_accounts|test_invoice_and_collection_in_parallel_conserve_the_balance' tests/Feature/FinancialConcurrencyTest.php

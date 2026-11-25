@@ -17,6 +17,10 @@ final class InvoiceCancellationService
         }
 
         return DB::transaction(function () use ($invoice, $reason, $actorId, $source) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($invoice->subscriber_id);
             if ($invoice->meter_id) {
                 \App\Models\Meter::query()->lockForUpdate()->findOrFail($invoice->meter_id);

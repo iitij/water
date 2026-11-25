@@ -649,4 +649,148 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame($first->id, $one->fresh()->subscriber_id);
         $this->assertSame($second->id, $two->fresh()->subscriber_id);
     }
+
+    private function heldRaceFixture(): array
+    {
+        $now = new \DateTimeImmutable('2026-11-25T08:30:00.123456Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        DB::table('financial_scopes')->insert([
+            'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
+            'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
+        ]);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-11', 'start_on' => '2026-11-01',
+            'next_on' => '2026-12-01', 'state' => 'OPEN', 'version' => 2,
+        ]);
+        $actor = static function (): User {
+            $user = User::factory()->create(['role' => 'admin']);
+            $user->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+            return $user;
+        };
+        $counter = $actor();
+        $reviewer = $actor();
+        $assigner = $actor();
+        $authorizer = $actor();
+        $executor = $actor();
+        $refundActor = $actor();
+        $account = app(\App\Services\GatedTreasuryOpeningFundingWriter::class)->open($counter, [
+            'code' => 'QA-HELD-RACE', 'name' => 'Synthetic held cash race account',
+            'channel' => 'cash', 'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-HELD-RACE-OPEN',
+            'opening_evidence' => 'Independent counted opening cash evidence',
+        ], (string) Str::uuid(), $now)['account'];
+        $counts = app(\App\Services\TreasuryCashCountService::class);
+        $count = $counts->record($counter, (int) $account['id'], '100.25', 'QA-HELD-RACE-COUNT',
+            'Independent documented physical cash investigation')['count'];
+        $counts->review($reviewer, (int) $count['id'], true, 'Independent review of the count and physical evidence');
+        $lot = app(\App\Services\GatedCashCountAdjustmentWriter::class)->adjust($reviewer, (int) $count['id'],
+            'QA-HELD-RACE-ADJUST', 'unattributed_cash_held', 'Independent investigation confirmed cash variance',
+            'Independent documented physical cash investigation', (string) Str::uuid(), $now)['held_liability_id'];
+        $subscriber = Subscriber::create(['name' => 'Synthetic held race subscriber',
+            'square_id' => Square::create(['name' => 'Synthetic held race square'])->id, 'status' => 'active']);
+        $assignment = (string) Str::uuid();
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->assign($assigner, $lot,
+            (int) $subscriber->id, 25, 'QA-HELD-RACE-OWNER', 'Independent proof of ownership of counted cash',
+            $assignment, '2026-11-25', $now);
+        return [$now, $account, $subscriber, $lot, $assignment, $authorizer, $executor, $refundActor];
+    }
+
+    public function test_round110_held_credit_and_ordinary_receipt_serialize_on_same_subscriber(): void
+    {
+        [$now, $account, $subscriber, $lot, $assignment, $approver] = $this->heldRaceFixture();
+        $uuid = (string) Str::uuid();
+        $receiptUuid = (string) Str::uuid();
+        $results = $this->race(
+            fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit(
+                User::findOrFail($approver->id), $assignment, 20, 'QA-HELD-RACE-CREDIT',
+                'Independent documented owner consent to apply held cash', $uuid, '2026-11-25', $now),
+            fn () => app(PaymentService::class)->collectPayment(
+                Subscriber::findOrFail($subscriber->id), '1.00', syncUuid: $receiptUuid)->id,
+        );
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(120, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(1, Payment::count());
+        $this->assertSame(2, Transaction::count());
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $report = app(\App\Services\TreasuryRegisterService::class)->inspect($approver, (int) $account['id']);
+        $this->assertSame(5, $report['held_cash_outstanding_minor']);
+        $this->assertSame(20, $report['held_cash_subscriber_credit_reserve_minor']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+        $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
+    }
+
+    public function test_round110_refund_evidence_and_held_payout_authorization_serialize(): void
+    {
+        [$now, $account, $subscriber, $lot, $assignment, $authorizer, $executor, $refundActor] = $this->heldRaceFixture();
+        $payment = app(PaymentService::class)->collectPayment($subscriber, '200.00');
+        $uuid = (string) Str::uuid();
+        $results = $this->race(
+            fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->authorizePayout(
+                User::findOrFail($authorizer->id), User::findOrFail($executor->id), $assignment, 1,
+                'QA-HELD-RACE-AUTH', 'Independent prior approval and designated cash executor',
+                $uuid, '2026-11-25', $now),
+            fn () => app(\App\Services\PaymentRefundService::class)->record(
+                Payment::findOrFail($payment->id), User::findOrFail($refundActor->id), '100.01',
+                'QA-HELD-RACE-REFUND', 'treasury_cash', '2026-11-25',
+                'Synthetic verified refund reason', 'Synthetic verified actual disbursement proof')->id,
+        );
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        if ($results[0]['ok']) {
+            $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 1);
+            try {
+                app(\App\Services\TreasuryHeldCashLiabilityService::class)->payout(
+                    $executor, $assignment, 1, 'QA-HELD-RACE-PAYOUT',
+                    'Independent signed acknowledgement of returned cash by identified owner',
+                    $uuid, '2026-11-25', $now);
+                $this->fail('A prior authorization cannot override the new cash shortfall.');
+            } catch (\DomainException $error) {
+                $this->assertSame('held_cash_payout_insufficient_cash', $error->getMessage());
+            }
+        } else {
+            $this->assertSame(\DomainException::class, $results[0]['error'], json_encode($results));
+            $this->assertSame('held_cash_payout_insufficient_cash', $results[0]['message']);
+            $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 0);
+        }
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(9999, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $report = app(\App\Services\TreasuryRegisterService::class)->inspect($authorizer, (int) $account['id']);
+        $this->assertSame(10001, $report['channel_unposted_cash_refund_minor']);
+        $this->assertSame(1, $report['held_cash_possible_shortfall_minor']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+    }
+    public function test_round111_invoice_cancellation_and_held_credit_conserve_liability_and_allocation(): void
+    {
+        [$now, $account, $subscriber, $lot, $assignment, $approver, $canceller] = $this->heldRaceFixture();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-RACE-CANCEL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $uuid = (string) Str::uuid();
+        $results = $this->race(
+            fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit(
+                User::findOrFail($approver->id), $assignment, 20, 'QA-HELD-RACE-CANCEL-CREDIT',
+                'Independent documented owner consent to apply held cash', $uuid, '2026-11-25', $now),
+            fn () => app(\App\Services\InvoiceCancellationService::class)->cancel(
+                Invoice::findOrFail($invoice->id), 'Synthetic independently documented invoice cancellation', $canceller->id)->id,
+        );
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(20, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(3, Transaction::count());
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $proof = DB::transaction(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $this->assertSame(0, $proof['applied_minor']);
+        $this->assertSame(20, $proof['unapplied_minor']);
+        $this->assertFalse($proof['spending_release_authorized']);
+        $report = app(\App\Services\TreasuryRegisterService::class)->inspect($approver, (int) $account['id']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+        $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
+    }
 }

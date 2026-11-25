@@ -798,7 +798,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $cash = DB::table('treasury_postings')->orderBy('id')->get()->toArray();
         $oldRevision = DB::table('payment_allocation_revisions')->where('id', $before['credits'][0]['revision_id'])->sole();
 
-        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice->fresh(), 'Synthetic independently documented invoice cancellation', (int) $actor->id);
+        $this->assertIssuancePrecedesSubscriber(fn () => app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented invoice cancellation', (int) $actor->id));
         $after = $inspect();
         $this->assertSame(0, $after['applied_minor']);
         $this->assertSame(25, $after['unapplied_minor']);

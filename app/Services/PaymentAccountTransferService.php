@@ -32,6 +32,10 @@ final class PaymentAccountTransferService
             throw ValidationException::withMessages(['to_subscriber_id' => 'يجب اختيار مشترك مختلف.']);
         }
         return DB::transaction(function () use ($receipt, $destinationId, $actor, $reason, $evidence) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $accounts = Subscriber::query()->whereIn('id', [$receipt->subscriber_id, $destinationId])
                 ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $from = $accounts->get($receipt->subscriber_id);

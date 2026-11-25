@@ -66,6 +66,10 @@ final class HistoricalInvoiceCorrectionService
         $confirmedPrice = $price === null ? null : $minor($price);
 
         return DB::transaction(function () use ($invoice, $actor, $reason, $evidence, $requested, $requestedUnits, $legacyUnits, $confirmedPrice, $minor, $decimal) {
+            // Serialize allocation-changing corrections before taking account locks.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($invoice->subscriber_id);
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
             abort_unless((int) $invoice->subscriber_id === (int) $subscriber->id, 409);
