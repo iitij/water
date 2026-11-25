@@ -26,12 +26,12 @@ class PaymentAllocationHistory
         $byInvoice = array_fill_keys(array_keys($paid), 0);
         $bySource = array_fill_keys(array_keys($sourceAmounts), 0);
         foreach ($rows as $row) {
-            if (($row['payment_id'] === null) === ($row['account_transfer_id'] === null)
+            if (count(array_filter([$row['payment_id'], $row['account_transfer_id'], $row['held_cash_credit_id'] ?? null], fn ($id) => $id !== null)) !== 1
                 || ! is_int($row['amount_minor']) || $row['amount_minor'] <= 0) {
                 throw new \LogicException('Invalid allocation source or amount.');
             }
             AccountMoney::positiveAllocation($row['amount_minor']);
-            $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : 'transfer:'.$row['account_transfer_id'];
+            $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : ($row['account_transfer_id'] !== null ? 'transfer:'.$row['account_transfer_id'] : 'held:'.$row['held_cash_credit_id']);
             if (! array_key_exists($sourceKey, $bySource)) {
                 throw new \LogicException('Unknown allocation credit source.');
             }
@@ -68,7 +68,7 @@ class PaymentAllocationHistory
         ]);
         foreach (array_chunk($rows, 300, true) as $chunk) {
             DB::table('payment_allocations')->insert(array_map(
-                fn ($row, $position) => $row + ['revision_id' => $id, 'position' => $position + 1],
+                fn ($row, $position) => $row + ['held_cash_credit_id' => null, 'revision_id' => $id, 'position' => $position + 1],
                 $chunk, array_keys($chunk)
             ));
         }
