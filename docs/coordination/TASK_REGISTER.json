@@ -4624,7 +4624,7 @@
     },
     "round104": {
       "phase": "MySQL migration compatibility, independent credit allocation proof and affected projections/regressions",
-      "status": "FINAL_SQLITE_FOCUSED_AND_REGRESSION_PASS_MYSQL_PENDING",
+      "status": "BOTH_ENGINES_PASS_FOCUSED_AND_REGRESSION_ACCEPTED",
       "base": "45f0a0c3d444bdccd358f1228e8cb4563245b61e",
       "branch": "fix/central-g1a-surplus-liability",
       "source": "647312ae112fcd6a80f1e39e0da9be4120d90874",
@@ -4687,7 +4687,7 @@
         {
           "id": 45645372663,
           "head_sha": "647312ae112fcd6a80f1e39e0da9be4120d90874",
-          "conclusion": "sqlite_all_three_suites_pass_mysql_pending",
+          "conclusion": "success",
           "jobs": [
             {
               "id": 139314825682,
@@ -4713,8 +4713,23 @@
             {
               "id": 139314826224,
               "engine": "mysql",
-              "status": "in_progress",
-              "conclusion": null
+              "status": "completed",
+              "conclusion": "success",
+              "focused": {
+                "tests": 38,
+                "assertions": 348,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 16,
+                "assertions": 152,
+                "exit": 0
+              },
+              "registry": {
+                "tests": 6,
+                "assertions": 48,
+                "exit": 0
+              }
             }
           ]
         }
