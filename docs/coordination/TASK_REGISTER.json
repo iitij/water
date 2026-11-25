@@ -3161,7 +3161,7 @@
     },
     "round52": {
       "phase": "V8 integrated backup/cache and period evidence",
-      "status": "SQLITE_PASS_MYSQL_FLUTTER_PENDING",
+      "status": "ORDINARY_INTEGRATED_PASS",
       "base": "e2223fa0fec7775ce2a99ca30538bc3e1f9f0196",
       "source": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
       "workflow": "2ca5978924e35d00e8c76a0a8c8204921626c39c",
@@ -3181,15 +3181,31 @@
         },
         "mysql": {
           "job": 139049519586,
-          "status": "in_progress"
+          "tests": 503,
+          "passed": 497,
+          "assertions": 16488,
+          "skipped": 6,
+          "failures": 0,
+          "errors": 0,
+          "exit": 0
         },
         "flutter": {
           "job": 139049585120,
-          "status": "in_progress"
+          "passed": 809,
+          "skipped": 25,
+          "failed": 0,
+          "exit": 0,
+          "analyzer": "34 infos; ordinary analyzer job success"
+        },
+        "total": {
+          "passed": 1783,
+          "backend_assertions": 32717,
+          "skipped": 57,
+          "failed": 0
         }
       },
       "scope": "9 exact accepted paths from rounds47/49/50 plus deletion of accidentally inherited QA workflow, all 10 verified. Excludes round51 pending integration.",
-      "limits": "Not final acceptance, no permanent close activation."
+      "limits": "Ordinary exact V8 only, 57 explicitly skipped; no final release acceptance or permanent close activation."
     },
     "round53": {
       "phase": "G1B exact frozen source writer inventory",
@@ -3234,14 +3250,36 @@
     },
     "round54": {
       "phase": "Exact legacy original-posting audit",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
       "source": "f4f1eec2de8be1c7e9c21c184e196fd6e7c9b0c1",
       "workflow": "0a147e8acb1759c1c35a4acd1b80002d75d2b8c2",
       "branch": "fix/central-exact-legacy-ledger-audit",
       "pr": 131,
       "scope": "ledger:migrate remains read-only; AccountMoney raw exact instead of float rounding, invalid/mismatched data rejected. Two new synthetic cases per engine.",
-      "limits": "Pending runtime; originals only, not complete reconciliation or closure."
+      "limits": "Scoped exact originals only; not complete reconciliation or closure. No product database writes.",
+      "run": 45569000285,
+      "results": {
+        "sqlite": {
+          "job": 139050728864,
+          "tests": 2,
+          "assertions": 11,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139050728304,
+          "tests": 2,
+          "assertions": 11,
+          "exit": 0
+        },
+        "total": {
+          "tests": 4,
+          "assertions": 22,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
