@@ -3283,7 +3283,7 @@
     },
     "round55": {
       "phase": "V9 integrate exact ledger source evidence and legacy audit",
-      "status": "HOSTED_BACKEND_PENDING",
+      "status": "ORDINARY_INTEGRATED_BACKEND_PASS",
       "base": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
       "source": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
       "workflow": "282143f6d0b2a37da523eeeb20efd8fae667df2e",
@@ -3293,12 +3293,41 @@
       "runs": [
         {
           "id": 45569978135,
-          "name": "V9 integrated backend regression",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
-      "limits": "No complete ledger writer coverage, permanent closure activation, production data changes or main merge. No V9 Flutter run; no claim of final acceptance."
+      "limits": "No complete ledger writer coverage, permanent closure activation, production data changes or main merge. No V9 Flutter run; no claim of final acceptance.",
+      "results": {
+        "sqlite": {
+          "job": 139053952988,
+          "tests": 508,
+          "passed": 482,
+          "assertions": 16268,
+          "skipped": 26,
+          "failures": 0,
+          "errors": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139053952589,
+          "tests": 508,
+          "passed": 502,
+          "assertions": 16528,
+          "skipped": 6,
+          "failures": 0,
+          "errors": 0,
+          "exit": 0
+        },
+        "total": {
+          "passed": 984,
+          "assertions": 32796,
+          "skipped": 32,
+          "failures": 0,
+          "errors": 0
+        },
+        "flutter": "V8 evidence only: 809 pass, 25 skips; no changed mobile paths"
+      }
     }
   }
 }
