@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact CI run, correct confirmed defects only, then inventory and wire other Filament receipt creation actions and enforce service-level receipt gate before activation.",
+  "next": "Inventory remaining Filament receipt creation actions and integrate them with same gate and stable identity; then enforce service-level receipt fence, keeping actual late/noncash settlement contracts distinct.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-cash-receipt-api-regression",
-      "commit": "dbd704ee6f5ac866357fd4f0284237b3b20e6fb2",
-      "run": 45710276439,
-      "sqlite": "6 tests, 84 assertions across two product-identical runs",
-      "mysql": "6 tests, 84 assertions across two product-identical runs",
-      "scope": "Four actual API cash entrypoints share ProspectiveCashReceiptEntry and GatedCashReceiptWriter behind default-off staging/testing switch. Exact amount, notes, effective date, till, UUID and balance checks; same-day explicit deferred receipt supported, older new receipt rejected to review, registered earlier date replay allowed in open period with identical source. Two new targeted HTTP cases on both engines."
+      "branch": "release/prospective-cash-receipt-filament",
+      "commit": "a36967524ec21f8b98675dd75b59a75a2718ef7d",
+      "run": 45710832867,
+      "sqlite": "2 tests, 30 assertions",
+      "mysql": "2 tests, 30 assertions",
+      "scope": "Standard Filament CreatePayment form uses shared prospective entry when candidate switch enabled; default UUID retained in form, explicit original collector till, cash-only choice, date default in Asia/Aden; form-preserving gate conflicts; two Livewire creation tests on both engines."
     }
   },
   "round146": {
@@ -1054,12 +1054,30 @@
     }
   },
   "release_cash_receipt_filament": {
-    "status": "TARGETED_CI_RUN_DISCOVERY_PENDING",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "dbd704ee6f5ac866357fd4f0284237b3b20e6fb2",
     "branch": "release/prospective-cash-receipt-filament",
     "source": "a36967524ec21f8b98675dd75b59a75a2718ef7d",
     "scope": "Standard Filament CreatePayment form uses shared prospective entry when candidate switch enabled; default UUID retained in form, explicit original collector till, cash-only choice, date default in Asia/Aden; form-preserving gate conflicts; two Livewire creation tests on both engines.",
-    "limits": "CI run ID not yet confirmed due connector empty list and remote network timeout. No production activation; UUID survives mounted form retry, not guaranteed after reload; other receipt actions and all-writer fence remain separate. No historic remediation.",
-    "next": "Verify exact CI run, correct confirmed defects only, then inventory and wire other Filament receipt creation actions and enforce service-level receipt gate before activation."
+    "limits": "Targeted standard CreatePayment page accepted. UUID survives mounted-form retry, not guaranteed after reload; other receipt actions and all-writer fence remain separate. No production activation or historic remediation.",
+    "next": "Verify exact CI run, correct confirmed defects only, then inventory and wire other Filament receipt creation actions and enforce service-level receipt gate before activation.",
+    "run": 45710832867,
+    "jobs": [
+      {
+        "id": 139544507540,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 30,
+        "exit": 0
+      },
+      {
+        "id": 139544507917,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 30,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
