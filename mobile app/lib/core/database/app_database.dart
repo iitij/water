@@ -1162,6 +1162,7 @@ class AppDatabase extends GeneratedDatabase {
     String? nextAttemptAt,
     bool clearNextAttempt = false,
     int? lastStatusCode,
+    bool clearLastStatusCode = false,
   }) async {
     await _execute(
       '''UPDATE pending_sync_actions SET state = ?,
@@ -1185,7 +1186,9 @@ class AppDatabase extends GeneratedDatabase {
         [nextAttemptAt, id],
       );
     }
-    if (lastStatusCode != null) {
+    if (clearLastStatusCode) {
+      await _execute('UPDATE pending_sync_actions SET last_status_code = NULL WHERE id = ?', [id]);
+    } else if (lastStatusCode != null) {
       await _execute(
         'UPDATE pending_sync_actions SET last_status_code = ? WHERE id = ?',
         [lastStatusCode, id],
