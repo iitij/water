@@ -70,7 +70,19 @@ final class HandoverSurplusReservation
                 && $event->currency === 'YER' && hash_equals($leg['source_hash'], $event->source_hash));
             $proof = $matches->sole();
             $expectedProof = self::proof($source, $posting, $event->operation_uuid, $variance, (int) $approval->id);
-            $this->need((int) $proof->actor_user_id === (int) $posting->posted_by && count($proof->after ?? []) === count($expectedProof));
+            $receipts = AuditEvent::query()->where('event', 'cash_handover.received')
+                ->where('entity_type', CashHandover::class)->where('entity_id', (string) $source->id)
+                ->lockForUpdate()->get();
+            $this->need($receipts->count() === 1);
+            $receipt = $receipts->sole();
+            $this->need((int) $approval->id < (int) $receipt->id && (int) $receipt->id < (int) $proof->id
+                && (int) $receipt->actor_user_id === (int) $source->received_by
+                && ($receipt->after['target_minor'] ?? null) === $counted
+                && ($receipt->after['received_minor'] ?? null) === $counted
+                && ($receipt->before['received_minor'] ?? null) === 0
+                && ($receipt->after['subscriber_receipt_created'] ?? null) === false
+                && (int) $proof->actor_user_id === (int) $posting->posted_by
+                && count($proof->after ?? []) === count($expectedProof));
             foreach ($expectedProof as $field => $value) {
                 $this->need(array_key_exists($field, $proof->after ?? []) && $proof->after[$field] === $value);
             }
