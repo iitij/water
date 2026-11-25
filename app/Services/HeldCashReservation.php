@@ -8,11 +8,12 @@ use App\Support\SignedMinor;
 use App\Support\TreasuryMoney;
 use DomainException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Conservative reservation for ordinary outgoing cash while a held surplus
  * exists. Uses the existing issuance lock, never acquires the scope lock
- * after business locks. No release, settlement or certified balance.
+ * after business locks. Discharges release reserved capacity safely.
  */
 final class HeldCashReservation
 {
@@ -32,8 +33,8 @@ final class HeldCashReservation
             ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get();
         if ($adjustments->isEmpty()) return;
 
-        // Reserve even historical, not-yet-adopted held surplus. Never infer
-        // release from an owner assignment or missing liability record.
+        // Reserve active undischarged held surplus. Discharged amounts
+        // have either been refunded in cash or converted to billing credit.
         $held = 0;
         foreach ($adjustments as $adjustment) {
             $posting = DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $adjustment->id)
@@ -43,7 +44,15 @@ final class HeldCashReservation
                 || ! app(TreasuryCashCountService::class)->checkAdjustmentPosting($posting)) {
                 throw new DomainException('held_cash_reservation_source');
             }
-            $held = SignedMinor::add($held, $amount);
+            $liability = DB::table('treasury_held_cash_liabilities')
+                ->where('treasury_cash_adjustment_id', $adjustment->id)->lockForUpdate()->first();
+            $discharged = 0;
+            if ($liability !== null && Schema::hasTable('treasury_held_cash_discharges')) {
+                $discharged = (int) DB::table('treasury_held_cash_discharges')
+                    ->where('liability_id', $liability->id)->lockForUpdate()->sum('amount_minor');
+            }
+            $remainingHeld = max(0, SignedMinor::subtract($amount, $discharged));
+            $held = SignedMinor::add($held, $remainingHeld);
         }
 
         $balance = TreasuryMoney::document($account->opening_minor);

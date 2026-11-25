@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Inactive held-cash subledger. Recognition is atomic with the cash adjustment.
  * Assignment changes the creditor, not the cash balance or subscriber balance.
- * No discharge, revenue recognition, legacy adoption or closure authorization.
+ * Discharge settles the liability via subscriber credit or guarded cash refund.
+ * No revenue recognition, legacy adoption or premature closure authorization.
  */
 final class TreasuryHeldCashLiabilityService
 {
@@ -82,7 +83,7 @@ final class TreasuryHeldCashLiabilityService
                     return $before + ['created' => false];
                 }
                 $this->need($minor <= $before['unidentified_minor'], 'held_cash_capacity_exceeded');
-                foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims'] as $table) {
+                foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims', 'treasury_held_cash_discharges'] as $table) {
                     $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(),
                         'held_cash_uuid_reserved');
                 }
@@ -95,7 +96,123 @@ final class TreasuryHeldCashLiabilityService
             });
     }
 
-    /** Reconstruct registered reclassifications, never infer ownership from a balance. */
+    public function dischargeToSubscriber(User $actor, int $liabilityId, int $subscriberId, int $minor,
+        string $reference, string $evidence, string $uuid, string $date, DateTimeImmutable $now): array
+    {
+        return $this->discharge($actor, $liabilityId, $subscriberId, 'subscriber_credit', $minor,
+            $reference, $evidence, $uuid, $date, $now, null);
+    }
+
+    public function dischargeByCashRefund(User $actor, int $liabilityId, int $subscriberId, int $minor,
+        string $reference, string $evidence, string $uuid, string $date, DateTimeImmutable $now, ?int $treasuryAccountId = null): array
+    {
+        return $this->discharge($actor, $liabilityId, $subscriberId, 'cash_refund', $minor,
+            $reference, $evidence, $uuid, $date, $now, $treasuryAccountId);
+    }
+
+    private function discharge(User $actor, int $liabilityId, int $subscriberId, string $method, int $minor,
+        string $reference, string $evidence, string $uuid, string $date, DateTimeImmutable $now, ?int $treasuryAccountId): array
+    {
+        $reference = mb_strtoupper(trim($reference));
+        $evidence = trim($evidence);
+        $this->need(in_array($method, ['subscriber_credit', 'cash_refund'], true)
+            && $minor > 0 && $subscriberId > 0 && $liabilityId > 0
+            && mb_strlen($reference) >= 3 && mb_strlen($reference) <= 150
+            && mb_strlen($evidence) >= 20 && mb_strlen($evidence) <= 4000
+            && preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1,
+            'held_cash_discharge_input');
+
+        return $this->gate->withinOpenPeriod('water', $date, $now,
+            function (array $context) use ($actor, $liabilityId, $subscriberId, $method, $minor, $reference, $evidence, $uuid, $date, $now, $treasuryAccountId): array {
+                $this->lock();
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                $this->treasury->authorize($actor);
+                $lot = $this->lot($liabilityId);
+                [$adjustment, $posting] = $this->verifyLot($lot);
+                $count = DB::table('treasury_cash_counts')->where('id', $adjustment->treasury_cash_count_id)->lockForUpdate()->first();
+                $this->need($count !== null && (int) $actor->id !== (int) $count->counted_by
+                    && (int) $actor->id !== (int) $adjustment->approved_by, 'held_cash_independent_approval');
+                Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
+                $this->need($date >= $posting->effective_on, 'held_cash_discharge_date');
+
+                $before = $this->inspectLocked($lot);
+                $identifiedForSub = $before['identified_by_subscriber'][(string) $subscriberId] ?? 0;
+                $dischargedForSub = $before['discharged_by_subscriber'][(string) $subscriberId] ?? 0;
+                $availableForSub = SignedMinor::subtract($identifiedForSub, $dischargedForSub);
+                $this->need($availableForSub > 0, 'held_cash_discharge_no_identified_balance');
+
+                $old = DB::table('treasury_held_cash_discharges')->where('operation_uuid', $uuid)->lockForUpdate()->first();
+                if ($old !== null) {
+                    $this->need((string) $old->liability_id === (string) $liabilityId
+                        && (string) $old->subscriber_id === (string) $subscriberId
+                        && $old->method === $method
+                        && SignedMinor::parse($old->amount_minor) === $minor
+                        && $old->effective_on === $date
+                        && $old->reference === $reference
+                        && $old->evidence === $evidence, 'held_cash_discharge_conflict');
+                    $oldPostingId = $old->treasury_posting_id ? (int) $old->treasury_posting_id : null;
+                    $legs = $this->dischargeLegs((object) [
+                        'operation_uuid' => $uuid, 'liability_id' => $liabilityId,
+                        'subscriber_id' => $subscriberId, 'approved_by' => $old->approved_by,
+                        'method' => $method, 'amount_minor' => $minor,
+                        'effective_on' => $date, 'reference' => $reference, 'evidence' => $evidence,
+                        'treasury_posting_id' => $oldPostingId,
+                    ], $lot);
+                    $this->need(! $this->registry->record($context, $uuid, $legs, $now), 'held_cash_discharge_conflict');
+                    return $before + ['created' => false];
+                }
+
+                $this->need($minor <= $availableForSub, 'held_cash_discharge_capacity_exceeded');
+                foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims', 'treasury_held_cash_assignments'] as $table) {
+                    $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(),
+                        'held_cash_uuid_reserved');
+                }
+                $this->need(! DB::table('treasury_held_cash_discharges')->where('reference', $reference)->lockForUpdate()->first()
+                    && ! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first(),
+                    'held_cash_discharge_conflict');
+
+                $postingId = null;
+                if ($method === 'cash_refund') {
+                    $targetAccountId = $treasuryAccountId ?? (int) $posting->treasury_account_id;
+                    $account = DB::table('treasury_accounts')->where('id', $targetAccountId)->lockForUpdate()->first();
+                    $this->need($account !== null && $account->channel === 'cash', 'held_cash_invalid_treasury_account');
+
+                    // Cash reservation protection: verify treasury account has sufficient balance
+                    $currentCashBalance = (int) (DB::table('treasury_postings')
+                        ->where('treasury_account_id', $targetAccountId)
+                        ->lockForUpdate()
+                        ->sum('amount_minor') + $account->opening_minor);
+                    $this->need($currentCashBalance >= $minor, 'held_cash_insufficient_treasury_balance');
+
+                    $postingId = (int) DB::table('treasury_postings')->insertGetId([
+                        'treasury_account_id' => $targetAccountId,
+                        'kind' => 'payment_refund',
+                        'amount_minor' => SignedMinor::negate($minor),
+                        'effective_on' => $date,
+                        'evidence_reference' => $reference,
+                        'posted_by' => (int) $actor->id,
+                        'created_at' => $now->format('Y-m-d H:i:s'),
+                        'updated_at' => $now->format('Y-m-d H:i:s'),
+                    ]);
+                }
+
+                $row = [
+                    'operation_uuid' => $uuid, 'liability_id' => $liabilityId,
+                    'subscriber_id' => $subscriberId, 'approved_by' => (int) $actor->id,
+                    'method' => $method, 'amount_minor' => $minor,
+                    'effective_on' => $date, 'reference' => $reference, 'evidence' => $evidence,
+                    'treasury_posting_id' => $postingId,
+                ];
+
+                $legs = $this->dischargeLegs((object) $row, $lot);
+                $this->need($this->registry->record($context, $uuid, $legs, $now), 'held_cash_discharge_conflict');
+                DB::table('treasury_held_cash_discharges')->insert($row);
+
+                return $this->inspectLocked($lot) + ['created' => true];
+            });
+    }
+
+    /** Reconstruct registered reclassifications and discharges, never infer ownership from a balance. */
     public function inspect(int $liabilityId): array
     {
         $this->lock();
@@ -117,15 +234,22 @@ final class TreasuryHeldCashLiabilityService
             ->leftJoin('treasury_held_cash_assignments as a', 'a.operation_uuid', '=', 'e.source_id')
             ->where('e.source_type', 'held_cash_assignment')->whereNull('a.operation_uuid')->first(),
             'held_cash_coverage_orphan_event');
+        $this->need(! DB::table('financial_posting_events as e')
+            ->leftJoin('treasury_held_cash_discharges as d', 'd.operation_uuid', '=', 'e.source_id')
+            ->where('e.source_type', 'held_cash_discharge')->whereNull('d.operation_uuid')->first(),
+            'held_cash_coverage_orphan_discharge_event');
         $held = 0;
         $identified = 0;
+        $discharged = 0;
         foreach ($lots as $lot) {
             $report = $this->inspectLocked($lot);
             $held = SignedMinor::add($held, $report['held_minor']);
             $identified = SignedMinor::add($identified, $report['identified_minor']);
+            $discharged = SignedMinor::add($discharged, $report['discharged_minor']);
         }
         return ['liabilities' => $lots->count(), 'held_minor' => $held,
             'identified_minor' => $identified, 'unidentified_minor' => SignedMinor::subtract($held, $identified),
+            'discharged_minor' => $discharged, 'remaining_liability_minor' => SignedMinor::subtract($held, $discharged),
             'scope' => 'held_cash_only', 'source_coverage_verified' => false, 'closure_authorized' => false];
     }
 
@@ -146,10 +270,34 @@ final class TreasuryHeldCashLiabilityService
             $owner = (string) $row->subscriber_id;
             $owners[$owner] = SignedMinor::add($owners[$owner] ?? 0, $minor);
         }
+
+        $discharged = 0;
+        $dischargedBySub = [];
+        $dischargedByMethod = ['subscriber_credit' => 0, 'cash_refund' => 0];
+        $dischargeRows = DB::table('treasury_held_cash_discharges')->where('liability_id', $lot->id)
+            ->orderBy('operation_uuid')->lockForUpdate()->get();
+        foreach ($dischargeRows as $dRow) {
+            $dMinor = SignedMinor::parse($dRow->amount_minor);
+            $this->need($dMinor > 0 && $dRow->effective_on >= $posting->effective_on, 'held_cash_discharge_corrupt');
+            $this->registered($dRow->operation_uuid, $dRow->effective_on, $this->dischargeLegs($dRow, $lot), true);
+            $discharged = SignedMinor::add($discharged, $dMinor);
+            $dOwner = (string) $dRow->subscriber_id;
+            $dischargedBySub[$dOwner] = SignedMinor::add($dischargedBySub[$dOwner] ?? 0, $dMinor);
+            $dischargedByMethod[$dRow->method] = SignedMinor::add($dischargedByMethod[$dRow->method] ?? 0, $dMinor);
+            $this->need($dischargedBySub[$dOwner] <= ($owners[$dOwner] ?? 0), 'held_cash_discharge_capacity_exceeded');
+        }
+        $this->need($discharged <= $assigned, 'held_cash_discharge_capacity_exceeded');
+
         return ['liability_id' => (int) $lot->id, 'held_minor' => $total,
             'identified_minor' => $assigned, 'unidentified_minor' => SignedMinor::subtract($total, $assigned),
-            'identified_by_subscriber' => $owners, 'cash_movement_created' => false,
-            'discharge_created' => false, 'certified_balance' => false];
+            'discharged_minor' => $discharged,
+            'undischarged_identified_minor' => SignedMinor::subtract($assigned, $discharged),
+            'remaining_liability_minor' => SignedMinor::subtract($total, $discharged),
+            'identified_by_subscriber' => $owners,
+            'discharged_by_subscriber' => $dischargedBySub,
+            'discharged_by_method' => $dischargedByMethod,
+            'cash_movement_created' => ($dischargedByMethod['cash_refund'] > 0),
+            'discharge_created' => ($discharged > 0), 'certified_balance' => false];
     }
 
     private function verifyLot(object $lot): array
@@ -212,6 +360,30 @@ final class TreasuryHeldCashLiabilityService
             'currency' => 'YER', 'source_hash' => hash('sha256', $bytes)];
         return [$base + ['leg' => 'unidentified_liability', 'amount_minor' => SignedMinor::negate($minor)],
             $base + ['leg' => 'identified_liability', 'amount_minor' => $minor]];
+    }
+
+    private function dischargeLegs(object $row, object $lot): array
+    {
+        $minor = SignedMinor::parse($row->amount_minor);
+        $postingId = isset($row->treasury_posting_id) && $row->treasury_posting_id ? (string) $row->treasury_posting_id : null;
+        $bytes = json_encode([
+            'format' => 1, 'operation_uuid' => $row->operation_uuid,
+            'liability_id' => (string) $row->liability_id, 'original_hash' => $lot->source_hash,
+            'subscriber_id' => (string) $row->subscriber_id, 'approved_by' => (string) $row->approved_by,
+            'method' => $row->method, 'amount_minor' => (string) $minor,
+            'effective_on' => $row->effective_on, 'reference' => $row->reference,
+            'evidence' => $row->evidence, 'currency' => 'YER',
+            'treasury_posting_id' => $postingId,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $base = [
+            'source_type' => 'held_cash_discharge', 'source_id' => $row->operation_uuid,
+            'currency' => 'YER', 'source_hash' => hash('sha256', $bytes),
+        ];
+        $settlementLeg = $row->method === 'cash_refund' ? 'treasury_cash' : 'subscriber_credit';
+        return [
+            $base + ['leg' => 'identified_liability', 'amount_minor' => SignedMinor::negate($minor)],
+            $base + ['leg' => $settlementLeg, 'amount_minor' => $minor],
+        ];
     }
 
     private function lot(int $id): object
