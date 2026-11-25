@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedBankFeeWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private BankReconciliationService $bank,
@@ -54,7 +56,13 @@ final class GatedBankFeeWriter
                     $this->need($prior->operation_uuid === $uuid, 'gated_bank_fee_operation_conflict');
                 }
 
-                $result = $this->bank->recordFee($actor, $statementId, $lineId, $reference, $reason, $evidence);
+                $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_bank_fee_mutation_scope');
+                $this->mutationIdentity = [$statementId, $lineId, (int) $actor->id];
+                try {
+                    $result = $this->bank->recordFee($actor, $statementId, $lineId, $reference, $reason, $evidence, $this);
+                } finally {
+                    $this->mutationIdentity = null;
+                }
                 $posting = $result['posting'];
                 $leg = $this->adjustments->leg((int) $posting['id']);
                 $this->need($leg['amount_minor'] === $minor && $posting['kind'] === 'bank_fee'
@@ -71,6 +79,11 @@ final class GatedBankFeeWriter
                 $this->need($created === ! $replay, 'gated_bank_fee_operation_conflict');
                 return $result + ['registry_created' => $created];
             });
+    }
+
+    public function allowsMutation(int $statementId, int $lineId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [$statementId, $lineId, $actorId];
     }
 
     private function registered(array $leg, string $date): object
