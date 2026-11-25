@@ -146,22 +146,25 @@ class MobileConnectivityFixesTest extends TestCase
     public function test_reading_faults_sync_batch_and_index(): void
     {
         [$meter] = $this->meterFixture();
+        $absentUuid = (string) Str::uuid();
+        $brokenUuid = (string) Str::uuid();
+        $date = now()->toDateString();
 
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults/sync-batch', [
                 'faults' => [
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'subscriber_absent',
-                        'sync_uuid' => (string) Str::uuid(),
+                        'sync_uuid' => $absentUuid,
                     ],
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'meter_broken',
                         'notes' => 'الزجاج مكسور',
-                        'sync_uuid' => (string) Str::uuid(),
+                        'sync_uuid' => $brokenUuid,
                     ],
                 ],
             ])
@@ -174,14 +177,22 @@ class MobileConnectivityFixesTest extends TestCase
                 'faults' => [
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'subscriber_absent',
-                        'sync_uuid' => ReadingFault::first()->sync_uuid,
+                        'sync_uuid' => $absentUuid,
+                    ],
+                    [
+                        'meter_id' => $meter->id,
+                        'reading_date' => $date,
+                        'fault_type' => 'meter_broken',
+                        'notes' => 'الزجاج مكسور',
+                        'sync_uuid' => $brokenUuid,
                     ],
                 ],
             ])
             ->assertOk()
-            ->assertJsonPath('duplicate_count', 1);
+            ->assertJsonPath('synced_count', 0)
+            ->assertJsonPath('duplicate_count', 2);
 
         $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/readings/faults?fault_type=meter_broken')
@@ -192,7 +203,7 @@ class MobileConnectivityFixesTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'aliens_ate_the_meter',
                 'sync_uuid' => (string) Str::uuid(),
             ])
