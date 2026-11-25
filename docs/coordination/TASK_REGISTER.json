@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 83,
+    "round": 84,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4047,6 +4047,17 @@
       "scope": "Late check or bank-transfer review, original submitted evidence and approved physical till snapshot, distinct review and bank clearance references, independent reviewer, registered bank opening and targeted invoice if specified, actual bank date and paired ledger/treasury registry effects under stable review UUID, unchanged original till and its receipt rows. Nine cases per engine prepared: late check and transfer, mismatch, authority, unregistered opening/tamper, closed/frozen/rejected review, legacy clearance, distinct reference and approved till, treasury-leg failure rollback/retry.",
       "limits": "Independent branch from accepted round69. Rounds70–75 and77–82 unaccepted. No runtime evidence or new workflow after earlier tool restriction. Tests prepared for different days within November 2026, not across period boundaries; targeted invoice path not separately exercised. Submission/rejection/import/approval still outside full gate, immutable audit and global source coverage unproved. No activation, main merge or live data changes.",
       "next": "W17 separately received late cash, then W18 already-counted allocation and W19 existing bank collection; validate pending branches before integration."
+    },
+    "round84": {
+      "phase": "W17 independent inactive same-date separate late cash receipt",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "983dfc72725068506181b93e71fe8093f8c1bfd4",
+      "branch": "fix/central-g1b-gated-late-cash",
+      "runs": [],
+      "scope": "Same effective date only: approved original physical till, no positive original counted surplus, original submission and approval audit, registered cash opening, separate actual receipt evidence, independent actor, paired subscriber and treasury legs, unchanged original till, exact replay. Eight test cases per engine prepared: same-date receipt/replay, distinct-date rejection, positive surplus rejection, actor/UUID/tamper, unregistered opening, unapproved/closed/frozen, legacy receipt, second-leg fault rollback/retry.",
+      "limits": "Partial W17 only. Current source retains original review payment date but treasury receipt uses actual received date; registry assigns one effective date to an operation. Distinct dates are held, even within a month, pending explicit recognition/date policy or atomic multi-date registry design and period locks. Positive counted surplus requires separate allocation review; no automatic inference. Targeted invoice path not separately exercised. Independent branch from accepted round69; no runtime evidence or workflow creation after earlier restriction. No main merge or production changes.",
+      "next": "W18 independent already-counted allocation proof; W19 existing bank collection; resolve W17 dual-date contract and validate all pending candidates before integration."
     }
   }
 }
