@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify corrected round132 job logs and actual rollback assertions, not just initial failure message. Then target late receipt path; do not rerun accepted baseline.",
+  "next": "Batch remaining prospective gaps: late receipts and cash count shortfall follow-up; inspect and run only new/affected cases.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -286,7 +286,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round132": {
-    "status": "CORRECTED_TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "759683725502888aae196a3abe090d59fd19aedb",
     "branch": "qa/held-cash-noncash-atomicity-round132",
     "source": "d29c3745e6e2f5843f6adf19aa60d91a4cd8ccaa",
@@ -323,6 +323,23 @@
       "cause": "AuditLogger::record logs the original SQL exception and returns null. recordRequired throws generic RuntimeException without previous exception. Test incorrectly searched exception chain for original SQL error; remaining rollback assertions did not execute. Product failure not established."
     },
     "additional_automatic_gate_run": 45694340759,
-    "correction": "Only test assertion changed: expect exact generic RuntimeException and verify Log warning event noncash_claim.cleared contains injected SQL error marker; original injection condition and all rollback/replay assertions retained. No product change."
+    "correction": "Only test assertion changed: expect exact generic RuntimeException and verify Log warning event noncash_claim.cleared contains injected SQL error marker; original injection condition and all rollback/replay assertions retained. No product change.",
+    "jobs": [
+      {
+        "id": 139487695535,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 54,
+        "exit": 0
+      },
+      {
+        "id": 139487694993,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 54,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
