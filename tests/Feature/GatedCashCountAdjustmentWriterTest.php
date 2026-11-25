@@ -108,7 +108,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         return [$counter, $reviewer, $account, $report['count']];
     }
 
-    private function post(User $actor, array $count, string $classification = 'confirmed_cash_loss',
+    private function postAdjustment(User $actor, array $count, string $classification = 'confirmed_cash_loss',
         string $uuid = self::ADJUST, string $reason = self::REASON): array
     {
         return app(GatedCashCountAdjustmentWriter::class)->adjust($actor, (int) $count['id'],
@@ -130,7 +130,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         [, $reviewer, , $count] = $this->fixture();
         $original = (array) DB::table('treasury_cash_counts')->find($count['id']);
         $review = (array) DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count['id'])->sole();
-        $result = $this->post($reviewer, $count);
+        $result = $this->postAdjustment($reviewer, $count);
         $this->assertTrue($result['registry_created']);
         $this->assertSame(-25, (int) $result['posting']['amount_minor']);
         $this->assertSame('confirmed_cash_loss', $result['adjustment']['classification']);
@@ -142,7 +142,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($review, (array) DB::table('treasury_cash_count_reviews')->find($review['id']));
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST,
             'source_type' => 'treasury_posting', 'source_id' => (string) $result['posting']['id'], 'amount_minor' => -25]);
-        $again = $this->post($reviewer, $count);
+        $again = $this->postAdjustment($reviewer, $count);
         $this->assertFalse($again['registry_created']);
         $this->assertSame($result['posting']['id'], $again['posting']['id']);
         $this->assertDatabaseCount('treasury_cash_adjustments', 1);
@@ -162,8 +162,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_surplus_is_held_unattributed_after_registered_funding(): void
     {
         [, $reviewer, , $count] = $this->fixture('95.25', funded: true);
-        $this->rejects('gated_cash_count_classification', fn () => $this->post($reviewer, $count));
-        $result = $this->post($reviewer, $count, 'unattributed_cash_held');
+        $this->rejects('gated_cash_count_classification', fn () => $this->postAdjustment($reviewer, $count));
+        $result = $this->postAdjustment($reviewer, $count, 'unattributed_cash_held');
         $this->assertTrue($result['registry_created']);
         $this->assertSame(25, (int) $result['posting']['amount_minor']);
         $this->assertSame('unattributed_cash_held', $result['adjustment']['classification']);
@@ -178,13 +178,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         [$counter, $reviewer, , $count] = $this->fixture('100.00');
         try {
-            $this->post($counter, $count);
+            $this->postAdjustment($counter, $count);
             $this->fail('Self approval accepted.');
         } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
             $this->assertSame(403, $error->getStatusCode());
         }
-        $this->rejects('gated_cash_count_classification', fn () => $this->post($reviewer, $count));
-        $this->rejects('gated_cash_count_classification', fn () => $this->post($reviewer, $count, 'unattributed_cash_held'));
+        $this->rejects('gated_cash_count_classification', fn () => $this->postAdjustment($reviewer, $count));
+        $this->rejects('gated_cash_count_classification', fn () => $this->postAdjustment($reviewer, $count, 'unattributed_cash_held'));
         $this->assertDatabaseCount('treasury_cash_adjustments', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
     }
@@ -192,10 +192,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_pending_and_rejected_observations_do_not_post(): void
     {
         [, $reviewer, , $count] = $this->fixture(accepted: null);
-        $this->rejects('gated_cash_count_review_required', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_review_required', fn () => $this->postAdjustment($reviewer, $count));
         app(TreasuryCashCountService::class)->review($reviewer, (int) $count['id'], false,
             'Independent review rejected the observation');
-        $this->rejects('gated_cash_count_review_required', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_review_required', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
     }
@@ -203,7 +203,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_unregistered_opening_is_not_adopted(): void
     {
         [, $reviewer, , $count] = $this->fixture(registered: false);
-        $this->rejects('gated_cash_count_prerequisite_unregistered', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_prerequisite_unregistered', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 0);
         $this->assertDatabaseCount('financial_posting_events', 0);
     }
@@ -211,7 +211,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_unregistered_preceding_funding_cannot_be_treated_as_a_loss(): void
     {
         [, $reviewer, , $count] = $this->fixture('94.75', funded: true, registeredFunding: false);
-        $this->rejects('gated_cash_count_prior_unregistered', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_prior_unregistered', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 0);
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
@@ -222,7 +222,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         [$counter, $reviewer, $account, $count] = $this->fixture();
         app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $counter, (int) $account['id'],
             '5.00', 'QA-COUNT-LATER', 'Independent physical funding after count', self::OTHER, $this->nowAt());
-        $this->rejects('gated_cash_count_snapshot_mismatch', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_snapshot_mismatch', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 0);
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseCount('financial_posting_events', 2);
@@ -231,7 +231,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_closed_frozen_and_tampered_observation_are_rejected(): void
     {
         [, $reviewer, , $count] = $this->fixture();
-        $post = fn () => $this->post($reviewer, $count);
+        $post = fn () => $this->postAdjustment($reviewer, $count);
         DB::table('financial_periods')->update(['state' => 'CLOSED']);
         $this->rejects('financial_period_not_open', $post);
         DB::table('financial_periods')->update(['state' => 'OPEN']);
@@ -249,7 +249,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         [, $reviewer, , $count] = $this->fixture();
         app(TreasuryCashCountService::class)->adjust($reviewer, (int) $count['id'], 'QA-ADJUST-01',
             'confirmed_cash_loss', self::REASON, self::EVIDENCE);
-        $this->rejects('gated_cash_count_operation_conflict', fn () => $this->post($reviewer, $count));
+        $this->rejects('gated_cash_count_operation_conflict', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
@@ -264,7 +264,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             : "CREATE TRIGGER qa_registry_failure BEFORE INSERT ON financial_posting_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_registry_failure'";
         DB::unprepared($trigger);
         try {
-            $this->post($reviewer, $count);
+            $this->postAdjustment($reviewer, $count);
             $this->fail('Registry insert should fail.');
         } catch (\Illuminate\Database\QueryException $error) {
             $this->assertStringContainsString('synthetic_registry_failure', $error->getMessage());
@@ -277,8 +277,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('financial_posting_operations', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);
-        $this->assertTrue($this->post($reviewer, $count)['registry_created']);
-        $this->rejects('gated_cash_count_operation_conflict', fn () => $this->post($reviewer, $count, uuid: self::NEXT));
+        $this->assertTrue($this->postAdjustment($reviewer, $count)['registry_created']);
+        $this->rejects('gated_cash_count_operation_conflict', fn () => $this->postAdjustment($reviewer, $count, uuid: self::NEXT));
         $this->assertDatabaseCount('treasury_cash_adjustments', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseCount('financial_posting_events', 2);
@@ -288,7 +288,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     private function held(): array
     {
         [$counter, $reviewer, $account, $count] = $this->fixture('100.25');
-        $result = $this->post($reviewer, $count, 'unattributed_cash_held');
+        $result = $this->postAdjustment($reviewer, $count, 'unattributed_cash_held');
         $subscriber = Subscriber::create(['name' => 'Synthetic identified owner',
             'square_id' => Square::create(['name' => 'Synthetic held cash square'])->id, 'status' => 'active']);
         return [$counter, $reviewer, $account, $count, $result['held_liability_id'], $subscriber];
@@ -306,7 +306,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         [, $reviewer, , $count, $lot, $subscriber] = $this->held();
         $actor = $this->actor();
-        $this->assertSame($lot, $this->post($reviewer, $count, 'unattributed_cash_held')['held_liability_id']);
+        $this->assertSame($lot, $this->postAdjustment($reviewer, $count, 'unattributed_cash_held')['held_liability_id']);
         $result = $this->assignHeld($actor, $lot, $subscriber, 20);
         $this->assertSame(25, $result['held_minor']);
         $this->assertSame(20, $result['identified_minor']);
@@ -357,7 +357,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             : "CREATE TRIGGER qa_held_failure BEFORE INSERT ON treasury_held_cash_liabilities FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_held_failure'";
         DB::unprepared($trigger);
         try {
-            $this->post($reviewer, $count, 'unattributed_cash_held');
+            $this->postAdjustment($reviewer, $count, 'unattributed_cash_held');
             $this->fail('Expected synthetic recognition failure.');
         } catch (\Illuminate\Database\QueryException $error) {
             $this->assertStringContainsString('synthetic_held_failure', $error->getMessage());
@@ -368,7 +368,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('treasury_held_cash_liabilities', 0);
         $this->assertDatabaseCount('financial_posting_operations', 1);
-        $this->assertTrue($this->post($reviewer, $count, 'unattributed_cash_held')['registry_created']);
+        $this->assertTrue($this->postAdjustment($reviewer, $count, 'unattributed_cash_held')['registry_created']);
     }
 
     public function test_held_cash_reservation_rejects_funding_that_would_consume_held_cash(): void
