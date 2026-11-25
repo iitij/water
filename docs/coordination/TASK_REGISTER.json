@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_11_CENTRAL_CHAT_EXECUTION_CODEX_TEMPORARILY_UNAVAILABLE_HOLD_RUNTIME_GATES_MAIN",
+    "decision": "ROUND_11_CENTRAL_G07_DRAFT_IMPLEMENTED_PURE_CHECKS_PASS_RUNTIME_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1342,6 +1342,29 @@
           ],
           "limits": "Source review does not certify runtime. No application code modified; no new defect reproduction, no new tests. Existing I01 exact accepted-source head34d48fc and V2 stay frozen."
         }
+      },
+      "central_g07_draft": {
+        "status": "DRAFT_PRODUCT_FIX_PURE_PASS_RUNTIME_PENDING",
+        "branch": "fix/central-v2-g07-billing-chain",
+        "head": "0583e2161a491445c2e597793cfa91377cb7a87f",
+        "base": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a",
+        "pr": 84,
+        "delta": "3 paths relative to QA base; 4 vs V2 including original unchanged four feature tests",
+        "scope": "ObservationBillingChain pure validator + InvoiceService prepricing invocation under existing subscriber/current-meter locks and current active same-meter reading read. Checks duplicate actual dates, interval overlap/gap, anchor date/quantity, exact units and pending flags/links; no historical data writes. Calendar-only pending keeps prior behavior; mixed pending bases rejected pending policy/compatibility validation.",
+        "evidence": {
+          "php": "8.4.24",
+          "command": "php tests/Unit/g07_observation_chain_check.php",
+          "checks": 25,
+          "exit": 0,
+          "lint": "2 new PHP files exit0",
+          "blobs": {
+            "app/Support/ReadingQuantity.php": "13f9dbc97e2f9278751f3e3245406807ef6fb133",
+            "app/Support/ObservationBillingChain.php": "e436b563f51587859a956054b05fa8f5065acb25",
+            "tests/Unit/g07_observation_chain_check.php": "8ec8b1027af298b6a8a8b7baf6bb89b66cf42366"
+          },
+          "note": "Local assistant pure tests executed against exact dependency and new file blobs, remotely checked. No Laravel, PDO, database, integrated lint or real runtime execution."
+        },
+        "remaining": "Original G07 baseline runtime reproduction remains unexecuted. Draft runtime acceptance requires all four original cases per engine on exact new head; review real raw date/types and locks, legacy-only and mixed-basis contract, existing tariff-line provenance (not enforced by new helper beyond invoice_id/flag/retired_meter_id), and integration regressions. No claim G07 closure or release. Keep L01 and I01 actual PDO pending; no merge, no production."
       }
     },
     "operating_model": {
