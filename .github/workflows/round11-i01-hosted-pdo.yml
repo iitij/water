@@ -36,6 +36,10 @@ jobs:
           php -v
           php -r 'if (PHP_INT_SIZE !== 8 || ini_get("serialize_precision") !== "-1" || !in_array("sqlite", PDO::getAvailableDrivers(), true) || !in_array("mysql", PDO::getAvailableDrivers(), true)) { exit(1); } echo json_encode(PDO::getAvailableDrivers()), PHP_EOL;'
           sha256sum composer.lock package-lock.json 'mobile app/pubspec.lock'
+          printf '%s\n' \
+            'eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c  composer.lock' \
+            'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
       - name: Run only the new PDO acceptance cases
         shell: bash
         env:
