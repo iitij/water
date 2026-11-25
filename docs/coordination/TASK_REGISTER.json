@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 104,
+    "round": 105,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4721,9 +4721,17 @@
                 "exit": 0
               },
               "regression": {
-                "tests": 16,
-                "assertions": 152,
-                "exit": 0
+                "tests": 13,
+                "assertions": 118,
+                "exit": 0,
+                "allocation": {
+                  "tests": 3,
+                  "assertions": 25
+                },
+                "reports": {
+                  "tests": 10,
+                  "assertions": 93
+                }
               },
               "registry": {
                 "tests": 6,
@@ -4734,9 +4742,72 @@
           ]
         }
       ],
-      "scope": "Use explicitly short FK names, preserving restrict-on-delete constraints. Add isolated scope-first, read-only HeldCashCreditAllocationEvidence, validating source coverage, reconciliation, revision hash and exact per-credit applied/unapplied conservation; no cash release. Distinguish held-credit reclassification from cash receipt in reporting, Filament and Flutter detail model/labels; add Flutter serialization/label test (not yet executed). Expand existing workflow to directly affected allocation/report and ledger verifier tests. SQLite regression exposed rebuild dropping append-only triggers; restore original protection and require active after credit allocation schema migration. No assertion weakened. Thirteen files changed. Five non-Blade PHP files linted at intermediate f347bc1 (all pass); final trigger fix not yet runtime verified.",
-      "limits": "Final exact SHA workflow pending; no full acceptance. Flutter runtime and view verification pending. MySQL regression excludes allocation corruption/trigger-specific fixtures whose setup requires engine-specific handling; retain existing protection tests, do not claim full MySQL regression coverage. Conservative reserve remains entire credit, even if allocated, until fenced correction/refund/invoice flows prove safe release. Read-only allocation proof is not spending authority or global certification. No new live endpoints, production/main/live database modification.",
+      "scope": "Use explicitly short FK names, preserving restrict-on-delete constraints. Add isolated scope-first, read-only HeldCashCreditAllocationEvidence, validating source coverage, reconciliation, revision hash and exact per-credit applied/unapplied conservation; no cash release. Distinguish held-credit reclassification from cash receipt in reporting, Filament and Flutter detail model/labels; add Flutter serialization/label test (not yet executed). Expand existing workflow to directly affected allocation/report and ledger verifier tests. SQLite regression exposed rebuild dropping append-only triggers; restore original protection and require active after credit allocation schema migration. No assertion weakened. Thirteen files changed. Five non-Blade PHP files linted at intermediate f347bc1 (all pass); final trigger fix not yet runtime verified. Exact final MySQL log confirms 57 tests/514 assertions rather than the previously copied SQLite count; SQLite 60/548. Both jobs success.",
+      "limits": "Final exact SHA focused and selected regression jobs accepted; no full system acceptance. Flutter runtime and view verification pending. MySQL regression excludes allocation corruption/trigger-specific fixtures whose setup requires engine-specific handling; retain existing protection tests, do not claim full MySQL regression coverage. Conservative reserve remains entire credit, even if allocated, until fenced correction/refund/invoice flows prove safe release. Read-only allocation proof is not spending authority or global certification. No new live endpoints, production/main/live database modification.",
       "next": "Check run 45645372663 exact final source, resolve failures without weakening constraints, run focused Flutter tests and review all affected entrypoints. Establish durable protection against reopening paid credit before release. Continue task-one acceptance, then global coverage, all-writer fencing, concurrency and closure."
+    },
+    "round105": {
+      "phase": "Append-only held source protection, reversal-safe credit evidence, shared evidence reference checks and mobile verification",
+      "status": "PRIOR_BOTH_ENGINES_CONFIRMED_NEW_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "base": "647312ae112fcd6a80f1e39e0da9be4120d90874",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
+      "runs": [
+        {
+          "id": 45645372663,
+          "head_sha": "647312ae112fcd6a80f1e39e0da9be4120d90874",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139314825682,
+              "engine": "sqlite",
+              "tests": 60,
+              "assertions": 548,
+              "exit": 0
+            },
+            {
+              "id": 139314826224,
+              "engine": "mysql",
+              "tests": 57,
+              "assertions": 514,
+              "exit": 0
+            }
+          ]
+        },
+        {
+          "id": 45648047245,
+          "head_sha": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
+          "jobs": [
+            {
+              "id": 139324299880,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            },
+            {
+              "id": 139324300214,
+              "engine": "sqlite",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "flutter": {
+        "source": "647312ae112fcd6a80f1e39e0da9be4120d90874",
+        "environment": "msi isolated git archive in /tmp, Flutter 3.50.0 ab2912035e, Dart 3.14.0, offline pub get",
+        "tests": 9,
+        "exit": 0,
+        "files": [
+          "test/accounting/allocation_snapshot_test.dart",
+          "test/features/transactions/ledger_clarity_test.dart"
+        ],
+        "limits": "8 dependency changes in temporary pub lock due to installed SDK; not locked-dependency or full Flutter acceptance. Existing checkout untouched."
+      },
+      "syntax_validation": "Four changed PHP files linted at exact new SHA; exit 0; no working-tree checkout or database access. Retired feature gate exact 45648047272 success.",
+      "scope": "Install append-only update/delete triggers for six held document families and explicit SQLite REPLACE protection for PK/unique document identities; three new feature methods prove actual source immutability, cancellation of an invoice restores unapplied credit without cash changes and all reserve remains, and shared evidence references cannot be reused across held document families. Existing corruption reconstruction case deliberately drops assignment protection only in isolated fixture then restores it; previous independent corruption assertions retained. Centralize reference conflicts on held writers with existing treasury evidence sources. Correct round104 MySQL test count from actual log.",
+      "limits": "New exact workflow acceptance pending unless subsequent exact jobs succeed. No DB-admin-proof security or full insert authorization, and existing legacy writers still require reverse reference and UUID fencing. Conservative reserve not released on invoice allocation because cancellation can restore credit. Flutter local focused tests passed with temporary dependency changes, not reproducible locked suite. No production, main or live data changes.",
+      "next": "Check exact run 45648047245, correct confirmed failures, evaluate fenced release and replenishment invariant, independently review and finish task-one acceptance; do not claim global coverage, entrypoint fencing, concurrency or permanent closure."
     }
   }
 }
