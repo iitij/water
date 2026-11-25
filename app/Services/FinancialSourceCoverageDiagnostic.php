@@ -44,13 +44,14 @@ final class FinancialSourceCoverageDiagnostic
         };
         $expect = static function (string $type, string $id, string $leg, string $date, ?string $group = null) use (&$expected, $issue): void {
             $key = $type.'|'.$id.'|'.$leg;
+            $group ??= 'single:'.$key;
             if (isset($expected[$key])) {
                 if ($expected[$key]['date'] !== $date) $issue('source_date_conflict', $type, $id);
-                if ($group !== null) $expected[$key]['groups'][$group] = true;
+                $expected[$key]['groups'][$group] = true;
                 return;
             }
             $expected[$key] = ['type' => $type, 'id' => $id, 'leg' => $leg, 'date' => $date,
-                'groups' => $group === null ? [] : [$group => true]];
+                'groups' => [$group => true]];
         };
         $ledger = static function (string $class, int $id, string $kind, string $date, ?string $group = null) use ($expect, $issue): void {
             $rows = DB::table('transactions')->where('reference_type', $class)->where('reference_id', $id)
@@ -101,7 +102,7 @@ final class FinancialSourceCoverageDiagnostic
             foreach ($late as $review) {
                 if ($review->settlement_method !== 'separate_handover') continue;
                 $group = 'collection:'.$doc->id;
-                $cash = DB::table('treasury_late_cash_receipts')->where('payment_id', $doc->id)->lockForUpdate()->get();
+                $cash = DB::table('treasury_late_cash_receipts')->where('late_receipt_review_id', $review->id)->lockForUpdate()->get();
                 if ($cash->count() !== 1) $issue('payment_late_cash_missing_or_duplicate', 'payments', (string) $doc->id);
                 elseif ($cash[0]->received_on !== $date($doc->payment_date)) $issue('collection_dates_require_separate_proof', 'payments', (string) $doc->id);
             }
@@ -178,8 +179,23 @@ final class FinancialSourceCoverageDiagnostic
         ] as [$table, $column, $fk, $kind]) {
             foreach ($rows($table, $column) as $doc) {
                 $documents++;
-                $group = in_array($kind, ['bank_collection', 'late_cash_receipt'], true) ? 'collection:'.$doc->payment_id : null;
-                $posting($fk, (int) $doc->id, $kind, $doc->$column, $group);
+                $group = null;
+                if ($kind === 'bank_collection') {
+                    $group = 'collection:'.$doc->payment_id;
+                } elseif ($kind === 'late_cash_receipt') {
+                    // Cash receipt links to the approved review, not directly to a payment.
+                    $review = DB::table('late_receipt_reviews')->where('id', $doc->late_receipt_review_id)->lockForUpdate()->first();
+                    if (! $review || $review->status !== 'approved' || $review->settlement_method !== 'separate_handover'
+                        || (int) $review->payment_id <= 0) {
+                        $issue('late_cash_receipt_review_missing_or_conflicting', $table, (string) $doc->id);
+                    } else {
+                        $group = 'collection:'.$review->payment_id;
+                    }
+                }
+                $effectiveOn = $kind === 'cash_handover'
+                    ? \App\Models\CashHandover::query()->lockForUpdate()->findOrFail($doc->id)->received_on->toDateString()
+                    : $doc->$column;
+                $posting($fk, (int) $doc->id, $kind, $effectiveOn, $group);
             }
         }
         foreach ($rows('treasury_postings', 'effective_on') as $row) {
@@ -201,9 +217,33 @@ final class FinancialSourceCoverageDiagnostic
             }
         }
 
+        // Decisions can exist without a receipt at all. Scan the decision
+        // documents independently; a decision date only selects the audit
+        // window and never replaces the payment's authoritative effective date.
+        foreach (['noncash_collection_claims' => 'cleared', 'late_receipt_reviews' => 'approved'] as $table => $status) {
+            foreach ($rows($table, 'decided_at') as $doc) {
+                if ($doc->status !== $status) continue;
+                $documents++;
+                $payment = DB::table('payments')->where('id', $doc->payment_id)->lockForUpdate()->first();
+                if (! $payment || $payment->deleted_at !== null || $payment->sync_uuid !== $doc->sync_uuid
+                    || (int) $payment->subscriber_id !== (int) $doc->subscriber_id
+                    || $payment->payment_method !== $doc->payment_method) {
+                    $issue('approved_collection_payment_missing_or_conflicting', $table, (string) $doc->id);
+                    continue;
+                }
+                $effectiveOn = $date($payment->payment_date);
+                if ($effectiveOn < $start || $effectiveOn >= $end) {
+                    $issue('collection_decision_cross_period_requires_proof', $table, (string) $doc->id);
+                }
+            }
+        }
+
         $groups = [];
+        $groupMembers = [];
         $matched = 0;
-        foreach ($expected as $item) {
+        foreach ($expected as $key => $item) {
+            foreach ($item['groups'] as $group => $_) $groupMembers[$group][$key] = true;
+            if (count($item['groups']) !== 1) $issue('source_operation_group_conflict', $item['type'], $item['id'].':'.$item['leg']);
             $events = DB::table('financial_posting_events as e')->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
                 ->where('e.scope_key', 'water')->where('e.source_type', $item['type'])->where('e.source_id', $item['id'])
                 ->where('e.leg', $item['leg'])->select('e.*', 'o.period_id', 'o.effective_on')->lockForUpdate()->get();
@@ -220,7 +260,19 @@ final class FinancialSourceCoverageDiagnostic
             foreach ($item['groups'] as $group => $_) $groups[$group][$event->operation_uuid] = true;
         }
         foreach ($groups as $group => $operations) {
-            if (count($operations) !== 1) $issue('multi_leg_operation_split', 'operation_group', $group);
+            if (count($operations) !== 1) {
+                $issue('multi_leg_operation_split', 'operation_group', $group);
+                continue;
+            }
+            $uuid = array_key_first($operations);
+            $actual = [];
+            foreach (DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('id')->lockForUpdate()->get() as $row) {
+                $actual[$row->source_type.'|'.$row->source_id.'|'.$row->leg] = true;
+            }
+            $members = $groupMembers[$group];
+            ksort($actual, SORT_STRING);
+            ksort($members, SORT_STRING);
+            if ($actual !== $members) $issue('operation_membership_mismatch', 'operation_group', $group);
         }
         $events = DB::table('financial_posting_events as e')->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
             ->where('o.period_id', $periodId)->select('e.*')->orderBy('e.id')->lockForUpdate()->get();
