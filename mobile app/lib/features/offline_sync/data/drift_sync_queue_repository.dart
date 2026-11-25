@@ -113,23 +113,13 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
 
   @override
   Future<void> saveAll(List<SyncQueueItem> items) async {
-    final existingRows = await _database.getActiveSyncActions(limit: null);
-    final incomingIds = items.map((item) => item.id).toSet();
-
-    for (final row in existingRows) {
-      final existingId = row['id']?.toString() ?? '';
-      if (existingId.isNotEmpty && !incomingIds.contains(existingId)) {
-        await _database.updateSyncAction(
-          id: existingId,
-          state: 'synced',
-          lastError: null,
-        );
+    // A partial snapshot is not an acknowledgement. Only explicit verified
+    // mark*Synced calls may mark a durable row as synchronized.
+    await _database.transaction(() async {
+      for (final item in items) {
+        await upsert(item);
       }
-    }
-
-    for (final item in items) {
-      await upsert(item);
-    }
+    });
   }
 
   @override
@@ -169,6 +159,8 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
         lastError: item.lastError,
         nextAttemptAt: item.nextAttemptAt?.toUtc().toIso8601String(),
         clearNextAttempt: item.nextAttemptAt == null,
+        lastStatusCode: item.lastStatusCode,
+        clearLastStatusCode: item.lastStatusCode == null,
       );
     });
   }
@@ -225,17 +217,29 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
     required String error,
     DateTime? retryAt,
   }) async {
-    await _database.updateSyncAction(
-      id: item.id,
-      state: retryAt == null ? 'failed' : 'retrying',
-      attemptCount: item.attempts,
-      lastError: error,
-      nextAttemptAt: retryAt?.toUtc().toIso8601String(),
-      clearNextAttempt: retryAt == null,
-    );
-    if (item.type == SyncQueueType.reading) {
-      await _database.setReadingSyncError(item.id, error);
-    }
+    await _database.transaction(() async {
+      final existing = await _database.getSyncAction(item.id);
+      if (existing == null || existing['state'] == 'synced' ||
+          existing['state'] == 'discarded' ||
+          existing['owner_user_id'] != item.ownerUserId ||
+          existing['owner_server'] != item.ownerServer) {
+        throw StateError('Cannot change failure state of this action.');
+      }
+      await _database.updateSyncAction(
+        id: item.id,
+        state: retryAt != null && item.status == SyncQueueStatus.queued
+            ? 'retrying' : _wireState(item.status),
+        attemptCount: item.attempts,
+        lastError: error,
+        nextAttemptAt: retryAt?.toUtc().toIso8601String(),
+        clearNextAttempt: retryAt == null,
+        lastStatusCode: item.lastStatusCode,
+        clearLastStatusCode: item.lastStatusCode == null,
+      );
+      if (item.type == SyncQueueType.reading) {
+        await _database.setReadingSyncError(item.id, error);
+      }
+    });
   }
 
   SyncQueueItem _fromRow(Map<String, Object?> row) {
