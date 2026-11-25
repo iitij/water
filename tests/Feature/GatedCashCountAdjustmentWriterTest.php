@@ -3062,6 +3062,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
+    public function test_release_surplus_handover_reserves_full_variance_without_duplicate_cash(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $receive = fn (string $amount) => $writer->receive($reviewer, (int) $session->id, $accountId,
+            $amount, 'QA-SURPLUS-HANDOVER', '2026-11-25', self::EVIDENCE, $uuid, $this->nowAt());
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.cash_handovers' => true]);
+        $this->rejects('gated_handover_surplus_requires_full_count', fn () => $receive('10.00'));
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertTrue($receive('15.00')['registry_created']);
+        $this->assertFalse($receive('15.00')['registry_created']);
+        $reserve = app(\App\Services\HeldCashReservation::class);
+        $this->assertSame(525, DB::transaction(fn () => $reserve->protectedForAccount($accountId)));
+        $this->assertSame(500, DB::transaction(fn () => app(\App\Services\HandoverSurplusReservation::class)->forAccount($accountId)));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => 1500]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        DB::transaction(fn () => $reserve->assertOrdinaryOutflow($accountId, 11000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () => $reserve->assertOrdinaryOutflow($accountId, 11001, '2026-11-25')));
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame($before['transactions'], $snapshot('transactions'));
+        $treasury = $snapshot('treasury_postings');
+        $owner = Subscriber::create(['name' => 'Synthetic surplus owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $key = '99999999-9999-4999-8999-999999999999';
+        $id = (int) $late->submit($collector, ['sync_uuid' => $key, 'cash_session_id' => $session->id,
+            'subscriber_id' => $owner->id, 'amount' => '2.00', 'payment_method' => 'cash', 'payment_date' => '2026-11-25'])['id'];
+        config(['financial_candidate.late_cash_settlements' => true]);
+        $allocated = app(\App\Services\GatedCountedCashWriter::class)->allocate($reviewer, $id, '2026-11-25',
+            'QA-SURPLUS-ALLOCATED', self::EVIDENCE, $key, $this->nowAt());
+        $this->assertSame(300, $allocated['allocation']['available_minor']);
+        $this->assertSame(200, $owner->fresh()->getAccountBalanceMinor());
+        $this->assertSame($treasury, $snapshot('treasury_postings'));
+        $this->assertSame(525, DB::transaction(fn () => $reserve->protectedForAccount($accountId)));
+        $this->assertSame(1000, $subscriber->fresh()->getAccountBalanceMinor());
+    }
+
     public function test_release_shortage_handover_only_posts_counted_cash_and_preserves_shortage(): void
     {
         [, , $account, , , $subscriber] = $this->held();
