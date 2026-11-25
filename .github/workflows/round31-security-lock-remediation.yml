@@ -40,9 +40,13 @@ jobs:
             'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' | sha256sum --check
       - name: Resolve candidate lockfiles without installing or running package scripts
         run: |
+          set +e
           set -uo pipefail
           mkdir -p "$RUNNER_TEMP/security-candidate"
-          composer update filament/actions filament/filament filament/infolists filament/tables guzzlehttp/guzzle guzzlehttp/psr7 laravel/framework league/commonmark league/flysystem livewire/livewire symfony/html-sanitizer symfony/http-foundation symfony/http-kernel symfony/mime symfony/routing ueberdosis/tiptap-php --with-all-dependencies --minimal-changes --no-install --no-scripts --no-plugins --no-interaction --no-progress
+          # Allow compatible Filament 5.x fixes, never disable advisory blocking.
+          composer config --no-plugins --no-interaction audit.block-insecure true
+          composer require 'filament/filament:^5.6' --no-update --no-scripts --no-plugins --no-interaction
+          composer update bezhansalleh/filament-shield ysfkaya/filament-phone-input filament/actions filament/filament filament/infolists filament/tables guzzlehttp/guzzle guzzlehttp/psr7 laravel/framework league/commonmark league/flysystem livewire/livewire symfony/html-sanitizer symfony/http-foundation symfony/http-kernel symfony/mime symfony/routing ueberdosis/tiptap-php --with-all-dependencies --minimal-changes --no-install --no-scripts --no-plugins --no-interaction --no-progress
           composer_resolve=$?
           npm audit fix --package-lock-only --ignore-scripts --no-fund
           npm_resolve=$?
@@ -51,11 +55,23 @@ jobs:
           npm audit --package-lock-only --audit-level=high --json > "$RUNNER_TEMP/security-candidate/npm-audit.json"
           npm_audit=$?
           printf 'COMPOSER_RESOLVE=%s NPM_RESOLVE=%s COMPOSER_AUDIT=%s NPM_AUDIT=%s\n' "$composer_resolve" "$npm_resolve" "$composer_audit" "$npm_audit"
-          git diff --exit-code -- composer.json package.json
+          python3 - <<'PY'
+          import json,subprocess
+          original=json.loads(subprocess.check_output(['git','show','HEAD:composer.json']))
+          candidate=json.load(open('composer.json'))
+          original['require']['filament/filament']='^5.6'
+          # Composer's explicit advisory-block config is the only extra key allowed.
+          if candidate.get('config',{}).get('audit') == {'block-insecure': True}:
+              candidate['config'].pop('audit')
+          assert original==candidate
+          PY
           manifest_result=$?
+          git diff --exit-code -- package.json
+          npm_manifest_result=$?
+          test "$npm_manifest_result" -eq 0 || manifest_result=1
           git diff --stat
-          git diff -- composer.lock package-lock.json > "$RUNNER_TEMP/security-candidate/lockfiles.diff"
-          cp composer.lock package-lock.json "$RUNNER_TEMP/security-candidate/"
+          git diff -- composer.json composer.lock package.json package-lock.json > "$RUNNER_TEMP/security-candidate/lockfiles.diff"
+          cp composer.json composer.lock package.json package-lock.json "$RUNNER_TEMP/security-candidate/"
           sha256sum composer.lock package-lock.json
           git status --short
           test "$composer_resolve" -eq 0 && test "$npm_resolve" -eq 0 && test "$composer_audit" -eq 0 && test "$npm_audit" -eq 0 && test "$manifest_result" -eq 0
