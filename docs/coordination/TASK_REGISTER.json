@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 84,
+    "round": 85,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4058,6 +4058,17 @@
       "scope": "Same effective date only: approved original physical till, no positive original counted surplus, original submission and approval audit, registered cash opening, separate actual receipt evidence, independent actor, paired subscriber and treasury legs, unchanged original till, exact replay. Eight test cases per engine prepared: same-date receipt/replay, distinct-date rejection, positive surplus rejection, actor/UUID/tamper, unregistered opening, unapproved/closed/frozen, legacy receipt, second-leg fault rollback/retry.",
       "limits": "Partial W17 only. Current source retains original review payment date but treasury receipt uses actual received date; registry assigns one effective date to an operation. Distinct dates are held, even within a month, pending explicit recognition/date policy or atomic multi-date registry design and period locks. Positive counted surplus requires separate allocation review; no automatic inference. Targeted invoice path not separately exercised. Independent branch from accepted round69; no runtime evidence or workflow creation after earlier restriction. No main merge or production changes.",
       "next": "W18 independent already-counted allocation proof; W19 existing bank collection; resolve W17 dual-date contract and validate all pending candidates before integration."
+    },
+    "round85": {
+      "phase": "W18 independent inactive allocation of previously counted physical cash",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aa9ae8bbd2",
+      "source": "d65a2196be0c49aaeeed417f1ab8772cf1a736e3",
+      "branch": "fix/central-g1b-gated-counted-cash",
+      "runs": [],
+      "scope": "Approved original physical till, zero opening and registered ordinary cash receipts; reconstruct expected cash, exact positive variance and submission/approval evidence, verify every earlier already-counted allocation against registered subscriber leg, original decision and cumulative allocation proof ordered by approval audit ID; prevent overspend, preserve original till and receipts, one subscriber leg only, no new treasury cash. Seven cases per engine prepared: two subscribers exhaust capacity in reverse submission order, exact replay after later allocation and one-minor-unit excess rejection, prior legacy and tampered proof, unregistered original receipt, no surplus/date mismatch, authority and closed/frozen, registry fault rollback and retry.",
+      "limits": "Partial W18: funded tills, mixed/other approved settlement methods, corrected receipts and historical adoption excluded. Proof is checked by this writer, not yet by independent closure verifier; audit immutability, original till custody completeness and concurrency unproved. Targeted invoice branch not separately tested. Original payment date must be open; cross-period recognition policy remains open. Independent branch from accepted round69; no runtime evidence or new workflow after earlier restriction. No main merge or production data changes.",
+      "next": "W19 existing bank collection; resolve W17 dual-date and W18 excluded flows, independent proof verifier and validate pending branches before integration."
     }
   }
 }
