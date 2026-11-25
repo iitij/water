@@ -215,6 +215,7 @@ final class FinancialReportingService
             'invoice_reversals' => MoneyBoundary::numericMajorOutput($totals['invoice_reversal'] ?? 0),
             'receipt_reversals' => MoneyBoundary::numericMajorOutput(SignedMinor::negate($totals['payment_reversal'] ?? 0)),
             'account_transfers_in' => MoneyBoundary::numericMajorOutput($totals['payment_transfer_in'] ?? 0),
+            'held_cash_credits' => MoneyBoundary::numericMajorOutput($totals['held_cash_credit'] ?? 0),
             'ledger_net_movement' => MoneyBoundary::numericMajorOutput($net),
         ];
     }
