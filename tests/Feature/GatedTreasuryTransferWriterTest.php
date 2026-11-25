@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Services\FinancialPostingRegistry;
 use App\Services\FinancialWriteGate;
 use App\Models\User;
+use App\Models\AuditEvent;
 use App\Services\TreasuryRegisterService;
 use App\Services\TreasuryTransferService;
 use App\Services\TreasuryTransferEvidence;
@@ -167,7 +168,7 @@ final class GatedTreasuryTransferWriterTest extends TestCase
     public function test_registry_failure_rolls_back_business_source_and_audit(): void
     {
         [$sender, , $out] = $this->fixture();
-        $auditCount = DB::table('audit_logs')->count();
+        $auditCount = AuditEvent::query()->count();
         // A database-side insert failure occurs after the actual dispatch.
         $trigger = DB::getDriverName() === 'sqlite'
             ? "CREATE TRIGGER qa_registry_failure BEFORE INSERT ON financial_posting_events BEGIN SELECT RAISE(ABORT, 'synthetic_registry_failure'); END"
@@ -184,6 +185,16 @@ final class GatedTreasuryTransferWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_transfers', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('financial_posting_events', 0);
-        $this->assertDatabaseCount('audit_logs', $auditCount);
+        $this->assertSame($auditCount, AuditEvent::query()->count());
+        $this->assertDatabaseCount('financial_posting_operations', 0);
+        $this->assertSame(0, AuditEvent::query()->where('event', 'treasury.transfer_dispatched')->count());
+        // Positive control after removing the failure: the exact retry can commit.
+        $result = app(GatedTreasuryTransferWriter::class)->dispatch($sender, $out, self::UUID, $this->nowAt());
+        $this->assertTrue($result['registry_created']);
+        $this->assertDatabaseCount('treasury_transfers', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('financial_posting_operations', 1);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+        $this->assertSame(1, AuditEvent::query()->where('event', 'treasury.transfer_dispatched')->count());
     }
 }
