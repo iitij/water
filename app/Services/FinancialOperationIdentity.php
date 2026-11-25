@@ -38,6 +38,7 @@ final class FinancialOperationIdentity
     public function assertRegistryReservation(array $context, string $uuid, array $legs): void
     {
         $this->lock();
+        $this->assertSourceIdentities($uuid, $legs);
         $payments = Payment::withTrashed()->where('sync_uuid', $uuid)->orderBy('id')->lockForUpdate()->get();
         $claims = DB::table('noncash_collection_claims')->where('sync_uuid', $uuid)->orderBy('id')->lockForUpdate()->get();
         $reviews = DB::table('late_receipt_reviews')->where('sync_uuid', $uuid)->orderBy('id')->lockForUpdate()->get();
@@ -84,6 +85,62 @@ final class FinancialOperationIdentity
             $this->need($payment->payment_method === 'cash', 'financial_uuid_owner_mismatch');
         }
         $this->need($this->canonical($expected) === $this->canonical($legs), 'financial_uuid_effect_mismatch');
+    }
+
+    /**
+     * Reverse direction: a free operation UUID is not permission to relabel
+     * an actual receipt or its original collection effect. Reversals, refunds
+     * and account transfers are distinct operations, not original issuance.
+     * The generic registry still supports nonbusiness evidence fixtures;
+     * absent sources and receipts without a sync UUID require separate
+     * source coverage/transition validation, not inferred ownership here.
+     */
+    private function assertSourceIdentities(string $uuid, array $legs): void
+    {
+        foreach ($legs as $leg) {
+            $sourceId = $leg['source_id'];
+            if (preg_match('/\A[1-9][0-9]*\z/', $sourceId) !== 1 || (string) (int) $sourceId !== $sourceId) {
+                continue;
+            }
+            $paymentId = null;
+            if ($leg['source_type'] === 'ledger_transaction') {
+                $entry = Transaction::withTrashed()->whereKey((int) $sourceId)->lockForUpdate()->first();
+                if ($entry !== null && $entry->type === 'payment') {
+                    $this->need(! $entry->trashed() && $entry->reference_type === Payment::class
+                        && (int) $entry->reference_id > 0, 'financial_uuid_owner_mismatch');
+                    $paymentId = (int) $entry->reference_id;
+                }
+            } elseif ($leg['source_type'] === 'treasury_posting') {
+                $posting = DB::table('treasury_postings')->where('id', (int) $sourceId)->lockForUpdate()->first();
+                if ($posting !== null && $posting->kind === 'bank_collection') {
+                    $doc = DB::table('treasury_bank_collections')->where('id', $posting->treasury_bank_collection_id)
+                        ->lockForUpdate()->first();
+                    $this->need($doc !== null && (int) $doc->payment_id > 0, 'financial_uuid_owner_mismatch');
+                    $paymentId = (int) $doc->payment_id;
+                } elseif ($posting !== null && $posting->kind === 'late_cash_receipt') {
+                    $doc = DB::table('treasury_late_cash_receipts')->where('id', $posting->treasury_late_cash_receipt_id)
+                        ->lockForUpdate()->first();
+                    $review = $doc === null ? null : DB::table('late_receipt_reviews')
+                        ->where('id', $doc->late_receipt_review_id)->lockForUpdate()->first();
+                    $this->need($review !== null && (int) $review->payment_id > 0
+                        && $review->sync_uuid === $uuid, 'financial_uuid_source_mismatch');
+                    $paymentId = (int) $review->payment_id;
+                }
+            }
+            if ($paymentId === null) {
+                continue;
+            }
+            $payment = Payment::withTrashed()->whereKey($paymentId)->lockForUpdate()->first();
+            $this->need($payment !== null && ! $payment->trashed(), 'financial_uuid_owner_mismatch');
+            $this->need($payment->sync_uuid === null || $payment->sync_uuid === $uuid, 'financial_uuid_source_mismatch');
+            foreach (['noncash_collection_claims', 'late_receipt_reviews'] as $table) {
+                $owners = DB::table($table)->where('payment_id', $paymentId)->orderBy('id')->lockForUpdate()->get();
+                foreach ($owners as $owner) {
+                    $this->need($owner->sync_uuid === $uuid && $payment->sync_uuid === $uuid,
+                        'financial_uuid_source_mismatch');
+                }
+            }
+        }
     }
 
     private function bankLeg(Payment $payment, string $date): array
