@@ -62,7 +62,10 @@ final class FinancialClosePolicy
         $this->need(($facts['request_unused'] ?? null) === true, 'request_used');
         $uuid = $this->uuid($command['uuid'] ?? null);
         $actor = $this->actor($facts);
-        $epoch = $this->increment($this->counter($facts['epoch'] ?? null));
+        $currentEpoch = $this->counter($facts['epoch'] ?? null);
+        // Reserve freeze + release epochs and freeze + prepare + terminal versions.
+        $this->need($currentEpoch <= PHP_INT_MAX - 2 && $period['version'] <= PHP_INT_MAX - 3, 'counter_overflow');
+        $epoch = $this->increment($currentEpoch);
         $period['attempt'] = ['uuid' => $uuid, 'requester' => $actor, 'reason' => $this->reason($command['reason'] ?? null),
             'frozen_at' => $this->instant($now), 'epoch' => $epoch, 'predecessor_hash' => $this->digest($facts['predecessor_hash'] ?? null),
             'prepared' => null];
@@ -75,6 +78,9 @@ final class FinancialClosePolicy
     {
         $this->frozen($period, $command, $facts, 'prepare');
         $this->need($period['attempt']['prepared'] === null, 'already_prepared');
+        // Preparation must leave room for approval or abort, including older frozen states.
+        $this->need($this->counter($period['attempt']['epoch']) < PHP_INT_MAX
+            && $period['version'] <= PHP_INT_MAX - 2, 'counter_overflow');
         $this->need($this->instant($now) >= $period['attempt']['frozen_at'], 'event_time');
         $canonical = $this->snapshot($period, $snapshot, $facts);
         $period['attempt']['prepared'] = ['actor' => $this->actor($facts), 'at' => $this->instant($now),
