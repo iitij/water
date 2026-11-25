@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify both CI jobs; then integrate Filament and Flutter request/operation identity contract and complete gated receipt entrypoints on same release candidate.",
+  "next": "Integrate prospective void request and decision actions in Filament and Flutter client contract; gate actual receipt writers before activation.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-void-decision-binding",
-      "commit": "77118254c988a121252362b3a913bbff2c98b784",
-      "run": 45706026398,
-      "sqlite": "3 tests, 78 assertions",
-      "mysql": "3 tests, 78 assertions",
-      "scope": "All supervised void decisions require exact gated request audit ID. Reject stale approval and rejection, verify exact decision replay including actor, notes and source audit, keep registry reversal atomic. New stale approval case and two affected void regressions."
+      "branch": "release/prospective-void-api",
+      "commit": "57dcd61ee15565a6b45d216931ce2983cc210f2b",
+      "run": 45706702360,
+      "sqlite": "2 tests, 37 assertions",
+      "mysql": "2 tests, 37 assertions",
+      "scope": "Existing authenticated API void request/list/decision endpoints use GatedReceiptVoidWriter when isolated candidate switch enabled; mandatory request_id, stable operation_uuid for approval, list returns request identity, gate conflicts return 409 without legacy fallback. Two real HTTP integration tests on both engines."
     }
   },
   "round146": {
@@ -812,13 +812,30 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_void_api": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "77118254c988a121252362b3a913bbff2c98b784",
     "branch": "release/prospective-void-api",
     "source": "57dcd61ee15565a6b45d216931ce2983cc210f2b",
     "run": 45706702360,
     "scope": "Existing authenticated API void request/list/decision endpoints use GatedReceiptVoidWriter when isolated candidate switch enabled; mandatory request_id, stable operation_uuid for approval, list returns request identity, gate conflicts return 409 without legacy fallback. Two real HTTP integration tests on both engines.",
     "limits": "Default-off switch restricted to testing/staging; no production activation, complete receipt entrypoint cutover, Filament or Flutter integration yet. Registered synthetic receipts only; historical remediation excluded.",
-    "next": "Verify both CI jobs; then integrate Filament and Flutter request/operation identity contract and complete gated receipt entrypoints on same release candidate."
+    "next": "Verify both CI jobs; then integrate Filament and Flutter request/operation identity contract and complete gated receipt entrypoints on same release candidate.",
+    "jobs": [
+      {
+        "id": 139530419848,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 37,
+        "exit": 0
+      },
+      {
+        "id": 139530419461,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 37,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
