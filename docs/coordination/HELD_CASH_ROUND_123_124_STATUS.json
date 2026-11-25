@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted CI; fix confirmed failures. Inventory actual invoice issue/cancel callers including direct model creation, batch and reading-driven issue; wire them with stable per-operation identity and protect remaining mutation paths. Continue prospective reserve discharge, liquidity and Flutter inventory, integrated release checks.",
+  "next": "Verify exact targeted CI; fix confirmed failures only. Wire Filament single issue/cancel with stable form UUID, then inventory and wire batch/readings-driven issue; protect direct model mutation. Continue reserve discharge, general liquidity, Flutter inventory and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-subscriber-transfer-entry",
-      "commit": "fffb90b05ca11f6ab18f83bb06ae884fde9dc2fb",
-      "run": 45723949155,
-      "sqlite": "1 test, 44 assertions",
-      "mysql": "1 test, 44 assertions",
-      "scope": "Private exact payment/destination/actor scope on GatedInvoiceTransferWriter transfer; fence PaymentAccountTransferService under issuance lock including registered correction replay. Shared prospective API/Filament entry with stable UUID and confirmation of no new cash; staging/testing only. New targeted UI/API test checks closed period, independent approval, direct/idle scope rejection, two equal opposite subscriber legs, conserved balances, unchanged original receipt and treasury, replay and disabled switch protection."
+      "branch": "release/prospective-invoice-service-fence",
+      "commit": "ec8b04491c7b7394ba472191ff23df071bd98744",
+      "run": 45724729229,
+      "sqlite": "1 test, 64 assertions",
+      "mysql": "1 test, 64 assertions",
+      "scope": "Private issue subscriber/meter and cancellation invoice/actor scopes in GatedInvoiceTransferWriter; protect InvoiceService and InvoiceCancellationService under issuance lock. Default-off candidate switch, registered original or reversal blocks direct cancellation even when disabled. Targeted test checks closed period, direct and idle writer rejection, exact invoice debt and reversal, original ledger unchanged, reading released, replay and unchanged cash/held reserve."
     }
   },
   "round146": {
@@ -1637,12 +1637,42 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_invoice_service_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "fffb90b05ca11f6ab18f83bb06ae884fde9dc2fb",
     "branch": "release/prospective-invoice-service-fence",
-    "source": "7b376788acf29268c9ddb58b7ce7d3ae9910c3ee",
+    "source": "ec8b04491c7b7394ba472191ff23df071bd98744",
     "scope": "Private issue subscriber/meter and cancellation invoice/actor scopes in GatedInvoiceTransferWriter; protect InvoiceService and InvoiceCancellationService under issuance lock. Default-off candidate switch, registered original or reversal blocks direct cancellation even when disabled. Targeted test checks closed period, direct and idle writer rejection, exact invoice debt and reversal, original ledger unchanged, reading released, replay and unchanged cash/held reserve.",
-    "limits": "CI pending. Actual single/bulk issue and cancel API/Filament/Flutter entrypoints and direct model-level creation/cancellation/other writers not yet fenced or verified. No production activation or main merge; no historical repairs.",
-    "next": "Verify exact targeted CI; fix confirmed failures. Inventory actual invoice issue/cancel callers including direct model creation, batch and reading-driven issue; wire them with stable per-operation identity and protect remaining mutation paths. Continue prospective reserve discharge, liquidity and Flutter inventory, integrated release checks."
+    "limits": "Corrected test snapshot loop only; exact source, raw logs and lockfile verified for scoped invoice service issue/cancel. No complete writer coverage or production activation.",
+    "next": "Connect actual single invoice API and then Filament/bulk/readings.",
+    "initial_source": "7b376788acf29268c9ddb58b7ce7d3ae9910c3ee",
+    "initial_run": 45724482816,
+    "initial_failure": "Both engines stopped after 24 assertions because test snapshot loop used numeric keys instead of table names; no product logic changed.",
+    "run": 45724729229,
+    "jobs": [
+      {
+        "id": 139591575707,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 64,
+        "exit": 0
+      },
+      {
+        "id": 139591576116,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 64,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_invoice_api": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "ec8b04491c7b7394ba472191ff23df071bd98744",
+    "branch": "release/prospective-invoice-api",
+    "source": "a082c098bce5d8f9e373c1f77b2fa3d97431526e",
+    "scope": "Shared ProspectiveInvoiceEntry with policy authorization, stable operation UUID, current meter guard, staged gate and conflict handling. Actual POST /api/invoices, /api/invoices/generate-meter and /api/invoices/{id}/cancel wired. Targeted test verifies missing UUID, closed period, same issuance replay across endpoints, conflicting notes/reason, exact opposite ledger legs, unchanged cash and registered cancel rejection with switch off.",
+    "limits": "CI pending. Filament CreateInvoice, generate_invoice header action and cancel_invoice row action inventoried but not wired; batch/readings-driven callers and direct model/other mutation paths not fully inventoried. Existing mobile API callers require stable UUID rollout. No production activation or main merge; no historical repairs.",
+    "next": "Verify exact targeted CI; fix confirmed failures only. Wire Filament single issue/cancel with stable form UUID, then inventory and wire batch/readings-driven issue; protect direct model mutation. Continue reserve discharge, general liquidity, Flutter inventory and integrated release checks."
   }
 }
