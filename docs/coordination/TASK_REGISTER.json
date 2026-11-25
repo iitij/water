@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 31,
+    "round": 35,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2526,7 +2526,7 @@
     },
     "round30": {
       "phase": "Flutter collector refresh and partial-payment regressions",
-      "status": "HOSTED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "70221dc1cfa297f0c95eacb1d339dcf04da0edfa",
       "source": "b215c1d5d224b075843080765e4178ddea5ddeff",
       "workflow": "41814747dca0155b3a705544a5ce0218db784f6c",
@@ -2534,17 +2534,141 @@
       "branch": "fix/central-flutter-collector-refresh",
       "run": 45560267891,
       "scope": "Filter-aware refresh, stale response guards, confirmed partial invoice visibility, queued payment suppression within current cubit, current submission outcome and in-flight guard; four ordinary regression cases.",
-      "limits": "Pending runtime; no persistent offline suppression guarantee across restart. Remaining quarantined cases not accepted."
+      "limits": "Pending runtime; no persistent offline suppression guarantee across restart. Remaining quarantined cases not accepted.",
+      "results": {
+        "job": 139022066344,
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,25 infos",
+        "new_cases": 4
+      }
     },
     "round31": {
       "phase": "Targeted security lockfile candidate",
-      "status": "DRAFT_CREATED_RUNTIME_PENDING",
+      "status": "RESOLVED_AUDITED_EXACT_CANDIDATE",
       "base": "dd920a1dde29737cd42923c3be94c05364690231",
       "workflow": "48346c5a49de9a54ccef36e4602ccffe2d3e0bc5",
       "pr": 107,
       "branch": "qa/central-security-lock-remediation",
       "scope": "Resolve 16 advisory-affected Composer packages with minimal changes and npm audit fix without force, in read-only hosted workflow. No root manifest change, package scripts, production writes or main merge; preserve candidate locks/audits as artifact.",
-      "limits": "No security remediation claimed until solve, independent audit, exact candidate review and full integrated runtime tests. Filament exact 5.6 constraint may require separate compatibility decision."
+      "limits": "No security remediation claimed until solve, independent audit, exact candidate review and full integrated runtime tests. Filament exact 5.6 constraint may require separate compatibility decision.",
+      "first_run": {
+        "run": 45560491683,
+        "job": 139022741416,
+        "exit": 2,
+        "reason": "Exact Filament 5.6.0 constraint blocked by security advisories; early shell exit prevented npm audit."
+      },
+      "retry": {
+        "workflow": "8f2f760b32aeb153a88c96b94f6e7ea257dac7c8",
+        "run": 45560732324,
+        "job": 139023536661,
+        "composer_resolve": 0,
+        "npm_resolve": 0,
+        "composer_audit": 0,
+        "npm_audit": 0,
+        "artifact": 14997921321,
+        "artifact_sha256": "e5c4fa67c1e7475287c8d88e77e05ae97a6605ae7a707372d92753dfa8558450",
+        "manifests": {
+          "composer_json": "88ec4d0ed81ea583f9a93764b7da5a0fa4eed445e79d7054558fa0e43f660dc8",
+          "composer_lock": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335",
+          "package_json": "6806d10f2d2ea5dd0c12b78a19a2b945857a9f092d1f559acdc5ea0eb09abddd",
+          "package_lock": "4e49440cc7ed97bf3efa59fca5a4d892f89f9531bda9173ad5ad84777945ddd3"
+        },
+        "decision": "Relax Filament exact version to compatible ^5.6 and retain explicit advisory blocking. Review exact files; no forced updates."
+      }
+    },
+    "round32": {
+      "phase": "Flutter session generation and refresh safety",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "b215c1d5d224b075843080765e4178ddea5ddeff",
+      "source": "b80195c2e461ba733ef27d1deee90551713091c6",
+      "workflow": "dc1b5eb704f4a1f0986c44e119c6ccd3c46a5779",
+      "branch": "fix/central-flutter-session-refresh",
+      "pr": 108,
+      "run": 45561035341,
+      "job": 139024597634,
+      "results": {
+        "passed": 16,
+        "new_cases": 5,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,25 infos"
+      },
+      "scope": "Preserve volatile refresh, serialize token mutation with compare-and-replace, isolate refresh generation, reject stale authenticated responses/retries. No complete lifecycle or local DB identity guarantee; old opt-in diagnostic probes remain quarantined."
+    },
+    "round33": {
+      "phase": "Security lock candidate full runtime regression",
+      "status": "ORDINARY_FULL_BOTH_ENGINES_PASS",
+      "base": "dd920a1dde29737cd42923c3be94c05364690231",
+      "workflow": "4548beec0594f243a63ee9ea3339c1e51a462eb0",
+      "pr": 109,
+      "run": 45561110034,
+      "artifact": 14997921321,
+      "sqlite": {
+        "job": 139024776496,
+        "tests": 487,
+        "passed": 461,
+        "assertions": 16057,
+        "skipped": 26,
+        "errors": 0,
+        "failures": 0,
+        "exit": 0
+      },
+      "mysql": {
+        "job": 139024776785,
+        "tests": 487,
+        "passed": 481,
+        "assertions": 16316,
+        "skipped": 6,
+        "errors": 0,
+        "failures": 0,
+        "exit": 0
+      },
+      "total": {
+        "tests": 974,
+        "passed": 942,
+        "assertions": 32373,
+        "skipped": 32,
+        "errors": 0,
+        "failures": 0
+      },
+      "limits": "Advisory snapshot zero, exact artifact files verified; PHP8.4.28/MySQL8.0.46, Vite and npm audit passed. No host/release/skip acceptance."
+    },
+    "round34": {
+      "phase": "Flutter backup collision and PIN cooldown persistence",
+      "status": "ANALYZER_FAILURE_CORRECTED_RETRY_PENDING",
+      "base": "b80195c2e461ba733ef27d1deee90551713091c6",
+      "initial_source": "029fbe2b91eb73c53f388b94681b66d00c0e8f8e",
+      "source": "e33b54ba7499c7bb92055aa8d982bcdb95a42763",
+      "workflow": "e8fd121e1d5030cc64e8a70b3216f2a96e9300e2",
+      "pr": 110,
+      "branch": "fix/central-flutter-backup-lock-safety",
+      "first_run": 45561377606,
+      "first_job": 139025712450,
+      "failure": "Invalid filename regex source from replacement; corrected method and rerun, no bypass.",
+      "retry": 45561769579,
+      "scope": "Exclusive backup file creation and suffix collisions; preserve format. Persistent local PIN attempts/cooldown, serialized single service attempts, require current PIN. Six new acceptance cases. No hardware clock or privileged-storage resistance claim."
+    },
+    "round35": {
+      "phase": "Exact security lock adoption",
+      "status": "ADOPTED_ON_ISOLATED_BRANCH",
+      "base": "dd920a1dde29737cd42923c3be94c05364690231",
+      "source": "f50143b985a5e70b4728c1b9a53b03b83e82f06d",
+      "branch": "integration/accounting-v4-secure-locks",
+      "pr": 112,
+      "adoption_pr": 111,
+      "adoption_workflow": "9ed98381dc9a92c48de7bd2695a244095a7ea6d3",
+      "run": 45561695744,
+      "job": 139026668857,
+      "verified": "One commit ahead, zero behind; exactly composer.json composer.lock package-lock.json changed. All four exact Git blob hashes independently compared with downloaded artifact. One-shot scoped write job succeeded; PR111 closed unmerged; no writable workflow in product candidate.",
+      "limits": "Separate from Flutter and closure changes. Compose approved slices before final integrated release."
+    },
+    "remaining_field_sync_review": {
+      "status": "SOURCE_DEFECTS_CONFIRMED_NOT_IMPLEMENTED",
+      "scope": "Fault batch currently exceeds server max200; both fault/visit records have time-window omissions and unscoped SharedPreferences. Need fixed server+user scope, legacy unknown-owner quarantine without deletion or auto-claim, auth-generation guarded batch requests, complete scoped date enumeration, partial progress and exact server acknowledgement; backend duplicate-owner provenance and Drift queue/account isolation separate review. No widening unscoped upload before ownership guard."
     }
   }
 }
