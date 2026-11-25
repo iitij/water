@@ -68,6 +68,7 @@ class FieldDataSyncService {
     scope.ensureCurrent();
     return Options(extra: {
       AuthInterceptor.sessionGenerationKey: scope.generation,
+      AuthInterceptor.sessionServerKey: scope.server,
       'skipOfflineCache': true,
     });
   }
