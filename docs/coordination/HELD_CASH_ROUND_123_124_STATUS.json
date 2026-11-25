@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Inspect exact job logs, correct confirmed failures only; review prerequisite source coverage and cross-date settlement policy, then complete other multi-effect adapters.",
+  "next": "Implement prospective gated account transfer with registered original receipt and exact reversing/incoming legs; review separate refund evidence and posting dates. No partial API cutover.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -369,13 +369,30 @@
     "limits": "Candidate only. Positive unidentified surplus during shortfall deliberately remains blocked; no recovery policy inferred. Legacy API writers still not gate-first and full source coverage is not proved. FinancialCloseProofSource interface has no production binding. No historical remediation, actual reserve reduction, production, real data or main changes."
   },
   "round134": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "70ffbf0e63146f9e5becb57eb8f5dca06c3470e5",
     "branch": "qa/gated-collection-writers-round134",
     "source": "70294542c29ff8c09558976fce068e76c2db6dee",
     "run": 45695803201,
     "scope": "Inactive GatedCollectionWriter for ordinary bank claim, late bank and separate late cash. Gate before business locks, verify registered opening and targeted invoice prerequisite, require common effective date of both effects, verify exact positive subscriber and treasury legs and register both atomically under original sync UUID. Reject old unregistered approved decisions. Four targeted tests for both engines covering registry failure rollback, freeze and closed period, replay, and unregistered legacy refusal.",
     "limits": "Runtime pending. Late cash with unequal original payment and treasury receipt dates deliberately unsupported; must implement multi-period attribution rather than falsify a date. No full source coverage proof, API activation, historical remediation, production/main/real data change or reserve release.",
-    "next": "Inspect exact job logs, correct confirmed failures only; review prerequisite source coverage and cross-date settlement policy, then complete other multi-effect adapters."
+    "next": "Inspect exact job logs, correct confirmed failures only; review prerequisite source coverage and cross-date settlement policy, then complete other multi-effect adapters.",
+    "jobs": [
+      {
+        "id": 139492750735,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 147,
+        "exit": 0
+      },
+      {
+        "id": 139492751424,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 147,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
