@@ -3501,6 +3501,63 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('bank_statement_matches', 0);
     }
 
+    public function test_release_settlement_filament_counted_cash_modal_and_api_replay(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        foreach (['ViewAny:CashSession', 'View:CashSession'] as $permission) {
+            $reviewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $owner = Subscriber::create(['name' => 'Synthetic modal counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $id = (int) $late->submit($issuer, ['sync_uuid' => $uuid, 'cash_session_id' => $session->id,
+            'subscriber_id' => $owner->id, 'amount' => '4.12', 'payment_method' => 'cash', 'payment_date' => '2026-11-25'])['id'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $tables = ['cash_sessions', 'treasury_postings', 'payments', 'transactions', 'late_receipt_reviews',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'document_sequences'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.late_cash_settlements' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($reviewer, 'web');
+        $page = \App\Filament\Resources\CashSessions\Pages\ListCashSessions::class;
+        $action = \Filament\Actions\Testing\TestAction::make('late_receipt_review')->table($session);
+        $data = ['review_id' => $id, 'decision' => 'approve', 'settlement_method' => 'already_counted',
+            'evidence_reference' => 'QA-COUNTED-MODAL', 'evidence' => self::EVIDENCE];
+        $modal = \Livewire\Livewire::test($page)->mountAction($action)->setActionData(array_replace($data, ['evidence_reference' => null]));
+        $modal->callMountedAction()->assertHasActionErrors();
+        $modal->setActionData($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        foreach ($tables as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $modal->assertActionDataSet(['review_id' => $id, 'evidence_reference' => 'QA-COUNTED-MODAL']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $payment = Payment::where('sync_uuid', $uuid)->sole();
+        $this->assertSame(412, $owner->fresh()->getAccountBalanceMinor());
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->get();
+        $this->assertCount(1, $events);
+        $this->assertSame('subscriber', $events->sole()->leg);
+        $this->assertSame(412, (int) $events->sole()->amount_minor);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $url = '/api/late-receipt-reviews/'.$id.'/decide';
+        $api = ['approve' => true, 'settlement_method' => 'already_counted',
+            'evidence_reference' => $data['evidence_reference'], 'evidence' => $data['evidence']];
+        $this->postJson($url, $api)->assertOk()->assertJsonPath('review.payment_id', $payment->id);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+    }
+
     public function test_release_settlement_api_counted_cash(): void
     {
         [, , , , , $subscriber] = $this->held();
