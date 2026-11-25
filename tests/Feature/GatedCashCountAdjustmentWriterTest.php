@@ -3062,6 +3062,65 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
+    public function test_release_handover_entrypoints_modal_and_api_preserve_single_treasury_effect(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        foreach (['ViewAny:CashSession', 'View:CashSession'] as $permission) {
+            $reviewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['amount' => '0.40', 'reference' => 'QA-HANDOVER-ENTRY', 'received_on' => '2026-11-25',
+            'evidence' => self::EVIDENCE, 'treasury_account_id' => $accountId, 'operation_uuid' => $uuid];
+        $url = '/api/cash-sessions/'.$session->id.'/handovers';
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.cash_handovers' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($collector);
+        $this->postJson($url, $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, array_diff_key($data, ['treasury_account_id' => true]))->assertUnprocessable();
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($reviewer, 'web');
+        $page = \App\Filament\Resources\CashSessions\Pages\ListCashSessions::class;
+        $action = \Filament\Actions\Testing\TestAction::make('record_treasury_handover')->table($session);
+        $modal = \Livewire\Livewire::test($page)->mountAction($action)->setActionData($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $modal->assertActionDataSet(['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $handover = \App\Models\CashHandover::where('reference', $data['reference'])->sole();
+        $posting = DB::table('treasury_postings')->where('cash_handover_id', $handover->id)->sole();
+        $this->assertSame($accountId, (int) $posting->treasury_account_id);
+        $this->assertSame(40, (int) $posting->amount_minor);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => 40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('handover.id', $handover->id)
+            ->assertJsonPath('posting.id', $posting->id)->assertJsonPath('treasury_handover.remaining_amount', '0.60');
+        $this->postJson('/api/treasury/accounts/'.$accountId.'/postings', ['kind' => 'cash_handover', 'source_id' => $handover->id])->assertConflict();
+        config(['financial_candidate.cash_handovers' => false]);
+        $this->postJson($url, $data)->assertConflict();
+        $this->postJson($url, array_diff_key($data, ['treasury_account_id' => true, 'operation_uuid' => true]))->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['cash_sessions', 'payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
     public function test_release_handover_service_fence_requires_atomic_custody_scope(): void
     {
         [, , $account, , , $subscriber] = $this->held();
