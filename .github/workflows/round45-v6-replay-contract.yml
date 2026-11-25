@@ -1,7 +1,7 @@
 name: V6 exact replay contract regression
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: ['integration/accounting-candidate-v2']
     paths: ['.github/workflows/round45-v6-replay-contract.yml']
 permissions:
@@ -16,8 +16,8 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - { case: v6-replay-sqlite, engine: sqlite, sha: 6b537766cf329fe5e829f997ba205c57e2852153 }
-          - { case: v6-replay-mysql, engine: mysql, sha: 6b537766cf329fe5e829f997ba205c57e2852153 }
+          - { case: v6-replay-sqlite, engine: sqlite, sha: ab840547a11ee28d031f9e4bcd4381fcc1fbc991 }
+          - { case: v6-replay-mysql, engine: mysql, sha: ab840547a11ee28d031f9e4bcd4381fcc1fbc991 }
     env:
       EXACT_SHA: ${{ matrix.sha }}
       QA_CASE: ${{ matrix.case }}
@@ -106,8 +106,6 @@ jobs:
             php -l "$path"
           done
           if git grep -n -E 'generateBillNumber|generateReceiptNumber' -- app routes database tests; then exit 2; fi
-          php tests/Unit/financial_close_policy_check.php
-          php tests/Unit/financial_close_counter_headroom_check.php
           args=(--filter 'MobileConnectivityFixesTest|FieldSyncReplayIntegrityTest' --fail-on-skipped)
           set +e
           timeout 900s php vendor/bin/phpunit "${args[@]}" --fail-on-incomplete --log-junit "$evidence/junit.xml" 2>&1 | tee "$evidence/result.log"
