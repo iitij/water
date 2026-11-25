@@ -34,7 +34,7 @@ void main() {
   test('remember=false remains volatile after successful rotation', () async {
     final storage = SecureStorageService();
     await storage.writeAccessToken('temporary', persist: false);
-    final dio = Dio()..httpClientAdapter = _Adapter((_) async =>
+    final dio = Dio(BaseOptions(baseUrl: 'https://water.test/api/'))..httpClientAdapter = _Adapter((_) async =>
         _json({'access_token': 'rotated'}));
     final refresh = TokenRefreshService(dio: dio, secureStorage: storage);
 
@@ -49,7 +49,7 @@ void main() {
     await storage.writeAccessToken('a');
     final started = Completer<void>();
     final response = Completer<ResponseBody>();
-    final dio = Dio()..httpClientAdapter = _Adapter((_) {
+    final dio = Dio(BaseOptions(baseUrl: 'https://water.test/api/'))..httpClientAdapter = _Adapter((_) {
       started.complete();
       return response.future;
     });
@@ -73,7 +73,7 @@ void main() {
     final oldResponse = Completer<ResponseBody>();
     final newResponse = Completer<ResponseBody>();
     var calls = 0;
-    final dio = Dio()..httpClientAdapter = _Adapter((options) {
+    final dio = Dio(BaseOptions(baseUrl: 'https://water.test/api/'))..httpClientAdapter = _Adapter((options) {
       calls++;
       if (options.headers['Authorization'] == 'Bearer a') {
         oldStarted.complete();
@@ -107,7 +107,7 @@ void main() {
       final started = Completer<void>();
       final response = Completer<ResponseBody>();
       var calls = 0;
-      final dio = Dio()..httpClientAdapter = _Adapter((_) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://water.test/api/'))..httpClientAdapter = _Adapter((_) {
         calls++;
         started.complete();
         return response.future;
