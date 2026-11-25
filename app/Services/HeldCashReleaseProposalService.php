@@ -30,6 +30,7 @@ final class HeldCashReleaseProposalService
         return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now,
             function (array $proof) use ($actor, $accountId, $creditId, $minor, $uuid, $reference, $evidence): array {
                 $this->authorize($actor);
+                $this->verifyLocked($proof);
                 $credit = $this->credit($proof, $creditId);
                 $document = DB::table('treasury_held_cash_credits')->where('id', $creditId)->lockForUpdate()->first();
                 $this->need($document !== null && (int) $document->approved_by !== (int) $actor->id,
@@ -72,6 +73,7 @@ final class HeldCashReleaseProposalService
         return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now,
             function (array $proof) use ($actor, $accountId, $uuid, $evidence): array {
                 $this->authorize($actor);
+                $this->verifyLocked($proof);
                 $proposal = DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->lockForUpdate()->first();
                 $this->need($proposal !== null && (int) $proposal->treasury_account_id === $accountId
                     && (int) $proposal->proposed_by !== (int) $actor->id, 'held_release_withdrawal_identity');
@@ -95,6 +97,105 @@ final class HeldCashReleaseProposalService
                 $this->audit('treasury.held_release_withdrawn', $uuid, $row, 'withdrawn_by');
                 return $this->result($row, true);
             });
+    }
+
+    /** Read-only bidirectional coverage, under the same scope/issuance fence. */
+    public function inspect(int $accountId, DateTimeImmutable $now): array
+    {
+        return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now,
+            fn (array $proof): array => $this->verifyLocked($proof));
+    }
+
+    private function verifyLocked(array $proof): array
+    {
+        $this->need(app(HeldCashReleaseDocumentProtection::class)->active(), 'held_release_protection_missing');
+        $proposals = DB::table('held_cash_release_proposals')->orderBy('operation_uuid')->lockForUpdate()->get()->keyBy('operation_uuid');
+        $withdrawals = DB::table('held_cash_release_withdrawals')->orderBy('proposal_uuid')->lockForUpdate()->get()->keyBy('proposal_uuid');
+        $audits = AuditEvent::query()->whereIn('event', ['treasury.held_release_proposed', 'treasury.held_release_withdrawn'])
+            ->orderBy('id')->lockForUpdate()->get();
+        $this->need($audits->count() === $proposals->count() + $withdrawals->count(), 'held_release_coverage');
+        foreach ($audits as $audit) {
+            $documents = $audit->event === 'treasury.held_release_proposed' ? $proposals : $withdrawals;
+            $this->need($audit->entity_type === 'held_cash_release_proposal'
+                && $documents->has($audit->entity_id), 'held_release_coverage');
+        }
+        $current = collect($proof['credits'])->keyBy('credit_id');
+        $counts = ['proposals' => 0, 'withdrawn' => 0, 'stale' => 0, 'current' => 0];
+        foreach ($proposals as $uuid => $proposal) {
+            $this->verifyAudit('treasury.held_release_proposed', $uuid, (array) $proposal, 'proposed_by');
+            $credit = DB::table('treasury_held_cash_credits as c')
+                ->join('treasury_held_cash_assignments as a', 'a.operation_uuid', '=', 'c.assignment_uuid')
+                ->join('treasury_held_cash_liabilities as l', 'l.id', '=', 'a.liability_id')
+                ->join('treasury_cash_adjustments as d', 'd.id', '=', 'l.treasury_cash_adjustment_id')
+                ->where('c.id', $proposal->credit_id)->select('c.*', 'd.treasury_account_id')->lockForUpdate()->first();
+            $this->need($credit !== null && (int) $credit->subscriber_id === (int) $proposal->subscriber_id
+                && (int) $credit->treasury_account_id === (int) $proposal->treasury_account_id
+                && (int) $credit->approved_by !== (int) $proposal->proposed_by
+                && $proposal->effective_on >= $credit->effective_on, 'held_release_coverage_source');
+            $amount = \App\Support\MoneyBoundary::readDecimal($credit->amount, \App\Support\DecimalDomain::D12,
+                DB::getDriverName(), signed: true);
+            $applied = $this->historicalApplied($proposal, (int) $credit->id, (int) $credit->subscriber_id, $amount);
+            $minor = SignedMinor::parse($proposal->amount_minor);
+            $pending = SignedMinor::parse($proposal->pending_refunds_minor);
+            $protected = SignedMinor::parse($proposal->protected_minor);
+            $this->need($minor > 0 && $minor <= $applied && $pending >= 0 && $protected >= $amount
+                && SignedMinor::subtract(SignedMinor::subtract(SignedMinor::parse($proposal->recorded_balance_minor), $pending), $protected) >= 0,
+                'held_release_coverage_amount');
+            $withdrawal = $withdrawals->get($uuid);
+            if ($withdrawal !== null) {
+                $this->verifyAudit('treasury.held_release_withdrawn', $uuid, (array) $withdrawal, 'withdrawn_by');
+                $this->need((int) $withdrawal->withdrawn_by !== (int) $proposal->proposed_by
+                    && $withdrawal->effective_on >= $proposal->effective_on
+                    && (int) $withdrawal->revision_id >= (int) $proposal->revision_id
+                    && $audits->first(fn ($a) => $a->entity_id === $uuid && $a->event === 'treasury.held_release_proposed')->id
+                        < $audits->first(fn ($a) => $a->entity_id === $uuid && $a->event === 'treasury.held_release_withdrawn')->id,
+                    'held_release_coverage_withdrawal');
+                $this->historicalApplied($withdrawal, (int) $credit->id, (int) $credit->subscriber_id, $amount);
+            }
+            if ((int) $proposal->treasury_account_id !== $proof['account_id']) continue;
+            $counts['proposals']++;
+            $latest = $current->get((int) $credit->id);
+            $this->need($latest !== null, 'held_release_coverage_source');
+            if ($withdrawal !== null) {
+                $counts['withdrawn']++;
+            } elseif ($latest['revision_id'] !== (int) $proposal->revision_id
+                || ! hash_equals($latest['allocation_hash'], $proposal->allocation_hash)
+                || $proof['recorded_balance_minor'] !== SignedMinor::parse($proposal->recorded_balance_minor)
+                || $proof['pending_refunds_minor'] !== $pending || $proof['protected_minor'] !== $protected
+                || $proof['effective_on'] !== $proposal->effective_on) {
+                $counts['stale']++;
+            } else {
+                $counts['current']++;
+            }
+        }
+        return $counts + ['document_coverage_verified' => true,
+            'spending_release_authorized' => false, 'closure_authorized' => false];
+    }
+
+    private function historicalApplied(object $document, int $creditId, int $subscriberId, int $amount): int
+    {
+        $revision = DB::table('payment_allocation_revisions')->where('id', $document->revision_id)->lockForUpdate()->first();
+        $period = DB::table('financial_periods')->where('id', $document->period_id)->lockForUpdate()->first();
+        $this->need($revision !== null && (int) $revision->subscriber_id === $subscriberId
+            && hash_equals($revision->allocation_hash, $document->allocation_hash)
+            && app(AllocationSnapshotIntegrity::class)->valid($revision)
+            && $period !== null && $period->scope_key === 'water'
+            && $document->effective_on >= $period->start_on && $document->effective_on < $period->next_on,
+            'held_release_coverage_revision');
+        $total = $applied = 0;
+        foreach (DB::table('payment_allocations')->where('revision_id', $revision->id)
+            ->where('held_cash_credit_id', $creditId)->orderBy('position')->lockForUpdate()->get() as $row) {
+            $minor = \App\Support\AccountMoney::positiveAllocation($row->amount_minor);
+            $total = SignedMinor::add($total, $minor);
+            if ($row->invoice_id !== null) {
+                $invoice = DB::table('invoices')->where('id', $row->invoice_id)->lockForUpdate()->first();
+                $this->need($invoice !== null && (int) $invoice->subscriber_id === $subscriberId, 'held_release_coverage_revision');
+                $applied = SignedMinor::add($applied, $minor);
+            }
+        }
+        $this->need($amount > 0 && $total === $amount && $applied === SignedMinor::parse($document->applied_minor),
+            'held_release_coverage_revision');
+        return $applied;
     }
 
     private function credit(array $proof, int $id): array

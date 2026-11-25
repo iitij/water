@@ -1280,6 +1280,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($result['created']);
         $this->assertFalse($result['spending_release_authorized']);
         $this->assertFalse($propose($actor, 10)['created']);
+        $coverage = $service->inspect((int) $account['id'], $this->nowAt());
+        $this->assertSame(1, $coverage['current']);
+        $this->assertTrue($coverage['document_coverage_verified']);
+        $this->assertFalse($coverage['spending_release_authorized']);
         $this->rejects('held_release_proposal_conflict', fn () => $propose($actor, 9));
         $this->assertDatabaseCount('held_cash_release_proposals', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
@@ -1287,6 +1291,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
         app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
         $this->rejects('held_release_proposal_conflict', fn () => $propose($actor, 10));
+        $this->assertSame(1, $service->inspect((int) $account['id'], $this->nowAt())['stale']);
         $withdraw = fn ($who) => $service->withdraw($who, (int) $account['id'], $uuid,
             'Independent review of changed allocation evidence', $this->nowAt());
         $this->rejects('held_release_withdrawal_identity', fn () => $withdraw($actor));
@@ -1295,6 +1300,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $cancel['applied_minor']);
         $this->assertFalse($cancel['spending_release_authorized']);
         $this->assertFalse($withdraw($reviewer)['created']);
+        $this->assertSame(1, $service->inspect((int) $account['id'], $this->nowAt())['withdrawn']);
         foreach ([
             fn () => DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->update(['amount_minor' => 1]),
             fn () => DB::table('held_cash_release_proposals')->where('operation_uuid', $uuid)->delete(),
@@ -1312,5 +1318,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
         $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+    public function test_release_coverage_rejects_orphan_audit_without_changing_reserve(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\AuditEvent::create(['actor_user_id' => $actor->id,
+            'event' => 'treasury.held_release_proposed', 'entity_type' => 'held_cash_release_proposal',
+            'entity_id' => '77777777-7777-4777-8777-777777777777', 'after' => [], 'source' => 'internal', 'occurred_at' => now()]);
+        $this->rejects('held_release_coverage', fn () =>
+            app(\App\Services\HeldCashReleaseProposalService::class)->inspect((int) $account['id'], $this->nowAt()));
+        $this->assertDatabaseCount('held_cash_release_proposals', 0);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 }
