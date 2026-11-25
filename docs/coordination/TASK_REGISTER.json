@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 92,
+    "round": 93,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4174,6 +4174,20 @@
       "scope": "Pure canonical format 2 contract for separate late cash with one UUID and exactly two linked positive equal subscriber/treasury effects, distinct ordered dates, exact period/epoch/version, canonical source identity and source hashes, review/payment/receipt IDs, SHA256 and independently reconstructed byte comparison. Inactive source adapter derives actual two legs from persisted linked sources within both open period contexts. Seven pure unit test methods prepared; no database test results. Design note proposes shared global UUID and effect uniqueness across formats with per-part contexts; existing format 1 unchanged.",
       "limits": "No runtime validation or new workflow after earlier restriction. No persistence migration, grouped registry insertion, historical read verifier, W17 integrated writer, or closure proof; adapter not separately tested against actual database fixture. SHA256 not immutable protection. Must review existing schema and digest compatibility, ownership candidate R90, cross-period lock ordering and closed-period recognition; no production changes or main merge.",
       "next": "Review exact existing registry migrations and closure snapshot compatibility; implement shared group storage and independent per-period verification only after explicit compatibility design, then validate pending candidates."
+    },
+    "round93": {
+      "phase": "W17 inactive shared multi-date group persistence and legacy-verifier fail-closed guard",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "9c18969e817c83c78b682cfefb63a6f49598d363",
+      "branch": "fix/central-g1b-dual-date-storage",
+      "source": "e67122228e0548074b4f8c47af2a72ebfc13eb47",
+      "migration_commit": "63356035027e4a6d2ca100dfb816daa166e7ceeb",
+      "registry_commit": "7c4d7798b0421c010515c1365ad1f998334bccc2",
+      "guard_commit": "89bb4a2db5407b6dd5de63943b36e260bddee83b",
+      "runs": [],
+      "scope": "Reviewed actual registry, period and closure migrations. Additive payload_format discriminator default 1 and part table referencing shared operation UUID and globally unique existing events; format 1 canonical bytes unchanged. Inactive group registry derives actual proof, inserts one header/two events/two date parts in one savepoint inside gate-first outer transaction, checks exact replay and source effect collision; old single-date registry refuses format 2 replay and old verifier holds scope-wide upon group header/parts to avoid omitting non-anchor effects. Four feature cases per engine prepared using actual isolated late receipt service: persistence/replay and prior format 1 bytes, old verifier hold, missing part rejection, closed origin period.",
+      "limits": "No runtime validation or workflow creation after earlier restriction. Migration not applied to production; candidate registry only, no active W17 route. Part/event cross-owner relation is application-verified, not composite FK; complete grouped verifier, immutability, downgrade/recovery and fault injection/concurrency tests remain open. Old verifier deliberately blocks scope-wide verification when format 2 exists; cannot activate until replacement accepted. Group branch does not include R90 UUID candidate; integration and legacy adoption fencing required. No main merge or real data changes.",
+      "next": "Implement group-aware independent historical and per-period verifier preserving format 1 digest, then verify schema, exact replay, fault rollback and global UUID compatibility before integrating W17."
     }
   }
 }
