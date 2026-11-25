@@ -3290,7 +3290,14 @@
       "branch": "integration/accounting-candidate-v9",
       "pr": 132,
       "scope": "Five exact accepted blobs from rounds 51 and 54, verified against source; no other source delta. Full ordinary backend on exact V9, sequential SQLite and disposable socket-only MySQL; V8 Flutter evidence retained because no Flutter path changes.",
-      "runs": [],
+      "runs": [
+        {
+          "id": 45569978135,
+          "name": "V9 integrated backend regression",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "limits": "No complete ledger writer coverage, permanent closure activation, production data changes or main merge. No V9 Flutter run; no claim of final acceptance."
     }
   }
