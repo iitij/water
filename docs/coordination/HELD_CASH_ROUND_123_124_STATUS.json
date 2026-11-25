@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Complete direct mobile void request and offline retry policy, then actual receipt writer entrypoints.",
+  "next": "Verify three CI jobs, correct confirmed failures only. Complete actual registered receipt creation entrypoints and check queue error handling without deleting existing local evidence.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -963,5 +963,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_intent": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "4ca488c21714dfe767715672b5178cdf0f0fabf8",
+    "branch": "release/prospective-void-intent",
+    "source": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
+    "run": 45709324168,
+    "scope": "Explicit durable void intent audit bound to actor/receipt/reason; same pending intent can replay exact active request, resolved pending intent cannot create a new request, immediate replay uses same registered UUID. Candidate API rejects bare legacy queued request and flag-off bound request. Flutter opt-in WATER_PROSPECTIVE_VOID online-only direct request with verified acknowledgement and no new offline queue on transport failure; manual refresh before new attempt. One new backend case, two directly affected HTTP regressions, three new Flutter cases with pinned SDK.",
+    "limits": "Runtime pending; no production activation. Existing queued items not deleted or migrated; server refuses bare old requests in candidate mode, but local queue UI/quarantine needs separate review. Client does not persist an uncertain intent across restarts; no automatic replay, manual reconciliation required. Flag-off legacy unregistered receipts retain behavior. Other writers still not cut over; historical corrections excluded.",
+    "next": "Verify three CI jobs, correct confirmed failures only. Complete actual registered receipt creation entrypoints and check queue error handling without deleting existing local evidence."
   }
 }
