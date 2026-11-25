@@ -4,6 +4,7 @@ namespace App\Filament\Resources\CashSessions\Tables;
 
 use App\Models\CashSession;
 use App\Services\CashSessionService;
+use App\Services\ProspectiveSettlementEntry;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -174,12 +175,17 @@ class CashSessionsTable
                         $review = \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
                             ->where('cash_session_id', $record->id)->find((int) $data['review_id']);
                         abort_unless($review, 404);
-                        app(\App\Services\LateReceiptReviewService::class)->decide((int) $review->id, Auth::user(), [
-                            'approve' => $data['decision'] === 'approve',
-                            'evidence' => $data['evidence'],
-                            'evidence_reference' => $data['evidence_reference'] ?? null,
-                            'settlement_method' => $data['settlement_method'] ?? null,
-                        ]);
+                        try {
+                            app(ProspectiveSettlementEntry::class)->decide(Auth::user(), (int) $review->id, [
+                                'approve' => $data['decision'] === 'approve',
+                                'evidence' => $data['evidence'],
+                                'evidence_reference' => $data['evidence_reference'] ?? null,
+                                'settlement_method' => $data['settlement_method'] ?? null,
+                            ]);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            // Preserve the mounted review and evidence; never fall back.
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
                         Notification::make()->title('تم تسجيل قرار المراجعة')->success()->send();
                     }),
                 Action::make('correct_duplicate')
