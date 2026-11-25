@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 75,
+    "round": 76,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3942,6 +3942,34 @@
       "runs": [],
       "scope": "Registered original retired-meter invoice, explicit complete corrected quantities; verify original pricing evidence and independently recompute replacement lines using original prices, preserve original readings and payment rows, verify reversal and replacement pair, exact balance delta and audit, reject conflicting replay. Five cases per engine prepared including actual two-tariff correction with targeted receipt, unregistered original, reading and period conflicts, tampered replacement pricing and allocation/audit rollback.",
       "limits": "Independent branch from accepted round 69; original invoice test fixture registers actual invoice explicitly under isolated gate, not unaccepted round 70 writer or historical adoption. No runtime evidence; earlier workflow creation restriction remains. Rounds 70-74 remain unaccepted. Full immutable invoice/decision provenance, active-meter corrections, all-writer fencing, global lock order and closure remain open. No production activation or main merge."
+    },
+    "round76": {
+      "phase": "Financial writer coverage classification and acceptance gates",
+      "status": "SOURCE_CLASSIFICATION_COMPLETED_NOT_COVERAGE",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "document": "docs/coordination/ROUND76_WRITER_COVERAGE_AR.md",
+      "document_commit": "ad18a0d002f7e7f5fff76e8fd5fd88d38bc39741",
+      "evidence": {
+        "inventory_round": 53,
+        "run": 45568716429,
+        "job": 139049798930,
+        "monetary_families": 19,
+        "evidence_families": 12,
+        "acceptance_gates": 7,
+        "pending_rounds": [
+          70,
+          71,
+          72,
+          73,
+          74,
+          75
+        ],
+        "prepared_cases_per_engine": 32,
+        "prepared_executions": 64
+      },
+      "scope": "Reviewed original inventory and actual API/service paths at accepted round69 source. Classified direct financial and evidence-affecting writers, explicit prerequisite gaps and integration/cutover/coverage/concurrency acceptance. No repeated runtime or product changes.",
+      "limits": "Static classification only; no claim of complete entrypoint coverage. Rounds 70–75 remain unexecuted/unaccepted. Prior workflow creation restriction respected. No activation, production data changes, or main merge.",
+      "next": "W10 invoice cancellation, W11 closed cash duplicate correction, W12 cash handover; validate independent pending branches before integrated activation."
     }
   }
 }
