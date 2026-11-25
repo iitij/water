@@ -102,7 +102,8 @@ final class HeldCashReservation
 
     public function protectedForAccount(int $accountId): int
     {
-        return SignedMinor::add($this->outstandingForAccount($accountId), $this->subscriberCreditReserveForAccount($accountId));
+        return SignedMinor::add(SignedMinor::add($this->outstandingForAccount($accountId), $this->subscriberCreditReserveForAccount($accountId)),
+            app(HandoverSurplusReservation::class)->forAccount($accountId));
     }
 
     /** Caller owns the issuance lock and account lock. No scope acquisition. */
