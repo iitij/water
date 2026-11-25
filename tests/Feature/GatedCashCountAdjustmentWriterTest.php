@@ -883,4 +883,37 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_refunds', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_unmatched_cash_refund_posting_cannot_inflate_available_cash(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '200.00');
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '40.00',
+            'QA-CORRUPT-REFUND', 'treasury_cash', '2026-11-25',
+            'Synthetic refund of excess subscriber credit', 'Independent evidence of actual cash disbursement');
+        $posting = app(TreasuryRegisterService::class)->post($actor, (int) $account['id'], 'payment_refund', (int) $refund->id);
+        DB::table('treasury_postings')->where('id', $posting['id'])->update(['amount_minor' => 4000]);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $this->rejects('custody_evidence_source_mismatch', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->rejects('custody_evidence_source_mismatch', fn () => $this->authorizeHeld($actor, $this->actor(), 1));
+        $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 0);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('treasury_postings', 2);
+    }
+
+    public function test_missing_opening_audit_blocks_new_outflows_and_owner_payout(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        AuditEvent::query()->where('event', 'treasury.opened')->where('entity_id', (string) $account['id'])->delete();
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $this->rejects('held_cash_liquidity_opening_audit', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->rejects('held_cash_liquidity_opening_audit', fn () => $this->authorizeHeld($actor, $this->actor(), 1));
+        $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
 }

@@ -43,6 +43,12 @@ jobs:
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/PaymentAllocationHistoryTest.php tests/Feature/FinancialReportsTest.php
       - name: Independent registry regressions on SQLite
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
+
+      - name: Directly affected refund and custody regressions
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_p1_refund_|test_p1_corrections_refund_valid_retired_receipt' tests/Feature/Acc09P1ExactMoneyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -108,3 +114,9 @@ jobs:
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialReportsTest.php
       - name: Independent registry regressions on MySQL
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
+
+      - name: Directly affected refund and custody regressions
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_p1_refund_|test_p1_corrections_refund_valid_retired_receipt' tests/Feature/Acc09P1ExactMoneyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php

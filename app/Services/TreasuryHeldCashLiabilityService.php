@@ -200,11 +200,7 @@ final class TreasuryHeldCashLiabilityService
     {
         $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
         $this->need($account !== null && $account->channel === 'cash', 'held_cash_payout_account');
-        $balance = \App\Support\TreasuryMoney::document($account->opening_minor);
-        foreach (DB::table('treasury_postings')->where('treasury_account_id', $accountId)->orderBy('id')->lockForUpdate()->get() as $posting) {
-            $this->need($posting->effective_on <= $date, 'held_cash_outflow_backdated');
-            $balance = SignedMinor::add($balance, SignedMinor::parse($posting->amount_minor));
-        }
+        $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
         $guard = app(HeldCashReservation::class);
         $held = $guard->outstandingForAccount($accountId);
         $reserved = SignedMinor::add($held, $guard->subscriberCreditReserveForAccount($accountId));

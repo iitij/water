@@ -32,15 +32,7 @@ final class HeldCashReservation
         if ($held === 0) return;
 
         $pending = $this->unpostedCashRefundMinor($postingRefundId, $minor);
-        $balance = TreasuryMoney::document($account->opening_minor);
-        foreach (DB::table('treasury_postings')->where('treasury_account_id', $accountId)
-            ->orderBy('id')->lockForUpdate()->get() as $posting) {
-            // No backdating through a balance reconstructed from later cash.
-            if ($posting->effective_on > $date) {
-                throw new DomainException('held_cash_outflow_backdated');
-            }
-            $balance = SignedMinor::add($balance, SignedMinor::parse($posting->amount_minor));
-        }
+        $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
         if (SignedMinor::subtract(SignedMinor::subtract($balance, $held), $pending) < $minor) {
             throw new DomainException('held_cash_reserved');
         }
@@ -57,11 +49,18 @@ final class HeldCashReservation
         $total = 0;
         $matched = $postingRefundId === null;
         $rows = \App\Models\PaymentRefund::query()->where('method', 'treasury_cash')
-            ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('payment_refund_id')->select('payment_refund_id'))
             ->orderBy('id')->lockForUpdate()->get();
         foreach ($rows as $row) {
             $minor = \App\Support\AccountMoney::stored($row);
             if ($minor <= 0) throw new DomainException('held_cash_unposted_refund_amount');
+            $postings = DB::table('treasury_postings')->where('payment_refund_id', $row->id)->lockForUpdate()->get();
+            if ($postings->isNotEmpty()) {
+                if ($postings->count() !== 1 || (int) $row->id === $postingRefundId) {
+                    throw new DomainException('held_cash_refund_posting_identity');
+                }
+                app(HeldCashRecordedLiquidityEvidence::class)->assertRefund($postings->first(), $minor);
+                continue;
+            }
             if ((int) $row->id === $postingRefundId) {
                 if ($matched || $minor !== $postingMinor) throw new DomainException('held_cash_unposted_refund_identity');
                 $matched = true;
