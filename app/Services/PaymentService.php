@@ -34,106 +34,8 @@ class PaymentService
             }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
-            $invoices = Invoice::where('subscriber_id', $subscriber->id)
-                ->whereNotIn('status', ['draft', 'cancelled'])
-                ->orderBy('bill_date')->orderBy('id')->lockForUpdate()->get();
-            $payments = Payment::where('subscriber_id', $subscriber->id)
-                ->whereNull('voided_at')
-                ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
-                ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
-            // Sum individual raw DECIMAL amounts, not an engine-dependent floating SUM.
-            $refunds = [];
-            foreach (\App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)->get(['payment_id', 'amount']) as $refund) {
-                $minor = AccountMoney::stored($refund);
-                if ($minor <= 0) {
-                    throw new \LogicException('Invalid refund amount.');
-                }
-                $refunds[$refund->payment_id] = SignedMinor::add($refunds[$refund->payment_id] ?? 0, $minor);
-            }
-            $credits = $payments->map(function ($payment) use ($refunds) {
-                $minor = AccountMoney::stored($payment);
-                $refunded = $refunds[$payment->id] ?? 0;
-                if ($minor <= 0 || $refunded > $minor) {
-                    throw new \LogicException('Receipt/refund amounts do not conserve money.');
-                }
-
-                return ['minor' => SignedMinor::subtract($minor, $refunded), 'target' => $payment->invoice_id,
-                    'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id];
-            })->all();
-            foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
-                $minor = AccountMoney::stored($transfer);
-                if ($minor <= 0) {
-                    throw new \LogicException('Invalid incoming transfer amount.');
-                }
-                $credits[] = ['minor' => $minor, 'target' => null,
-                    'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
-            }
-            foreach (\App\Models\TreasuryHeldCashCredit::where('subscriber_id', $subscriber->id)->lockForUpdate()->get() as $credit) {
-                $minor = AccountMoney::stored($credit);
-                if ($minor <= 0) throw new \LogicException('Invalid held cash credit.');
-                $credits[] = ['minor' => $minor, 'target' => null,
-                    'date' => $credit->effective_on.' 00:00:00', 'kind' => 2, 'id' => $credit->id];
-            }
-            usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
-
-            // Use integer minor units inside allocation so cents cannot disappear.
-            $paid = [];
-            $caps = [];
-            foreach ($invoices as $invoice) {
-                $paid[$invoice->id] = 0;
-                $cap = AccountMoney::stored($invoice, 'total_amount');
-                if ($cap < 0) {
-                    throw new \LogicException('Negative invoice allocation cap.');
-                }
-                $caps[$invoice->id] = $cap;
-            }
-
-            $replacements = \App\Models\HistoricalInvoiceCorrection::whereIn('replacement_invoice_id', $invoices->modelKeys())
-                ->pluck('replacement_invoice_id', 'original_invoice_id');
-            $allocationRows = [];
-            $availableMinor = 0;
-            $sourceAmounts = [];
-            foreach ($credits as $credit) {
-                $remaining = $credit['minor'];
-                if ($remaining < 0) {
-                    throw new \LogicException('Negative allocation source.');
-                }
-                $availableMinor = SignedMinor::add($availableMinor, $remaining);
-                $sourceKey = (match ($credit['kind']) {0 => 'payment:', 1 => 'transfer:', 2 => 'held:'}).$credit['id'];
-                if (array_key_exists($sourceKey, $sourceAmounts)) {
-                    throw new \LogicException('Duplicate allocation credit source.');
-                }
-                $sourceAmounts[$sourceKey] = $remaining;
-                $source = [
-                    'payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
-                    'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null,
-                ];
-                if ($credit['kind'] === 2) $source['held_cash_credit_id'] = $credit['id'];
-                $record = function (?int $invoiceId, int $amount) use (&$allocationRows, $source): void {
-                    if ($amount > 0) {
-                        $allocationRows[] = $source + ['invoice_id' => $invoiceId, 'amount_minor' => $amount];
-                    }
-                };
-                $target = $credit['target'];
-                $target = $target === null ? null : ($replacements[$target] ?? $target);
-                if ($target !== null && isset($caps[$target])) {
-                    $applied = min($remaining, SignedMinor::subtract($caps[$target], $paid[$target]));
-                    $paid[$target] = SignedMinor::add($paid[$target], $applied);
-                    $remaining = SignedMinor::subtract($remaining, $applied);
-                    $record((int) $target, $applied);
-                }
-                foreach ($invoices as $invoice) {
-                    if ($remaining === 0) {
-                        break;
-                    }
-                    $id = $invoice->id;
-                    $applied = min($remaining, SignedMinor::subtract($caps[$id], $paid[$id]));
-                    $paid[$id] = SignedMinor::add($paid[$id], $applied);
-                    $remaining = SignedMinor::subtract($remaining, $applied);
-                    $record((int) $id, $applied);
-                }
-                $record(null, $remaining);
-            }
+            ['invoices' => $invoices, 'rows' => $allocationRows, 'paid' => $paid,
+                'available' => $availableMinor, 'source_amounts' => $sourceAmounts] = $this->allocationPlanLocked($subscriber);
             app(PaymentAllocationHistory::class)->append($subscriber, $allocationRows, $paid, $availableMinor, $sourceAmounts);
 
             // Persist all allocations before deriving any cumulative status.
@@ -147,6 +49,120 @@ class PaymentService
                 $invoice->updateStatus();
             }
         });
+    }
+
+    /**
+     * Deterministic read-only replay from persisted documents. The caller must
+     * already hold the subscriber lock; this method must never acquire the
+     * issuance fence after the subscriber or write any allocation rows.
+     */
+    public function allocationPlanLocked(Subscriber $subscriber): array
+    {
+        if (DB::transactionLevel() < 1) {
+            throw new \LogicException('Allocation planning requires a locked account transaction.');
+        }
+        $invoices = Invoice::where('subscriber_id', $subscriber->id)
+            ->whereNotIn('status', ['draft', 'cancelled'])
+            ->orderBy('bill_date')->orderBy('id')->lockForUpdate()->get();
+        $payments = Payment::where('subscriber_id', $subscriber->id)
+            ->whereNull('voided_at')
+            ->whereNotIn('id', DB::table('payment_account_transfers')->select('payment_id'))
+            ->orderBy('payment_date')->orderBy('id')->lockForUpdate()->get();
+        // Sum individual raw DECIMAL amounts, not an engine-dependent floating SUM.
+        $refunds = [];
+        foreach (\App\Models\PaymentRefund::where('subscriber_id', $subscriber->id)->get(['payment_id', 'amount']) as $refund) {
+            $minor = AccountMoney::stored($refund);
+            if ($minor <= 0) {
+                throw new \LogicException('Invalid refund amount.');
+            }
+            $refunds[$refund->payment_id] = SignedMinor::add($refunds[$refund->payment_id] ?? 0, $minor);
+        }
+        $credits = $payments->map(function ($payment) use ($refunds) {
+            $minor = AccountMoney::stored($payment);
+            $refunded = $refunds[$payment->id] ?? 0;
+            if ($minor <= 0 || $refunded > $minor) {
+                throw new \LogicException('Receipt/refund amounts do not conserve money.');
+            }
+
+            return ['minor' => SignedMinor::subtract($minor, $refunded), 'target' => $payment->invoice_id,
+                'date' => $payment->payment_date->format('Y-m-d H:i:s'), 'kind' => 0, 'id' => $payment->id];
+        })->all();
+        foreach (\App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->lockForUpdate()->get() as $transfer) {
+            $minor = AccountMoney::stored($transfer);
+            if ($minor <= 0) {
+                throw new \LogicException('Invalid incoming transfer amount.');
+            }
+            $credits[] = ['minor' => $minor, 'target' => null,
+                'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
+        }
+        foreach (\App\Models\TreasuryHeldCashCredit::where('subscriber_id', $subscriber->id)->lockForUpdate()->get() as $credit) {
+            $minor = AccountMoney::stored($credit);
+            if ($minor <= 0) throw new \LogicException('Invalid held cash credit.');
+            $credits[] = ['minor' => $minor, 'target' => null,
+                'date' => $credit->effective_on.' 00:00:00', 'kind' => 2, 'id' => $credit->id];
+        }
+        usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
+
+        // Use integer minor units inside allocation so cents cannot disappear.
+        $paid = [];
+        $caps = [];
+        foreach ($invoices as $invoice) {
+            $paid[$invoice->id] = 0;
+            $cap = AccountMoney::stored($invoice, 'total_amount');
+            if ($cap < 0) {
+                throw new \LogicException('Negative invoice allocation cap.');
+            }
+            $caps[$invoice->id] = $cap;
+        }
+
+        $replacements = \App\Models\HistoricalInvoiceCorrection::whereIn('replacement_invoice_id', $invoices->modelKeys())
+            ->pluck('replacement_invoice_id', 'original_invoice_id');
+        $allocationRows = [];
+        $availableMinor = 0;
+        $sourceAmounts = [];
+        foreach ($credits as $credit) {
+            $remaining = $credit['minor'];
+            if ($remaining < 0) {
+                throw new \LogicException('Negative allocation source.');
+            }
+            $availableMinor = SignedMinor::add($availableMinor, $remaining);
+            $sourceKey = (match ($credit['kind']) {0 => 'payment:', 1 => 'transfer:', 2 => 'held:'}).$credit['id'];
+            if (array_key_exists($sourceKey, $sourceAmounts)) {
+                throw new \LogicException('Duplicate allocation credit source.');
+            }
+            $sourceAmounts[$sourceKey] = $remaining;
+            $source = [
+                'payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
+                'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null,
+            ];
+            if ($credit['kind'] === 2) $source['held_cash_credit_id'] = $credit['id'];
+            $record = function (?int $invoiceId, int $amount) use (&$allocationRows, $source): void {
+                if ($amount > 0) {
+                    $allocationRows[] = $source + ['invoice_id' => $invoiceId, 'amount_minor' => $amount];
+                }
+            };
+            $target = $credit['target'];
+            $target = $target === null ? null : ($replacements[$target] ?? $target);
+            if ($target !== null && isset($caps[$target])) {
+                $applied = min($remaining, SignedMinor::subtract($caps[$target], $paid[$target]));
+                $paid[$target] = SignedMinor::add($paid[$target], $applied);
+                $remaining = SignedMinor::subtract($remaining, $applied);
+                $record((int) $target, $applied);
+            }
+            foreach ($invoices as $invoice) {
+                if ($remaining === 0) {
+                    break;
+                }
+                $id = $invoice->id;
+                $applied = min($remaining, SignedMinor::subtract($caps[$id], $paid[$id]));
+                $paid[$id] = SignedMinor::add($paid[$id], $applied);
+                $remaining = SignedMinor::subtract($remaining, $applied);
+                $record((int) $id, $applied);
+            }
+            $record(null, $remaining);
+        }
+        return ['invoices' => $invoices, 'rows' => $allocationRows, 'paid' => $paid,
+            'available' => $availableMinor, 'source_amounts' => $sourceAmounts];
     }
 
     public function distributePayment(Payment $payment): void

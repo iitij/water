@@ -1,7 +1,7 @@
-name: Held cash allocation protection acceptance
+name: Held cash allocation replay acceptance
 on:
   push:
-    branches: ['qa/held-cash-allocation-protection-round114', 'fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-allocation-replay-round115', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read

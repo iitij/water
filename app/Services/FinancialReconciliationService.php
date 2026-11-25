@@ -189,6 +189,23 @@ final class FinancialReconciliationService
                     $issue('allocation_totals_mismatch');
                 }
             }
+            // A self-consistent hash, equal source totals and equal invoice
+            // totals do not establish the correct target/FIFO distribution.
+            // Replay independently from persisted documents without writes.
+            if ($revision && $issues === []) {
+                try {
+                    $plan = app(PaymentService::class)->allocationPlanLocked($subscriber);
+                    $allocated = SignedMinor::sum($plan['paid']);
+                    $unallocated = SignedMinor::subtract($plan['available'], $allocated);
+                    $expectedHash = app(AllocationSnapshotIntegrity::class)->fingerprint(
+                        $id, $plan['available'], $allocated, $unallocated, $plan['rows']);
+                    if (! hash_equals($expectedHash, $revision->allocation_hash)) {
+                        $issue('allocation_policy_mismatch', ['revision_id' => (int) $revision->id]);
+                    }
+                } catch (\LogicException|\OverflowException) {
+                    $issue('allocation_policy_unverifiable', ['revision_id' => (int) $revision->id]);
+                }
+            }
             return ['subscriber_id' => $id, 'matches' => $issues === [], 'issue_count' => count($issues),
                 'issues' => $issues, 'ledger_minor' => $actual, 'expected_ledger_minor' => $expectedLedger,
                 'document_balance_minor' => SignedMinor::subtract($available, $billed), 'billed_minor' => $billed,

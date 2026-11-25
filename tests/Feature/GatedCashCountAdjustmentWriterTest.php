@@ -1137,4 +1137,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($latest));
         $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
+    public function test_self_consistent_forged_allocation_is_not_a_valid_held_cash_release_proof(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic policy tariff', 'unit_price' => '0.25', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-FORGED']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 25);
+        app(PaymentService::class)->collectPayment($subscriber, '0.25');
+        $audit = app(\App\Services\FinancialReconciliationService::class);
+        $this->assertTrue($audit->inspect($subscriber)['matches']);
+        $latest = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->first();
+        $integrity = app(\App\Services\AllocationSnapshotIntegrity::class);
+        $original = DB::table('payment_allocations')->where('revision_id', $latest->id)->orderBy('position')->get();
+        $this->assertCount(2, $original);
+        $this->assertSame(25, (int) $original[0]->amount_minor);
+        $this->assertSame(25, (int) $original[1]->amount_minor);
+        $this->assertNotSame($original[0]->invoice_id, $original[1]->invoice_id);
+        // Swap destinations while preserving each source amount, invoice paid
+        // total, outstanding credit, ledger balance and a valid new fingerprint.
+        $rows = $original->map(function ($row, $index) use ($original) {
+            $source = ['payment_id' => $row->payment_id === null ? null : (int) $row->payment_id,
+                'account_transfer_id' => $row->account_transfer_id === null ? null : (int) $row->account_transfer_id];
+            if ($row->held_cash_credit_id !== null) $source['held_cash_credit_id'] = (int) $row->held_cash_credit_id;
+            $other = $original[1 - $index]->invoice_id;
+            return $source + ['invoice_id' => $other === null ? null : (int) $other, 'amount_minor' => (int) $row->amount_minor];
+        })->all();
+        $forged = DB::table('payment_allocation_revisions')->insertGetId([
+            'subscriber_id' => $subscriber->id, 'revision' => (int) $latest->revision + 1,
+            'allocation_hash' => $integrity->fingerprint((int) $subscriber->id, 50, 25, 25, $rows),
+            'available_minor' => 50, 'allocated_minor' => 25, 'unallocated_minor' => 25, 'created_at' => now(),
+        ]);
+        foreach ($rows as $position => $row) {
+            DB::table('payment_allocations')->insert($row + ['held_cash_credit_id' => null,
+                'revision_id' => $forged, 'position' => $position + 1]);
+        }
+        $snapshot = DB::table('payment_allocation_revisions')->where('id', $forged)->sole();
+        $this->assertTrue($integrity->valid($snapshot));
+        $this->assertTrue($integrity->valid($latest));
+        $this->assertSame('0.25', $invoice->fresh()->amount_paid);
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $result = $audit->inspect($subscriber);
+        $this->assertFalse($result['matches']);
+        $this->assertSame(['allocation_policy_mismatch'], array_column($result['issues'], 'code'));
+        $this->assertFalse(app(\App\Services\PaymentAllocationReadService::class)->reconcile($subscriber)['matches']);
+        $this->rejects('held_credit_allocation_reconciliation', fn () =>
+            $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id'])));
+        $this->assertSame($forged, DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->value('id'));
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
 }
