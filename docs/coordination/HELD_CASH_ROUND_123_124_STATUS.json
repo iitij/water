@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Round139: gate and register actual bank fees; verify exact statement debit and immutable evidence, no subscriber posting.",
+  "next": "Verify exact CI logs. Continue inventory and source coverage for remaining complex custody/late paths, then period closure proof.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -523,5 +523,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round139": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "a302830e728d0650e1785d47212f49b81a17063c",
+    "branch": "qa/gated-bank-fee-round139",
+    "source": "2c0a0ec4c6659a6b9c075aa2e3f4b0c2bd139236",
+    "run": 45699305106,
+    "scope": "Inactive bank fee adapter verifies exact negative bank statement line at effective date, registered account opening, independent reviewer and required audit; records treasury leg and match atomically, refuses unregistered preexisting fee. Two new cases on each engine.",
+    "limits": "Runtime pending. No physical spending authorization, full source coverage, production activation, historical remediation, main merge or actual reserve release.",
+    "next": "Verify exact CI logs. Continue inventory and source coverage for remaining complex custody/late paths, then period closure proof."
   }
 }
