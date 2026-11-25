@@ -3337,7 +3337,14 @@
       "workflow": "59982ae95fda3a914a6a977d02394e657dca275d",
       "branch": "qa/central-g1b-ledger-correction-evidence",
       "pr": 133,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45610694945,
+          "name": "Actual correction ledger evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "scope": "Three new actual payment service cases on each isolated engine: refund exact cents, two transfer legs conserve money and registry rolls back atomically, void preserves stable original evidence. Registry remains not a complete source coverage verifier.",
       "limits": "No runtime acceptance yet; test-only source, no production callers, no historical invoice correction or retirement proof in this slice, no close activation or main merge."
     }
