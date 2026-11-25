@@ -210,7 +210,14 @@ final class TreasuryCashCountService
             // Existing register is provisional: refuse known source gaps rather than
             // convert missing cash documents into an apparent loss or surplus.
             $register = app(TreasuryRegisterService::class)->inspect($actor, (int) $account->id);
-            abort_if($register['issues'] || $register['channel_unposted_handover_count'] || $register['channel_unposted_refund_count'] || $register['channel_unposted_late_cash_count'],
+            // A proven liquidity deficit is an accounting condition, not missing
+            // evidence. Recording a further independently observed loss must not
+            // hide that loss. All source defects and pending documents still block
+            // adjustment; the ordinary spending reserve remains unchanged.
+            $blockingIssues = array_filter($register['issues'], static fn (array $issue): bool =>
+                ! ($classification === 'confirmed_cash_loss' && $variance < 0
+                    && ($issue['code'] ?? null) === 'held_cash_possible_liquidity_shortfall'));
+            abort_if($blockingIssues || $register['channel_unposted_handover_count'] || $register['channel_unposted_refund_count'] || $register['channel_unposted_late_cash_count'],
                 409, 'توجد حركات غير مرحلة أو خلل في دفتر الخزينة؛ يلزم معالجتها أولاً.');
             abort_if(DB::table('treasury_cash_adjustments')->where('reference', $reference)->exists()
                 || DB::table('treasury_cash_counts')->where('reference', $reference)->exists()
