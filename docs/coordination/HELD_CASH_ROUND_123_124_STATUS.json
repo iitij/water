@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted CI, correct confirmed failures only; then inspect direct bank confirmation and custody/handover writers; inventory remaining actual web/API entrypoints.",
+  "next": "Verify exact new CI, correct confirmed failures only; inspect and wire gated custody/treasury handover, bank fees and other disbursement paths. Do not repeat accepted tests.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-settlement-api",
-      "commit": "603ebe91a8afbb7eb69a5bd692d3f5c0a546c764",
-      "run": 45717495373,
-      "sqlite": "4 tests, 169 assertions",
-      "mysql": "4 tests, 169 assertions",
-      "scope": "Shared ProspectiveSettlementEntry for four actual API approval routes: ordinary noncash, late bank, separate cash, counted cash. Persisted claim UUID and bank booked date or review/explicit receipt date; gate revalidates. Preserve old response shape, authorization and default-off compatibility; domain conflicts HTTP 409 without fallback, including registered sources when disabled. Four new HTTP integration cases target closed period, actor independence, exact replay, no duplicate cash, protected reserve."
+      "branch": "release/prospective-settlement-filament",
+      "commit": "efc2fbd573f38c295adde5916116ea6d4ce92fca",
+      "run": 45717743997,
+      "sqlite": "1 test, 38 assertions",
+      "mysql": "1 test, 38 assertions",
+      "scope": "CashSessionsTable late_receipt_review table action uses shared ProspectiveSettlementEntry; keep selected review scoped to session, permission checks, convert gate conflicts to validation preserving mounted modal; validate nullable evidence reference before typed counted cash call. One targeted Livewire integration case tests missing reference, closed period unchanged state, preserved identity, successful counted allocation and API replay with unchanged till/treasury."
     }
   },
   "round146": {
@@ -1280,12 +1280,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_settlement_filament": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "603ebe91a8afbb7eb69a5bd692d3f5c0a546c764",
     "branch": "release/prospective-settlement-filament",
     "source": "efc2fbd573f38c295adde5916116ea6d4ce92fca",
     "scope": "CashSessionsTable late_receipt_review table action uses shared ProspectiveSettlementEntry; keep selected review scoped to session, permission checks, convert gate conflicts to validation preserving mounted modal; validate nullable evidence reference before typed counted cash call. One targeted Livewire integration case tests missing reference, closed period unchanged state, preserved identity, successful counted allocation and API replay with unchanged till/treasury.",
-    "limits": "CI pending. Recursive tree inventory confirms CashSessionsTable as named Filament cash resource; not exhaustive search of other paths. Existing handover action, direct bank confirmation, distinct-date late cash and other writers remain open. No real data, production or main changes.",
-    "next": "Verify exact targeted CI, correct confirmed failures only; then inspect direct bank confirmation and custody/handover writers; inventory remaining actual web/API entrypoints."
+    "limits": "Exact source, raw logs and lockfile hash verified. One targeted Filament modal case; not exhaustive web coverage, no production activation.",
+    "next": "Protect direct bank confirmation and custody/handover paths.",
+    "run": 45717743997,
+    "jobs": [
+      {
+        "id": 139568061860,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 38,
+        "exit": 0
+      },
+      {
+        "id": 139568062362,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 38,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_bank_confirmation_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "efc2fbd573f38c295adde5916116ea6d4ce92fca",
+    "branch": "release/prospective-bank-confirmation-fence",
+    "source": "6de9983313e84350b3cc7436f7ecedd61e5c15dd",
+    "scope": "BankReconciliationService::confirmCollection enforces private GatedCollectionWriter claim or late_bank source scope under issuance lock; passes scope from PaymentService both original clearance and replay. Registered UUIDs protected even flag off. Actual direct confirmation API maps domain refusal to HTTP 409. Two new targeted cases check direct service, inactive writer, direct HTTP conflict, legitimate replay in both flag states, exact dual legs and unchanged balances/reserve.",
+    "limits": "CI not verified. Default-off legacy compatibility preserved; no adoption or correction of historical records. Distinct-date settlements, bank fee/match, cash custody and handover, disbursements and exhaustive entrypoints remain open. No real data, production activation or main merge.",
+    "next": "Verify exact new CI, correct confirmed failures only; inspect and wire gated custody/treasury handover, bank fees and other disbursement paths. Do not repeat accepted tests."
   }
 }
