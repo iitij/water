@@ -2137,15 +2137,21 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_noncash_final_audit_after_both_ledgers'); END"
             : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_noncash_final_audit_after_both_ledgers'; END IF; END";
         DB::unprepared("CREATE TRIGGER qa_round132_final_audit BEFORE INSERT ON audit_events {$body}");
+        // AuditLogger intentionally logs the SQL error and throws a generic
+        // required-audit exception without retaining the original exception.
+        \Illuminate\Support\Facades\Log::spy();
         try {
             try {
                 $clear();
                 $this->fail('Noncash clearance unexpectedly committed despite required final audit failure.');
-            } catch (\Throwable $error) {
-                $chain = '';
-                for ($current = $error; $current !== null; $current = $current->getPrevious()) $chain .= $current->getMessage().' ';
-                $this->assertStringContainsString('qa_noncash_final_audit_after_both_ledgers', $chain);
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
             }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with(
+                'audit.record_failed', \Mockery::on(static fn ($context) =>
+                    is_array($context) && ($context['event'] ?? null) === 'noncash_claim.cleared'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_noncash_final_audit_after_both_ledgers'))
+            )->once();
             foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
             $this->assertSame($beforeSequence, $sequence());
             $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
