@@ -65,6 +65,12 @@ class PaymentService
                 $credits[] = ['minor' => $minor, 'target' => null,
                     'date' => $transfer->created_at->format('Y-m-d H:i:s'), 'kind' => 1, 'id' => $transfer->id];
             }
+            foreach (\App\Models\TreasuryHeldCashCredit::where('subscriber_id', $subscriber->id)->lockForUpdate()->get() as $credit) {
+                $minor = AccountMoney::stored($credit);
+                if ($minor <= 0) throw new \LogicException('Invalid held cash credit.');
+                $credits[] = ['minor' => $minor, 'target' => null,
+                    'date' => $credit->effective_on.' 00:00:00', 'kind' => 2, 'id' => $credit->id];
+            }
             usort($credits, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
 
             // Use integer minor units inside allocation so cents cannot disappear.
@@ -90,7 +96,7 @@ class PaymentService
                     throw new \LogicException('Negative allocation source.');
                 }
                 $availableMinor = SignedMinor::add($availableMinor, $remaining);
-                $sourceKey = ($credit['kind'] === 0 ? 'payment:' : 'transfer:').$credit['id'];
+                $sourceKey = (match ($credit['kind']) {0 => 'payment:', 1 => 'transfer:', 2 => 'held:'}).$credit['id'];
                 if (array_key_exists($sourceKey, $sourceAmounts)) {
                     throw new \LogicException('Duplicate allocation credit source.');
                 }
@@ -99,6 +105,7 @@ class PaymentService
                     'payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
                     'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null,
                 ];
+                if ($credit['kind'] === 2) $source['held_cash_credit_id'] = $credit['id'];
                 $record = function (?int $invoiceId, int $amount) use (&$allocationRows, $source): void {
                     if ($amount > 0) {
                         $allocationRows[] = $source + ['invoice_id' => $invoiceId, 'amount_minor' => $amount];
