@@ -145,7 +145,7 @@ final class FinancialPostingRegistry
             foreach (DB::table('financial_posting_events')->where('operation_uuid', $uuid)->lockForUpdate()->get() as $leg) {
                 $this->need($leg->scope_key === $scope && $leg->operation_uuid === $uuid, 'posting_effect_corrupt');
                 $minor = (string) $leg->amount_minor;
-                $this->need(preg_match('/\A-?[1-9][0-9]*\z/', $minor) === 1
+                $this->need(preg_match('/\A(?:0|-?[1-9][0-9]*)\z/', $minor) === 1
                     && (string) (int) $minor === $minor && (int) $minor !== PHP_INT_MIN, 'posting_effect_corrupt');
                 $rawLegs[] = ['source_type' => $leg->source_type, 'source_id' => $leg->source_id,
                     'leg' => $leg->leg, 'amount_minor' => (int) $minor, 'currency' => $leg->currency,
@@ -193,7 +193,10 @@ final class FinancialPostingRegistry
                     && preg_match('/\A[a-z0-9_-]+\z/', $leg[$field]) === 1, 'posting_source_identity');
             }
             $amount = $leg['amount_minor'] ?? null;
-            $this->need(is_int($amount) && $amount !== 0 && $amount !== PHP_INT_MIN, 'posting_minor');
+            // Zero invoice ledger rows still require provenance. Only the
+            // reviewed ledger-source adapter may supply this evidence leg.
+            $zeroEvidence = $leg['source_type'] === 'ledger_transaction' && $leg['leg'] === 'subscriber';
+            $this->need(is_int($amount) && ($amount !== 0 || $zeroEvidence) && $amount !== PHP_INT_MIN, 'posting_minor');
             $this->need(($leg['currency'] ?? null) === 'YER' && is_string($leg['source_hash'] ?? null)
                 && preg_match('/\A[0-9a-f]{64}\z/', $leg['source_hash']) === 1, 'posting_provenance');
             $key = $this->identity($leg);
