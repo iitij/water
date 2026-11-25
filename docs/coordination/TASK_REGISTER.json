@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 65,
+    "round": 66,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3683,7 +3683,7 @@
     },
     "round65": {
       "phase": "Noncash claim and late collection source proof",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "802fd4449dafe425f714e532e28e0f1cfc23c749",
       "source": "f6271daad0b4fde40ae7ea9236792e9a895f9f58",
       "workflow": "ecf821a02402cd5c40106b91a965ed2f221e8305",
@@ -3692,13 +3692,51 @@
       "runs": [
         {
           "id": 45615481772,
-          "name": "Collection claim source proof",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "scope": "Bind linked claim and late bank review decision identity and original dates to treasury source hash. Three new cases and two directly affected regressions per engine: claim two-leg atomic rollback, date tamper rejection, late noncash two-leg clearance, already counted cash subscriber-only effect and allocation.",
+      "limits": "Independent already-counted allocation proof and complete source coverage remain open. Scope-first writer fencing and global lock order must be proved before activation. No main merge or production changes.",
+      "results": {
+        "sqlite": {
+          "job": 139209640864,
+          "tests": 5,
+          "assertions": 90,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139209641228,
+          "tests": 5,
+          "assertions": 90,
+          "exit": 0
+        },
+        "total": {
+          "tests": 10,
+          "assertions": 180,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round66": {
+      "phase": "First inactive gate-first treasury transfer writer",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "f6271daad0b4fde40ae7ea9236792e9a895f9f58",
+      "source": "20261506c99e7cc8cbc44c7a9174aab575aee86b",
+      "workflow": "78d3a8a04967d7418a817606fa3419ab9fbb95e8",
+      "branch": "fix/central-g1b-gated-transfer-writer",
+      "pr": 143,
+      "runs": [
+        {
+          "id": 45615786156,
           "status": "queued",
           "conclusion": null
         }
       ],
-      "scope": "Bind linked claim and late bank review decision identity and original dates to treasury source hash. Three new cases and two directly affected regressions per engine: claim two-leg atomic rollback, date tamper rejection, late noncash two-leg clearance, already counted cash subscriber-only effect and allocation.",
-      "limits": "Independent already-counted allocation proof and complete source coverage remain open. Scope-first writer fencing and global lock order must be proved before activation. No main merge or production changes."
+      "scope": "First isolated gate-first writer for actual treasury dispatch and receive; exact source proof and registry atomic with business operation; reject unregistered legacy source, conflict, frozen/closed/nested gate; test DB-trigger failure rollback. Four cases per engine.",
+      "limits": "No route/command activation, no global lock order or concurrency certification, no production coverage or complete closure. No main merge or production changes."
     }
   }
 }
