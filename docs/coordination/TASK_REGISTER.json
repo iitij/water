@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 76,
+    "round": 77,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3970,6 +3970,17 @@
       "scope": "Reviewed original inventory and actual API/service paths at accepted round69 source. Classified direct financial and evidence-affecting writers, explicit prerequisite gaps and integration/cutover/coverage/concurrency acceptance. No repeated runtime or product changes.",
       "limits": "Static classification only; no claim of complete entrypoint coverage. Rounds 70–75 remain unexecuted/unaccepted. Prior workflow creation restriction respected. No activation, production data changes, or main merge.",
       "next": "W10 invoice cancellation, W11 closed cash duplicate correction, W12 cash handover; validate independent pending branches before integrated activation."
+    },
+    "round77": {
+      "phase": "W10 independent inactive gated current-meter invoice cancellation",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "6fbf775e93e6744bd3e302b12f630aadca4c087e",
+      "branch": "fix/central-g1b-gated-invoice-cancellation",
+      "runs": [],
+      "scope": "Registered current-meter observation invoice only; original monetary leg and historical pricing evidence, preserve invoice/pricing/items/receipt rows, reverse exact amount, release original readings and verify complete pending observation suffix to prevent irreparable billing gaps. Exact replay with audit pricing fingerprint and reading identity, including after subsequent rebilling. Six cases per engine prepared: cancellation/rebill, zero identity, older invoice chain-gap rollback, legacy/closed/frozen rejection, replay/tamper conflicts, registry failure restoring credit and allocation history.",
+      "limits": "Independent branch from accepted round 69; synthetic prerequisite invoice explicitly registered via actual InvoiceService, not the unaccepted round70 writer. No runtime execution; previous workflow creation restriction respected. Current-meter observation scope only; retired and legacy-calendar corrections separate, multi-invoice correction policy open. Pricing fingerprint in audit not independently immutable; all-writer coverage and global lock protocol unproved. No activation, main merge or production data changes.",
+      "next": "W11 closed-cash duplicate correction, then W12 cash handover; validate pending independent branches."
     }
   }
 }
