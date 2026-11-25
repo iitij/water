@@ -29,3 +29,8 @@
 | G12 | CI/استضافة | exact SHA workflow logs/jobs and artifacts; authorized read-only cron/cache/privilege evidence; specialized security checks separate authorized procedure | كل تشغيل يطابق SHA؛ explicit failures/skips؛ لا تجاوز قيود، لا ادعاء أمان أو نشر دون إثبات |
 ## ترتيب التنفيذ
 G00 ثم G01 وG10، G03/G07/G05/G06 focused، G02 كامل محركاً تلو الآخر، concurrency منفصل، G11 بتزامن=1، G12. G04/G08/G09 بوابات مؤجلة حتى قرارات التنفيذ. لا جمع نتائج SHA مختلفة كأنها اختبار مرشح واحد. لا اختبار شامل جديد قبل نشر مرشح المشرف، وأي إصلاح ينتج SHA جديد مع إعادة الاختبارات المتأثرة فقط. حالة RELEASE HOLD.
+
+## تحديث مراجعة الجولة 4C
+- 240b79f1f5a23fb09941e66f94fb0f5ec4471df8 (C): مقارنة cae7f2e..240b79f تحتوي الاختبار المحجوز Acc12Acc13ReadingIntegrityTest.php ووثيقته فقط. ستة اختبارات جديدة غير منفذة؛ C12-R4C-01 فجوة مصدر متوقعة (السابق المباشر ذو يوم مكرر يختار الصف الأعلى ID)، ليست فشلاً منفذاً. تطلب قبولاً مستقلاً قبل أي تصحيح. مصدر [PR69](https://github.com/iitij/water/pull/69#issuecomment-7148586571).
+- B 833cae2 بقي كما هو بعد تسليم 4C [PR71](https://github.com/iitij/water/pull/71#issuecomment-7148580119). فحص المصدر يثبت تمرير النص من API/widget، checked aggregates وexact line، لكن العقد المالي والنقدي الكبير وFlutter والعمليات غير المركزية لا تزال مفتوحة. لا نتائج Laravel جديدة.
+- D: php -l على blob سكربت 53864da عبر git show من نسخة القراءة المحلية: No syntax errors detected، لا تشغيل DB أو إعادة تنفيذ الأمر المقيد. PR72 اختبار فقط؛ لم يتم التحقق الفعلي من سيناريوهات MySQL الثلاثة. مراجعة workflow وPASS gates قراءة مصدر فقط.
