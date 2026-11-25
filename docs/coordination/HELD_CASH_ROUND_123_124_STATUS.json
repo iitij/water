@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Integrate prospective void request and decision actions in Filament and Flutter client contract; gate actual receipt writers before activation.",
+  "next": "Verify MySQL, then integrate mobile request identity and operation UUID contract; verify permission and closed-period checks for all UI paths.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -837,5 +837,24 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_filament": {
+    "status": "SQLITE_PASS_MYSQL_PENDING",
+    "base": "57dcd61ee15565a6b45d216931ce2983cc210f2b",
+    "branch": "release/prospective-void-filament",
+    "source": "0d242c7eaa0a8821039f3f1cc8bba0809ae4a69c",
+    "run": 45707269801,
+    "scope": "Standard Filament payment table request/approve/reject actions share default-off staging/testing candidate API switch; request ID and operation UUID captured at modal mount, no recomputation on submit, no legacy fallback; actual Livewire stale modal test.",
+    "jobs": [
+      {
+        "id": 139532322784,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 23,
+        "exit": 0
+      }
+    ],
+    "limits": "MySQL pending; no production activation or complete writer cutover; only stale approval modal case executed, request/reject UI direct coverage and Flutter integration remain; no history modification.",
+    "next": "Verify MySQL, then integrate mobile request identity and operation UUID contract; verify permission and closed-period checks for all UI paths."
   }
 }
