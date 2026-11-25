@@ -99,7 +99,7 @@ final class FinancialSourceCoverageDiagnostic
             $late = DB::table('late_receipt_reviews')->where('payment_id', $doc->id)->where('status', 'approved')->lockForUpdate()->get();
             if ($late->count() > 1) $issue('payment_late_decision_duplicate', 'payments', (string) $doc->id);
             foreach ($late as $review) {
-                if ($review->settlement_method !== 'separate_cash_handover') continue;
+                if ($review->settlement_method !== 'separate_handover') continue;
                 $group = 'collection:'.$doc->id;
                 $cash = DB::table('treasury_late_cash_receipts')->where('payment_id', $doc->id)->lockForUpdate()->get();
                 if ($cash->count() !== 1) $issue('payment_late_cash_missing_or_duplicate', 'payments', (string) $doc->id);
