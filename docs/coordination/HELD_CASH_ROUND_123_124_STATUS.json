@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify final MySQL writer regression, then integrate Filament receipt creation and inventory other collection actions; keep explicit till and stable UUID.",
+  "next": "Integrate Filament CreatePayment and inventory other collection actions; keep explicit till and stable UUID.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,13 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-void-intent",
-      "commit": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
-      "run": 45709324168,
-      "sqlite": "3 tests, 60 assertions",
-      "mysql": "3 tests, 60 assertions",
-      "flutter": "3 tests, locked SDK 3.44.0",
-      "scope": "Explicit durable void intent audit bound to actor/receipt/reason; same pending intent can replay exact active request, resolved pending intent cannot create a new request, immediate replay uses same registered UUID. Candidate API rejects bare legacy queued request and flag-off bound request. Flutter opt-in WATER_PROSPECTIVE_VOID online-only direct request with verified acknowledgement and no new offline queue on transport failure; manual refresh before new attempt. One new backend case, two directly affected HTTP regressions, three new Flutter cases with pinned SDK."
+      "branch": "release/prospective-cash-receipt-api-regression",
+      "commit": "dbd704ee6f5ac866357fd4f0284237b3b20e6fb2",
+      "run": 45710276439,
+      "sqlite": "6 tests, 84 assertions across two product-identical runs",
+      "mysql": "6 tests, 84 assertions across two product-identical runs",
+      "scope": "Four actual API cash entrypoints share ProspectiveCashReceiptEntry and GatedCashReceiptWriter behind default-off staging/testing switch. Exact amount, notes, effective date, till, UUID and balance checks; same-day explicit deferred receipt supported, older new receipt rejected to review, registered earlier date replay allowed in open period with identical source. Two new targeted HTTP cases on both engines."
     }
   },
   "round146": {
@@ -1006,13 +1005,13 @@
     }
   },
   "release_cash_receipt_api": {
-    "status": "API_BOTH_ENGINES_PASS_WRITER_REGRESSION_SQLITE_PASS_MYSQL_PENDING",
+    "status": "TARGETED_API_AND_WRITER_BOTH_ENGINES_PASS",
     "base": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
     "branch": "release/prospective-cash-receipt-api",
     "source": "03175b307b0e7703ff0a7b6ebfd1040ee85867b2",
     "run": 45710132370,
     "scope": "Four actual API cash entrypoints share ProspectiveCashReceiptEntry and GatedCashReceiptWriter behind default-off staging/testing switch. Exact amount, notes, effective date, till, UUID and balance checks; same-day explicit deferred receipt supported, older new receipt rejected to review, registered earlier date replay allowed in open period with identical source. Two new targeted HTTP cases on both engines.",
-    "limits": "All four API routes exercised on both engines; dedicated writer MySQL regression pending. Staging/testing only; no activation. Actual Filament CreatePayment still uses legacy service and needs stable UUID plus explicit till selection; other Filament payment actions, full receipt/claim custody cutover, queue attention and all-writer fence remain open. No historical remediation.",
+    "limits": "All four HTTP entrypoints and dedicated writer regressions accepted. Staging/testing only; no activation. Filament receipt creation, full receipt/claim custody cutover, queue attention and all-writer fence remain open. No historical remediation.",
     "next": "Verify exact HTTP test results, correct confirmed failures only, and run dedicated affected GatedCashReceiptWriterTest cases. Then integrate Filament receipt creation with stable identity.",
     "jobs": [
       {
@@ -1040,6 +1039,13 @@
         {
           "id": 139542585571,
           "engine": "sqlite",
+          "tests": 4,
+          "assertions": 49,
+          "exit": 0
+        },
+        {
+          "id": 139542585161,
+          "engine": "mysql",
           "tests": 4,
           "assertions": 49,
           "exit": 0
