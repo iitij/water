@@ -62,6 +62,7 @@ final class FinancialPostingRegistry
 
             $existing = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
             if ($existing) {
+                $this->need((string) $existing->payload_format === '1', 'posting_group_requires_group_registry');
                 $this->need($existing->operation_uuid === $uuid && $existing->scope_key === $context['scope']
                     && (string) $existing->period_id === (string) $context['period_id']
                     && $existing->effective_on === $context['effective_on']
@@ -112,6 +113,16 @@ final class FinancialPostingRegistry
         $period = DB::table('financial_periods')->where('id', $periodId)->lockForUpdate()->first();
         $this->need($period && $period->scope_key === $scope
             && in_array($period->state, ['OPEN', 'FROZEN', 'CLOSED'], true), 'posting_period_changed');
+
+        // The existing format 1 digest cannot certify a format 2 group:
+        // the non-anchor period would otherwise silently omit its effect.
+        // Hold scope-wide verification until the group-aware digest exists.
+        $this->need(! DB::table('financial_posting_operations')->where('scope_key', $scope)
+            ->where('payload_format', '<>', 1)->lockForUpdate()->first()
+            && ! DB::table('financial_posting_group_parts as part')
+                ->join('financial_posting_operations as op', 'op.operation_uuid', '=', 'part.operation_uuid')
+                ->where('op.scope_key', $scope)->lockForUpdate()->first(),
+            'posting_group_verifier_required');
 
         $epoch = $this->exactCounter($gate->fence_epoch);
         $version = $this->exactCounter($period->version);
