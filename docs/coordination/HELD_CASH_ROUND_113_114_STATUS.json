@@ -1,0 +1,50 @@
+{
+  "round113": {
+    "source": "f97bf6e511ecd6df12de17bcb41187fc5fe24ed7",
+    "branch": "qa/held-cash-meter-fence-round113",
+    "run": 45657669321,
+    "jobs": [
+      {
+        "id": 139358629096,
+        "engine": "mysql",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 139358629630,
+        "engine": "sqlite",
+        "status": "completed",
+        "conclusion": "success",
+        "tests": 181,
+        "assertions": 1740
+      }
+    ],
+    "status": "PARTIAL_RUNTIME"
+  },
+  "round114": {
+    "base": "f97bf6e511ecd6df12de17bcb41187fc5fe24ed7",
+    "source": "ca32d90759e09b72f4be5779fe62643b8d0576e1",
+    "branch": "qa/held-cash-allocation-protection-round114",
+    "status": "STAGED_RUNTIME_NOT_ACCEPTED",
+    "runs": [
+      {
+        "id": 45659109470,
+        "name": "Held cash allocation protection acceptance",
+        "status": "in_progress",
+        "conclusion": null,
+        "sha": "ca32d90759e09b72f4be5779fe62643b8d0576e1"
+      },
+      {
+        "id": 45659109418,
+        "name": "Retired feature removal gate",
+        "status": "completed",
+        "conclusion": "success",
+        "sha": "ca32d90759e09b72f4be5779fe62643b8d0576e1"
+      }
+    ],
+    "scope": "AllocationHistoryProtection adds SQLite BEFORE INSERT conflict guards for revision id and subscriber_id/revision, row id and revision_id/position. New irreversible migration requires append-only guards on SQLite and MySQL, fails rather than silently omitting protection. Test four raw replacement attempts, including empty historical revision, preserve snapshots and balances. Existing MySQL update/delete guard test enabled.",
+    "limits": "Round114 descends from round113 candidate; no promotion before both accepted. Existing trigger names are checked, not full definitions. No protection against all fabricated new inserts; source/coverage proof and actual application-role SQL privileges still required. Production MySQL trigger permissions unverified; no deployment or real data access. Full reserve remains."
+  },
+  "coordination": "Independent receipt; main register historical update unresolved.",
+  "next": "Verify exact runs; correct proven failures, then verify origin and integrity of allocation inserts and runtime guard checks."
+}
