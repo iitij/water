@@ -856,13 +856,37 @@
         "decision": "DELIVERIES_RECEIVED_INDEPENDENT_REVIEW_AND_RUNTIME_EVIDENCE_PENDING_HOLD_V2",
         "frozen_refs_verified": true,
         "round8_reports": {
-          "status": "ORIGINALS_NOT_RECOVERED",
+          "status": "OWNER_EXIT_LEDGER_AND_EXECUTION_SCRIPT_RECEIVED_COUNTS_AND_RAW_LOGS_PENDING",
           "files": [
             "WATER_ROUND8_P1_ACCEPTANCE.md",
             "WATER_ROUND8_METER_POLICY_ACCEPTANCE.md"
           ],
           "searched": "GitHub handoffs and exact PR workflow runs, Library by filename, prior conversation context",
-          "prior": "Retain reported coverage and historical failure; no duplicate baseline runs."
+          "prior": "Retain reported coverage and historical failure; no duplicate baseline runs.",
+          "ledger": {
+            "source": "Owner pasted Codex Cloud exit ledger and execution script",
+            "P1": {
+              "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+              "setup": 0,
+              "sqlite": 0,
+              "mysql": 0,
+              "reversal_sqlite": 0,
+              "reversal_mysql": 0,
+              "mysql_races": 0
+            },
+            "meter": {
+              "sha": "3572bf4f9968821651c7621cbce725e7da542788",
+              "setup": 0,
+              "sqlite": 0,
+              "mysql": 0,
+              "legacy_removal_sqlite": 0,
+              "legacy_rollback_sqlite": 0,
+              "legacy_removal_mysql": 0,
+              "legacy_rollback_mysql": 0,
+              "mysql_races": 0
+            },
+            "qualification": "14 zero exit records, including two setup stages. Script gates setup on exact HEAD, clean tree, absence of .env files, platform and lockfile checks. No attached raw summary/JUnit, actual assertions/skips or lock digest values. Initial setup and command exits corroborate reported Round 8 success; exact runtime acceptance not closed. Evidence predates Round 9 C follow-up; no duplicate runs."
+          }
         },
         "B": {
           "head": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
@@ -910,7 +934,7 @@
             "ACC14 activation",
             "durable closing and return posting"
           ],
-          "open": "Original Round 8 evidence, A/D acceptance on exact delivery heads, targeted C runtime and G07 stored billing ambiguity. Exact candidate QA after authorized composition."
+          "open": "Reconcile Round 8 counts/assertions/skips with existing logs or JUnit, verify A/D acceptance, obtain C Round 9 targeted runtime, track G07 ambiguity. Exact candidate QA after authorized composition."
         }
       }
     }
