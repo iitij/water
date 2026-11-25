@@ -1775,7 +1775,25 @@
           "rerun": "Failed-jobs-only rerun request accepted by GitHub; latest job list initially empty. Execution success not yet proven."
         },
         "next": "Verify hosted runner actually starts and probe result. Then prepare narrowly scoped ordinary QA-only workflow for pending round11 exact heads, respecting synthetic isolation, locked dependencies and excluded diagnostics. Avoid deployment and repeated accepted suites.",
-        "limits": "No billing settings changed or financial commitments. Public exposure is owner decision; full secrets/privacy/history audit not certified. No fresh application test result yet."
+        "limits": "No billing settings changed or financial commitments. Public exposure is owner decision; full secrets/privacy/history audit not certified. No fresh application test result yet.",
+        "i01_hosted": {
+          "status": "QA_WORKFLOW_AND_DRAFT_PR_CREATED_RESULTS_PENDING",
+          "branch": "qa/central-i01-hosted-pdo",
+          "workflow_head": "f13ec16fc51be159335bdfabc0f012f014ac7457",
+          "workflow": ".github/workflows/round11-i01-hosted-pdo.yml",
+          "pr": 85,
+          "source_sha": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
+          "scope": "Only 64+63 standalone PDO expected checks on exact frozen accepted-source commit. Workflow-only branch; read-only contents, standard ubuntu-24.04, PHP8.4 actual drivers, exact three lock digests, MySQL8.0.46 image pinned prior approved digest, disposable synthetic database socket-only network none, generated masked credentials. No app data/deployment/older suites. Hosted environment differs from Codex; actual environment evidence required. setup-php v2 tag is not immutable and PHP patch version will be recorded.",
+          "observed_runs": [
+            {
+              "id": 45553649896,
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ],
+          "old_probe_latest": [],
+          "limitations": "Workflow created and PR opened, no confirmed runner allocation or test output yet. No repeat of failed job probe; no direct billing changes, no main or frozen source changes. Full public exposure audit pending."
+        }
       }
     }
   }
