@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_12_I02_SCOPED_RUNTIME_ACCEPTED_I03_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_13_I03_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1923,9 +1923,20 @@
     },
     "round13": {
       "phase": "P2-I03 exact treasury register, transfers and cash counts",
-      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
+      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
       "base": "ef299515f9d599aec4039222c422418518ecb71d",
-      "scope": "Replace unchecked native casts and addition with accepted SignedMinor/MoneyBoundary at authoritative raw amounts; exact D14 document amounts and portable signed accumulated balances, gross inflow/outflow, custody-in-transit, physical counted-minus-recorded variance. Preserve fingerprint serialization and existing evidence, locks, identity, classification, response shapes and validation caps. Audit integrity in touched operations. Test exact bounds, intermediate overflow, transfer conservation, replay, cash adjustment, malformed stored amounts, and changed-path regressions. No bank I04 changes except inventory, no new schema/dependencies or production deployment."
+      "scope": "Replace unchecked native casts and addition with accepted SignedMinor/MoneyBoundary at authoritative raw amounts; exact D14 document amounts and portable signed accumulated balances, gross inflow/outflow, custody-in-transit, physical counted-minus-recorded variance. Preserve fingerprint serialization and existing evidence, locks, identity, classification, response shapes and validation caps. Audit integrity in touched operations. Test exact bounds, intermediate overflow, transfer conservation, replay, cash adjustment, malformed stored amounts, and changed-path regressions. No bank I04 changes except inventory, no new schema/dependencies or production deployment.",
+      "product_test_head": "9c803d0e32e48d097691c0e6f3f12de22219f158",
+      "workflow_head": "9028aedc970741c744371231821a120ecb50c1f9",
+      "pull_request": 88,
+      "tests": "4 new exact treasury tests plus 6 directly impacted existing regression tests per engine; SQLite and socket-only isolated MySQL; no result claimed before hosted logs.",
+      "changes": [
+        "TreasuryMoney exact bounded document and signed accumulation domains",
+        "TreasuryRegisterService exact running balances, gross totals, sources and held cash",
+        "TreasuryTransferService exact conservation, matching and persisted audit",
+        "TreasuryCashCountService exact count variance and unchanged snapshot hash serialization"
+      ],
+      "remaining": "Hosted evidence; I04 bank, I05-I06, P3, remaining G07 integration and L01 inconclusive review; no deployment or main merge."
     }
   }
 }
