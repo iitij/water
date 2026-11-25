@@ -3,6 +3,7 @@
 // Isolated staging/testing switches; never enable in production until all
 // financial entry points share the same gate and client contract.
 return [
+    'bank_fees' => env('WATER_CANDIDATE_BANK_FEES', false),
     'cash_handovers' => env('WATER_CANDIDATE_CASH_HANDOVERS', false),
     'late_cash_settlements' => env('WATER_CANDIDATE_LATE_CASH_SETTLEMENTS', false),
     'noncash_settlements' => env('WATER_CANDIDATE_NONCASH_SETTLEMENTS', false),
