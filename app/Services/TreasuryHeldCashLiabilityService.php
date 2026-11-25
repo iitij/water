@@ -102,6 +102,33 @@ final class TreasuryHeldCashLiabilityService
         return $this->inspectLocked($this->lot($liabilityId));
     }
 
+    /**
+     * Bidirectional coverage for this subledger only. No whole-system proof.
+     * Missing legacy recognition is a blocker, never a reason to backfill.
+     */
+    public function verifyCoverage(): array
+    {
+        $this->lock();
+        $lots = DB::table('treasury_held_cash_liabilities')->orderBy('id')->lockForUpdate()->get();
+        $adjustments = DB::table('treasury_cash_adjustments')->where('classification', 'unattributed_cash_held')
+            ->orderBy('id')->lockForUpdate()->get();
+        $this->need($lots->count() === $adjustments->count(), 'held_cash_coverage_missing_recognition');
+        $this->need(! DB::table('financial_posting_events as e')
+            ->leftJoin('treasury_held_cash_assignments as a', 'a.operation_uuid', '=', 'e.source_id')
+            ->where('e.source_type', 'held_cash_assignment')->whereNull('a.operation_uuid')->first(),
+            'held_cash_coverage_orphan_event');
+        $held = 0;
+        $identified = 0;
+        foreach ($lots as $lot) {
+            $report = $this->inspectLocked($lot);
+            $held = SignedMinor::add($held, $report['held_minor']);
+            $identified = SignedMinor::add($identified, $report['identified_minor']);
+        }
+        return ['liabilities' => $lots->count(), 'held_minor' => $held,
+            'identified_minor' => $identified, 'unidentified_minor' => SignedMinor::subtract($held, $identified),
+            'scope' => 'held_cash_only', 'source_coverage_verified' => false, 'closure_authorized' => false];
+    }
+
     private function inspectLocked(object $lot): array
     {
         [, $posting] = $this->verifyLot($lot);
@@ -113,7 +140,7 @@ final class TreasuryHeldCashLiabilityService
         foreach ($rows as $row) {
             $minor = SignedMinor::parse($row->amount_minor);
             $this->need($minor > 0 && $row->effective_on >= $posting->effective_on, 'held_cash_assignment_corrupt');
-            $operation = $this->registered($row->operation_uuid, $row->effective_on, $this->legs($row, $lot), true);
+            $this->registered($row->operation_uuid, $row->effective_on, $this->legs($row, $lot), true);
             $assigned = SignedMinor::add($assigned, $minor);
             $this->need($assigned <= $total, 'held_cash_capacity_exceeded');
             $owner = (string) $row->subscriber_id;
