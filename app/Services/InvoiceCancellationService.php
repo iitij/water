@@ -9,14 +9,14 @@ use Illuminate\Validation\ValidationException;
 
 final class InvoiceCancellationService
 {
-    public function cancel(Invoice $invoice, string $reason, ?int $actorId = null, string $source = 'api'): Invoice
+    public function cancel(Invoice $invoice, string $reason, ?int $actorId = null, string $source = 'api', ?GatedInvoiceTransferWriter $gatedWriter = null): Invoice
     {
         $reason = trim($reason);
         if (mb_strlen($reason) < 10 || mb_strlen($reason) > 1000) {
             throw ValidationException::withMessages(['reason' => 'سبب الإلغاء بين 10 و1000 حرف.']);
         }
 
-        return DB::transaction(function () use ($invoice, $reason, $actorId, $source) {
+        return DB::transaction(function () use ($invoice, $reason, $actorId, $source, $gatedWriter) {
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
@@ -26,6 +26,15 @@ final class InvoiceCancellationService
                 \App\Models\Meter::query()->lockForUpdate()->findOrFail($invoice->meter_id);
             }
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $ids = \App\Models\Transaction::withTrashed()->where('reference_type', Invoice::class)
+                ->where('reference_id', $invoice->id)->whereIn('type', ['invoice', 'invoice_reversal'])->pluck('id');
+            $registered = DB::table('financial_posting_events')->where('scope_key', 'water')
+                ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+                ->whereIn('source_id', $ids->map(fn ($id) => (string) $id)->all())->exists();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsCancellation((int) $invoice->id, $actorId))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.invoices') === true)) {
+                throw new \DomainException('gated_invoice_writer_required');
+            }
             if ($invoice->status === 'cancelled') {
                 return $invoice;
             }
