@@ -51,6 +51,29 @@ final class HeldCashReleaseDocumentProtection
         return true;
     }
 
+    /** Journal triggers are installed by the journal migration, not the proposal installer. */
+    public function journalActive(): bool
+    {
+        $driver = DB::getDriverName();
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) return false;
+        $events = ['release_journal_reject_update' => 'UPDATE', 'release_journal_reject_delete' => 'DELETE'];
+        if ($driver === 'sqlite') $events['release_journal_reject_replace'] = 'INSERT';
+        foreach ($events as $name => $event) {
+            if ($driver === 'sqlite') {
+                $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)
+                    ->where('tbl_name', 'held_cash_release_journal')->first();
+                if ($trigger === null || ! preg_match('/\\bBEFORE\\s+'. $event .'\\s+ON\\s+held_cash_release_journal\\b/i', $trigger->sql)
+                    || ! str_contains($trigger->sql, 'Held release journal is immutable')) return false;
+            } else {
+                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                    ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', 'held_cash_release_journal')
+                    ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
+                if ($trigger === null || ! str_contains($trigger->ACTION_STATEMENT, 'Held release journal is immutable')) return false;
+            }
+        }
+        return true;
+    }
+
     public function install(): void
     {
         foreach ($this->definitions() as $name => $definition) {
