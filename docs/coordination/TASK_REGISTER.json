@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 100,
+    "round": 101,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4460,6 +4460,60 @@
       "scope": "Dedicated immutable-model held credit document, same identified subscriber only; same-day gate-first independent authority, exact D12 amount, combined payout/credit capacity and replay. Actual subscriber ledger credit, corresponding identified liability reduction and mandatory audit in one transaction without receipt or treasury cash movement. Allocation engine treats credit as third distinct source; existing allocation hash bytes preserved when new source absent. Reconciliation and read projection understand new source; general registered-leg verifier invokes scoped held coverage and recognizes held source legs, and cash count writer can resolve prior payout treasury leg. Three focused feature methods added: actual mixed receipt and credit invoice allocation with prior hash preservation and mixed payout/credit cap; allocation insert failure rollback and retry; missing credit audit blocks release.",
       "limits": "Focused tests only. Not full affected regression acceptance or global source coverage. New credit releases specifically held reserve, but unused subscriber credit is a separate subscriber liability, not free distributable cash; general liquidity/credit reserve policy still requires review. Existing read API now exposes optional held credit source; mobile/reporting projections and existing allocator/reconciliation/ledger suites need changed-path validation. No prior physical payout authorization workflow, full DB immutability, W18 funded/mixed till independent proof, global UUID integration, all-writer fencing, cross-period replay or race acceptance. General held verifier relies on scoped reconstruction, not globally complete closure proof. No main merge, live data, production changes.",
       "next": "Complete exact MySQL result if still pending; run changed-path allocation/reconciliation/registry regressions, independently exercise later count following payout, review remaining owner consent and pre-disbursement authorization, W18 funded/mixed till and cash-credit liquidity protection before declaring task one complete."
+    },
+    "round101": {
+      "phase": "W18 funded and mixed counted cash attribution plus independent scoped capacity audit",
+      "status": "PRIOR_CREDIT_BOTH_ENGINES_PASS_COUNTED_CASH_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "base": "9b22c5b526fc5d34b388451071d91e5436d8806b",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "fa4df63cfda15243b728649807cbde2a1f94e851",
+      "runs": [
+        {
+          "id": 45639631317,
+          "head_sha": "9b22c5b526fc5d34b388451071d91e5436d8806b",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139294352070,
+              "engine": "sqlite",
+              "tests": 24,
+              "assertions": 200,
+              "exit": 0
+            },
+            {
+              "id": 139294352110,
+              "engine": "mysql",
+              "tests": 24,
+              "assertions": 200,
+              "exit": 0
+            }
+          ]
+        },
+        {
+          "id": 45641295271,
+          "head_sha": "fa4df63cfda15243b728649807cbde2a1f94e851",
+          "conclusion": "pending_or_unaccepted",
+          "jobs": [
+            {
+              "id": 139300332963,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "failure",
+              "log_summary": []
+            },
+            {
+              "id": 139300333594,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "syntax_validation": "Two added PHP files linted at exact source on msi; exit 0; no working tree checkout. GitHub compare confirms 3 files and 5 commits.",
+      "scope": "Import W18 from frozen d65a2196 into existing held-liability candidate; verify actual registered treasury opening and negative collector funding, reconstruct expected physical cash from opening plus registered original cash receipts, compare exact cash/noncash approval totals. Mixed verified bank collection or separately received same-date cash requires actual matched treasury source, registered account opening, exact paired operation under source UUID, no increase to original counted surplus. Unsupported legacy/corrected sources fail closed. Independent read-only session and scoped approved-allocation coverage checks rederive sequence, source proof and capacity, detect missing/orphan allocation audit; no new treasury posting from already-counted cash. Seven frozen W18 feature methods plus three added focused methods (funded, unregistered funding, actual mixed late bank clearance), existing 24 held-liability cases retained. Combined existing isolated workflow targets 34 cases per engine.",
+      "limits": "New exact runtime pending unless recorded as success. Mixed late bank fixture is actual same-day approved clearance manually registered in synthetic gate, not activation of W16; direct historical noncash receipts and separate handover branches not independently exercised. Corrected/voided receipts and unregistered legacy funding/allocations deliberately refused. W17 dual-date group registry not integrated; distinct-date mixed proof remains unsupported. Independent coverage scoped to approved counted allocations only, not all cash custody and no global verifier integration. Cross-period history, full allocation/report/API/mobile regressions, database immutability, pre-disbursement authorization, liquidity reservation for unapplied subscriber credit, UUID integration, concurrency and closure remain open. No main, production, real DB or live financial changes.",
+      "next": "Read combined CI exact results, correct proven defects; complete pre-disbursement independent authorization and subscriber-credit liquidity reserve, then changed-path regressions and independent review before task-one acceptance."
     }
   }
 }
