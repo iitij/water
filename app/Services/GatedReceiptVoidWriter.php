@@ -73,34 +73,38 @@ final class GatedReceiptVoidWriter
                 || $actor->can('Approve:Payment') || $actor->can('approve_payment'), 403);
             $notes = $notes === null ? null : trim($notes);
             $this->need($notes === null || mb_strlen($notes) <= 1000, 'gated_void_notes');
-            if ($requestId !== null) {
-                $this->need(! $approve && $uuid === null, 'gated_void_replay_conflict');
+            if (! $payment->hasPendingVoidRequest()) {
+                $this->need($requestId !== null && $requestId > 0, 'gated_void_request_id_required');
                 $latest = AuditEvent::query()->where('entity_type', Payment::class)
                     ->where('entity_id', (string) $payment->id)->whereIn('event', [
                         'financial.void_request_gated', 'payment.void_requested', 'payment.void_rejected', 'payment.void_approved',
                     ])->orderByDesc('id')->lockForUpdate()->first();
-                if (! $payment->hasPendingVoidRequest()) {
-                    $this->need(! $payment->isVoided() && $latest?->event === 'payment.void_rejected'
-                        && $latest->source === 'gated' && (int) $latest->actor_user_id === (int) $actor->id
-                        && ($latest->after['notes'] ?? null) === $notes
-                        && (int) $payment->void_decided_by === (int) $actor->id && $payment->void_decision_notes === $notes,
-                        'gated_void_replay_conflict');
-                    $prior = AuditEvent::query()->where('entity_type', Payment::class)->where('entity_id', (string) $payment->id)
-                        ->whereIn('event', ['payment.void_requested', 'financial.void_request_gated'])
-                        ->where('id', '<', $latest->id)->orderByDesc('id')->lockForUpdate()->first();
-                    $this->need($prior?->event === 'financial.void_request_gated' && (int) $prior->id === $requestId, 'gated_void_replay_conflict');
-                    return ['payment' => $payment, 'pending' => false, 'registry_created' => false];
+                $this->need($latest?->event === ($approve ? 'payment.void_approved' : 'payment.void_rejected')
+                    && $latest->source === 'gated' && (int) $latest->actor_user_id === (int) $actor->id
+                    && array_key_exists('notes', $latest->after) && $latest->after['notes'] === $notes
+                    && (int) $payment->void_decided_by === (int) $actor->id && $payment->void_decision_notes === $notes,
+                    'gated_void_replay_conflict');
+                $prior = AuditEvent::query()->where('entity_type', Payment::class)->where('entity_id', (string) $payment->id)
+                    ->whereIn('event', ['payment.void_requested', 'financial.void_request_gated'])
+                    ->where('id', '<', $latest->id)->orderByDesc('id')->lockForUpdate()->first();
+                $this->need($prior?->event === 'financial.void_request_gated' && (int) $prior->id === $requestId, 'gated_void_replay_conflict');
+                if ($approve) {
+                    $this->need($payment->isVoided() && $payment->voided_via === 'approval'
+                        && ($latest->after['reason'] ?? null) === $payment->void_reason
+                        && ($prior->after['reason'] ?? null) === $payment->void_reason, 'gated_void_replay_conflict');
+                    return $this->register($payment, $uuid, $context, $now, true);
                 }
-                $this->need($latest?->event === 'financial.void_request_gated' && (int) $latest->id === $requestId, 'gated_void_replay_conflict');
+                $this->need(! $payment->isVoided() && $uuid === null, 'gated_void_replay_conflict');
+                return ['payment' => $payment, 'pending' => false, 'registry_created' => false];
             }
-            if ($payment->isVoided()) {
-                $this->need($approve && $payment->voided_via === 'approval'
-                    && (int) $payment->void_decided_by === (int) $actor->id
-                    && $payment->void_decision_notes === $notes, 'gated_void_replay_conflict');
-                return $this->register($payment, $uuid, $context, $now, true);
-            }
-            $this->need($payment->hasPendingVoidRequest(), 'gated_void_pending_required');
-            $this->requestProof($payment);
+            $verifiedRequestId = $this->requestProof($payment);
+            $this->need($requestId !== null && $requestId > 0, 'gated_void_request_id_required');
+            $this->need($verifiedRequestId === $requestId, 'gated_void_replay_conflict');
+            $latest = AuditEvent::query()->where('entity_type', Payment::class)
+                ->where('entity_id', (string) $payment->id)->whereIn('event', [
+                    'financial.void_request_gated', 'payment.void_requested', 'payment.void_rejected', 'payment.void_approved',
+                ])->orderByDesc('id')->lockForUpdate()->first();
+            $this->need($latest?->event === 'financial.void_request_gated' && (int) $latest->id === $requestId, 'gated_void_replay_conflict');
             abort_if((int) $payment->void_requested_by === (int) $actor->id, 403);
             if ($approve) $this->unused($uuid);
             else $this->need($uuid === null, 'gated_void_pending_no_posting_uuid');
