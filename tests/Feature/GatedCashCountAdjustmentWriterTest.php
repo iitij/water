@@ -1093,4 +1093,48 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('transactions', 2);
     }
+    public function test_allocation_history_rejects_replace_by_primary_and_composite_keys(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        app(PaymentService::class)->recalculateInvoices($subscriber);
+        $empty = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->sole();
+        $this->assertDatabaseMissing('payment_allocations', ['revision_id' => $empty->id]);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 25);
+        $latest = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->first();
+        $row = DB::table('payment_allocations')->where('revision_id', $latest->id)->sole();
+        $this->assertTrue(app(\App\Services\AllocationHistoryProtection::class)->active());
+        $before = DB::table('payment_allocation_revisions')->orderBy('id')->get()->toArray();
+        $rowsBefore = DB::table('payment_allocations')->orderBy('id')->get()->toArray();
+
+        $replace = static function (string $table, array $values): void {
+            $columns = array_keys($values);
+            $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+            DB::statement('REPLACE INTO '.$table.' ('.implode(', ', array_map(
+                static fn ($column) => chr(96).$column.chr(96), $columns
+            )).') VALUES ('.$placeholders.')', array_values($values));
+        };
+        $badRevision = array_replace((array) $empty, ['available_minor' => 1]);
+        $badCompositeRevision = array_replace($badRevision, ['id' => (int) $latest->id + 1000]);
+        $badRow = array_replace((array) $row, ['amount_minor' => 1]);
+        $badCompositeRow = array_replace($badRow, ['id' => (int) $row->id + 1000]);
+        foreach ([
+            ['payment_allocation_revisions', $badRevision],
+            ['payment_allocation_revisions', $badCompositeRevision],
+            ['payment_allocations', $badRow],
+            ['payment_allocations', $badCompositeRow],
+        ] as [$table, $values]) {
+            try {
+                DB::transaction(fn () => $replace($table, $values));
+                $this->fail('Saved allocation history was replaced.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Allocation history is append-only', $error->getMessage());
+            }
+        }
+        $this->assertEquals($before, DB::table('payment_allocation_revisions')->orderBy('id')->get()->toArray());
+        $this->assertEquals($rowsBefore, DB::table('payment_allocations')->orderBy('id')->get()->toArray());
+        $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($empty));
+        $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($latest));
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }

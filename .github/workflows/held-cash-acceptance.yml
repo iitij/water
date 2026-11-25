@@ -1,7 +1,7 @@
-name: Held cash meter fence acceptance
+name: Held cash allocation protection acceptance
 on:
   push:
-    branches: ['qa/held-cash-meter-fence-round113', 'fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-allocation-protection-round114', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read
@@ -116,7 +116,7 @@ jobs:
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/GatedCountedCashWriterTest.php
       - name: Changed-path allocation and report regressions on MySQL
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_target_fifo_credit_and_void_create_conserved_immutable_revisions|test_failure_to_save_allocation_rolls_back_receipt_and_ledger|test_reconciliation_detects_wrong_invoice_paid_distribution_with_equal_totals' tests/Feature/PaymentAllocationHistoryTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_target_fifo_credit_and_void_create_conserved_immutable_revisions|test_failure_to_save_allocation_rolls_back_receipt_and_ledger|test_reconciliation_detects_wrong_invoice_paid_distribution_with_equal_totals|test_database_rejects_rewriting_or_deleting_saved_allocations' tests/Feature/PaymentAllocationHistoryTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialReportsTest.php
       - name: Independent registry regressions on MySQL
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
