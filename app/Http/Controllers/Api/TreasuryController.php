@@ -62,8 +62,12 @@ final class TreasuryController extends ApiController
             'reference' => ['required', 'string', 'max:150'],
             'dispatched_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        return response()->json(['transfer' => $service->dispatch($request->user(), $data)]);
+        return $this->transferEntry($request, $data, fn ($uuid, $input) =>
+            app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($request->user(),
+                $input, $uuid, now()->toDateTimeImmutable())['transfer'],
+            fn ($input) => $service->dispatch($request->user(), $input));
     }
 
     public function receiveTransfer(Request $request, int $id, \App\Services\TreasuryTransferService $service)
@@ -73,8 +77,30 @@ final class TreasuryController extends ApiController
             'reference' => ['required', 'string', 'max:150'],
             'received_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        return response()->json(['transfer' => $service->receive($request->user(), $id, $data)]);
+        return $this->transferEntry($request, $data, fn ($uuid, $input) =>
+            app(\App\Services\GatedTreasuryTransferWriter::class)->receive($request->user(), $id,
+                $input, $uuid, now()->toDateTimeImmutable())['transfer'],
+            fn ($input) => $service->receive($request->user(), $id, $input));
+    }
+
+    private function transferEntry(Request $request, array $data, callable $candidate, callable $legacy)
+    {
+        app(TreasuryRegisterService::class)->authorize($request->user());
+        try {
+            $uuid = $data['operation_uuid'] ?? null;
+            unset($data['operation_uuid']);
+            if (config('financial_candidate.treasury_transfers') === true) {
+                abort_unless(app()->environment(['testing', 'staging']), 503);
+                $request->validate(['operation_uuid' => ['required', 'uuid']]);
+                return response()->json(['transfer' => $candidate(strtolower($uuid), $data)]);
+            }
+            if ($uuid !== null) throw new \DomainException('gated_treasury_transfer_entry_disabled');
+            return response()->json(['transfer' => $legacy($data)]);
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 
     public function transfers(Request $request, \App\Services\TreasuryTransferService $service)
