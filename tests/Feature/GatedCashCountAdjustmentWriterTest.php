@@ -3645,4 +3645,30 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
+
+    public function test_release_void_mobile_decision_does_not_downgrade_and_echoes_identity(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $request = app(\App\Services\GatedReceiptVoidWriter::class)->request($issuer, (int) $receipt->id,
+            'Independent documented receipt cancellation', $this->nowAt())['request_id'];
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $url = '/api/payments/'.$receipt->id.'/void-decision';
+        $uuid = '88888888-8888-5888-8888-888888888888';
+        $approve = ['approve' => true, 'request_id' => $request, 'operation_uuid' => $uuid];
+        config(['financial_candidate.void_api' => false]);
+        $this->postJson($url, $approve)->assertConflict();
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        config(['financial_candidate.void_api' => true]);
+        $this->postJson($url, $approve)->assertOk()->assertJsonPath('request_id', $request)
+            ->assertJsonPath('operation_uuid', $uuid)->assertJsonPath('payment.id', $receipt->id);
+        $this->postJson($url, $approve)->assertOk()->assertJsonPath('request_id', $request);
+        $this->assertTrue($receipt->fresh()->isVoided());
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+    }
 }
