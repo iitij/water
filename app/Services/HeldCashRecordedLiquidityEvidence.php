@@ -75,7 +75,8 @@ final class HeldCashRecordedLiquidityEvidence
             ['treasury_cash_adjustments', 'treasury_account_id', 'treasury_cash_adjustment_id'],
         ] as [$table, $accountColumn, $sourceColumn]) {
             $this->need(! DB::table($table)->where($accountColumn, $accountId)
-                ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull($sourceColumn)->select($sourceColumn))
+                ->whereNotIn('id', DB::table('treasury_postings')->where('treasury_account_id', $accountId)
+                    ->whereNotNull($sourceColumn)->select($sourceColumn))
                 ->exists(), 'held_cash_liquidity_missing_posting');
         }
         return $balance;

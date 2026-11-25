@@ -916,4 +916,58 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_payout_authorizations', 0);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_changed_held_classification_cannot_hide_the_reservation(): void
+    {
+        [, , $account, , $lot] = $this->held();
+        $source = DB::table('treasury_held_cash_liabilities')->where('id', $lot)->sole();
+        DB::table('treasury_cash_adjustments')->where('id', $source->treasury_cash_adjustment_id)
+            ->update(['classification' => 'confirmed_cash_loss']);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        $this->rejects('held_cash_reservation_source', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->rejects('held_cash_reservation_source', fn () => DB::transaction(fn () =>
+            $guard->protectedForAccount((int) $account['id'])));
+        $this->assertDatabaseCount('treasury_held_cash_liabilities', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
+    public function test_relocated_dispatch_posting_cannot_inflate_original_account_cash(): void
+    {
+        [, , $account] = $this->held();
+        $actor = $this->actor();
+        $destination = app(TreasuryRegisterService::class)->open($actor, [
+            'code' => 'QA-MOVED-CASH', 'name' => 'Synthetic other cash account', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-MOVED-OPEN', 'opening_evidence' => 'Independent opening cash count',
+        ]);
+        $dispatch = app(TreasuryTransferService::class)->dispatch($actor, [
+            'from_account_id' => $account['id'], 'to_account_id' => $destination['id'],
+            'amount' => '20.00', 'reference' => 'QA-MOVED-DISPATCH', 'dispatched_on' => '2026-11-25',
+            'evidence' => 'Independent actual dispatch evidence',
+        ]);
+        $guard = app(\App\Services\HeldCashReservation::class);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 8000, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 8001, '2026-11-25')));
+        DB::table('treasury_postings')->where('treasury_transfer_id', $dispatch['id'])
+            ->update(['treasury_account_id' => $destination['id']]);
+        $this->rejects('held_cash_liquidity_missing_posting', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->assertDatabaseCount('treasury_transfers', 1);
+        $this->assertDatabaseCount('treasury_postings', 2);
+    }
+
+    public function test_payout_verifier_rejects_a_modified_caller_snapshot(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->payoutHeld($this->actor(), 5);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $posting = DB::table('treasury_postings')->where('kind', 'held_cash_payout')->sole();
+        $this->assertTrue(DB::transaction(fn () => $service->checkPayoutPosting($posting)));
+        $wrong = clone $posting;
+        $wrong->amount_minor = -6;
+        $this->assertFalse(DB::transaction(fn () => $service->checkPayoutPosting($wrong)));
+        $this->assertSame(-5, (int) DB::table('treasury_postings')->where('kind', 'held_cash_payout')->sole()->amount_minor);
+    }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Support\SignedMinor;
-use App\Support\TreasuryMoney;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -82,8 +81,7 @@ final class HeldCashReservation
     {
         if (DB::transactionLevel() <= 0) throw new DomainException('held_cash_reservation_context');
         $total = 0;
-        foreach (DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
-            ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get() as $adjustment) {
+        foreach ($this->heldAdjustmentsForAccount($accountId) as $adjustment) {
             // Source-linked release validation must run even if the outstanding
             // held liability itself has reached zero.
             app(TreasuryHeldCashLiabilityService::class)->releasedForAdjustment((int) $adjustment->id);
@@ -111,8 +109,7 @@ final class HeldCashReservation
     public function outstandingForAccount(int $accountId): int
     {
         if (DB::transactionLevel() <= 0) throw new DomainException('held_cash_reservation_context');
-        $adjustments = DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
-            ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get();
+        $adjustments = $this->heldAdjustmentsForAccount($accountId);
 
 
         // Reserve even historical, not-yet-adopted held surplus. Never infer
@@ -131,6 +128,43 @@ final class HeldCashReservation
             $held = SignedMinor::add($held, SignedMinor::subtract($amount, $released));
         }
 
+        return $held;
+    }
+    /** Reconstruct candidates in both directions before a zero reserve can bypass checks. */
+    private function heldAdjustmentsForAccount(int $accountId): array
+    {
+        $adjustments = DB::table('treasury_cash_adjustments')
+            ->where(function ($query) use ($accountId): void {
+                $query->where('treasury_account_id', $accountId)
+                    ->orWhereIn('treasury_cash_count_id', DB::table('treasury_cash_counts')
+                        ->where('treasury_account_id', $accountId)->select('id'))
+                    ->orWhereIn('id', DB::table('treasury_postings')->where('treasury_account_id', $accountId)
+                        ->whereNotNull('treasury_cash_adjustment_id')->select('treasury_cash_adjustment_id'))
+                    ->orWhereIn('id', DB::table('treasury_held_cash_liabilities as l')
+                        ->join('treasury_postings as p', 'p.id', '=', 'l.treasury_posting_id')
+                        ->where('p.treasury_account_id', $accountId)->select('l.treasury_cash_adjustment_id'));
+            })->orderBy('id')->lockForUpdate()->get();
+        $held = [];
+        foreach ($adjustments as $adjustment) {
+            $count = DB::table('treasury_cash_counts')->where('id', $adjustment->treasury_cash_count_id)->lockForUpdate()->first();
+            $postings = DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $adjustment->id)->lockForUpdate()->get();
+            $lot = DB::table('treasury_held_cash_liabilities')->where('treasury_cash_adjustment_id', $adjustment->id)->lockForUpdate()->first();
+            $amount = SignedMinor::parse($adjustment->amount_minor);
+            $positive = $adjustment->classification === 'unattributed_cash_held'
+                || $lot !== null || $amount > 0
+                || ($count !== null && SignedMinor::parse($count->variance_minor) > 0)
+                || $postings->contains(fn ($row) => SignedMinor::parse($row->amount_minor) > 0);
+            if (! $positive) continue;
+            if ($adjustment->classification !== 'unattributed_cash_held' || $amount <= 0
+                || (int) $adjustment->treasury_account_id !== $accountId
+                || $count === null || (int) $count->treasury_account_id !== $accountId
+                || $postings->count() !== 1 || (int) $postings->first()->treasury_account_id !== $accountId
+                || ($lot !== null && (int) $lot->treasury_posting_id !== (int) $postings->first()->id)
+                || ! app(TreasuryCashCountService::class)->checkAdjustmentPosting($postings->first())) {
+                throw new DomainException('held_cash_reservation_source');
+            }
+            $held[] = $adjustment;
+        }
         return $held;
     }
 }

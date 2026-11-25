@@ -493,7 +493,18 @@ final class TreasuryHeldCashLiabilityService
             $this->need($assignment !== null, 'held_cash_assignment_missing');
             $lot = $this->lot((int) $assignment->liability_id);
             [, $original] = $this->verifyLot($lot, false);
-            $this->paidForAssignment($assignment, $lot, $original, false);
+            $actual = DB::table('treasury_postings')->where('held_cash_payout_uuid', $row->operation_uuid)->lockForUpdate()->first();
+            $this->need($actual !== null, 'held_cash_payout_source');
+            foreach (['id', 'treasury_account_id', 'kind', 'held_cash_payout_uuid', 'amount_minor',
+                'effective_on', 'evidence_reference', 'posted_by', 'cash_handover_id', 'payment_refund_id',
+                'cash_session_funding_id', 'treasury_transfer_id', 'treasury_transfer_receipt_id',
+                'treasury_bank_fee_id', 'treasury_cash_adjustment_id', 'treasury_bank_collection_id',
+                'treasury_late_cash_receipt_id'] as $field) {
+                $this->need(property_exists($posting, $field)
+                    && ($posting->$field === null) === ($actual->$field === null)
+                    && (string) $posting->$field === (string) $actual->$field, 'held_cash_payout_source');
+            }
+            $this->releasedForAdjustment((int) $lot->treasury_cash_adjustment_id);
             return true;
         } catch (DomainException|\InvalidArgumentException|\OverflowException) {
             return false;
