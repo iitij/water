@@ -4226,7 +4226,7 @@
     },
     "round97": {
       "phase": "Focused GitHub Actions held cash acceptance requested by owner",
-      "status": "CI_TEST_HELPER_COLLISION_FIXED_RETEST_STARTED",
+      "status": "CI_SQLITE_PASS_MYSQL_PENDING",
       "base": "44908f9339fdf4e1b32725436ecd5b60cdd0c79f",
       "branch": "fix/central-g1a-surplus-liability",
       "source": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
@@ -4235,7 +4235,7 @@
           "id": 45634489268,
           "url": "https://github.com/iitij/water/actions/runs/45634489268",
           "head_sha": "32215e1bf7fa8821dc1c98fb71dd20b76b24760b",
-          "status": "sqlite_failed_mysql_pending_at_observation",
+          "status": "completed",
           "jobs": [
             {
               "id": 139276168964,
@@ -4248,19 +4248,41 @@
             {
               "id": 139276169482,
               "engine": "mysql",
-              "status": "in_progress"
+              "status": "completed",
+              "conclusion": "failure",
+              "exit": 255,
+              "reason": "Same inherited test helper post() collision; no tests executed."
             }
-          ]
+          ],
+          "conclusion": "failure"
         },
         {
           "id": 45634630889,
           "url": "https://github.com/iitij/water/actions/runs/45634630889",
           "head_sha": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
-          "status": "in_progress"
+          "status": "in_progress",
+          "jobs": [
+            {
+              "id": 139276673181,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success",
+              "tests": 16,
+              "assertions": 123,
+              "exit": 0,
+              "php": "8.4.28"
+            },
+            {
+              "id": 139276672582,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
         }
       ],
       "scope": "Added branch-scoped workflow only, read-only permissions, exact checkout and Composer lock validation, disposable SQLite in memory and MySQL 8.0 water_test service database. Each job runs GatedCashCountAdjustmentWriterTest.php (16 test methods) with fail-on-skipped and fail-on-empty-test-suite. Confirmed real push-triggered run and both jobs started on GitHub-hosted runners; local machine used only for read-only status retrieval. No product source changes. Renamed private helper post() to postAdjustment() and all internal calls only; no assertions or accounting logic changed. Confirmed fresh push-triggered run.",
-      "limits": "Initial SQLite failed before test execution, not evidence of accounting failure or success. Initial MySQL still pending at observation; new exact commit run in progress. No acceptance until both conclude and logs reviewed.",
+      "limits": "SQLite exact corrected commit passed 16 tests and 123 assertions. MySQL final success not yet verified. Scoped acceptance only; no production activation or complete surplus settlement.",
       "next": "Read final conclusions and exact test logs for replacement run, fix any proven defects, then resume discharge and W18 proof."
     }
   }
