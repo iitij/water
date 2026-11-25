@@ -3533,4 +3533,74 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
+
+    public function test_release_void_api_uses_exact_request_identity_and_gate_without_legacy_fallback(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $outsider = User::factory()->create(['role' => 'subscriber']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        config(['financial_candidate.void_api' => true]);
+        $url = '/api/payments/'.$receipt->id;
+        $reason = 'Independent documented receipt cancellation';
+        \Laravel\Sanctum\Sanctum::actingAs($outsider);
+        $this->postJson($url.'/void', ['reason' => $reason])->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $first = $this->postJson($url.'/void', ['reason' => $reason])->assertStatus(202)
+            ->assertJsonPath('pending_approval', true)->json('request_id');
+        $this->assertIsInt($first);
+        $this->postJson($url.'/void-decision', ['approve' => false, 'request_id' => $first])->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->getJson('/api/payments/void-requests')->assertOk()->assertJsonPath('data.0.request_id', $first);
+        $this->postJson($url.'/void-decision', ['approve' => false])->assertUnprocessable();
+        $reject = ['approve' => false, 'request_id' => $first, 'notes' => 'Rejected independently'];
+        $this->postJson($url.'/void-decision', $reject)->assertOk();
+        $this->postJson($url.'/void-decision', $reject)->assertOk();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $second = $this->postJson($url.'/void', ['reason' => $reason])->assertStatus(202)->json('request_id');
+        $this->assertNotSame($first, $second);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $approve = ['approve' => true, 'request_id' => $second, 'operation_uuid' => $uuid, 'notes' => 'Approved independently'];
+        $this->postJson($url.'/void-decision', array_replace($approve, ['request_id' => $first]))->assertConflict();
+        $this->postJson($url.'/void-decision', array_diff_key($approve, ['operation_uuid' => true]))->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url.'/void-decision', $approve)->assertConflict();
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $this->postJson($url.'/void-decision', $approve)->assertOk();
+        $this->assertTrue($receipt->fresh()->isVoided());
+        $count = DB::table('audit_events')->count();
+        $this->postJson($url.'/void-decision', $approve)->assertOk();
+        $this->assertSame($count, DB::table('audit_events')->count());
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -100]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_void_api_immediate_void_and_unregistered_receipt_refusal(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $legacy = app(PaymentService::class)->collectPayment($subscriber, '2.00');
+        $this->assertFalse(config('financial_candidate.void_api'));
+        config(['financial_candidate.void_api' => true]);
+        $data = ['reason' => 'Independent documented immediate cancellation', 'operation_uuid' => '88888888-8888-4888-8888-888888888888'];
+        $this->postJson('/api/payments/'.$legacy->id.'/void', $data)->assertConflict();
+        $this->assertFalse($legacy->fresh()->isVoided());
+        $this->postJson('/api/payments/'.$receipt->id.'/void', ['reason' => $data['reason']])->assertConflict();
+        $this->postJson('/api/payments/'.$receipt->id.'/void', $data)->assertOk()->assertJsonPath('pending_approval', false);
+        $this->postJson('/api/payments/'.$receipt->id.'/void', $data)->assertOk()->assertJsonPath('pending_approval', false);
+        $this->assertSame(200, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['operation_uuid'], 'amount_minor' => -100]);
+    }
 }
