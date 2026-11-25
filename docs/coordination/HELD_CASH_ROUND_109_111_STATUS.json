@@ -1,0 +1,47 @@
+{
+  "round109": {
+    "source": "962d4f64c177c24e750233e85e0d29d515f5d9fb",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45651939093,
+    "status": "PASS_BOTH_ENGINES",
+    "jobs": [
+      {
+        "id": 139338463269,
+        "engine": "sqlite",
+        "tests": 87,
+        "assertions": 954,
+        "exit": 0
+      },
+      {
+        "id": 139338462895,
+        "engine": "mysql",
+        "tests": 84,
+        "assertions": 914,
+        "exit": 0
+      }
+    ]
+  },
+  "round110": {
+    "source": "388623dba99885c6fe4354a1a5b6d8350db0bf9f",
+    "branch": "qa/held-cash-concurrency-round110",
+    "run": 45652162047,
+    "status": "PASS_TARGETED_MYSQL_CONCURRENCY",
+    "job": {
+      "id": 139339248109,
+      "tests": 9,
+      "assertions": 117,
+      "exit": 0
+    },
+    "lint": "7 PHP files pass",
+    "scope": "Independent process races for held credit versus receipt, refund versus payout authorization, and seven affected legacy races."
+  },
+  "round111": {
+    "base": "962d4f64c177c24e750233e85e0d29d515f5d9fb",
+    "source": "6454aeda97ef3597ea0dd8ab394222ca1c7d5cc2",
+    "branch": "qa/held-cash-corrections-round111",
+    "status": "STAGED_RUNTIME_UNVERIFIED",
+    "scope": "Fence seven correction paths before subscriber lock: voidPayment, requestVoid, decideVoidRequest, invoice cancellation, historical invoice correction, closed cash duplicate correction, account transfer. Preserve round110 tests; assert cancellation query order and add real concurrent cancellation/held credit conservation; run changed correction regressions on both engines and selected MySQL races.",
+    "limits": "No release, no global ordering proof. Invoice generation and direct allocator/model paths still require outer caller inventory; no product branch promotion before runtime acceptance."
+  },
+  "coordination": "Independent status because TASK_REGISTER.json large update repeatedly failed. Keep original register and earlier receipts. No main merge, real data, or production activation."
+}
