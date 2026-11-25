@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 94,
+    "round": 95,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4199,6 +4199,18 @@
       "scope": "Separate read-only historical policy for original epoch/version and canonical period boundaries; independent group verifier locks scope and periods, then issuance, reconstructs proof from review UUID and linked actual effects, checks both group parts, event ownership, anchor, recorded date and canonical hash, and reports per-period group digest/count without changing format 1. Four new isolated feature cases prepared: historical stable digest and correct period counts, missing non-anchor part, forged hash with recomputed payload, future original version. GitHub compare confirms three changed files and four commits.",
       "limits": "No runtime execution or workflow creation; no operational acceptance. Group digest is separate, not integrated with format 1 registry or closure snapshot. Legacy verifier remains fail-closed. Historical source reconstruction still rejects unsupported later source transitions (void/reversal/pending void) via existing evidence checks; no claim of complete historical verification. Scope-wide scan/period locks require performance and concurrent lock-order review; no proof of immutable historical counters, complete coverage, same-month integration, fault rollback, R90 UUID compatibility or fenced legacy writers. No main merge, production activation or real database changes.",
       "next": "Design and implement unified verifier preserving exact format 1 digest for periods without groups, bind local part membership for mixed periods and explicitly version closure snapshot; test same-month groups, historical reversal compatibility, source/part corruption, rollback and UUID integration. Keep old closure guard until both-engine validation and independent review."
+    },
+    "round95": {
+      "phase": "Held cash liabilities and documented owner assignment, priority open-task sequence",
+      "status": "PARTIAL_SOURCE_CREATED_LINT_PASS_RUNTIME_PENDING",
+      "base": "951f054a051a6fc3a585b031ebb1b1fac33ee09a",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "a96984a7b86bfceddbe6e4371a833e2e060c7b0a",
+      "runs": [],
+      "syntax_validation": "Four changed PHP files linted sequentially from exact fetched commit on msi; exit 0; no DB or PHPUnit execution.",
+      "scope": "Separate source-linked held-liability table and append-only assignment table; candidate W14 writer recognizes positive investigated surplus in same outer transaction with original registry record, exact replay rejects missing recognition. Gate-first independent assignment of identified subscriber creditor with equal opposite liability registry effects; no receipt, treasury movement, revenue, or discharge. Scoped source-to-liability and assignment-to-registry verification rejects missing recognition, orphan event, inconsistent amount and capacity. Four new feature cases prepared for SQLite/MySQL, including recognition fault rollback.",
+      "limits": "No runtime or operational acceptance. Not a complete GL or a discharge/payout/credit-to-subscriber writer; verified owner identification evidence still requires human review. Legacy adoption, independently immutable proof, global UUID ownership integration, cash availability enforcement on all outgoing movements, same-transaction allocation/discharge policy, W18 funded/mixed till and independent allocation proof, cross-period historical reversal and complete source coverage remain open. Independent verifier still reports full source coverage false and no closure authorization. No main merge, real data or production activation. Existing grouped registry branch not integrated. Scope-wide lock strategy needs concurrent review.",
+      "next": "Finish held liability discharge and cash reservation protections under explicit accounting contracts, independently verify W18 counted cash allocation; run new isolated tests sequentially without rerunning accepted suites, then full source coverage, writer fencing, race/rollback and permanent closure in requested order."
     }
   }
 }
