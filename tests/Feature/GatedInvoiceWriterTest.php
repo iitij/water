@@ -21,6 +21,7 @@ use App\Models\Meter;
 use App\Models\Tariff;
 use App\Services\GatedInvoiceWriter;
 use App\Services\InvoiceService;
+use App\Services\AllocationSnapshotIntegrity;
 use App\Services\CashSessionService;
 use App\Services\FinancialLedgerRegistryVerifier;
 use DomainException;
@@ -44,6 +45,7 @@ final class GatedInvoiceWriterTest extends TestCase
         )) {
             $this->markTestSkipped('Requires disposable isolated ledger evidence database.');
         }
+        $this->travelTo(\Carbon\Carbon::instance($this->nowAt()));
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
         DB::table('financial_scopes')->insert([
@@ -182,11 +184,58 @@ final class GatedInvoiceWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 0);
     }
 
+    private function allocation(Subscriber $subscriber): array
+    {
+        $revision = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)
+            ->orderByDesc('revision')->first();
+        $this->assertNotNull($revision);
+        $this->assertTrue(app(AllocationSnapshotIntegrity::class)->valid($revision));
+        $rows = DB::table('payment_allocations')->where('revision_id', $revision->id)->orderBy('position')->get();
+        return ['revision' => (int) $revision->revision, 'id' => (int) $revision->id,
+            'hash' => $revision->allocation_hash, 'available' => (int) $revision->available_minor,
+            'allocated' => (int) $revision->allocated_minor, 'unallocated' => (int) $revision->unallocated_minor,
+            'rows' => $rows->map(fn ($row) => (array) $row)->all()];
+    }
+
+    public function test_actual_zero_consumption_invoice_retains_identity_without_debt(): void
+    {
+        [$actor, $subscriber, $meter, $ids] = $this->fixture(true);
+        $writer = app(GatedInvoiceWriter::class);
+        $post = fn () => $writer->issue($actor, $subscriber->id, $meter->id, $ids, self::UUID, $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame('0.00', $result['invoice']->total_amount);
+        $this->assertSame(0, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseHas('financial_posting_events', ['source_type' => 'ledger_transaction',
+            'source_id' => (string) $result['transaction_id'], 'leg' => 'subscriber', 'amount_minor' => 0]);
+        $this->assertDatabaseCount('invoice_tariff_lines', 2);
+        $this->assertSame(2, DB::table('readings')->whereIn('id', $ids)->where('is_invoiced', true)
+            ->where('invoice_id', $result['invoice']->id)->count());
+        $this->assertFalse($post()['registry_created']);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('payments', 0);
+        $this->gate(function (array $context): void {
+            $verified = app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']);
+            $this->assertSame(1, $verified['registered_ledger_legs_verified']);
+            $this->assertFalse($verified['source_coverage_verified']);
+        });
+    }
+
     public function test_registry_failure_restores_readings_and_credit_allocation_then_retries(): void
     {
         [$actor, $subscriber, $meter, $ids] = $this->fixture();
         $payment = app(GatedCashReceiptWriter::class)->collect($actor, $subscriber->id, '0.02', self::OTHER, $this->nowAt());
         $auditCount = AuditEvent::query()->count();
+        $before = $this->allocation($subscriber);
+        $revisionCount = DB::table('payment_allocation_revisions')->count();
+        $rowCount = DB::table('payment_allocations')->count();
+        $this->assertSame(2, $before['available']);
+        $this->assertSame(0, $before['allocated']);
+        $this->assertSame(2, $before['unallocated']);
+        $this->assertCount(1, $before['rows']);
+        $this->assertNull($before['rows'][0]['invoice_id']);
+        $this->assertSame((int) $payment['payment']->id, (int) $before['rows'][0]['payment_id']);
         $post = fn () => app(GatedInvoiceWriter::class)->issue($actor, $subscriber->id, $meter->id, $ids, self::UUID, $this->nowAt());
         $trigger = DB::getDriverName() === 'sqlite'
             ? "CREATE TRIGGER qa_registry_failure BEFORE INSERT ON financial_posting_events BEGIN SELECT RAISE(ABORT, 'synthetic_registry_failure'); END"
@@ -208,9 +257,24 @@ final class GatedInvoiceWriterTest extends TestCase
         $this->assertSame(2, DB::table('readings')->whereIn('id', $ids)->where('is_invoiced', false)->whereNull('invoice_id')->count());
         $this->assertSame(2, $subscriber->fresh()->getAccountBalanceMinor());
         $this->assertSame($auditCount, AuditEvent::query()->count());
+        $this->assertSame($before, $this->allocation($subscriber));
+        $this->assertDatabaseCount('payment_allocation_revisions', $revisionCount);
+        $this->assertDatabaseCount('payment_allocations', $rowCount);
         $result = $post();
         $this->assertTrue($result['registry_created']);
         $this->assertSame('0.02', $result['invoice']->fresh()->amount_paid);
+        $after = $this->allocation($subscriber);
+        $this->assertSame($before['revision'] + 1, $after['revision']);
+        $this->assertNotSame($before['hash'], $after['hash']);
+        $this->assertSame(2, $after['available']);
+        $this->assertSame(2, $after['allocated']);
+        $this->assertSame(0, $after['unallocated']);
+        $this->assertCount(1, $after['rows']);
+        $this->assertSame((int) $payment['payment']->id, (int) $after['rows'][0]['payment_id']);
+        $this->assertSame((int) $result['invoice']->id, (int) $after['rows'][0]['invoice_id']);
+        $this->assertSame(2, (int) $after['rows'][0]['amount_minor']);
+        $this->assertDatabaseCount('payment_allocation_revisions', $revisionCount + 1);
+        $this->assertDatabaseCount('payment_allocations', $rowCount + 1);
         $this->assertSame(-1, $subscriber->fresh()->getAccountBalanceMinor());
         $this->assertDatabaseCount('invoices', 1);
         $this->assertDatabaseCount('financial_posting_events', 2);
