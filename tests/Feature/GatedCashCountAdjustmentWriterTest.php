@@ -2659,6 +2659,71 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_invoice_filament_create_and_modals_share_financial_identity(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Invoice', 'ViewAny:Invoice', 'View:Invoice', 'Delete:Invoice'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        \App\Models\Tariff::create(['name' => 'Synthetic invoice Filament tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-INVOICE-FILAMENT']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        config(['financial_candidate.invoices' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $create = \App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class;
+        $list = \App\Filament\Resources\InvoiceResource\Pages\ListInvoices::class;
+        $component = \Livewire\Livewire::test($create);
+        $uuid = $component->get('data.operation_uuid');
+        $this->assertTrue(is_string($uuid) && \Illuminate\Support\Str::isUuid($uuid));
+        $data = ['subscriber_id' => $subscriber->id, 'notes' => 'Synthetic protected Filament invoice', 'operation_uuid' => $uuid];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions', 'payments',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $component->fillForm($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $component->call('create')->assertHasErrors();
+        $this->assertSame($uuid, $component->get('data.operation_uuid'));
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $component->call('create')->assertHasNoErrors();
+        $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
+        $afterIssue = [];
+        foreach ($tables as $table) $afterIssue[$table] = $snapshot($table);
+        $header = \Filament\Actions\Testing\TestAction::make('generate_invoice')->table();
+        \Livewire\Livewire::test($list)->callAction($header, data: $data + ['meter_id' => $meter->id])->assertHasNoActionErrors();
+        foreach ($afterIssue as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $cancelData = ['reason' => 'Independent prospective invoice cancellation', 'operation_uuid' => $cancelUuid];
+        $action = \Filament\Actions\Testing\TestAction::make('cancel_invoice')->table($invoice);
+        $modal = \Livewire\Livewire::test($list)->mountAction($action)->setActionData($cancelData);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        $modal->assertActionDataSet(['operation_uuid' => $cancelUuid]);
+        foreach ($afterIssue as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->postJson('/api/invoices/'.$invoice->id.'/cancel', $cancelData)->assertOk()
+            ->assertJsonPath('invoice.id', $invoice->id);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'leg' => 'subscriber', 'amount_minor' => 10]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $cancelUuid)->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_invoice_api_shares_issue_identity_and_cancellation_reversal(): void
     {
         [, , $account, , , $subscriber] = $this->held();
