@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 69,
+    "round": 70,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3840,7 +3840,7 @@
     },
     "round69": {
       "phase": "Inactive gate-first ordinary cash receipt writer",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "8d533d71eed46aeb265f4b7942f77b34a5dd27de",
       "source": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
       "workflow": "e86e7d04a199b7a0bd080701ba62445c92079090",
@@ -3849,12 +3849,43 @@
       "runs": [
         {
           "id": 45617005572,
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Ordinary current-day cash receipt, stable operation/receipt UUID, explicit till destination, actual ledger evidence and registry atomicity, exact replay, legacy/frozen/closed rejection and trigger rollback/retry. Four cases per engine.",
-      "limits": "Invoice-specific allocation tests, independent cash custody proof, noncash/late writer adapters, all-writer fencing, global lock order and concurrency unproved. No production activation or main merge."
+      "limits": "Invoice-specific allocation tests, independent cash custody proof, noncash/late writer adapters, all-writer fencing, global lock order and concurrency unproved. No production activation or main merge.",
+      "results": {
+        "sqlite": {
+          "job": 139214877929,
+          "tests": 4,
+          "assertions": 49,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139214878422,
+          "tests": 4,
+          "assertions": 49,
+          "exit": 0
+        },
+        "total": {
+          "tests": 8,
+          "assertions": 98,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round70": {
+      "phase": "Inactive gated invoice writer and targeted receipt allocation",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "7c549b419460e42b8457624d3fd945ab7e620e0d",
+      "branch": "fix/central-g1b-gated-invoice",
+      "runs": [],
+      "scope": "Current issue date distinct from consumption period; exact pending reading set, stable operation UUID and mandatory actor audit; actual invoice source and registry atomicity. Four cases per engine prepared: two-tariff invoice and targeted receipt, reading conflicts/frozen/closed, legacy rejection, fault rollback and credit allocation.",
+      "limits": "Workflow creation tool call blocked; no new execution evidence or PR. No production activation or global writer/concurrency certification. No main merge."
     }
   }
 }
