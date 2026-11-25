@@ -158,13 +158,15 @@ final class MoneyBoundary
             throw new InvalidArgumentException('Finite decimal amount required.');
         }
         $fraction = $parts[4] ?? $parts[3] ?? '';
-        $exponent = $parts[5] ?? '0';
-        if (strlen(ltrim(ltrim($exponent, '+-'), '0')) > 3 || abs((int) $exponent) > 256) {
-            throw new OverflowException('Exponent exceeds supported range.');
-        }
+        // Match FinancialAmount: a lexically valid zero needs no exponent
+        // calculation. inputBound still enforces the caller's endpoint limits.
         $digits = ltrim(($parts[2] ?? '').$fraction, '0');
         if ($digits === '') {
             return 0;
+        }
+        $exponent = $parts[5] ?? '0';
+        if (strlen(ltrim(ltrim($exponent, '+-'), '0')) > 3 || abs((int) $exponent) > 256) {
+            throw new OverflowException('Exponent exceeds supported range.');
         }
         $shift = (int) $exponent - strlen($fraction) + 2;
         if ($shift < 0) {

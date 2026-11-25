@@ -41,6 +41,54 @@ if ($mode === 'observed') {
     exit(0);
 }
 
+if ($mode === 'zero-compat') {
+    // Differential checks against the unchanged legacy parser. The endpoint
+    // range remains an independent constraint, even for a normalized zero.
+    $zeroes = ['0e257', '-0e-257', '+.000E+9999999999999999999999',
+        '000.000e-'.str_repeat('9', 240), '0e'.str_repeat('9', 254),
+        '-0e-'.str_repeat('9', 252), str_repeat('0', 256), '  -0.00e+257  '];
+    $tooLong = ['0e'.str_repeat('9', 255), '-0e-'.str_repeat('9', 253),
+        str_repeat('0', 257), ' '.str_repeat('0', 256)];
+    $malformed = ['0e', '0e+', '0e1.0', '0x0', "0e257\0", '0 e257'];
+    $nonzeroOverflow = ['1e257', '-1e-257', '0.01e9999', '-.01e-9999',
+        '1e'.str_repeat('9', 254), '1e256'];
+    foreach (Domain::cases() as $domain) {
+        $max = $domain->maxMinor();
+        foreach ($zeroes as $text) {
+            $legacy = \App\Support\FinancialAmount::parse($text)->minor;
+            $eq($legacy, 0);
+            $eq(Boundary::numericInput($text, $domain), $legacy);
+            $eq(Boundary::numericInput($text, $domain, true, -$max, $max), $legacy);
+            $eq(Boundary::numericInput($text, $domain, false, 0, 0), $legacy);
+            $reject(fn () => Boundary::numericInput($text, $domain, false, 1), $overflow);
+            $reject(fn () => Boundary::numericInput($text, $domain, true, -$max, -1), $overflow);
+        }
+        foreach (array_merge($tooLong, $malformed) as $text) {
+            $reject(fn () => \App\Support\FinancialAmount::parse($text), $invalid);
+            $reject(fn () => Boundary::numericInput($text, $domain), $invalid);
+        }
+        foreach ($nonzeroOverflow as $text) {
+            $reject(fn () => \App\Support\FinancialAmount::parse($text), $overflow);
+            $reject(fn () => Boundary::numericInput($text, $domain, true, -$max), $overflow);
+        }
+        $reject(fn () => \App\Support\FinancialAmount::parse('1e-256'), $invalid);
+        $reject(fn () => Boundary::numericInput('1e-256', $domain), $invalid);
+        foreach (['0e257', '-0e-257', '0e'.str_repeat('9', 254)] as $text) {
+            $reject(fn () => Boundary::regexInput($text, $domain, true, -$max), $invalid);
+            $reject(fn () => Boundary::readDecimal($text, $domain, 'sqlite', false, true), $invalid);
+            $reject(fn () => Boundary::readDecimal($text, $domain, 'mysql', false, true), $invalid);
+        }
+        $reject(fn () => Boundary::numericInput('0e257', $domain, false, -1), $invalid);
+        $reject(fn () => Boundary::numericInput('0e257', $domain, false, 0, $max + 1), $invalid);
+        $reject(fn () => Boundary::numericInput('0e257', $domain, false, 1, 0), $invalid);
+        $eq(Boundary::numericInput('1e-2', $domain, false, 1, 1), 1);
+        $eq(Boundary::regexInput('0.00', $domain), 0);
+        $eq(Boundary::readDecimal('0.00', $domain, 'mysql'), 0);
+    }
+    echo "ACC09_P2_I01_ZERO_COMPAT_PASS {$count} checks\n";
+    exit(0);
+}
+
 if ($mode === 'pure') {
     $eq(PHP_INT_SIZE, 8);
     $eq(ini_get('serialize_precision'), '-1');
@@ -79,7 +127,7 @@ if ($mode === 'pure') {
         $eq(Boundary::numericInput('.01', $domain), 1);
         $eq(Boundary::numericInput('1.', $domain), 100);
         $eq(Boundary::numericInput('0e256', $domain), 0);
-        $reject(fn () => Boundary::numericInput('0e257', $domain), $overflow);
+        $eq(Boundary::numericInput('0e257', $domain), 0);
         foreach (['1e1', ' +1', '1.000', ' 1 ', '.1', '-1', str_repeat('0', $domain->value - 1)] as $bad) {
             $reject(fn () => Boundary::regexInput($bad, $domain), $invalid);
         }
