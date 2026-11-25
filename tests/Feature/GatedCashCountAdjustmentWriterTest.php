@@ -1835,4 +1835,89 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_release_journal', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+
+    public function test_round129_proposal_and_withdrawal_guards_reject_counterfeit_definitions(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic proposal guard tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND129-GUARD']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $protection = app(\App\Services\HeldCashReleaseDocumentProtection::class);
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $uuid = '66666666-6666-4666-8666-666666666666';
+        $propose = fn () => $service->propose($actor, $accountId, (int) $credit->id, 10, $uuid,
+            'QA-ROUND129-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $withdraw = fn () => $service->withdraw($reviewer, $accountId, $uuid,
+            'Independent withdrawal of proposed release', $this->nowAt());
+        $inspect = fn () => $service->inspect($accountId, $this->nowAt());
+        $approve = fn () => $service->recordRelease($reviewer, $accountId, $uuid,
+            '77777777-7777-4777-8777-777777777777', 'Independent approval of shadow release', $this->nowAt());
+        $sqlite = DB::getDriverName() === 'sqlite';
+        $noop = $sqlite ? "BEGIN SELECT 'Held release proposal is immutable'; END"
+            : "FOR EACH ROW SET @qa_proposal_noop = 'Held release proposal is immutable'";
+        $this->assertTrue($protection->active());
+        $auditCount = AuditEvent::query()->count();
+        DB::unprepared('DROP TRIGGER release_plan_reject_update');
+        try {
+            DB::unprepared("CREATE TRIGGER release_plan_reject_update BEFORE UPDATE ON held_cash_release_proposals {$noop}");
+            $this->assertFalse($protection->active());
+            $this->rejects('held_release_protection_missing', $propose);
+            $this->rejects('held_release_protection_missing', $inspect);
+            $this->assertDatabaseCount('held_cash_release_proposals', 0);
+            $this->assertSame($auditCount, AuditEvent::query()->count());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS release_plan_reject_update');
+            $protection->install();
+        }
+        $this->assertTrue($propose()['created']);
+        $before = (array) DB::table('held_cash_release_proposals')->sole();
+        $auditCount = AuditEvent::query()->count();
+        DB::unprepared('DROP TRIGGER release_withdraw_reject_delete');
+        try {
+            DB::unprepared("CREATE TRIGGER release_withdraw_reject_delete BEFORE DELETE ON held_cash_release_withdrawals {$noop}");
+            $this->assertFalse($protection->active());
+            $this->rejects('held_release_protection_missing', $withdraw);
+            $this->rejects('held_release_protection_missing', $approve);
+            $this->rejects('held_release_protection_missing', $inspect);
+            $this->assertDatabaseCount('held_cash_release_withdrawals', 0);
+            $this->assertDatabaseCount('held_cash_release_journal', 0);
+            $this->assertSame($auditCount, AuditEvent::query()->count());
+            $this->assertSame($before, (array) DB::table('held_cash_release_proposals')->sole());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS release_withdraw_reject_delete');
+            $protection->install();
+        }
+        if ($sqlite) {
+            DB::unprepared('DROP TRIGGER release_plan_reject_replace');
+            try {
+                DB::unprepared("CREATE TRIGGER release_plan_reject_replace BEFORE INSERT ON held_cash_release_proposals FOR EACH ROW
+                    WHEN EXISTS (SELECT 1 FROM held_cash_release_proposals d WHERE d.operation_uuid = NEW.operation_uuid)
+                    BEGIN SELECT RAISE(ABORT, 'Held release proposal is immutable'); END");
+                $this->assertFalse($protection->active());
+                $this->rejects('held_release_protection_missing', $withdraw);
+                $this->assertDatabaseCount('held_cash_release_withdrawals', 0);
+            } finally {
+                DB::unprepared('DROP TRIGGER IF EXISTS release_plan_reject_replace');
+                $protection->install();
+            }
+        }
+        $this->assertTrue($protection->active());
+        $this->assertTrue($withdraw()['created']);
+        $this->assertFalse($withdraw()['created']);
+        $this->assertSame(1, $inspect()['withdrawn']);
+        $this->rejects('held_release_journal_proposal', $approve);
+        $this->assertDatabaseCount('held_cash_release_proposals', 1);
+        $this->assertDatabaseCount('held_cash_release_withdrawals', 1);
+        $this->assertDatabaseCount('held_cash_release_journal', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
 }
