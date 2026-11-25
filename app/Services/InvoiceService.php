@@ -33,6 +33,9 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $lockedSubscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if ($includeReadings) {
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);

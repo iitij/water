@@ -29,6 +29,9 @@ class PaymentService
         // The optional meter ID is retained for existing callers, but it never
         // scopes money. Only the subscriber is the financial account.
         DB::transaction(function () use ($subscriber): void {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
             $invoices = Invoice::where('subscriber_id', $subscriber->id)

@@ -1009,4 +1009,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertSame(4000, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->unpostedCashRefundMinor()));
     }
+    public function test_invoice_and_direct_allocation_take_issuance_before_subscriber(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic fence tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-ISSUE-FENCE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 25);
+        $invoice = $this->assertIssuancePrecedesSubscriber(fn () =>
+            app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter));
+        $this->assertIssuancePrecedesSubscriber(fn () => app(PaymentService::class)->recalculateInvoices($subscriber));
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $this->assertSame(15, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $proof = $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $this->assertSame(10, $proof['applied_minor']);
+        $this->assertSame(15, $proof['unapplied_minor']);
+        $this->assertSame(25, $proof['protected_minor']);
+        $this->assertFalse($proof['spending_release_authorized']);
+    }
+
+    public function test_direct_invoice_creation_rolls_back_allocation_on_created_event_failure(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 25);
+        $before = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderBy('id')->get()->toArray();
+        $allocations = DB::table('payment_allocations')->orderBy('id')->get()->toArray();
+        $candidate = new \App\Models\Invoice([
+            'subscriber_id' => $subscriber->id, 'invoice_type' => 'meter',
+            'bill_number' => 'QA-FAILED-DIRECT-CREATE', 'bill_date' => '2026-11-25',
+            'billing_period_start' => '2026-11-01', 'billing_period_end' => '2026-11-24',
+            'consumption_fee' => '0.10', 'previous_balance' => '0.00', 'credit_applied' => '0.10',
+            'total_amount' => '0.10', 'amount_paid' => '0.00', 'status' => 'issued',
+        ]);
+        $dispatcher = \App\Models\Invoice::getEventDispatcher();
+        $this->assertNotNull($dispatcher);
+        \App\Models\Invoice::setEventDispatcher(clone $dispatcher);
+        try {
+            \App\Models\Invoice::created(static function (): void {
+                throw new \DomainException('qa_invoice_created_failure');
+            });
+            $this->rejects('qa_invoice_created_failure', fn () => $candidate->save());
+        } finally {
+            \App\Models\Invoice::setEventDispatcher($dispatcher);
+        }
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertEquals($before, DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderBy('id')->get()->toArray());
+        $this->assertEquals($allocations, DB::table('payment_allocations')->orderBy('id')->get()->toArray());
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
 }

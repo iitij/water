@@ -1,7 +1,7 @@
-name: Held cash correction fence acceptance
+name: Held cash invoice fence acceptance
 on:
   push:
-    branches: ['qa/held-cash-corrections-round111', 'fix/central-g1a-surplus-liability']
+    branches: ['qa/held-cash-invoice-fence-round112', 'fix/central-g1a-surplus-liability']
   workflow_dispatch:
 permissions:
   contents: read
@@ -51,6 +51,7 @@ jobs:
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/InvoiceOverduePolicyTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -124,6 +125,7 @@ jobs:
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/InvoiceOverduePolicyTest.php
       - name: Actual MySQL concurrency on changed correction paths
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round111_|test_round110_|test_p1_corrections_concurrent_refund_and_void_cannot_both_commit|test_p1_corrections_reciprocal_transfers_conserve_both_accounts|test_invoice_and_collection_in_parallel_conserve_the_balance' tests/Feature/FinancialConcurrencyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round112_|test_round111_|test_round110_|test_p1_corrections_concurrent_refund_and_void_cannot_both_commit|test_p1_corrections_reciprocal_transfers_conserve_both_accounts|test_invoice_and_collection_in_parallel_conserve_the_balance' tests/Feature/FinancialConcurrencyTest.php

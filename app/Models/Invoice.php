@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use App\Support\AccountMoney;
 use App\Support\MoneyBoundary;
 use App\Support\SignedMinor;
@@ -71,6 +72,24 @@ class Invoice extends Model
         if ($errors !== []) {
             throw \Illuminate\Validation\ValidationException::withMessages($errors);
         }
+    }
+
+    /**
+     * A new invoice and its created-event allocation revision share the same
+     * transaction. Acquire the issuance fence before the subscriber or insert.
+     * This is not permission to bypass the financial invoice issuing service.
+     */
+    public function save(array $options = [])
+    {
+        if ($this->exists) return parent::save($options);
+
+        return DB::transaction(function () use ($options) {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
+            Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
+            return parent::save($options);
+        });
     }
 
     // ─── Relationships ───
