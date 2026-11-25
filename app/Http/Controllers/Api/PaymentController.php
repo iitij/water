@@ -327,11 +327,10 @@ class PaymentController extends ApiController
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'no_new_cash_movement' => ['required', 'accepted'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        $transfer = app(\App\Services\PaymentAccountTransferService::class)->transfer(
-            Payment::findOrFail($id), (int) $data['to_subscriber_id'], $request->user(), $data['reason'], $data['evidence']
-        );
-        return response()->json(['transfer' => $transfer]);
+        return response()->json(app(\App\Services\ProspectiveSubscriberTransferEntry::class)->transfer(
+            $request->user(), Payment::findOrFail($id), $data));
     }
 
     public function destroy(int $id)
