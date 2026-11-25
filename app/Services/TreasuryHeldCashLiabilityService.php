@@ -86,8 +86,8 @@ final class TreasuryHeldCashLiabilityService
                     $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(),
                         'held_cash_uuid_reserved');
                 }
-                $this->need(! DB::table('treasury_held_cash_assignments')->where('reference', $reference)->lockForUpdate()->first()
-                    && ! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()
+                $this->assertUnusedReference($reference, 'held_cash_assignment_conflict');
+                $this->need(! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()
                     && ! DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->exists(),
                     'held_cash_assignment_conflict');
                 $this->need($this->registry->record($context, $uuid, $legs, $now), 'held_cash_assignment_conflict');
@@ -150,11 +150,7 @@ final class TreasuryHeldCashLiabilityService
                 }
                 $this->need(! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists(),
                     'held_cash_authorization_conflict');
-                foreach (['treasury_held_cash_payout_authorizations', 'treasury_held_cash_payouts', 'treasury_held_cash_assignments', 'treasury_held_cash_credits'] as $table) {
-                    $this->need(! DB::table($table)->where('reference', $reference)->exists(), 'held_cash_authorization_conflict');
-                }
-                $this->need(! DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
-                    && ! DB::table('treasury_accounts')->where('opening_reference', $reference)->exists(), 'held_cash_authorization_conflict');
+                $this->assertUnusedReference($reference, 'held_cash_authorization_conflict');
                 $this->assertPayoutCash((int) $original->treasury_account_id, $minor, $date);
                 $row['authorized_at_utc'] = $now->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
                 DB::table('treasury_held_cash_payout_authorizations')->insert($row);
@@ -337,11 +333,8 @@ final class TreasuryHeldCashLiabilityService
                 foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims'] as $table) {
                     $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(), 'held_cash_uuid_reserved');
                 }
-                $this->need(! DB::table('treasury_held_cash_payouts')->where('reference', $reference)->exists()
-                    && ! DB::table('treasury_held_cash_assignments')->where('reference', $reference)->exists()
-                    && ! DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
-                    && ! DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
-                    && ! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists(), 'held_cash_payout_conflict');
+                $this->assertUnusedReference($reference, 'held_cash_payout_conflict');
+                $this->need(! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists(), 'held_cash_payout_conflict');
                 $accountId = (int) $original->treasury_account_id;
                 $this->assertPayoutCash($accountId, $minor, $date);
                 $this->need($this->registry->record($context, $uuid, $legs, $now), 'held_cash_payout_conflict');
@@ -408,13 +401,9 @@ final class TreasuryHeldCashLiabilityService
                 foreach (['payments', 'late_receipt_reviews', 'noncash_collection_claims'] as $table) {
                     $this->need(! DB::table($table)->where('sync_uuid', $uuid)->lockForUpdate()->first(), 'held_cash_uuid_reserved');
                 }
-                foreach (['treasury_held_cash_credits', 'treasury_held_cash_assignments', 'treasury_held_cash_payouts'] as $table) {
-                    $this->need(! DB::table($table)->where('reference', $reference)->exists(), 'held_cash_credit_conflict');
-                }
+                $this->assertUnusedReference($reference, 'held_cash_credit_conflict');
                 $this->need(! DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists()
-                    && ! DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->exists()
-                    && ! DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
-                    && ! DB::table('treasury_accounts')->where('opening_reference', $reference)->exists(), 'held_cash_credit_conflict');
+                    && ! DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->exists(), 'held_cash_credit_conflict');
                 $ledger = app(TransactionService::class);
                 $before = $ledger->accountBalanceMinor($subscriber);
                 $doc = \App\Models\TreasuryHeldCashCredit::create($record);
@@ -741,6 +730,26 @@ final class TreasuryHeldCashLiabilityService
         $row = DB::table('treasury_held_cash_liabilities')->where('id', $id)->lockForUpdate()->first();
         $this->need($row !== null, 'held_cash_liability_missing');
         return $row;
+    }
+
+    /** Same reference namespace across held documents and existing cash evidence. */
+    private function assertUnusedReference(string $reference, string $reason): void
+    {
+        foreach ([
+            'treasury_held_cash_assignments' => 'reference',
+            'treasury_held_cash_payout_authorizations' => 'reference',
+            'treasury_held_cash_payouts' => 'reference',
+            'treasury_held_cash_credits' => 'reference',
+            'treasury_accounts' => 'opening_reference',
+            'treasury_postings' => 'evidence_reference',
+            'cash_handovers' => 'reference',
+            'payment_refunds' => 'disbursement_reference',
+            'late_receipt_reviews' => 'evidence_reference',
+            'cash_session_fundings' => 'reference',
+            'treasury_cash_counts' => 'reference',
+        ] as $table => $column) {
+            $this->need(! DB::table($table)->where($column, $reference)->exists(), $reason);
+        }
     }
 
     private function lock(): void
