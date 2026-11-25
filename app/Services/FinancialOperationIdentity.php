@@ -30,7 +30,7 @@ final class FinancialOperationIdentity
     {
         $this->lock();
         if (DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
-            throw new DomainException('financial_uuid_already_registered');
+            abort(409, 'معرّف العملية مستخدم في السجل المالي.');
         }
     }
 
