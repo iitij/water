@@ -101,6 +101,7 @@ final class TreasuryTransferService
             if ($record['dispatched_on'] < $from->opening_on || $record['dispatched_on'] < $to->opening_on) {
                 $this->reject('dispatched_on', 'يجب أن يسبق افتتاح الحسابين تاريخ التحويل أو يوافقه.');
             }
+            app(HeldCashReservation::class)->assertOrdinaryOutflow((int) $from->id, $record['amount_minor'], $record['dispatched_on']);
             $this->unusedReference($record['reference']);
             $id = DB::table('treasury_transfers')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
             $posting = DB::table('treasury_postings')->insertGetId([
