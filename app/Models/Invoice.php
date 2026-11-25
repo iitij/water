@@ -265,22 +265,4 @@ class Invoice extends Model
         }
     }
 
-    /**
-     * توليد رقم فاتورة فريد
-     */
-    public static function generateBillNumber(): string
-    {
-        $prefix = 'INV-' . date('Ym') . '-';
-        $lastInvoice = static::withTrashed()
-            ->where('bill_number', 'like', $prefix . '%')
-            ->orderByDesc('bill_number')
-            ->first();
-
-        if ($lastInvoice) {
-            $lastNumber = (int) str_replace($prefix, '', $lastInvoice->bill_number);
-            return $prefix . str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
-        }
-
-        return $prefix . '0001';
-    }
 }
