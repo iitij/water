@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Source and scoped runtime acceptance complete for P1/C. Review only new V2 composition or actual demonstrated lock/financial issue. No duplicate tests or product edits; P2 integration held.",
+      "next": "V2 frozen at 40a216b. Review only new integration evidence or demonstrated financial/lock issues; no repeat source acceptance. For A-C-09-L01 specify a bounded ordinary synthetic cross-account contention test/acceptance criterion with D, not a schema change. Keep permanent closing inactive.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -64,7 +64,7 @@
       "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "P1 scoped runtime accepted at8f52bdc; foundation37ee7ea pure source accepted, integration plan received. Freeze; P2 excluded from V2. Start I01 only after exact V2 acceptance and supervisor scope.",
+      "next": "V2 frozen at 40a216b; preserve P1 and isolated foundation37ee7ea. Existing P2 I01 plan ready; no caller edits until V2 runtime acceptance and explicit I01 authorization. Respond only to confirmed integration defects.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -134,7 +134,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Scoped C runtime acceptance complete at3572bf4 and e79c3b4. A-C-08-01/02/03 closed within scope. Preserve all source/financial/audit/operational tests. No live data, no repeated suites or schema change. A-C-09-L01 operational lock breadth and G07 open separately.",
+      "next": "V2 frozen at40a216b. Review only integration evidence on meter policy. With D prepare a precise ordinary synthetic acceptance case for G07 stored ambiguous/overlapping billing input, separate from already accepted reading integrity; do not edit shared InvoiceService or candidate, do not claim failure without execution. Keep live cleanup/previously applied migration plan separate.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -196,7 +196,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Round10: reconcile owner Codex export 137/1219 on exact heads; after Codex composition review G00 on new V2 SHA (27 paths plus manifest, 26 exact exclusive blobs/modes, 20 concurrency methods and C bounded helper, ancestry, locks); identify only integration-specific tests; preserve G07 and A-C-09-L01 operational limits. No duplicate suites or product edits/main merge.",
+      "next": "Independent G00 on frozen40a216b: verify 28 total paths, exact exclusive source blobs/modes, C bounded helper plus exact B methods, all 20 retained cases and no superseded case, unchanged locks and V1/main, exclusions. Review one Codex runtime report; no duplicate runs. Review separate G07 and A-C-09-L01 test proposals with A/C; no product edits or merges.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_9_SCOPED_RUNTIME_ACCEPTED_ROUND_10_V2_COMPOSITION_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_10_V2_COMPOSITION_ACCEPTED_FROZEN_FOR_TARGETED_RUNTIME_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1128,11 +1128,11 @@
       }
     },
     "round10": {
-      "phase": "QA-only V2 composition",
+      "phase": "Frozen V2 integration runtime acceptance",
       "candidate": {
         "branch": "integration/accounting-candidate-v2",
         "seed_sha": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
-        "status": "SEED_CREATED_VERIFIED_NOT_COMPOSED",
+        "status": "COMPOSED_FROZEN_FOR_TARGETED_QA",
         "components": [
           {
             "name": "B complete P1",
@@ -1154,11 +1154,32 @@
         "path_count": 27,
         "exclusive_paths": 26,
         "shared": "tests/Feature/FinancialConcurrencyTest.php",
-        "concurrency_methods": 20
+        "concurrency_methods": 20,
+        "frozen_sha": "40a216bec7ebd540b2d127bea4cdd9180cf0c52a",
+        "reported_tree": "8d95fa4add5c0163daa3d0968bb0fe3fbebc1932",
+        "manifest_path": "WATER_INTEGRATION_V2_MANIFEST.md",
+        "manifest_blob": "ccc487a14d4c3e27309169a3ef615cfd1b18ae28",
+        "verified": "GitHub remote exact head; V1 and all three components ancestors; V1 delta12 commits,28 paths. 26 exclusive candidate blob IDs match manifest declarations, all20 method names present; C18 retained and B2 appended; only obsolete B baseline method missing as intended; WNOHANG present. Three primary locks, Invoice, ReadingSettings, console, ReadingService, InvoiceService blobs equal V1. P2 diverged/excluded, main unchanged. Codex reports exact modes, source method body verification and25 PHP lint pass, all8 dependency manifests/locks unchanged; one inherited documentation trailing space kept. Supervisor did not run lint or directly verify all modes/raw tree."
       },
       "composition": "Owner-mediated Codex may integrate exact approved components on V2 only. Preserve ancestry, 26 source blobs/modes and 20 test method bodies with C bounded helper; only shared semantic resolution; no superseded case; verify V1 unchanged paths and all locks, add/update one integration manifest. Exclude P2 foundation, D latest docs-only delta, ACC14 activation, optional A, P3/closing/returns. No product changes outside exact composition, no new schema changes, no main merge or deployment.",
       "validation": "Static G00 first, freeze resulting exact SHA before targeted integration tests. D independent review. Only integration-justified cases after authorization; preserve prior successful reports. Operational A-C-09-L01 and G07 separate acceptance gates, no schema change without approved scope. G02/G11/G12 held. P2 I01 only after V2 targeted acceptance.",
-      "limits": "No test executed by supervisor, no direct raw cloud file access. Seed branch created and verified only; no integration yet. main verified c877e9feae9a077d0b8d6e170b5ddeeab20f29f6."
+      "limits": "Supervisor read owner-supplied manifest and inspected GitHub refs, compare paths, declared blob IDs and selected unchanged files. No actual runtime or lint performed by supervisor; mode/method-body and other full-tree checks from Codex report, D independent review pending. No branch modifications beyond coordination docs this turn; main frozen.",
+      "runtime": {
+        "status": "AUTHORIZED_AFTER_RUNTIME_G00",
+        "scope": [
+          "Verify published environment, exact frozen head, clean checkout, locked dependencies and separate synthetic SQLite/MySQL schemas before execution.",
+          "MySQL FinancialConcurrencyTest.php: all 20 ordinary approved methods, because merged shared file/helper changes affect all; use documented supported runner, sequential, bounded execution, final parent/JUnit counts. Explicitly exclude any previously restricted case and report why; no retries of restricted checks.",
+          "SQLite and MySQL Acc09P1ExactMoneyTest.php, 15 per engine expected; integration-specific justification: P1 now shares candidate with C meter retirement/receipt provenance, ACC10/11/12/13.",
+          "SQLite and MySQL SingleCurrentMeterTest.php filter test_round9_|test_replacement_preserves_image_referenced_by_another_meter, and StrictSingleMeterPurgeTest.php filter test_plain_meter_deletion_removes_operational_rows_but_preserves_audit_history (6 per engine expected); justify integration with P1 PaymentService/refund and retirement balances. No other previously accepted meter suites unless new demonstrated gap and supervisor approval.",
+          "G10 fresh, legacy-clean, legacy-financial on genuine MySQL, each isolated synthetic empty schema, approved supported scenario runner, require exact PASS marker and exit0. Retain original V1 failure as history. If unavailable report blocker.",
+          "No full suites, no new tests written or product edits, no local device, no production, no changes to environment settings or main, no deployment. Retrieve existing exact V2 evidence if already run, never duplicate. Report exact SHA, command, counts/assertions/skips/errors/exits and JUnit/raw logs; do not count fork-child zero-tests messages as parent results."
+        ],
+        "expected_phpunit": 62,
+        "expected_g10_scenarios": 3,
+        "expected_phpunit_note": "20 MySQL concurrency +30 P1 +12 C follow-up; expected not actual. Report actual if differs; no silent skips.",
+        "report": "WATER_CANDIDATE_V2_VALIDATION.md",
+        "deferred": "G07 stored ambiguity and A-C-09-L01 cross-account lock breadth: A/C/D propose bounded ordinary acceptance, separately authorize. G02/G11 full suites, G12 CI/hosting and actual deployment; P2 I01 remains held until acceptance."
+      }
     }
   }
 }
