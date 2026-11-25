@@ -15,8 +15,6 @@ use App\Services\CashSessionService;
 use App\Services\LateReceiptReviewService;
 use App\Services\PaymentService;
 use App\Services\TreasuryRegisterService;
-use App\Support\CashCustodyAmounts;
-use App\Support\DecimalDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -225,4 +223,35 @@ final class ExactCashCustodyI02Test extends TestCase
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertSame('1.01', $session->fresh()->variance_amount);
     }
+
+    public function test_closed_duplicate_correction_preserves_counted_snapshot_and_exact_original(): void
+    {
+        $collector = $this->collector();
+        $issuer = $this->approver();
+        $service = app(CashSessionService::class);
+        $session = $service->open($collector);
+        $subscriber = $this->subscriber();
+        $payments = app(PaymentService::class);
+        $first = $payments->collectPayment($subscriber, '0.01', userId: $collector->id, syncUuid: (string) Str::uuid());
+        $duplicate = $payments->collectPayment($subscriber, '0.01', userId: $collector->id, syncUuid: (string) Str::uuid());
+        $session = $service->decide($service->close($session, '0.01'), true, $issuer);
+        $snapshot = $session->getRawOriginal();
+        $correct = app(\App\Services\ClosedCashCorrectionService::class);
+        $reason = 'I02 synthetic duplicate bookkeeping receipt';
+        $evidence = 'I02 independently verified one actual cash receipt';
+        $row = $correct->correctDuplicate($duplicate, $first->id, $issuer, $reason, $evidence);
+        $this->assertSame($snapshot, $session->fresh()->getRawOriginal());
+        $this->assertFalse($first->fresh()->isVoided());
+        $this->assertTrue($duplicate->fresh()->isVoided());
+        $this->assertSame(1, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('closed_cash_corrections', 1);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertSame('0.01', $service->summary($session)['post_close_correction_total']);
+        $this->assertSame('0.02', $service->summary($session)['expected_amount']);
+        $replay = $correct->correctDuplicate($duplicate, $first->id, $issuer, $reason, $evidence);
+        $this->assertSame($row['id'], $replay['id']);
+        $this->assertDatabaseCount('closed_cash_corrections', 1);
+        $this->assertSame($snapshot, $session->fresh()->getRawOriginal());
+    }
+
 }
