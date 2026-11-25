@@ -95,6 +95,51 @@ final class GatedCashReceiptWriterTest extends TestCase
         }
     }
 
+    public function test_release_cash_service_fence_blocks_bypass_and_preserves_exact_replay(): void
+    {
+        $actor = $this->actor();
+        $subscriber = $this->subscriber();
+        $service = app(PaymentService::class);
+        $writer = app(GatedCashReceiptWriter::class);
+        $direct = fn (?GatedCashReceiptWriter $candidate = null) => $service->collectPayment(
+            $subscriber, '10.25', userId: $actor->id, paymentDate: '2026-11-25',
+            syncUuid: self::UUID, gatedWriter: $candidate);
+        $post = fn () => $writer->collect($actor, $subscriber->id, '10.25', self::UUID, $this->nowAt());
+
+        config(['financial_candidate.cash_receipts' => true]);
+        $this->rejects('gated_cash_writer_required', $direct);
+        $this->rejects('gated_cash_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+        DB::table('financial_periods')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $post);
+        foreach (['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        $this->assertSame(0, $subscriber->fresh()->getAccountBalanceMinor());
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertFalse($writer->allowsMutation((int) $subscriber->id, self::UUID));
+
+        config(['financial_candidate.cash_receipts' => false]);
+        $this->rejects('gated_cash_writer_required', $direct);
+        $this->rejects('gated_cash_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+        $again = $post();
+        $this->assertFalse($again['registry_created']);
+        $this->assertSame($result['payment']->id, $again['payment']->id);
+        foreach (['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events'] as $table) {
+            $this->assertDatabaseCount($table, 1);
+        }
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('treasury_postings', 0);
+        // Default-off legacy compatibility for a distinct unregistered operation.
+        $legacy = $service->collectPayment($subscriber, '1.00', userId: $actor->id,
+            paymentDate: '2026-11-25', syncUuid: self::OTHER);
+        $this->assertNotSame($result['payment']->id, $legacy->id);
+        $this->assertSame(1125, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('financial_posting_operations', 1);
+    }
+
     public function test_direct_cash_receipt_and_exact_replay_register_only_subscriber_effect(): void
     {
         $actor = $this->actor();
