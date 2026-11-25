@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify corrected round140 logs and then extend independent source coverage beyond the selected month, without historic corrections or closure certification.",
+  "next": "Round141: extend diagnostics and enforce exact operation membership for multi-leg families and independently test bank collection/late handover and treasury families. Resolve cutover boundary and effective-date policy; no historical remediation or production activation.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -552,7 +552,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round140": {
-    "status": "CORRECTED_TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS_WITH_UNAFFECTED_PRIOR_CASES",
     "base": "2c0a0ec4c6659a6b9c075aa2e3f4b0c2bd139236",
     "branch": "qa/source-coverage-round140-corrected",
     "source": "2f402e4168f444a9b8837dba260b34f20514623d",
@@ -582,6 +582,24 @@
       ],
       "cause": "SQLite third case detected incorrectly dated receipt but missed split refund group. MySQL all passed. Candidate correction uses the same PaymentRefund Eloquent date cast as custody evidence, not raw SQLite timestamp, to normalize authoritative disbursed_on."
     },
-    "correction": "Only refund date retrieval changed; rerun directly affected split-refund/date case on both engines; unaffected cases preserved."
+    "correction": "Only refund date retrieval changed; rerun directly affected split-refund/date case on both engines; unaffected cases preserved.",
+    "jobs": [
+      {
+        "id": 139508262800,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 10,
+        "exit": 0
+      },
+      {
+        "id": 139508263284,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 10,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335",
+    "acceptance": "Two unaffected cases passed initial run on both engines; corrected split-refund/date case passed on both engines, six distinct engine/case combinations. MySQL affected regression repeated due changed source. All runtime evidence exact to recorded SHAs; not a complete source coverage certification."
   }
 }
