@@ -1,7 +1,7 @@
-name: Bidirectional financial source coverage diagnostic
+name: Exact financial operation membership acceptance
 on:
   push:
-    branches: ['qa/source-coverage-round140-corrected']
+    branches: ['qa/source-membership-round141']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round140_detects_correctly_hashed_wrong_date_and_split_refund_operation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round141_|test_round140_registered_documents_match_both_directions_without_authorizing_close|test_round140_detects_correctly_hashed_wrong_date_and_split_refund_operation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,4 +97,4 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round140_detects_correctly_hashed_wrong_date_and_split_refund_operation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round141_|test_round140_registered_documents_match_both_directions_without_authorizing_close|test_round140_detects_correctly_hashed_wrong_date_and_split_refund_operation' tests/Feature/GatedCashCountAdjustmentWriterTest.php
