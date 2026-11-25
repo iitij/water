@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact round130 job output and correct confirmed failures only. Complete writer inventory including invoice generation and cancellation, late receipt and bank reconciliation paths, custody and actual release/close gates. Avoid rerunning accepted baseline.",
+  "next": "Round131: review remaining forward invoice and receipt writers, focus on an untested transition or atomic rollback, no release activation.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -223,7 +223,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round130": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "a13ffc2cfdb7c028ed10585d18f1af03edcca92b",
     "branch": "qa/held-cash-transfer-atomicity-round130",
     "source": "f70f4170cd4255f4a2ffe481c3f0bfba5fd8ea40",
@@ -234,6 +234,23 @@
       "PaymentService: postPayment, voidPayment, requestVoid, decideVoidRequest and noncash clearance use issuance lock; allocation replay and snapshot history conserve sources."
     ],
     "scope": "Inject destination allocation revision INSERT failure after source account updates during current receipt transfer. Verify exact rollback of both balances, allocation revisions/rows, ledger, invoice, audit, release journal, shadow reinstatements, treasury postings, and transfer document. Restore guard, retry once, verify exact conserved balances, reconciliation and unchanged actual reserve; ensure replay idempotent and increased applied credit does not automatically increase shadow release.",
-    "limits": "Partial writer source inventory, not exhaustive; remote full grep did not return output during review. Candidate is test/workflow only; new behavior not yet accepted. No historical remediation, actual reserve reduction, production activation, real data or main changes."
+    "limits": "Partial writer source inventory, not exhaustive; remote full grep did not return output during review. Candidate is test/workflow only; new behavior not yet accepted. No historical remediation, actual reserve reduction, production activation, real data or main changes.",
+    "jobs": [
+      {
+        "id": 139483692072,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 35,
+        "exit": 0
+      },
+      {
+        "id": 139483691514,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 35,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
