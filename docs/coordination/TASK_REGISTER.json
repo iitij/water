@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 44,
+    "round": 48,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2880,7 +2880,7 @@
     },
     "round43": {
       "phase": "Payment origin capture and receipt evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e",
       "source": "bb2a4f4d5bb442b7356f5b1350a60ab33437984c",
       "workflow": "11cc600208516ac5fabcd89ebdb043f0b666a8ed",
@@ -2889,11 +2889,20 @@
       "run": 45565789529,
       "job": 139040198184,
       "scope": "Capture before first network await; carry scope through direct payment/void, reject stale fallback; UUID local receipt, strict scoped queued receipt proof for exact owner/subscriber/invoice/method/cents/UUID/id/number. Six new ordinary cases.",
-      "limits": "No pre-send durable outbox for unknown delivery across session switch, cash-session-close acknowledgement, complete cache scope, persisted needs_attention correction. Pending runtime."
+      "limits": "No pre-send durable outbox for unknown delivery across session switch, cash-session-close acknowledgement, complete cache scope, persisted needs_attention correction. Pending runtime.",
+      "results": {
+        "job": 139040198184,
+        "passed": 17,
+        "new_cases": 6,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,31 infos"
+      }
     },
     "round44": {
       "phase": "V6 cumulative accepted financial close foundations, field replay, payment context",
-      "status": "HOSTED_FULL_PENDING",
+      "status": "INTEGRATED_BACKEND_FAILED_FLUTTER_PASSED",
       "base": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
       "source": "7be61eebc2a6250715359b2a15172c5245123ac8",
       "workflow": "d8ef80231807d099ccb82e0047abec37def402d7",
@@ -2901,7 +2910,117 @@
       "pr": 121,
       "run": 45565915875,
       "scope": "19 exact verified paths from PR117, PR118, PR103/114/116; secure lock files retained, no intermediate workflow. Full SQLite/MySQL and Flutter plus close standalone contracts. Excludes rounds42/43 pending integrated scope.",
-      "limits": "Close coordinator inert, no trusted real proof/coverage binding, all writer fence integration, DB immutability, returned cheque, L01 or deployment approval."
+      "limits": "Close coordinator inert, no trusted real proof/coverage binding, all writer fence integration, DB immutability, returned cheque, L01 or deployment approval.",
+      "results": {
+        "sqlite": {
+          "job": 139040540788,
+          "tests": 501,
+          "assertions": 16204,
+          "failures": 1,
+          "errors": 0,
+          "skipped": 26,
+          "exit": 1
+        },
+        "mysql": {
+          "job": 139040540590,
+          "tests": 501,
+          "assertions": 16463,
+          "failures": 1,
+          "errors": 0,
+          "skipped": 6,
+          "exit": 1
+        },
+        "flutter": {
+          "job": 139040617307,
+          "passed": 790,
+          "skipped": 25,
+          "failed": 0,
+          "exit": 0,
+          "analyzer": "0 errors/warnings,26 infos"
+        }
+      },
+      "failure": "Legacy MobileConnectivityFixesTest replay omitted original notes; expected 201 instead of exact-payload conflict 409. Both engines same failure. Do not accept V6 original source."
+    },
+    "round45": {
+      "phase": "Correct integrated legacy fault replay fixtures without weakening product",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "7be61eebc2a6250715359b2a15172c5245123ac8",
+      "initial_source": "6b537766cf329fe5e829f997ba205c57e2852153",
+      "source": "ab840547a11ee28d031f9e4bcd4381fcc1fbc991",
+      "workflow": "203c53bd910f983ebcbcb7bd6f2490bd5243bf55",
+      "branch": "fix/central-v6-replay-contract",
+      "pr": 122,
+      "first_run": 45566337997,
+      "first_failure": "SQLite randomized first-row selection returned wrong fault after stable UUID sorting; MySQL passed 17/152. Fix original UUID references and replay both identical payloads.",
+      "run": 45566526199,
+      "results": {
+        "sqlite": {
+          "job": 139042569757,
+          "tests": 17,
+          "assertions": 153,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139042570224,
+          "tests": 17,
+          "assertions": 153,
+          "exit": 0
+        },
+        "total": {
+          "tests": 34,
+          "assertions": 306,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      },
+      "scope": "Only MobileConnectivityFixesTest changed: exact original notes/date/time replay, omitted notes conflict and retained evidence, deterministic UUID batch replay. No product relaxation.",
+      "limits": "Full corrected composition required; original round44 not accepted."
+    },
+    "round46": {
+      "phase": "Drift durable failure state and explicit acknowledgement",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "bb2a4f4d5bb442b7356f5b1350a60ab33437984c",
+      "source": "2c60c4b7c6261d5cb7e05b9af5e644dbfb33fa13",
+      "workflow": "16ed79850245059b3d9715fae9db826967e63d3c",
+      "branch": "fix/central-drift-durable-failure-state",
+      "pr": 123,
+      "run": 45566452418,
+      "job": 139042435280,
+      "results": {
+        "passed": 62,
+        "new_cases": 1,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,31 infos"
+      },
+      "scope": "Persist actual failure state and HTTP status, clear code on retry, guard foreign/terminal failure writes, no implicit acknowledgement of omitted rows via saveAll.",
+      "limits": "Still requires integrated Flutter; durable pre-send outbox, cash-session/void acknowledgements, backup origin and full cache isolation open."
+    },
+    "round47": {
+      "phase": "Scoped authenticated HTTP memory cache",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "2c60c4b7c6261d5cb7e05b9af5e644dbfb33fa13",
+      "source": "7bd273ce98906a0ef7dd0099a20efd74c87c0d87",
+      "workflow": "723f491619580ac7ae659545b9218faf0e82b812",
+      "branch": "fix/central-scoped-http-cache",
+      "pr": 124,
+      "run": 45566822995,
+      "job": 139043601248,
+      "scope": "Generation/clear epoch on opt-in authenticated GETs, no fallback on HTTP error, full URI key, independent JSON bytes; four new tests.",
+      "limits": "Pending runtime; not Drift field cache partition."
+    },
+    "round48": {
+      "phase": "V7 integrated corrected replay and durable offline queue",
+      "status": "HOSTED_FULL_PENDING",
+      "base": "ab840547a11ee28d031f9e4bcd4381fcc1fbc991",
+      "source": "e2223fa0fec7775ce2a99ca30538bc3e1f9f0196",
+      "workflow": "9858780e7c6fef1234e20ea88f19986aad420397",
+      "branch": "integration/accounting-candidate-v7",
+      "pr": 125,
+      "scope": "18 verified exact Flutter blobs from round46 vs payment context common baseline, corrected V6 fixture. No QA workflow contamination; excludes pending HTTP cache. Full Laravel SQLite/MySQL and ordinary Flutter.",
+      "limits": "No permanent close activation, real production proof source, return workflow, L01 resolution, full backup origin or final release. Full tests pending."
     }
   }
 }
