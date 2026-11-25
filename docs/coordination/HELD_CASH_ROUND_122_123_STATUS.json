@@ -1,0 +1,54 @@
+{
+  "round122": {
+    "source": "061e97b6a0af0b7c5c4f12625ad60973df715c87",
+    "run": 45683795205,
+    "status": "CORRECTIONS_PASS_BOTH_RACE_FAILED",
+    "jobs": [
+      {
+        "id": 139450925472,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 22,
+        "exit": 0
+      },
+      {
+        "id": 139450926119,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 22,
+        "exit": 0
+      },
+      {
+        "id": 139450925994,
+        "engine": "mysql-race",
+        "tests": 1,
+        "assertions": 9,
+        "failures": 1
+      }
+    ],
+    "failure": "Expected held_release_journal_stale; actual held_credit_allocation_reconciliation. Suspected snapshot established by trigger metadata queries before issuance lock; hypothesis pending runtime validation."
+  },
+  "round123": {
+    "source": "d3167ff88b66b453c75e6b1e37e8d88ac5ff2b27",
+    "base": "061e97b6a0af0b7c5c4f12625ad60973df715c87",
+    "branch": "qa/held-cash-reinstatement-fence-round123",
+    "runs": [
+      {
+        "id": 45684196306,
+        "name": "Retired feature removal gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 45684196418,
+        "name": "Held cash incremental fence and latest evidence acceptance",
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ],
+    "status": "STAGED_TARGETED_UNVERIFIED",
+    "scope": "Acquire scope-period-issuance fence before metadata reads in readiness; preserve strict race expectation. Track whether allocation revision was newly appended under subscriber lock; only new revision permits missing reinstatement event. Add latest-revision deletion corruption case and retest directly affected atomic cancellation case, plus independent failed race only.",
+    "limits": "Root cause hypothesis not yet proven; runtime pending. Previously successful correction case not repeated; shared writer change requires affected-path evidence. No effective release or reserve reduction; actual event handling and historical correction remain. No main merge or real data."
+  },
+  "next": "Review exact run, fix only failures; if race still fails inspect reconciliation issues and snapshot boundaries, not weaken assertions. Verify promotion only after necessary changed paths accepted."
+}
