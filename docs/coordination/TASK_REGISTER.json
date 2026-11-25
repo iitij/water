@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 85,
+    "round": 86,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4069,6 +4069,17 @@
       "scope": "Approved original physical till, zero opening and registered ordinary cash receipts; reconstruct expected cash, exact positive variance and submission/approval evidence, verify every earlier already-counted allocation against registered subscriber leg, original decision and cumulative allocation proof ordered by approval audit ID; prevent overspend, preserve original till and receipts, one subscriber leg only, no new treasury cash. Seven cases per engine prepared: two subscribers exhaust capacity in reverse submission order, exact replay after later allocation and one-minor-unit excess rejection, prior legacy and tampered proof, unregistered original receipt, no surplus/date mismatch, authority and closed/frozen, registry fault rollback and retry.",
       "limits": "Partial W18: funded tills, mixed/other approved settlement methods, corrected receipts and historical adoption excluded. Proof is checked by this writer, not yet by independent closure verifier; audit immutability, original till custody completeness and concurrency unproved. Targeted invoice branch not separately tested. Original payment date must be open; cross-period recognition policy remains open. Independent branch from accepted round69; no runtime evidence or new workflow after earlier restriction. No main merge or production data changes.",
       "next": "W19 existing bank collection; resolve W17 dual-date and W18 excluded flows, independent proof verifier and validate pending branches before integration."
+    },
+    "round86": {
+      "phase": "W19 independent read-only modern bank collection pair proof and historical transition hold",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "8f8c4db9a9aa59176dd9ba119fa77f98cd016d2c",
+      "branch": "qa/central-g1b-bank-collection-pair",
+      "runs": [],
+      "scope": "Independent read-only proof for actual modern cleared claim or verified late noncash review: exactly one subscriber and one treasury leg, same UUID, amount and effective date, registered account opening, recomputed source hashes and canonical registry period. No additional posting. Eight cases per engine prepared using actual isolated ordinary claim clearance explicitly registered in synthetic fixture: check/transfer verification, missing bank leg, split operation, legacy unregistered clearance, unregistered opening, date tamper, transaction and cash-source rejection.",
+      "limits": "Partial W19: W15/W16 should own new paired issuance; no third writer or automatic adoption of legacy receipts. Historical unpaired/noncash receipts require explicit transition and independent evidence review. Late-review verifier branch not separately exercised; source coverage and certified_balance remain false. No runtime evidence or new workflow after earlier restriction. No main merge or production changes.",
+      "next": "Review outstanding candidates and actual signatures against accepted base; resolve dual-date and counted-cash gaps, transition policy, independent completeness and evidence writer protection before integration. Prioritize validation rather than treating source-only branches as accepted."
     }
   }
 }
