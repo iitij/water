@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Round 9: scoped source acceptance of B at 8f52bdc recorded PR77; review only C A-C-08-01/02/03 corrections and D image coverage, preserve audit evidence and exact balance, review isolated P2 domain primitive if delivered. No product edits, close/returns or ACC14 activation, no main merge.",
+      "next": "Round 9 final acceptance checkpoint: review exact PR79 37ee7ea CashMoney/SignedMinor contract and PR80 e79c3b4 audit preservation, pending review locking/current read, exact balance/rollback, MySQL lock breadth. Record signed scoped acceptance or concrete defects in PR79/80, not merely review criteria. No product edits, repeated tests, main merge or activation.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -61,10 +61,10 @@
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Keep 8f52bdc frozen pending complete Codex report. To avoid idle time, authorize strictly isolated P2 domain foundation in separate integration/team-b-p2-domain-foundation from 8f52bdc: first inspect existing ExactMoney/domain primitives; implement only missing cash DECIMAL14 and checked portable signed arithmetic, raw lexical validation and pure tests in new independent files, no existing shared code/callers, schema/API changes, treasury posting or reporting integration. Preserve distinct DECIMAL10/12/14 limits; no widening existing ExactMoney12. If no missing primitive document reuse rather than duplicate. P2 runtime integration remains held until accepted new candidate. No product edits to frozen P1, no main merge.",
+      "next": "Freeze PR77 8f52bdc and isolated P2 foundation PR79 37ee7ea. Respond only to concrete A/D findings. Prepare read-only P2 integration slices, field/driver boundaries, exact storage, audit/lock order and rollback from future accepted V2; no integration, no duplicate arithmetic implementation, no candidate edits or main merge.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -130,11 +130,11 @@
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Round 9: independent integration/team-c-obsolete-meter-followup from frozen 3572bf4. Preserve audit history needed for meter replacement/retirement and financial provenance (no blanket audit deletion; owner approval concerns operational readings only). A-C-08-02 ensure ordinary model/API/purger/retirement parity for pending receipt review and current locked revalidation under subscriber-first ordered graph, ordinary application tests only; do not change shared financial writers or bypass protections. A-C-08-03 add targeted general-cache overflow and required audit failure atomic rollback tests using synthetic ordinary fixtures, and D shared-image callback actual execution and sole-owned cleanup coverage. Fix only confirmed source/contract gaps; if any requires new reserved path or schema, request approval. Preserve original 20-unit tests, retained readings and posted financial records. No live data, already-applied migration replay, candidate edits or main merge.",
+      "next": "Freeze PR80 e79c3b4. Retrieve existing exact-head cloud evidence if run; otherwise one authorized cloud runner executes only the 13 planned ordinary cases in PR80, separate synthetic schemas. Review actual current-read contention and required audit rollback; repair only independently confirmed defects under scope. No already-applied migration replay, product edits without defect approval, real data or main merge.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -196,7 +196,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Round 9: independently review C follow-up exact head and targeted ordinary test evidence. Review B isolated P2 foundation if delivered (pure no integration). Obtain owner-supplied original Round8 reports and reconcile actual counts/exit/SHA/lock/isolation; do not repeat successful suites merely to recover files. Preserve prior G10 and candidate evidence. Prepare V2 manifest B full14 paths, C12 plus followup, G10 fixture, resolve shared FinancialConcurrencyTest.php preserving C bounded helper and B races; no merge yet. G07 stored ambiguous billing targeted proposal remains distinct; no product edits or previously restricted checks.",
+      "next": "Final acceptance checkpoint: recover actual Round8 counts/assertions/skips and Round9 C report from owner, no duplicate runs; review exact PR79/80 source and evidence and publish concrete decisions. Refresh V2 manifest: 27 unique paths before manifest, 20 FinancialConcurrencyTest methods (15 baseline +3 C +2 B), retain C bounded helper. Record G07 unresolved stored-reading billing ambiguity; no claim of pass or new product edit. Hosted CI failure with no steps/BlobNotFound unresolved, separate from runtime. No previously restricted checks or merge.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -958,6 +958,23 @@
           ],
           "evidence": "Each exact-head check completed failure. Job steps API returned an empty list and all three log endpoints returned BlobNotFound. Keep separate from Codex Cloud exit ledger; no product regression inferred."
         }
+      },
+      "final_acceptance_checkpoint": {
+        "source": "Supervisor direct GitHub review of current c04319a2 register, PR79/80 bodies, exact heads and diffs; user reports all completed but no later exact runtime report supplied.",
+        "decision": "FINAL_EVIDENCE_HANDOFF_AND_SCOPED_REVIEW_BEFORE_V2",
+        "B": {
+          "sha": "37ee7ea07a8e4872f0e27e2ca9c36027601e8e66",
+          "status": "IMPLEMENTED_PURE_EVIDENCE_REPORTED_A_D_REVIEW_PENDING",
+          "evidence": "14177 pure checks exit0 and 4000 auxiliary oracle comparisons (1071 expected overflows); auxiliary harness not committed; no DB/caller integration."
+        },
+        "C": {
+          "sha": "e79c3b40e764016efb1987160ee9f618b4b9544d",
+          "status": "IMPLEMENTED_RUNTIME_REPORT_PENDING",
+          "tests": "PR80 exact 5+1 ordinary methods per engine, plus 1 MySQL-only race = 13 planned. Reuse existing results if already run; otherwise only these exact scoped tests."
+        },
+        "cloud": "Recover complete original Round8 P1 and meter reports and any existing Round9 follow-up report from owner. Prior 14 zero command exits includes 2 setups; not test counts. No repeat accepted suites. If Round9 was not executed, run only PR80 cases via approved water-qa synthetic environment. No restricted retries.",
+        "next": "Once A/D accept and exact runtime reports reconcile, supervisor authorizes V2 composition from frozen f043851 with B8f52bdc, Ce79c3b4 and G10 123fe5c; exclude P2 foundation until separate approval. Preserve 20 concurrency methods, lockfiles, protected records, no main merge. Then targeted V2 runtime including affected tests and G07 stored ambiguity; P2 integration only on separately approved accepted base.",
+        "limits": "No new test execution, product edits, branch composition or main merge in supervisor turn. User report completion not sufficient to infer actual test counts. CI root cause unknown; G02/G11 full suites and G12 deployment gates remain."
       }
     }
   }
