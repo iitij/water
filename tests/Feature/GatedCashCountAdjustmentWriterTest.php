@@ -3925,4 +3925,53 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
+
+    public function test_release_cash_actions_subscriber_and_invoice_share_gate_and_replay_identity(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Payment', 'ViewAny:Subscriber', 'View:Subscriber', 'ViewAny:Invoice', 'View:Invoice', 'ViewAny:Payment', 'View:Payment'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        \App\Models\Tariff::create(['name' => 'Synthetic modal tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-CASH-MODAL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $session = app(CashSessionService::class)->open($actor);
+        config(['financial_candidate.cash_receipts' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $subscriberPage = \App\Filament\Resources\SubscriberResource\Pages\ListSubscribers::class;
+        $invoicePage = \App\Filament\Resources\InvoiceResource\Pages\ListInvoices::class;
+        $action = fn ($record) => \Filament\Actions\Testing\TestAction::make('collect_payment')->table($record);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['sync_uuid' => $uuid, 'payment_date' => '2026-11-25', 'cash_session_id' => $session->id,
+            'amount' => '0.25', 'payment_method' => 'cash', 'invoice_id' => $invoice->id, 'notes' => 'Synthetic collection modal'];
+        $modal = \Livewire\Livewire::test($subscriberPage)->mountAction($action($subscriber))
+            ->assertActionDataSet(['payment_date' => '2026-11-25'])->setActionData($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        $this->assertDatabaseCount('payments', 0);
+        $modal->assertActionDataSet(['sync_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $receipt = Payment::where('sync_uuid', $uuid)->sole();
+        $this->assertSame((int) $session->id, (int) $receipt->cash_session_id);
+        $this->assertSame((int) $actor->id, (int) $receipt->user_id);
+        $this->assertSame('0.25', $invoice->fresh()->amount_paid);
+        $invoiceData = array_diff_key($data, ['invoice_id' => true]);
+        \Livewire\Livewire::test($invoicePage)->callAction($action($invoice), data: $invoiceData)->assertHasNoActionErrors();
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $second = array_replace($invoiceData, ['sync_uuid' => '99999999-9999-4999-8999-999999999999', 'amount' => '0.40']);
+        \Livewire\Livewire::test($invoicePage)->callAction($action($invoice), data: $second)->assertHasNoActionErrors();
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $second['sync_uuid'], 'amount_minor' => 40]);
+        $this->assertSame('0.65', $invoice->fresh()->amount_paid);
+        $this->assertSame(-35, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(65, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
 }
