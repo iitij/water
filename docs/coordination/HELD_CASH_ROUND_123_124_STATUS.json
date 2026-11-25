@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact SQLite/MySQL CI; fix confirmed defects only. Continue prospective reserve settlement design and actual bank fee/disbursement protection; finish Flutter inventory without archive download.",
+  "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue remaining refund/transfer/funding/opening and disbursement actual entrypoints, reserve discharge contract and Flutter inventory.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-surplus-handover",
-      "commit": "b7b3a371be61108f0328cf86f3c7436eb4d02f47",
-      "run": 45720139567,
-      "sqlite": "1 test, 25 assertions",
-      "mysql": "1 test, 25 assertions",
-      "scope": "Full counted cash handover for verified positive till variance to one destination only; atomic required reserve audit linked to original approval, source, treasury posting and operation UUID. HandoverSurplusReservation reconstructs registered source and proof; added to ordinary outflow and existing held payout liquidity checks separately from existing liability lots. Full positive variance remains conservatively reserved even after already-counted subscriber allocation; no duplicate treasury movement. Targeted test verifies 1000 expected, 1500 counted, 500 new protected reserve plus 25 existing, rejects partial and 11001 outflow, exact replay before later review, 200 allocated without new treasury movement."
+      "branch": "release/prospective-surplus-proof-ordering",
+      "commit": "3b6d16e4dfa8d35ef54486922f07ce9fb5823a8c",
+      "run": 45721200979,
+      "sqlite": "2 tests, 24 assertions",
+      "mysql": "2 tests, 24 assertions",
+      "scope": "Reuse independent counted-cash session proof for positive-variance handover with prior late reviews; preserve original till and full reserve. Validate ordered approval, full custody receipt and reserve audits. Two new tests: allocation before and after handover then idempotent replay; tampered and missing reserve proof blocks ordinary outflow."
     }
   },
   "round146": {
@@ -1448,12 +1448,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_surplus_proof_ordering": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "b7b3a371be61108f0328cf86f3c7436eb4d02f47",
     "branch": "release/prospective-surplus-proof-ordering",
     "source": "3b6d16e4dfa8d35ef54486922f07ce9fb5823a8c",
     "scope": "Reuse independent counted-cash session proof for positive-variance handover with prior late reviews; preserve original till and full reserve. Validate ordered approval, full custody receipt and reserve audits. Two new tests: allocation before and after handover then idempotent replay; tampered and missing reserve proof blocks ordinary outflow.",
-    "limits": "CI pending. Nonpositive variance with late reviews remains unsupported; closed corrections, split positive custody, reserve discharge, broader writer/entrypoint and Flutter coverage remain open. No main merge, production activation or historical changes.",
-    "next": "Verify exact SQLite/MySQL CI; fix confirmed defects only. Continue prospective reserve settlement design and actual bank fee/disbursement protection; finish Flutter inventory without archive download."
+    "limits": "Exact source, raw logs and lockfile verified. Positive surplus ordering and proof corruption cases only; no release/discharge, other handover scenarios or production activation.",
+    "next": "Protect actual bank fee and other disbursement writers.",
+    "run": 45721200979,
+    "jobs": [
+      {
+        "id": 139579678092,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 24,
+        "exit": 0
+      },
+      {
+        "id": 139579677741,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 24,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_bank_fee_entry": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "3b6d16e4dfa8d35ef54486922f07ce9fb5823a8c",
+    "branch": "release/prospective-bank-fee-entry",
+    "source": "c813024de1b21bf9afb13d7dc23593165314a350",
+    "scope": "Private exact statement/line/actor mutation scope in GatedBankFeeWriter, required at BankReconciliationService::recordFee under issuance lock when default-off bank_fees flag enabled or source already registered. Actual fee HTTP endpoint requires operation UUID in staging/testing, derives booked_on and amount from persisted bank line, preserves response, no fallback, returns conflict on direct/disabled protected attempt. New targeted test checks direct/inactive scope, independent importer, missing UUID, prohibited amount, closed period, exact single treasury debit, replay conflict and unchanged subscriber/reserve.",
+    "limits": "CI pending. Only actual bank fee API and service covered, other web/mobile callsites not exhaustively inventoried; no reserve release, other disbursement protection, main merge, historical correction or production activation.",
+    "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue remaining refund/transfer/funding/opening and disbursement actual entrypoints, reserve discharge contract and Flutter inventory."
   }
 }
