@@ -135,7 +135,7 @@ class CashSessionsTable
                     ->requiresConfirmation()
                     ->action(function (CashSession $record, array $data): void {
                         app(\App\Services\CashHandoverService::class)->record($record, Auth::user(),
-                            (float) $data['amount'], $data['reference'], $data['received_on'], $data['evidence']);
+                            $data['amount'], $data['reference'], $data['received_on'], $data['evidence']);
                         Notification::make()->title('تم توثيق الاستلام الفعلي')->success()->send();
                     }),
                 Action::make('late_receipt_review')
