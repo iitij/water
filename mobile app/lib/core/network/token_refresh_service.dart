@@ -22,6 +22,8 @@ class TokenRefreshService {
   final SecureStorageService _storage;
 
   Future<String?>? _inFlight;
+  int? _stateGeneration;
+  int _resetGeneration = 0;
   DateTime? _lastFailureAt;
 
   /// آخر توكن ناتج عن تدوير ناجح. الطلبات التي كانت في الطريق وقت التدوير
@@ -41,6 +43,11 @@ class TokenRefreshService {
 
   /// يعيد التوكن الجديد، أو null إذا تعذّر التحديث (فتُنهى الجلسة).
   Future<String?> refresh() {
+    final generation = _storage.sessionGeneration;
+    if (_stateGeneration != generation) {
+      reset();
+      _stateGeneration = generation;
+    }
     final active = _inFlight;
     if (active != null) return active;
 
@@ -50,14 +57,21 @@ class TokenRefreshService {
       return Future<String?>.value(null);
     }
 
-    final future = _performRefresh();
-    _inFlight = future.whenComplete(() => _inFlight = null);
-    return _inFlight!;
+    final resetGeneration = _resetGeneration;
+    late final Future<String?> future;
+    future = _performRefresh(generation, resetGeneration).whenComplete(() {
+      if (identical(_inFlight, future)) _inFlight = null;
+    });
+    _inFlight = future;
+    return future;
   }
 
-  Future<String?> _performRefresh() async {
+  bool _isCurrent(int generation, int resetGeneration) =>
+      _storage.sessionGeneration == generation && _resetGeneration == resetGeneration;
+
+  Future<String?> _performRefresh(int generation, int resetGeneration) async {
     final current = await _storage.readAccessToken();
-    if (current == null || current.isEmpty) return null;
+    if (!_isCurrent(generation, resetGeneration) || current == null || current.isEmpty) return null;
 
     final recent = _recentToken;
     final recentAt = _recentAt;
@@ -73,13 +87,15 @@ class TokenRefreshService {
         ApiEndpoints.refresh,
         options: Options(
           headers: <String, dynamic>{'Authorization': 'Bearer $current'},
-          extra: const <String, dynamic>{
+          extra: <String, dynamic>{
+            'authSessionGeneration': generation,
             'skipAuth': true,
             'skipRefresh': true,
             'skipOfflineCache': true,
           },
         ),
       );
+      if (!_isCurrent(generation, resetGeneration)) return null;
       final data = response.data;
       final token = data is Map ? data['access_token']?.toString() : null;
       if (token == null || token.isEmpty) {
@@ -87,12 +103,18 @@ class TokenRefreshService {
         return null;
       }
 
-      await _storage.writeAccessToken(token);
+      final replaced = await _storage.replaceAccessTokenIfCurrent(
+        generation: generation,
+        expected: current,
+        replacement: token,
+      );
+      if (!replaced || !_isCurrent(generation, resetGeneration)) return null;
       _recentToken = token;
       _recentAt = DateTime.now();
       _lastFailureAt = null;
       return token;
     } on DioException {
+      if (!_isCurrent(generation, resetGeneration)) return null;
       _lastFailureAt = DateTime.now();
       return null;
     }
@@ -100,6 +122,8 @@ class TokenRefreshService {
 
   /// يُستخدم في تسجيل الخروج لتصفير حالة التحديث.
   void reset() {
+    ++_resetGeneration;
+    _stateGeneration = null;
     _inFlight = null;
     _lastFailureAt = null;
     _recentToken = null;

@@ -33,6 +33,11 @@ class BackupException implements Exception {
   String toString() => message;
 }
 
+/// A name already belongs to another backup; the caller must allocate a new one.
+class BackupNameConflict implements Exception {
+  const BackupNameConflict();
+}
+
 /// ملف نسخة احتياطية مع بياناته الوصفية (بلا محتوى البيانات الثقيل).
 class BackupFile {
   const BackupFile({
@@ -92,6 +97,8 @@ abstract interface class FieldDataStore {
 
 /// مكان حفظ الملفات (مجلد المستندات على الجهاز، أو ذاكرة في الاختبارات).
 abstract class BackupStorage {
+  /// Create a new file exclusively; never replace an existing backup.
+  /// Throw BackupNameConflict when the name already exists.
   Future<String> write(String name, String contents);
 
   Future<List<String>> list();
@@ -126,8 +133,24 @@ class DeviceBackupStorage implements BackupStorage {
   Future<String> write(String name, String contents) async {
     final dir = await _dir();
     final file = File('${dir.path}/$name');
-    await file.writeAsString(contents, flush: true);
-    return file.path;
+    try {
+      await file.create(exclusive: true);
+    } on FileSystemException {
+      if (await file.exists()) throw const BackupNameConflict();
+      rethrow;
+    }
+    try {
+      await file.writeAsString(contents, flush: true);
+      return file.path;
+    } catch (_) {
+      // Delete only the file this call successfully reserved.
+      try {
+        await file.delete();
+      } catch (_) {
+        // A failed cleanup remains visible as an incompatible file.
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -214,9 +237,26 @@ class LocalBackupService {
       'checksum': checksumOf(data),
       'data': data,
     };
-    final name = fileNameFor(createdAt);
     final contents = const JsonEncoder.withIndent('  ').convert(payload);
-    await _storage.write(name, contents);
+    final baseName = fileNameFor(createdAt);
+    final existing = (await _storage.list()).toSet();
+    String? name;
+    for (var sequence = 0; sequence < 10000; sequence++) {
+      final candidate = sequence == 0
+          ? baseName
+          : '${baseName.substring(0, baseName.length - BackupFormat.fileSuffix.length)}-${sequence.toString().padLeft(4, '0')}${BackupFormat.fileSuffix}';
+      if (existing.contains(candidate)) continue;
+      try {
+        await _storage.write(candidate, contents);
+        name = candidate;
+        break;
+      } on BackupNameConflict {
+        // Another call reserved the same name after the list operation.
+      }
+    }
+    if (name == null) {
+      throw const BackupException('تعذر تخصيص اسم نسخة احتياطية فريد.');
+    }
 
     return BackupFile(
       name: name,
@@ -246,7 +286,12 @@ class LocalBackupService {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) throw const BackupException('ملف غير معروف');
       final map = Map<String, dynamic>.from(decoded);
-      final counts = _countsOf(map['data']);
+      final data = map['data'];
+      final counts = _countsOf(data);
+      final valid = map['format'] == 'water-field-backup' &&
+          map['version'] is int && map['version'] == BackupFormat.version &&
+          data is Map && map['checksum'] is String &&
+          checksumOf(Map<String, dynamic>.from(data)) == map['checksum'];
       return BackupFile(
         name: name,
         createdAt: DateTime.tryParse(map['created_at']?.toString() ?? '')?.toUtc() ?? fallbackDate,
@@ -254,7 +299,7 @@ class LocalBackupService {
         appVersion: map['app_version']?.toString(),
         formatVersion: (map['version'] as num?)?.toInt() ?? 0,
         counts: counts,
-        isCompatible: (map['version'] as num?)?.toInt() == BackupFormat.version,
+        isCompatible: valid,
       );
     } catch (_) {
       return BackupFile(
@@ -284,11 +329,14 @@ class LocalBackupService {
     if (payload['format'] != 'water-field-backup') {
       throw const BackupException('الملف ليس نسخة احتياطية من تطبيق المياه.');
     }
-    final version = (payload['version'] as num?)?.toInt() ?? 0;
-    if (version > BackupFormat.version) {
+    final version = payload['version'];
+    if (version is int && version > BackupFormat.version) {
       throw BackupException(
         'النسخة من إصدار أحدث (صيغة $version). حدّث التطبيق ثم أعد المحاولة.',
       );
+    }
+    if (version is! int || version != BackupFormat.version) {
+      throw const BackupException('صيغة النسخة غير معتمدة للاستعادة.');
     }
     final data = payload['data'];
     if (data is! Map) throw const BackupException('الملف لا يحتوي بيانات.');
@@ -382,7 +430,7 @@ class LocalBackupService {
   }
 
   static DateTime? _dateFromFileName(String name) {
-    final match = RegExp(r'water-backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.json')
+    final match = RegExp(r'^water-backup-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d{4})?\.json$')
         .firstMatch(name);
     if (match == null) return null;
     int part(int index) => int.tryParse(match.group(index) ?? '') ?? 0;

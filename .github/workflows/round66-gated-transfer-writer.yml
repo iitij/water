@@ -1,0 +1,114 @@
+name: Gated treasury transfer writer
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round66-gated-transfer-writer.yml']
+permissions:
+  contents: read
+jobs:
+  targeted:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/central-g1b-gated-transfer-writer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - { case: gated-transfer-sqlite, engine: sqlite, sha: 20261506c99e7cc8cbc44c7a9174aab575aee86b }
+          - { case: gated-transfer-mysql, engine: mysql, sha: 20261506c99e7cc8cbc44c7a9174aab575aee86b }
+    env:
+      EXACT_SHA: ${{ matrix.sha }}
+      QA_CASE: ${{ matrix.case }}
+      DB_CONNECTION: ${{ matrix.engine }}
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, pdo_mysql, mysqli, dom, curl, fileinfo, gd, intl, zip, bcmath, pcntl, posix
+          ini-values: serialize_precision=-1
+          coverage: none
+          tools: composer:2.9.8
+      - name: Verify frozen source and locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            '62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335  composer.lock' \
+            '4e49440cc7ed97bf3efa59fca5a4d892f89f9531bda9173ad5ad84777945ddd3  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
+          git rev-parse HEAD
+          php -v
+          composer --version
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist --no-scripts
+          composer check-platform-reqs
+          php artisan package:discover --ansi
+          php vendor/bin/phpunit --version
+          git diff --exit-code
+      - name: Run one approved case group with synthetic database
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/round66-evidence"
+          mkdir -p "$evidence"
+          name="water-r11-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "$DB_CONNECTION" = mysql ]; then
+            socketdir="$(mktemp -d "$RUNNER_TEMP/r11-socket.XXXXXX")"
+            chmod 777 "$socketdir"
+            trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+            export MYSQL_ROOT_PASSWORD="$(openssl rand -hex 24)"
+            export MYSQL_PASSWORD="$(openssl rand -hex 24)"
+            echo "::add-mask::$MYSQL_ROOT_PASSWORD"
+            echo "::add-mask::$MYSQL_PASSWORD"
+            docker run -d --name "$name" --network none \
+              -v "$socketdir:/var/run/mysqld" \
+              -e MYSQL_ROOT_PASSWORD -e MYSQL_PASSWORD -e MYSQL_USER=water_qa -e MYSQL_DATABASE=water_test \
+              mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b \
+              --skip-networking --skip-log-bin --socket=/var/run/mysqld/mysqld.sock
+            export DB_SOCKET="$socketdir/mysqld.sock"
+            export DB_DATABASE=water_test DB_USERNAME=water_qa DB_PASSWORD="$MYSQL_PASSWORD"
+            unset MYSQL_ROOT_PASSWORD MYSQL_PASSWORD
+            ready=0
+            for i in $(seq 1 90); do
+              if docker exec "$name" sh -c 'test "$(cat /proc/1/comm)" = mysqld' 2>/dev/null &&
+                 php -r 'try { $p = new PDO("mysql:unix_socket=".getenv("DB_SOCKET").";dbname=water_test", getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $v=$p->query("SELECT VERSION(), DATABASE(), @@skip_networking, @@log_bin, @@foreign_key_checks, @@unique_checks")->fetch(PDO::FETCH_NUM); if (!preg_match("/^8\\.0\\.46(?:$|[-+])/", $v[0]) || $v[1] !== "water_test" || (int)$v[2] !== 1 || (int)$v[3] !== 0 || (int)$v[4] !== 1 || (int)$v[5] !== 1 || $p->query("SHOW TABLES")->fetch()) { exit(2); } echo "MySQL ", $v[0], " empty synthetic water_test socket-only FK/unique enabled", PHP_EOL; } catch (Throwable $e) { exit(1); }'; then
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+            test "$ready" -eq 1 || { echo 'QA_BLOCKED: isolated MySQL not ready'; exit 1; }
+          else
+            test "$DB_DATABASE" = ':memory:'
+            php -r 'echo "SQLite ", (new PDO("sqlite::memory:"))->query("SELECT sqlite_version()")->fetchColumn(), PHP_EOL;'
+          fi
+          php -l app/Services/GatedTreasuryTransferWriter.php
+          php -l tests/Feature/GatedTreasuryTransferWriterTest.php
+          args=(tests/Feature/GatedTreasuryTransferWriterTest.php)
+          set +e
+          timeout 900s php vendor/bin/phpunit "${args[@]}" --fail-on-incomplete --log-junit "$evidence/junit.xml" 2>&1 | tee "$evidence/result.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          echo "ROUND66_CASE=$QA_CASE EXIT=$result"
+          if [ -f "$evidence/junit.xml" ]; then
+            php -r '$x=simplexml_load_file($argv[1]); foreach($x->testsuite as $s) { foreach(["tests","assertions","errors","failures","skipped"] as $k) echo $k,"=",$s[$k]," "; echo PHP_EOL; } foreach($x->xpath("//testcase[skipped]") as $t) echo "SKIPPED ",$t["class"],"::",$t["name"]," ",trim((string)$t->skipped),PHP_EOL;' "$evidence/junit.xml"
+          fi
+          git diff --exit-code
+          exit "$result"
