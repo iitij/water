@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Check exact round127 job output and only fix confirmed failures; then finish journal semantics, remaining forward writer coverage and closing gates.",
+  "next": "Round128: verify actual journal trigger definitions, including ineffective replacements; keep the active reserve unchanged.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -145,12 +145,29 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round127": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "a4a1eeeedffe7acf01fa93dcc31767f83fab3811",
     "branch": "qa/held-cash-reinstatement-protection-round127",
     "source": "12143e53ac716595c81eb1055c6ebdec6d369fa3",
     "run": 45691525575,
     "scope": "Verify migration-defined reinstatement triggers by exact normalized SQL and metadata; require journal and reinstatement protection in current subscriber allocation and release proposal verification. New test checks missing guards, counterfeit same-name guard, cancellation rollback, successful retry, unchanged actual reserve. Two directly affected missing-evidence regressions restore guard after deliberate disposable fixture corruption to preserve independent detection assertions.",
-    "limits": "Not accepted until exact CI logs verified. Journal trigger definition checking remains weaker than reinstatement checking. No actual reserve reduction, historical remediation, real data mutation, main merge or production activation."
+    "limits": "Not accepted until exact CI logs verified. Journal trigger definition checking remains weaker than reinstatement checking. No actual reserve reduction, historical remediation, real data mutation, main merge or production activation.",
+    "jobs": [
+      {
+        "id": 139477927514,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 37,
+        "exit": 0
+      },
+      {
+        "id": 139477927736,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 34,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
