@@ -2707,7 +2707,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.invoices' => false]);
         $this->rejects('gated_invoice_writer_required', $directCancel);
         $issued = [];
-        foreach ($tables as $table => $rows) $issued[$table] = $snapshot($table);
+        foreach ($tables as $table) $issued[$table] = $snapshot($table);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
         $this->rejects('financial_period_not_open', $cancel);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
