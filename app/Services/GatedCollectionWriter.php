@@ -50,7 +50,7 @@ final class GatedCollectionWriter
         string $reference, string $evidence, string $uuid, DateTimeImmutable $now): array
     {
         return $this->write($actor, 'late_cash', $id, $accountId, null, $receivedOn, $uuid, $now,
-            fn (User $locked) => $this->late->receiveCash($id, $locked, $accountId, $receivedOn, $reference, $evidence));
+            fn (User $locked) => $this->late->receiveCash($id, $locked, $accountId, $receivedOn, $reference, $evidence, $this));
     }
 
     private function write(User $actor, string $kind, int $id, int $destination, ?int $lineId,
