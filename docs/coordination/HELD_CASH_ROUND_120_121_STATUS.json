@@ -1,0 +1,41 @@
+{
+  "round120": {
+    "source": "e71adc943489e920a0030a01e52bbb5e1fb40b98",
+    "run": 45682988346,
+    "status": "TARGETED_BOTH_ENGINES_PASS_NOT_PROMOTED",
+    "jobs": [
+      {
+        "id": 139448109824,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 80,
+        "exit": 0
+      },
+      {
+        "id": 139448110279,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 80,
+        "exit": 0
+      }
+    ],
+    "limits": "Shared allocation writer changed; additional affected-path acceptance pending."
+  },
+  "round121": {
+    "base": "e71adc943489e920a0030a01e52bbb5e1fb40b98",
+    "source": "9e98f27ad194f1bbddd3f89a9f8fc3f1dca601c8",
+    "branch": "qa/held-cash-reinstatement-coverage-round121",
+    "runs": [
+      {
+        "id": 45683410180,
+        "name": "Retired feature removal gate",
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ],
+    "status": "STAGED_INCREMENTAL_RUNTIME_UNVERIFIED",
+    "scope": "Verify all intervening allocation revisions against exact expected reinstatement events. Allow absent event only for current revision in allocation transaction. Reject missing intermediate event even if later allocation rises. New tests cover ordinary refund, transfer and void with existing shadow release; deliberate deletion in disposable fixture; re-run only affected atomic journal case. Prior unchanged evidence retained.",
+    "limits": "No active release or reserve reduction; no new concurrency race yet; historic correction intermediate replay behavior and complete origin/fence proof remain. Need exact engine results before acceptance, then focused MySQL race and relevant changed-path regression. No production or main/real data changes."
+  },
+  "next": "Check round121 logs, correct proven failures using only affected tests, add focused concurrent allocation/reinstatement scenario."
+}
