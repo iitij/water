@@ -350,7 +350,7 @@ class PaymentsRepositoryImpl
   }) async {
     final requestId = request.requestId;
     if (!request.requiresBoundDecision || requestId == null || requestId <= 0) {
-      throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.');
+      throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.', <String, List<String>>{});
     }
     final scope = _captureScope?.call();
     scope?.ensureCurrent();
