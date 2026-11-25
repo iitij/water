@@ -89,5 +89,12 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
+      - name: Permit migration triggers in disposable MySQL only
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Held cash and adjustment tests on MySQL
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php
