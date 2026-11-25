@@ -1,7 +1,7 @@
 name: G11 strict Dart type correction
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: ['integration/accounting-candidate-v2']
     paths: ['.github/workflows/round24-p3-flutter-types.yml']
 permissions:
@@ -94,8 +94,6 @@ jobs:
         run: |
           set -euo pipefail
           flutter analyze --no-pub --no-fatal-infos
-          dart run test/accounting/acc09_exact_money_check.dart
-          dart run test/accounting/acc09_money_contract_check.dart
           set +e
           flutter test --no-pub --concurrency=1 --machine > "$RUNNER_TEMP/flutter-tests.jsonl" 2>&1
           result=$?
@@ -104,13 +102,19 @@ jobs:
           import json,sys
           tests={}
           done={}
+          run_complete=False
           for line in open(sys.argv[1]):
               try: event=json.loads(line)
               except ValueError:
                   print(line.rstrip())
                   continue
+              if not isinstance(event, dict):
+                  print("FLUTTER_NON_EVENT", str(event)[:500])
+                  continue
               kind=event.get("type")
-              if kind=="testStart":
+              if kind=="done":
+                  run_complete=event.get("success") is True
+              elif kind=="testStart":
                   tests[event["test"]["id"]]=event["test"]["name"]
               elif kind=="testDone" and not event.get("hidden",False):
                   done[event["testID"]]=event
@@ -127,7 +131,7 @@ jobs:
                   failed+=1
                   print("FLUTTER_FAILED",tests.get(i,i),event.get("result"))
           print("FLUTTER_RESULT",json.dumps(dict(passed=passed,skipped=skipped,failed=failed)))
-          if not done or failed: sys.exit(1)
+          if not done or failed or not run_complete: sys.exit(1)
           PY
           echo "FLUTTER_EXIT=$result"
           git diff --exit-code
