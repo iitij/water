@@ -78,7 +78,9 @@ final class GatedHistoricalInvoiceCorrectionWriter
                 $originalLines = DB::table('invoice_tariff_lines')->where('invoice_id', $invoiceId)
                     ->orderBy('reading_id')->lockForUpdate()->get();
                 HistoricalTariffEvidence::verify($originalReadings->map(fn ($r) => (object) [
-                    'id' => $r->id, 'period_start' => $r->period_start, 'period_end' => $r->period_end,
+                    'id' => $r->id,
+                    'period_start' => $r->period_start ? \Carbon\CarbonImmutable::parse($r->period_start)->toDateString() : null,
+                    'period_end' => $r->period_end ? \Carbon\CarbonImmutable::parse($r->period_end)->toDateString() : null,
                     'consumption_units' => $r->getRawOriginal('consumption_units'),
                 ]), $originalLines, $invoice->getRawOriginal('consumption_fee'));
                 $originalMinor = AccountMoney::stored($invoice, 'total_amount');
