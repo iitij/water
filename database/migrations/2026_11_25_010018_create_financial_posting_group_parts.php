@@ -11,6 +11,9 @@ return new class extends Migration
     {
         // The original operation UUID and event identity remain globally unique
         // in their existing tables. No historical payload is rewritten.
+        Schema::table('financial_posting_operations', function (Blueprint $table) {
+            $table->unsignedSmallInteger('payload_format')->default(1)->index('fin_operation_format_index');
+        });
         Schema::create('financial_posting_group_parts', function (Blueprint $table) {
             $table->id();
             $table->uuid('operation_uuid');
@@ -29,9 +32,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (DB::table('financial_posting_group_parts')->exists()) {
+        if (DB::table('financial_posting_group_parts')->exists()
+            || DB::table('financial_posting_operations')->where('payload_format', '<>', 1)->exists()) {
             throw new \LogicException('Financial group evidence requires a reviewed recovery procedure.');
         }
         Schema::dropIfExists('financial_posting_group_parts');
+        Schema::table('financial_posting_operations', function (Blueprint $table) {
+            $table->dropIndex('fin_operation_format_index');
+            $table->dropColumn('payload_format');
+        });
     }
 };
