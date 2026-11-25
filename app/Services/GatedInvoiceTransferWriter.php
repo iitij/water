@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 final class GatedInvoiceTransferWriter
 {
     private ?array $transferIdentity = null;
+    private ?array $invoiceIdentity = null;
 
     public function __construct(
         private FinancialWriteGate $gate,
@@ -56,7 +57,13 @@ final class GatedInvoiceTransferWriter
             }
             $balance = app(TransactionService::class);
             $before = $balance->accountBalanceMinor($subscriber);
-            $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter, $notes);
+            $this->need($this->invoiceIdentity === null && DB::transactionLevel() > 0, 'gated_invoice_mutation_scope');
+            $this->invoiceIdentity = ['issue', $subscriberId, $meterId];
+            try {
+                $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter, $notes, true, 'meter', $this);
+            } finally {
+                $this->invoiceIdentity = null;
+            }
             $entry = $this->entry(Invoice::class, (int) $invoice->id, 'invoice');
             $leg = $this->ledger->leg((int) $entry->id);
             $this->need($invoice->bill_date->toDateString() === $context['effective_on']
@@ -93,7 +100,13 @@ final class GatedInvoiceTransferWriter
             }
             $balance = app(TransactionService::class);
             $before = $balance->accountBalanceMinor($subscriber);
-            $invoice = app(InvoiceCancellationService::class)->cancel($invoice, $reason, (int) $actor->id);
+            $this->need($this->invoiceIdentity === null && DB::transactionLevel() > 0, 'gated_invoice_mutation_scope');
+            $this->invoiceIdentity = ['cancel', $invoiceId, (int) $actor->id];
+            try {
+                $invoice = app(InvoiceCancellationService::class)->cancel($invoice, $reason, (int) $actor->id, 'api', $this);
+            } finally {
+                $this->invoiceIdentity = null;
+            }
             $leg = $this->ledger->leg((int) $this->entry(Invoice::class, $invoiceId, 'invoice_reversal')->id);
             $this->need($invoice->status === 'cancelled' && $leg['amount_minor'] === AccountMoney::stored($invoice, 'total_amount')
                 && $balance->accountBalanceMinor($subscriber) === SignedMinor::add($before, $replay ? 0 : $leg['amount_minor']),
@@ -150,6 +163,16 @@ final class GatedInvoiceTransferWriter
             $this->need($created === ! $replay, 'gated_transfer_operation_conflict');
             return ['transfer' => $transfer, 'registry_created' => $created];
         });
+    }
+
+    public function allowsIssue(int $subscriberId, int $meterId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->invoiceIdentity === ['issue', $subscriberId, $meterId];
+    }
+
+    public function allowsCancellation(int $invoiceId, ?int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->invoiceIdentity === ['cancel', $invoiceId, $actorId];
     }
 
     public function allowsTransfer(int $paymentId, int $destinationId, int $actorId): bool
