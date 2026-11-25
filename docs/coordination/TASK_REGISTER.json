@@ -935,6 +935,28 @@
             "durable closing and return posting"
           ],
           "open": "Reconcile Round 8 counts/assertions/skips with existing logs or JUnit, verify A/D acceptance, obtain C Round 9 targeted runtime, track G07 ambiguity. Exact candidate QA after authorized composition."
+        },
+        "hosted_ci": {
+          "status": "FAILED_NO_EXECUTED_STEPS_OR_RETRIEVABLE_LOGS_CAUSE_UNVERIFIED",
+          "check": "reject-removed-feature",
+          "runs": [
+            {
+              "sha": "8f52bdc",
+              "run": 45531057655,
+              "job": 138926168949
+            },
+            {
+              "sha": "3572bf4",
+              "run": 45531278102,
+              "job": 138926922234
+            },
+            {
+              "sha": "e79c3b4",
+              "run": 45533597126,
+              "job": 138934666252
+            }
+          ],
+          "evidence": "Each exact-head check completed failure. Job steps API returned an empty list and all three log endpoints returned BlobNotFound. Keep separate from Codex Cloud exit ledger; no product regression inferred."
         }
       }
     }
