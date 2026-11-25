@@ -65,7 +65,7 @@ final class CashHandoverService
         ];
     }
 
-    public function record(CashSession $session, User $receiver, mixed $amount, string $reference, string $date, string $evidence): CashHandover
+    public function record(CashSession $session, User $receiver, mixed $amount, string $reference, string $date, string $evidence, ?GatedCashHandoverWriter $gatedWriter = null): CashHandover
     {
         abort_unless($this->canRecord($receiver), 403);
         $reference = mb_strtoupper(trim($reference));
@@ -78,7 +78,7 @@ final class CashHandoverService
             || $date > now()->toDateString()) {
             throw ValidationException::withMessages(['handover' => 'بيانات التسليم أو المبلغ أو التاريخ غير صالحة.']);
         }
-        return DB::transaction(function () use ($session, $receiver, $requested, $reference, $date, $evidence): CashHandover {
+        return DB::transaction(function () use ($session, $receiver, $requested, $reference, $date, $evidence, $gatedWriter): CashHandover {
             // Global financial issuance lock serializes reference checks across tills.
             // No subscriber locks are acquired by this custody-only operation.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -87,6 +87,14 @@ final class CashHandoverService
             $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
             abort_if((int) $session->user_id === (int) $receiver->id, 403, 'لا يجوز للمحصّل توثيق الاستلام من نفسه.');
             $existing = CashHandover::where('reference', $reference)->lockForUpdate()->first();
+            $postingId = $existing === null ? null : DB::table('treasury_postings')->where('cash_handover_id', $existing->id)->value('id');
+            $registered = $postingId !== null && DB::table('financial_posting_events')
+                ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsRecord((int) $session->id, $reference, (int) $receiver->id))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.cash_handovers') === true)) {
+                throw new \DomainException('gated_handover_writer_required');
+            }
             if ($existing) {
                 abort_unless((int) $existing->cash_session_id === (int) $session->id
                     && (int) $existing->received_by === (int) $receiver->id
