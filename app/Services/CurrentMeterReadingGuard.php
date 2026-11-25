@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Meter;
+use App\Support\ReadingQuantity;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -25,10 +26,15 @@ final class CurrentMeterReadingGuard
             ]);
         }
 
-        $previous = (float) $meter->getLastReadingValue();
-        if ((float) $currentReading < $previous) {
+        $last = $meter->getLatestReading();
+        $previous = ReadingQuantity::validated(
+            $last ? $last->getRawOriginal('current_reading') : $meter->getRawOriginal('initial_reading'),
+            'previous_reading'
+        );
+        $current = ReadingQuantity::validated($currentReading, 'current_reading');
+        if ($current < $previous) {
             throw ValidationException::withMessages([
-                'current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي السابقة ('.$previous.').'],
+                'current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي السابقة ('.ReadingQuantity::decimal($previous).').'],
             ]);
         }
 

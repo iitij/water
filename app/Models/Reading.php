@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ReadingQuantity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -81,6 +82,16 @@ class Reading extends Model
 
     public function save(array $options = [])
     {
+        // Eloquent decimal casts round before dirty comparison. Validate raw
+        // submitted values even when the rounded cast appears unchanged.
+        $raw = $this->getAttributes();
+        foreach (['previous_reading', 'current_reading'] as $field) {
+            if (array_key_exists($field, $raw)
+                && (! $this->exists || $raw[$field] !== $this->getRawOriginal($field))
+                && ! (! $this->exists && $field === 'previous_reading' && $raw[$field] === null)) {
+                ReadingQuantity::validated($raw[$field], $field);
+            }
+        }
         if (! $this->exists) {
             $meter = Meter::findOrFail($this->meter_id);
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $meter) {
@@ -151,7 +162,8 @@ class Reading extends Model
         $end = $observed ? CarbonImmutable::parse($observed)->toDateString() : null;
         if (! $end || $end <= CarbonImmutable::parse($this->period_start)->toDateString()
             || $end > today()->toDateString()
-            || (float) $this->current_reading < (float) $this->previous_reading) {
+            || ReadingQuantity::validated($this->getAttributes()['current_reading'], 'current_reading')
+                < ReadingQuantity::validated($this->getAttributes()['previous_reading'], 'previous_reading')) {
             throw ValidationException::withMessages(['reading_date' => 'تاريخ أو قيمة القراءة المصححة غير صالح.']);
         }
         $this->period_end = $end;
@@ -160,23 +172,13 @@ class Reading extends Model
     /** Meter readings have two decimal places; calculate in hundredths, not floats. */
     private function calculateConsumption(): void
     {
-        foreach (['previous_reading', 'current_reading'] as $field) {
-            if (! preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', (string) ($this->getAttributes()[$field] ?? ''))) {
-                throw ValidationException::withMessages([$field => 'القراءة يجب أن تكون غير سالبة وبمنزلتين عشريتين كحد أقصى.']);
-            }
-        }
-        $toHundredths = static function ($value): int {
-            if (! preg_match('/^\d{1,10}\.\d{2}$/D', (string) $value)) {
-                throw ValidationException::withMessages(['current_reading' => 'قيمة قراءة العداد خارج النطاق المسموح.']);
-            }
-
-            return (int) str_replace('.', '', (string) $value);
-        };
-        $units = $toHundredths($this->current_reading) - $toHundredths($this->previous_reading);
-        if ($units < 0) {
+        $raw = $this->getAttributes();
+        $previous = ReadingQuantity::validated($raw['previous_reading'] ?? null, 'previous_reading');
+        $current = ReadingQuantity::validated($raw['current_reading'] ?? null, 'current_reading');
+        if ($current < $previous) {
             throw ValidationException::withMessages(['current_reading' => 'القراءة الحالية أقل من القراءة السابقة.']);
         }
-        $this->consumption_units = intdiv($units, 100).'.'.str_pad((string) ($units % 100), 2, '0', STR_PAD_LEFT);
+        $this->consumption_units = ReadingQuantity::decimal($current - $previous);
     }
 
     // ─── Boot: Auto-calculate consumption ───
@@ -215,11 +217,16 @@ class Reading extends Model
                 }
                 $reading->{$field} = $period[$field];
             }
-            $previous = $meter->getLastReadingValue();
-            if ($reading->previous_reading !== null && (float) $reading->previous_reading !== $previous) {
+            $last = $meter->getLatestReading();
+            $previous = ReadingQuantity::validated(
+                $last ? $last->getRawOriginal('current_reading') : $meter->getRawOriginal('initial_reading'),
+                'previous_reading'
+            );
+            $submitted = $reading->getAttributes()['previous_reading'] ?? null;
+            if ($submitted !== null && ReadingQuantity::validated($submitted, 'previous_reading') !== $previous) {
                 throw ValidationException::withMessages(['previous_reading' => 'القيمة السابقة لا تطابق آخر قراءة معتمدة.']);
             }
-            $reading->previous_reading = $previous;
+            $reading->previous_reading = ReadingQuantity::decimal($previous);
             app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
                 $meter, $reading->current_reading, $reading->period_start, $reading->period_end,
                 $reading->actual_reading_date->toDateString()
