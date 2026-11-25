@@ -33,7 +33,7 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
-            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+            $lockedSubscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if ($includeReadings) {
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
                 $meter = \App\Models\Meter::query()->where('subscriber_id', $subscriber->id)
@@ -58,6 +58,26 @@ class InvoiceService
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'readings' => 'لا توجد قراءات جديدة لإصدار فاتورة لهذا المشترك.',
                 ]);
+            }
+
+            // Validate physical observations before pricing, numbering or any financial write.
+            // Existing calendar-only pending invoices retain their historical period policy.
+            if ($uninvoicedReadings->contains(fn (Reading $reading) => $reading->period_basis !== 'legacy_calendar')) {
+                // The subscriber and current meter are already locked. Re-read the
+                // active same-meter chain with current locking reads, including its billed anchor.
+                $chain = Reading::query()->where('meter_id', $meter->id)
+                    ->orderBy('id')->lockForUpdate()->get()
+                    ->map(fn (Reading $reading) => $reading->getRawOriginal())->all();
+                try {
+                    \App\Support\ObservationBillingChain::assertValid(
+                        $chain,
+                        $uninvoicedReadings->modelKeys(),
+                        $meter->getRawOriginal('installed_at') ?? $lockedSubscriber->getRawOriginal('subscription_start_date'),
+                        $meter->getRawOriginal('initial_reading'),
+                    );
+                } catch (\InvalidArgumentException $error) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['readings' => $error->getMessage()]);
+                }
             }
 
             $pricing = app(HistoricalTariffService::class)->quote($uninvoicedReadings);
