@@ -3532,7 +3532,14 @@
       "workflow": "775d4c87a68190a8d6ce7c16c1a0f0dfe6c51657",
       "branch": "fix/central-g1b-treasury-custody-evidence",
       "pr": 138,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45613880319,
+          "name": "Treasury custody source evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "scope": "Cash custody source adapter and registry integration: exact amount, signed direction, source identity, date, channel and refund ledger hash. Two new cases and seven changed verifier regressions per engine.",
       "limits": "No proof of complete source chain, all-writer coverage, concurrency, other treasury families, activation or final closure. Runtime pending."
     }
