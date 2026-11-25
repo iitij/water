@@ -90,7 +90,11 @@ final class TreasuryController extends ApiController
             'source_id' => ['required', 'integer', 'min:1'],
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'],
         ]);
-        return response()->json(['posting' => $service->post($request->user(), $id, $data['kind'], (int) $data['source_id']),
-            'certified_balance' => false]);
+        try {
+            return response()->json(['posting' => $service->post($request->user(), $id, $data['kind'], (int) $data['source_id']),
+                'certified_balance' => false]);
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 }
