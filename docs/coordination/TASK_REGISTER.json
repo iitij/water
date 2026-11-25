@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 41,
+    "round": 44,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2677,7 +2677,7 @@
       "limits": "Separate from Flutter and closure changes. Compose approved slices before final integrated release."
     },
     "remaining_field_sync_review": {
-      "status": "FIELD_FAULT_VISIT_SCOPED_ACCEPTED_DRIFT_AND_SERVER_PROVENANCE_OPEN",
+      "status": "FIELD_FAULT_VISIT_AND_DRIFT_SCOPED_ACCEPTED_FULL_OUTBOX_CACHE_PROVENANCE_OPEN",
       "scope": "Fault batch currently exceeds server max200; both fault/visit records have time-window omissions and unscoped SharedPreferences. Need fixed server+user scope, legacy unknown-owner quarantine without deletion or auto-claim, auth-generation guarded batch requests, complete scoped date enumeration, partial progress and exact server acknowledgement; backend duplicate-owner provenance and Drift queue/account isolation separate review. No widening unscoped upload before ownership guard."
     },
     "round36": {
@@ -2834,7 +2834,7 @@
     },
     "round41": {
       "phase": "Flutter explicit payment account context",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
       "source": "e01e6f3ad3e3716ec6132143dc70aa760554d995",
       "workflow": "b65a66c57d41d994d7f46213b22aebdb5092b5fa",
@@ -2842,7 +2842,66 @@
       "pr": 118,
       "run": 45563559839,
       "scope": "Request-generation guard even for same subscriber, verify response owner and invoice identity, no route meter override, reset account-specific details, reject unverified or completed submission; four new ordinary cases.",
-      "limits": "Runtime result pending; original quarantined diagnostics not enabled, no global skipped-test closure claim."
+      "limits": "Runtime result pending; original quarantined diagnostics not enabled, no global skipped-test closure claim.",
+      "results": {
+        "job": 139032870323,
+        "passed": 14,
+        "new_cases": 4,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,26 infos"
+      }
+    },
+    "round42": {
+      "phase": "Drift durable queue origin ownership",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "e01e6f3ad3e3716ec6132143dc70aa760554d995",
+      "initial_source": "f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e",
+      "source": "ae24ef618861fb375eeae1c942894d2069072f9b",
+      "workflow": "e72bf94551431c63e2f4b8120918a8aabaf7ae16",
+      "branch": "fix/central-drift-queue-ownership",
+      "pr": 119,
+      "first_run": 45565231774,
+      "first_job": 139038373181,
+      "first_failure": "Strict analyzer unnecessary_non_null_assertion; corrected without bypass",
+      "run": 45565551877,
+      "job": 139039431078,
+      "results": {
+        "passed": 57,
+        "new_cases": 5,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,29 infos"
+      },
+      "scope": "Drift v7 origin field, no implicit legacy owner assignment, scoped production queue/direct readings, UUID collision and terminal-state rejection, session-tagged replay, preserve discard evidence, full active enumeration. Legacy preference data untouched by production startup.",
+      "limits": "No full offline cache ownership partition or backup import provenance. No all-producer durable outbox, alternate legacy facade review, close/void acknowledgement or full integrated suite yet. Failure persistence still needs distinct needs_attention state; quarantine UI/recovery pending."
+    },
+    "round43": {
+      "phase": "Payment origin capture and receipt evidence",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e",
+      "source": "bb2a4f4d5bb442b7356f5b1350a60ab33437984c",
+      "workflow": "11cc600208516ac5fabcd89ebdb043f0b666a8ed",
+      "branch": "fix/central-finance-origin-capture",
+      "pr": 120,
+      "run": 45565789529,
+      "job": 139040198184,
+      "scope": "Capture before first network await; carry scope through direct payment/void, reject stale fallback; UUID local receipt, strict scoped queued receipt proof for exact owner/subscriber/invoice/method/cents/UUID/id/number. Six new ordinary cases.",
+      "limits": "No pre-send durable outbox for unknown delivery across session switch, cash-session-close acknowledgement, complete cache scope, persisted needs_attention correction. Pending runtime."
+    },
+    "round44": {
+      "phase": "V6 cumulative accepted financial close foundations, field replay, payment context",
+      "status": "HOSTED_FULL_PENDING",
+      "base": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
+      "source": "7be61eebc2a6250715359b2a15172c5245123ac8",
+      "workflow": "d8ef80231807d099ccb82e0047abec37def402d7",
+      "branch": "integration/accounting-candidate-v6",
+      "pr": 121,
+      "run": 45565915875,
+      "scope": "19 exact verified paths from PR117, PR118, PR103/114/116; secure lock files retained, no intermediate workflow. Full SQLite/MySQL and Flutter plus close standalone contracts. Excludes rounds42/43 pending integrated scope.",
+      "limits": "Close coordinator inert, no trusted real proof/coverage binding, all writer fence integration, DB immutability, returned cheque, L01 or deployment approval."
     }
   }
 }
