@@ -1,7 +1,7 @@
-name: Prospective receipt void service fence
+name: Prospective online void intent acceptance
 on:
   push:
-    branches: ['release/prospective-void-service-fence-corrected']
+    branches: ['release/prospective-void-intent']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Verify protected void boundaries and affected mutation regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round137_rejected_request_creates_no_financial_posting_and_legacy_pending_is_not_adopted' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_intent_|test_release_void_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,32 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Verify protected void boundaries and affected mutation regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round137_rejected_request_creates_no_financial_posting_and_legacy_pending_is_not_adopted' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_intent_|test_release_void_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
 
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: "mobile app"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Verify source and resolve dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          flutter --version
+          sha256sum pubspec.lock
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.lock
+      - name: Analyze changed modules
+        run: dart analyze --no-fatal-warnings lib/features/payments/data/datasources/payments_remote_datasource.dart lib/features/payments/data/repositories/payments_repository_impl.dart test/features/payments/bound_void_intent_test.dart
+      - name: Verify bound decisions and affected list widget
+        run: flutter test --no-pub test/features/payments/bound_void_intent_test.dart
