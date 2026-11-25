@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Freeze isolated policy and persistent design. Provide review of B P1 field bounds and lock order if requested. No new code or tests absent demonstrated gap; no activation or main merge. Optional isolated policy inclusion only after D review and separate approval.",
+      "next": "Round 6: review P1 exact diff at d90643a for monetary conservation, field bounds, historical evidence, refund/transfer/void and lock order; deliver findings to B/D PR76. Keep closing policy/design frozen, no code edits, activation, or main merge.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -44,16 +44,20 @@
         "head": "2529082ee3fed5b663d1966dee0c90cec4e3c710",
         "tested": "6b2e4dcbed3adf4acd2dbdddf91b32f35555bf57",
         "evidence": "Versioned G1B_I01 report: same standalone 40 cases before 27 pass/13 fail/91 checks exit1, after 40 pass/102 checks exit0. D independent review pending; policy inactive."
+      },
+      "round5": {
+        "head": "2529082ee3fed5b663d1966dee0c90cec4e3c710",
+        "evidence": "D source/evidence scoped acceptance PR75 7149367364; 40/102 reported, raw logs not recovered. Remains outside candidate."
       }
     },
     "B": {
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Implement P1 on independent integration/team-b-acc09-p1 from frozen 833cae2. Review PR71 supervisor evidence. Exact historical corrections, refunds, account transfers, void thresholds, internal accessors with conserved amounts and bounds, no schema/wire changes. Reserve Invoice.php changes for supervisor coordination; preserve ACC11 own-debt/status semantics. Do not edit candidate, C paths, activate ACC14/close/returns or merge main. Focused synthetic SQLite/MySQL evidence on exact head; no duplicate baseline suites or previously restricted checks.",
+      "next": "Round 6: freeze d90643a until targeted cloud SQLite and MySQL P1 evidence. Review A/D findings and correct only demonstrated issues in own P1 branch, new exact SHA and affected tests. No candidate changes, P2/P3 cutover, ACC14 activation, schema/wire or main merge. Prepare P2 plan read-only, cash DECIMAL14, aggregates and reports, no implementation until supervisor authorization.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -94,15 +98,19 @@
       "round4e": {
         "head": "833cae2d0c97e00604622b365f5efc7a319a8d50",
         "evidence": "Owner pasted original ACC09 report, supervisor matched full SHA and reconciled all totals; scoped acceptance recorded in PR71 comment 7149316410. No literal lock hashes or raw JUnit supplied, no supervisor rerun. Prior G03 BLOCKED_EVIDENCE lifted for checkpoint only."
+      },
+      "round5": {
+        "head": "d90643a34729a1dac40c369649e5430fd4aa417b",
+        "evidence": "PR76 7149410355: eight changed paths, pure PHP 2018 checks exit0 reported, eight new DB integration cases unrun. Invoice.php untouched. Verified exact remote delta."
       }
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "REVIEW",
+      "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Freeze reading branch; no duplicate tests or edits until candidate G07. Review candidate reading/quantity boundaries and support D after exact integrated SHA. No shared service edits or main merge.",
+      "next": "Round 6: review reading/quantity boundary on frozen f043851, own G07 acceptance criteria and independently review Codex candidate G07 logs (final 47 feature cases plus quantity/period suites). No duplicate heavy tests; no product edits before supervisor assigns confirmed defects, no shared writers or main merge.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -135,6 +143,10 @@
       "round4e": {
         "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
         "evidence": "D independently verified all seven raw log SHA256 and accepted C12-R4C-01 scope PR69 comment 7149114716. Owner provided original Codex pre-fix report exact 240b79f, SQLite6/59 exit0, MySQL5pass1fail/55 exit1; no post-fix cloud run claimed."
+      },
+      "round5": {
+        "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
+        "evidence": "Candidate includes C ancestry; prior D scoped acceptance unchanged."
       }
     },
     "D": {
@@ -143,7 +155,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Review PR71 supervisor report and reconcile original evidence; review A counter-headroom isolated patch. Independently inspect candidate composition after supervisor/Codex produces integrated head (G00, ancestry/diffs/lock hashes, migration ordering, ReadingSettings semantic merge and ACC11 status/scheduler). Then run assigned ordinary G01/G03/G07/G05/G06/G10 focused checks on exact candidate SHA, then remaining G02/G11/G12 according to manifest and approved scope; no repeat of previously restricted checks. G04/G08/G09 remain deferred. No product edits or main merge.",
+      "next": "Round 6: G00 independent review exact f043851 composition, verify 36 paths, source blobs, ancestry, migration order, settings and ACC11 scheduler, verify no P1 or optional A inclusion. Coordinate one cloud runner for focused G01/G03/G07/G05/G06/G10; explicitly identify and exclude previously restricted checks with reason, no duplicate runs. Review P1 exact diff and separate cloud report. Hold G02/G11 full regression until focused results reviewed by supervisor, G04/08/09 deferred, G12 CI/hosting pending. No product edits/main merge.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -306,6 +318,10 @@
       "round4e": {
         "head": "6ba50dda7253e499f95719d19712bb8ceac32cf7",
         "evidence": "PR72 manifest exact deltas and overlap decisions; G10 scoped PASS; seven C log hashes confirmed; ACC09 original report now supplied, reconciles missing 10/92. Independent raw cloud logs not accessible to supervisor."
+      },
+      "round5": {
+        "head": "047a5ea91a1c9851fead4dd8e830d100dde31d32",
+        "evidence": "D accepted scoped G03 and A G1B-I01; D preflight at seed before candidate composed. Supervisor now verified ancestry and locks via GitHub."
       }
     }
   },
@@ -355,7 +371,7 @@
       "owner": "B",
       "status": "IN_PROGRESS",
       "gate": "Stage exact money integration with B sole shared financial writer; no ACC14 activation",
-      "evidence": "Scoped G03 accepted exact 833cae2 from owner-pasted Codex full report, 196/22005, 0 fail/skip, 30048 standalone. P1/P2/P3 and candidate runtime open."
+      "evidence": "Canonical 833cae2 scoped 196/22005 accepted; P1 d90643a implemented, 2018 pure checks reported, eight DB cases unrun. Candidate excludes P1."
     },
     {
       "id": "ACC-10",
@@ -393,7 +409,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_4E_SCOPED_EVIDENCE_ACCEPTED_CANDIDATE_SEED_CREATED_HOLD_MAIN",
+    "decision": "ROUND_5_COMPOSITION_ACCEPTED_ROUND_6_FOCUSED_QA_FROZEN_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -635,7 +651,7 @@
       "candidate": {
         "branch": "integration/accounting-candidate-v1",
         "seed_sha": "833cae2d0c97e00604622b365f5efc7a319a8d50",
-        "status": "SEED_ONLY_NOT_INTEGRATED",
+        "status": "COMPOSED_FROZEN_FOR_FOCUSED_QA",
         "manifest": "6ba50dda7253e499f95719d19712bb8ceac32cf7",
         "components": [
           {
@@ -655,11 +671,26 @@
             "sha": "6ba50dda7253e499f95719d19712bb8ceac32cf7"
           }
         ],
-        "excluded": "A new closing policy optional pending independent review; P1/P2/P3, ACC14 activation and durable closing/return posting excluded. Seed contains prior A base and B canonical scope."
+        "excluded": "A new closing policy optional pending independent review; P1/P2/P3, ACC14 activation and durable closing/return posting excluded. Seed contains prior A base and B canonical scope.",
+        "frozen_sha": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+        "manifest_path": "WATER_INTEGRATION_MANIFEST.md",
+        "verified": "GitHub compare seed ahead30 behind0, 36 paths; each approved source ancestor behind0; P1 diverged, not included. Composer/npm/Flutter lock blobs match seed; Invoice blob matches ACC11; ReadingSettings retains visit labels and integer 0..365; daily schedule present. Codex reports static lint and all source blob/mode checks; supervisor did not rerun."
       },
       "composition": "Supervisor owns candidate; owner-mediated Codex may compose only listed accepted components on candidate branch. Preserve exact ancestry, ReadingSettings visit-planning semantics + integer grace 0..365, Invoice own debt and overdue precedence, scheduler and backlog; no wholesale overwrite, no schema changes beyond approved ACC10 branch, no conflict guessing; report conflict if unresolved. Commit only candidate branch after review and verify main unchanged. No deployment.",
       "acceptance": "Freeze integrated SHA then independent D checks with G00-G12 manifest; do not treat seed as unified. G04/08/09 deferred and release held. No restricted probe reruns.",
       "parallel": "B P1 separate branch only, A/C frozen pending review and candidate."
+    },
+    "round6": {
+      "phase": "Parallel scoped QA of frozen candidate and separate P1; no main merge or broad new implementation",
+      "candidate": "f043851ed7d372a1187581e36aa6ac29f3fb8f94",
+      "p1": "d90643a34729a1dac40c369649e5430fd4aa417b",
+      "cloud_tasks": [
+        "Fresh published water checkout exact candidate; G00 first, if pass run approved ordinary focused G01/G03/G07/G05/G06/G10 sequentially; identify previously restricted cases and exclude with explicit reason; G10 revised scenario helper mismatch use approved supported workflow or report blocker, no old invocation, no production; preserve raw logs and full counts",
+        "Separate fresh checkout exact P1, run eight new Acc09P1ExactMoneyTest cases on SQLite and genuine MySQL sequentially and only justified changed-path regressions, report exact SHA and raw evidence"
+      ],
+      "gates": "No candidate changes during QA. G02/G11 full suites after focused acceptance review, G04 remaining P1/P2/P3 deferred, G08 ACC14 and G09 persistent close/returns inactive, G12 hosted CI/host/security/device open. No main merge/deploy.",
+      "local": "No heavy local tests without supervisor slot. Cloud tasks separate independent sessions and synthetic schemas; avoid duplicate execution by D/C.",
+      "limitations": "No fresh candidate runtime yet. G10 older cloud helper incompatible with revised script. CI startup root cause unresolved. A optional excluded despite scoped evidence. P1 DB tests not run. No supervisor test execution."
     }
   }
 }
