@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Support\FinancialAmount;
 use App\Support\ExactMoney;
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
 
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -24,6 +26,15 @@ class TransactionService
     private function minor(mixed $amount): int
     {
         return FinancialAmount::validated($amount, 'transaction')->minor;
+    }
+
+    private function stored(Model $model, string $field = 'amount'): int
+    {
+        try {
+            return AccountMoney::stored($model, $field);
+        } catch (\InvalidArgumentException|\OverflowException) {
+            $this->reject('قيمة مالية مخزنة غير صالحة؛ يلزم التدقيق دون إعادة تقريبها.');
+        }
     }
 
     /** Match financial postings to the persisted document, not caller-supplied amounts. */
@@ -53,29 +64,29 @@ class TransactionService
                 || ($type === 'invoice' && $doc->status === 'cancelled')) {
                 $this->reject('نوع حركة الفاتورة أو حالتها غير صالح.');
             }
-            $expected = $this->minor($doc->total_amount) * ($type === 'invoice' ? -1 : 1);
+            $expected = $this->stored($doc, 'total_amount') * ($type === 'invoice' ? -1 : 1);
             if ($expected > 0 && $type === 'invoice' || $expected < 0 && $type === 'invoice_reversal') {
                 $this->reject('قيمة الفاتورة سالبة.');
             }
         } elseif ($doc instanceof Payment) {
-            if (! in_array($type, ['payment', 'payment_reversal'], true) || $this->minor($doc->amount) <= 0
+            if (! in_array($type, ['payment', 'payment_reversal'], true) || $this->stored($doc) <= 0
                 || ($type === 'payment' && $doc->isVoided())) {
                 $this->reject('نوع حركة سند القبض أو حالته غير صالح.');
             }
-            $expected = $this->minor($doc->amount) * ($type === 'payment' ? 1 : -1);
+            $expected = $this->stored($doc) * ($type === 'payment' ? 1 : -1);
         } elseif ($doc instanceof PaymentAccountTransfer) {
-            if ($type !== 'payment_transfer_in' || $this->minor($doc->amount) <= 0) {
+            if ($type !== 'payment_transfer_in' || $this->stored($doc) <= 0) {
                 $this->reject('نوع حركة التحويل أو مبلغها غير صالح.');
             }
             $owner = $doc->to_subscriber_id;
             $meterId = null;
-            $expected = $this->minor($doc->amount);
+            $expected = $this->stored($doc);
         } else {
-            if ($type !== 'payment_refund' || $this->minor($doc->amount) <= 0) {
+            if ($type !== 'payment_refund' || $this->stored($doc) <= 0) {
                 $this->reject('نوع حركة الاسترداد أو مبلغها غير صالح.');
             }
             $meterId = null;
-            $expected = -$this->minor($doc->amount);
+            $expected = -$this->stored($doc);
         }
         if ((int) $owner !== (int) $subscriber->id || (int) ($meterId ?? 0) !== (int) ($meter?->id ?? 0)
             || ($meter && (int) $meter->subscriber_id !== (int) $subscriber->id) || $minor !== $expected) {
@@ -114,7 +125,7 @@ class TransactionService
                     if ($existing->trashed()
                         || (int) $existing->subscriber_id !== (int) $subscriber->id
                         || (int) ($existing->meter_id ?? 0) !== (int) ($meter?->id ?? 0)
-                        || $this->minor($existing->amount) !== $this->minor($amount)
+                        || $this->stored($existing) !== $this->minor($amount)
                         || (int) ($existing->retired_meter_id ?? 0) !== (int) ($reference->retired_meter_id ?? 0)) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
                             'transaction' => 'المستند المالي سبق ترحيله ببيانات مختلفة.',
@@ -135,7 +146,9 @@ class TransactionService
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 $transaction->forceFill(['retired_meter_id' => $reference->retired_meter_id, 'retired_meter_code' => $reference->retired_meter_code]);
             }
-            $transaction->save();
+            if (! $transaction->save() || ! $transaction->exists || $transaction->getKey() === null) {
+                throw new \RuntimeException('Ledger posting was not persisted.');
+            }
 
         if ($meter) {
             $this->updateMeterBalance($meter);
@@ -163,11 +176,11 @@ class TransactionService
             $originals = Transaction::withTrashed()->where('reference_type', get_class($reference))
                 ->where('reference_id', $reference->id)->where('type', $originalType)
                 ->lockForUpdate()->get();
-            $expected = $originalType === 'invoice' ? -$this->minor($reference->total_amount) : $this->minor($reference->amount);
+            $expected = $originalType === 'invoice' ? -$this->stored($reference, 'total_amount') : $this->stored($reference);
             if ($originals->count() !== 1
                 || $originals->first()->trashed()
                 || (int) $originals->first()->subscriber_id !== (int) $subscriber->id
-                || $this->minor($originals->first()->amount) !== $expected
+                || $this->stored($originals->first()) !== $expected
                 || (int) ($originals->first()->meter_id ?? 0) !== (int) ($reference->meter_id ?? 0)
                 || (int) ($originals->first()->retired_meter_id ?? 0) !== (int) ($reference->retired_meter_id ?? 0)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -178,7 +191,7 @@ class TransactionService
             $reversal = $this->recordTransaction(
                 subscriber: $subscriber,
                 type: $originalType.'_reversal',
-                amount: ExactMoney::fromMinor(-$this->minor($original->amount))->decimal(),
+                amount: ExactMoney::fromMinor(-$this->stored($original))->decimal(),
                 description: 'عكس الحركة المالية رقم '.$original->id,
                 reference: $reference,
                 meter: $original->meter,
@@ -197,7 +210,7 @@ class TransactionService
     {
         $total = 0;
         foreach ($query->orderBy('id')->cursor() as $entry) {
-            $total = FinancialAmount::add($total, $this->minor($entry->amount));
+            $total = SignedMinor::add($total, $this->stored($entry));
         }
 
         return $total;
@@ -213,7 +226,9 @@ class TransactionService
             'subscriber_balance'
         );
         
-        $subscriber->updateQuietly(['balance' => $totalBalance]);
+        if (! $subscriber->updateQuietly(['balance' => $totalBalance])) {
+            throw new \RuntimeException('Subscriber balance cache was not persisted.');
+        }
     }
 
     /**
@@ -227,6 +242,8 @@ class TransactionService
             FinancialAmount::METER_BALANCE_MAX
         );
         
-        $meter->updateQuietly(['balance' => $totalBalance]);
+        if (! $meter->updateQuietly(['balance' => $totalBalance])) {
+            throw new \RuntimeException('Meter balance cache was not persisted.');
+        }
     }
 }
