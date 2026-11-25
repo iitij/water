@@ -35,7 +35,7 @@ final class FinancialAmount
             $value = (string) $value;
         }
         if (! is_string($value) || strlen($value) > 256
-            || ! preg_match('/\A([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?\z/', trim($value), $m, PREG_UNMATCHED_AS_NULL)) {
+            || ! preg_match('/\A([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?\z/', trim($value, " \t\n\r\v\f"), $m, PREG_UNMATCHED_AS_NULL)) {
             throw new InvalidArgumentException('Decimal amount required.');
         }
         $fraction = $m[4] ?? $m[3] ?? '';
