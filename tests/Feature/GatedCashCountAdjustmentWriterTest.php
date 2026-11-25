@@ -285,4 +285,90 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('transactions', 0);
     }
+    private function held(): array
+    {
+        [$counter, $reviewer, $account, $count] = $this->fixture('100.25');
+        $result = $this->post($reviewer, $count, 'unattributed_cash_held');
+        $subscriber = Subscriber::create(['name' => 'Synthetic identified owner',
+            'square_id' => Square::create(['name' => 'Synthetic held cash square'])->id, 'status' => 'active']);
+        return [$counter, $reviewer, $account, $count, $result['held_liability_id'], $subscriber];
+    }
+
+    private function assignHeld(User $actor, int $lot, Subscriber $subscriber, int $minor,
+        string $uuid = self::NEXT, string $reference = 'QA-HELD-OWNER'): array
+    {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->assign($actor, $lot,
+            (int) $subscriber->id, $minor, $reference, 'Independent proof of ownership of counted cash',
+            $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    public function test_held_cash_owner_assignment_conserves_cash_and_total_liability(): void
+    {
+        [, $reviewer, , $count, $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assertSame($lot, $this->post($reviewer, $count, 'unattributed_cash_held')['held_liability_id']);
+        $result = $this->assignHeld($actor, $lot, $subscriber, 20);
+        $this->assertSame(25, $result['held_minor']);
+        $this->assertSame(20, $result['identified_minor']);
+        $this->assertSame(5, $result['unidentified_minor']);
+        $this->assertFalse($result['cash_movement_created']);
+        $this->assertFalse($result['discharge_created']);
+        $this->assertFalse($this->assignHeld($actor, $lot, $subscriber, 20)['created']);
+        $this->assertDatabaseCount('treasury_held_cash_liabilities', 1);
+        $this->assertDatabaseCount('treasury_held_cash_assignments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertSame(0, (int) DB::table('financial_posting_events')
+            ->where('operation_uuid', self::NEXT)->sum('amount_minor'));
+        $coverage = $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage());
+        $this->assertSame(25, $coverage['held_minor']);
+        $this->assertFalse($coverage['closure_authorized']);
+    }
+
+    public function test_held_cash_rejects_excess_conflicting_replay_and_self_assignment(): void
+    {
+        [, $reviewer, , , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->rejects('held_cash_independent_approval', fn () => $this->assignHeld($reviewer, $lot, $subscriber, 1));
+        $this->assignHeld($actor, $lot, $subscriber, 25);
+        $this->rejects('held_cash_assignment_conflict', fn () => $this->assignHeld($actor, $lot, $subscriber, 24));
+        $this->rejects('held_cash_capacity_exceeded', fn () =>
+            $this->assignHeld($actor, $lot, $subscriber, 1, self::OTHER, 'QA-HELD-EXCESS'));
+        $this->assertDatabaseCount('treasury_held_cash_assignments', 1);
+    }
+
+    public function test_held_cash_coverage_detects_missing_assignment_and_modified_amount(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 20);
+        $verify = fn () => $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage());
+        DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->update(['amount_minor' => 19]);
+        $this->rejects('held_cash_registry_mismatch', $verify);
+        DB::table('treasury_held_cash_assignments')->where('operation_uuid', self::NEXT)->delete();
+        $this->rejects('held_cash_coverage_orphan_event', $verify);
+    }
+
+    public function test_held_cash_recognition_failure_rolls_back_cash_and_registry(): void
+    {
+        [, $reviewer, , $count] = $this->fixture('100.25');
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_held_failure BEFORE INSERT ON treasury_held_cash_liabilities BEGIN SELECT RAISE(ABORT, 'synthetic_held_failure'); END"
+            : "CREATE TRIGGER qa_held_failure BEFORE INSERT ON treasury_held_cash_liabilities FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_held_failure'";
+        DB::unprepared($trigger);
+        try {
+            $this->post($reviewer, $count, 'unattributed_cash_held');
+            $this->fail('Expected synthetic recognition failure.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_held_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_held_failure');
+        }
+        $this->assertDatabaseCount('treasury_cash_adjustments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertDatabaseCount('treasury_held_cash_liabilities', 0);
+        $this->assertDatabaseCount('financial_posting_operations', 1);
+        $this->assertTrue($this->post($reviewer, $count, 'unattributed_cash_held')['registry_created']);
+    }
+
 }
