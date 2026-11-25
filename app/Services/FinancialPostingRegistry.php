@@ -193,9 +193,10 @@ final class FinancialPostingRegistry
                     && preg_match('/\A[a-z0-9_-]+\z/', $leg[$field]) === 1, 'posting_source_identity');
             }
             $amount = $leg['amount_minor'] ?? null;
-            // Zero invoice ledger rows still require provenance. Only the
-            // reviewed ledger-source adapter may supply this evidence leg.
-            $zeroEvidence = $leg['source_type'] === 'ledger_transaction' && $leg['leg'] === 'subscriber';
+            // Zero invoices and zero opening balances still require identity evidence.
+            // They are not nonzero movements and must be checked against actual sources.
+            $zeroEvidence = ($leg['source_type'] === 'ledger_transaction' && $leg['leg'] === 'subscriber')
+                || ($leg['source_type'] === 'treasury_opening' && $leg['leg'] === 'opening');
             $this->need(is_int($amount) && ($amount !== 0 || $zeroEvidence) && $amount !== PHP_INT_MIN, 'posting_minor');
             $this->need(($leg['currency'] ?? null) === 'YER' && is_string($leg['source_hash'] ?? null)
                 && preg_match('/\A[0-9a-f]{64}\z/', $leg['source_hash']) === 1, 'posting_provenance');
