@@ -472,6 +472,8 @@ class VoidPaymentOutcome extends Equatable {
 class PaymentVoidRequest extends Equatable {
   const PaymentVoidRequest({
     required this.id,
+    this.requestId,
+    this.requiresBoundDecision = false,
     this.location = const RecordLocation(),
     required this.receiptNumber,
     required this.amount,
@@ -483,6 +485,8 @@ class PaymentVoidRequest extends Equatable {
   });
 
   final int id;
+  final int? requestId;
+  final bool requiresBoundDecision;
   final RecordLocation location;
   final String receiptNumber;
   final double amount;
@@ -495,6 +499,8 @@ class PaymentVoidRequest extends Equatable {
   factory PaymentVoidRequest.fromJson(Map<String, dynamic> json) =>
       PaymentVoidRequest(
         id: JsonUtils.asInt(json['id']),
+        requestId: JsonUtils.asIntOrNull(json['request_id']),
+        requiresBoundDecision: json.containsKey('request_id'),
         location: RecordLocation.fromJson(json),
         receiptNumber: JsonUtils.asString(json['receipt_number']),
         amount: JsonUtils.asDouble(json['amount']),
@@ -508,6 +514,8 @@ class PaymentVoidRequest extends Equatable {
   @override
   List<Object?> get props => <Object?>[
     id,
+    requestId,
+    requiresBoundDecision,
     receiptNumber,
     amount,
     subscriber,
