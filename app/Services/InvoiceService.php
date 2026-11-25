@@ -22,7 +22,8 @@ class InvoiceService
         ?\App\Models\Meter $meter = null,
         ?string $notes = null,
         bool $includeReadings = true,
-        string $invoiceType = 'meter'
+        string $invoiceType = 'meter',
+        ?GatedInvoiceTransferWriter $gatedWriter = null
     ): Invoice {
         // Reject obsolete internal callers even when they bypass the public
         // API and try to create a charge-only invoice without meter readings.
@@ -32,7 +33,7 @@ class InvoiceService
             ]);
         }
 
-        return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
+        return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType, $gatedWriter) {
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
@@ -42,6 +43,12 @@ class InvoiceService
                 $meter = \App\Models\Meter::query()->where('subscriber_id', $subscriber->id)
                     ->lockForUpdate()->findOrFail($meter->id);
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
+            }
+
+            if (! ($gatedWriter !== null && $includeReadings && $meter !== null
+                && $gatedWriter->allowsIssue((int) $subscriber->id, (int) $meter->id))
+                && ($gatedWriter !== null || config('financial_candidate.invoices') === true)) {
+                throw new \DomainException('gated_invoice_writer_required');
             }
 
             // 1. حساب الاستهلاك - نأخذ آخر قراءة فقط للاستهلاك الحالي، وما قبلها يُحتسب متأخرات
