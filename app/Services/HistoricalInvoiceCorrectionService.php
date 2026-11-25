@@ -168,7 +168,7 @@ final class HistoricalInvoiceCorrectionService
             $allocator = app(PaymentService::class);
             $allocator->recalculateInvoices($subscriber);
             $previousMinor = InvoiceAmounts::outstandingMinor(Invoice::where('subscriber_id', $subscriber->id)
-                ->whereNotIn('status', ['draft', 'cancelled'])->get());
+                ->whereNotIn('status', ['draft', 'cancelled'])->toBase()->get(['total_amount', 'amount_paid']));
             $previous = FinancialAmount::storageDecimal($previousMinor, 'previous_balance');
             $credit = $decimal(min($amount, max(0, $ledger->accountBalanceMinor($subscriber))));
             $replacement = new Invoice([
