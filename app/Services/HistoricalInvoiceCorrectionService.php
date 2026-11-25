@@ -171,9 +171,10 @@ final class HistoricalInvoiceCorrectionService
                 ->whereNotIn('status', ['draft', 'cancelled'])->toBase()->get(['total_amount', 'amount_paid']));
             $previous = FinancialAmount::storageDecimal($previousMinor, 'previous_balance');
             $credit = $decimal(min($amount, max(0, $ledger->accountBalanceMinor($subscriber))));
+            $issuedAt = now();
             $replacement = new Invoice([
                 'subscriber_id' => $subscriber->id, 'meter_id' => null, 'invoice_type' => 'meter',
-                'bill_number' => Invoice::generateBillNumber(), 'bill_date' => now()->toDateString(),
+                'bill_number' => app(DocumentSequenceService::class)->reserveForIssue('INV', $issuedAt->format('Ym')), 'bill_date' => $issuedAt->toDateString(),
                 'billing_period_start' => $invoice->billing_period_start, 'billing_period_end' => $invoice->billing_period_end,
                 'consumption_fee' => $decimal($amount), 'total_amount' => $decimal($amount),
                 'previous_balance' => $previous, 'credit_applied' => $credit,

@@ -234,6 +234,7 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
 
   /// يعيد `true` عند نجاح الحفظ (أو الإدراج في طابور المزامنة).
   Future<bool> submit() async {
+    if (isClosed || state.submitting) return false;
     final validation = state.validationMessage;
     if (validation != null) return false;
 
@@ -261,14 +262,17 @@ class CollectPaymentCubit extends Cubit<CollectPaymentState> {
     emit(state.copyWith(submitting: true, clearValidation: true));
     try {
       final outcome = await _payments.collect(request);
+      if (isClosed) return outcome.isSuccess;
       emit(state.copyWith(submitting: false, outcome: outcome));
       return outcome.isSuccess;
     } on AppFailure catch (failure) {
+      if (isClosed) return false;
       emit(
         state.copyWith(submitting: false, validationMessage: failure.message),
       );
       return false;
     } catch (error) {
+      if (isClosed) return false;
       emit(
         state.copyWith(
           submitting: false,
