@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failures.dart';
@@ -7,8 +9,7 @@ import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/domain/repositories/invoices_repository.dart';
 import 'quick_collector_state.dart';
 
-/// منطق `SCR-13` — بحث فوري (اسم مشترك/رقم فاتورة/مسار `4/1`) + فلتر المربع،
-/// وتحصيل بلمسة واحدة عبر `CollectPaymentSheet`.
+/// Field collection list. Every accepted response belongs to the current filters.
 class QuickCollectorCubit extends Cubit<QuickCollectorState> {
   QuickCollectorCubit({
     required InvoicesRepository invoicesRepository,
@@ -17,97 +18,99 @@ class QuickCollectorCubit extends Cubit<QuickCollectorState> {
         _references = references,
         super(const QuickCollectorState());
 
-  /// زمن تهدئة البحث الميداني: أقصر من الكيوبتات الأخرى لأن الشبكة في الحارات ضعيفة
-  /// لكن المحصل يحتاج ردّاً فورياً (قاعدة §3.4-2).
   static const Duration _debounce = Duration(milliseconds: 300);
-
   final InvoicesRepository _invoices;
   final ReferencesRemoteDataSource _references;
 
   int _requestSequence = 0;
+  // A queued offline receipt is not authoritative server settlement. Do not
+  // re-enable collection merely because a cached/server list still shows debt.
+  final Set<int> _queuedOfflineIds = <int>{};
 
   Future<void> bootstrap() async {
+    if (isClosed) return;
     emit(state.copyWith(loadingSquares: true));
     try {
       final squares = await _references.squares();
+      if (isClosed) return;
       emit(state.copyWith(squares: squares, loadingSquares: false));
     } catch (error) {
+      if (isClosed) return;
       emit(state.copyWith(loadingSquares: false, errorMessage: '$error'));
     }
     await loadUnpaid();
   }
 
-  /// قائمة الفواتير غير المسددة عند فتح الشاشة (بدون بحث).
-  Future<void> loadUnpaid() async {
-    final sequence = ++_requestSequence;
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final invoices = await _invoices.collectorList();
-      if (sequence != _requestSequence) return;
-      emit(state.copyWith(invoices: invoices, loading: false));
-    } on AppFailure catch (failure) {
-      if (sequence != _requestSequence) return;
-      emit(state.copyWith(loading: false, errorMessage: failure.message));
-    }
-  }
+  Future<void> loadUnpaid() => _load();
+  Future<void> searchNow() => _load();
 
   Future<void> onSearchChanged(String value) async {
-    emit(state.copyWith(searchText: value));
+    if (isClosed) return;
+    final sequence = ++_requestSequence;
+    // Invalidate the old response before the debounce starts.
+    emit(state.copyWith(searchText: value, invoices: const [], loading: true, clearError: true));
     await Future<void>.delayed(_debounce);
-    await searchNow();
+    if (isClosed || sequence != _requestSequence) return;
+    await _load();
   }
 
-  Future<void> searchNow() async {
-    final parsed = FinanceSearchQuery.parse(state.searchText);
-    if (parsed.isEmpty && state.selectedSquareId == null) {
-      await loadUnpaid();
-      return;
-    }
-
+  Future<void> _load({bool quiet = false}) async {
+    if (isClosed) return;
     final sequence = ++_requestSequence;
-    emit(state.copyWith(loading: true, clearError: true));
+    final parsed = FinanceSearchQuery.parse(state.searchText);
+    final square = state.selectedSquareId;
+    if (!quiet) emit(state.copyWith(loading: true, clearError: true));
     try {
-      final invoices = await _invoices.collectorList(
-        search: parsed,
-        squareId: state.selectedSquareId,
-      );
-      if (sequence != _requestSequence) return;
-      emit(state.copyWith(invoices: invoices, loading: false));
-    } on AppFailure catch (failure) {
-      if (sequence != _requestSequence) return;
-      emit(state.copyWith(loading: false, errorMessage: failure.message));
+      final invoices = parsed.isEmpty && square == null
+          ? await _invoices.collectorList()
+          : await _invoices.collectorList(search: parsed, squareId: square);
+      if (isClosed || sequence != _requestSequence) return;
+      // A successful server refresh can show a committed partial payment again.
+      // Keep queued-offline suppressions until an independently verified sync.
+      emit(state.copyWith(
+        invoices: invoices,
+        loading: false,
+        paidIds: Set<int>.of(_queuedOfflineIds),
+        clearError: true,
+      ));
+    } catch (error) {
+      if (isClosed || sequence != _requestSequence) return;
+      if (quiet && !state.loading) return;
+      emit(state.copyWith(
+        loading: false,
+        errorMessage: error is AppFailure ? error.message : '$error',
+      ));
     }
   }
 
   Future<void> selectSquare(int? squareId) async {
-    if (squareId == null) {
-      emit(state.copyWith(clearSquare: true));
-    } else {
-      emit(state.copyWith(selectedSquareId: squareId));
-    }
-    await searchNow();
+    if (isClosed) return;
+    ++_requestSequence;
+    emit(state.copyWith(
+      selectedSquareId: squareId,
+      clearSquare: squareId == null,
+      invoices: const [],
+      loading: true,
+    ));
+    await _load();
   }
 
   void clearSearch() {
-    emit(state.copyWith(searchText: ''));
-    loadUnpaid();
+    if (isClosed) return;
+    ++_requestSequence;
+    emit(state.copyWith(searchText: '', invoices: const [], loading: true));
+    unawaited(_load());
   }
 
-  /// بعد نجاح التحصيل: نعلّم الفاتورة كمسدّدة محلياً ونعيد الجلب في الخلفية.
-  void markCollected(InvoiceModel invoice) {
+  void markCollected(InvoiceModel invoice, {bool queuedOffline = false}) {
+    if (isClosed) return;
+    if (queuedOffline) _queuedOfflineIds.add(invoice.id);
     emit(state.copyWith(
       paidIds: state.paidIds.union(<int>{invoice.id}),
       lastCollectedBillNumber: invoice.billNumber,
     ));
-    refreshQuietly();
+    unawaited(refreshQuietly());
   }
 
-  Future<void> refreshQuietly() async {
-    try {
-      final invoices = await _invoices.collectorList();
-      emit(state.copyWith(invoices: invoices));
-    } on AppFailure {
-      // التحديث الصامت لا يعرض خطأ: القائمة الحالية تبقى صالحة للعرض.
-    }
-  }
+  Future<void> refreshQuietly() => _load(quiet: true);
 }
