@@ -209,7 +209,9 @@ class SubscriberResource extends Resource
                     ->label('تحصيل دفعة')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
+                    ->visible(fn () => auth()->user()?->can('create', \App\Models\Payment::class) ?? false)
                     ->form([
+                        ...\App\Filament\Actions\ProspectiveCashReceiptAction::fields(),
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
                             ->numeric()
@@ -229,11 +231,7 @@ class SubscriberResource extends Resource
 
                         Forms\Components\Select::make('payment_method')
                             ->label('طريقة الدفع')
-                            ->options([
-                                'cash' => 'نقدي',
-                                'bank_transfer' => 'تحويل بنكي',
-                                'check' => 'شيك',
-                            ])
+                            ->options(fn () => \App\Filament\Actions\ProspectiveCashReceiptAction::methods())
                             ->default('cash')
                             ->required(),
 
@@ -242,14 +240,7 @@ class SubscriberResource extends Resource
                             ->rows(2),
                     ])
                     ->action(function (Subscriber $record, array $data): void {
-                        $service = new PaymentService;
-                        $payment = $service->collectPayment(
-                            subscriber: $record,
-                            amount: (float) $data['amount'],
-                            invoiceId: $data['invoice_id'] ?? null,
-                            paymentMethod: $data['payment_method'],
-                            notes: $data['notes'] ?? null,
-                        );
+                        $payment = \App\Filament\Actions\ProspectiveCashReceiptAction::collect($record, $data);
 
                         Notification::make()
                             ->title('تم التحصيل بنجاح')
