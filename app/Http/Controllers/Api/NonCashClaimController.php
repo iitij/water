@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Services\NonCashClaimService;
-use App\Services\PaymentService;
+use App\Services\ProspectiveSettlementEntry;
 use Illuminate\Http\Request;
 
 final class NonCashClaimController extends ApiController
@@ -25,14 +25,13 @@ final class NonCashClaimController extends ApiController
         return response()->json(['claim' => $service->submit($request->user(), $data)], 201);
     }
 
-    public function clear(Request $request, int $id, PaymentService $service)
+    public function clear(Request $request, int $id, ProspectiveSettlementEntry $service)
     {
         $data = $request->validate([
             'statement_id' => ['required', 'integer', 'min:1'], 'line_id' => ['required', 'integer', 'min:1'],
             'reference' => ['required', 'string', 'max:150'], 'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        return response()->json($service->clearNonCashClaim($request->user(), $id, (int) $data['statement_id'],
-            (int) $data['line_id'], $data['reference'], $data['evidence']));
+        return response()->json($service->clearClaim($request->user(), $id, $data));
     }
 
     public function reject(Request $request, int $id, NonCashClaimService $service)
