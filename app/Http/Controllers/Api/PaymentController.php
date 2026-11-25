@@ -256,6 +256,8 @@ class PaymentController extends ApiController
         $this->authorizeVoidApprover($request->user());
 
         $candidate = $this->prospectiveVoidApi();
+        abort_if(! $candidate && ($request->has('request_id') || $request->has('operation_uuid')), 409,
+            'مسار القرار المالي المرتبط بالطلب غير متاح. لا يمكن تنفيذه عبر المسار السابق.');
         $data = $request->validate([
             'approve' => ['required', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -283,6 +285,8 @@ class PaymentController extends ApiController
             'message' => $data['approve']
                 ? 'تم اعتماد إلغاء السند وإعادة احتساب الأرصدة.'
                 : 'تم رفض طلب الإلغاء وبقي السند صالحاً.',
+            ...($candidate ? ['request_id' => (int) $data['request_id'],
+                'operation_uuid' => isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null] : []),
             'payment' => $payment,
             'receipt_data' => $this->receiptData($payment),
         ]);
