@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCashHandoverWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private CashHandoverService $handovers,
@@ -122,8 +124,14 @@ final class GatedCashHandoverWriter
             }
             $before = $session->getRawOriginal();
             $paymentBytes = $payments->map(fn ($p) => $p->getRawOriginal())->all();
-            $handover = $this->handovers->record($session, $actor, $amount, $reference, $date, $evidence);
-            $posting = $this->treasury->post($actor, $accountId, 'cash_handover', (int) $handover->id);
+            $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_handover_mutation_scope');
+            $this->mutationIdentity = [$sessionId, $reference, $accountId, (int) $actor->id];
+            try {
+                $handover = $this->handovers->record($session, $actor, $amount, $reference, $date, $evidence, $this);
+                $posting = $this->treasury->post($actor, $accountId, 'cash_handover', (int) $handover->id, $this);
+            } finally {
+                $this->mutationIdentity = null;
+            }
             $leg = $this->custody->leg((int) $posting['id']);
             $this->need($leg['amount_minor'] === Cash::positiveStored($handover->getRawOriginal('amount'), $driver, DecimalDomain::D14)
                 && $posting['effective_on'] === $date && (int) $posting['treasury_account_id'] === $accountId
@@ -134,6 +142,20 @@ final class GatedCashHandoverWriter
             $this->need($created === ! $replay, 'gated_handover_operation_conflict');
             return ['handover' => $handover, 'posting' => $posting, 'registry_created' => $created];
         });
+    }
+
+    public function allowsRecord(int $sessionId, string $reference, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity !== null
+            && $this->mutationIdentity[0] === $sessionId && $this->mutationIdentity[1] === $reference
+            && $this->mutationIdentity[3] === $actorId;
+    }
+
+    public function allowsPosting(CashHandover $handover, int $accountId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [
+            (int) $handover->cash_session_id, $handover->reference, $accountId, $actorId,
+        ] && (int) $handover->received_by === $actorId;
     }
 
     private function registered(array $leg, string $date): object
