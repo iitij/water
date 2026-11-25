@@ -2346,14 +2346,29 @@
     },
     "round25": {
       "phase": "ACC14 integrated atomic document issuance",
-      "status": "QUEUED_NOT_ACCEPTED",
+      "status": "SQLITE_FOCUSED_PASS_MYSQL_PENDING",
       "base": "117f159990b24491953427caa7a44dd45768b63c",
       "source": "453a3de3272c8ee3dc93cc92193e73a904825622",
       "workflow": "a164c17a35278465e37ea6e2badc6887d6ba953d",
       "pr": 101,
       "run": 45558889129,
       "scope": "Reviewed sequence allocator and migration, require existing outer transaction on issue; three inventoried writers, remove old generators and form defaults, preserve global payment issuance lock. New actual issuance/replay/rollback tests, distinct account invoice concurrency and relevant changed-path regressions.",
-      "limits": "No production activation, no real legacy-number inventory, no main merge. Need all-writer write fence, audit of legacy identifiers, no mixed versions, actual test results and subsequent cumulative integration. L01 causal attribution, closing and G12 remain open."
+      "limits": "No production activation, no real legacy-number inventory, no main merge. Need all-writer write fence, audit of legacy identifiers, no mixed versions, actual test results and subsequent cumulative integration. L01 causal attribution, closing and G12 remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139017512811,
+          "tests": 27,
+          "assertions": 287,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139017512629,
+          "status": "in_progress"
+        }
+      }
     }
   }
 }
