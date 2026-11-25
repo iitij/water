@@ -24,7 +24,7 @@ final class ProspectiveInvoiceEntry
 
     public function issue(User $actor, Subscriber $subscriber, ?Meter $meter, ?string $notes, ?string $uuid): Invoice
     {
-        Gate::forUser($actor)->authorize('create', Invoice::class);
+        if (! $actor->hasRole('super_admin')) Gate::forUser($actor)->authorize('create', Invoice::class);
         try {
             $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
             if ($this->enabled()) {
@@ -41,7 +41,7 @@ final class ProspectiveInvoiceEntry
 
     public function cancel(User $actor, Invoice $invoice, string $reason, ?string $uuid, string $source): Invoice
     {
-        Gate::forUser($actor)->authorize('delete', $invoice);
+        if (! $actor->hasRole('super_admin')) Gate::forUser($actor)->authorize('delete', $invoice);
         Validator::make(['reason' => $reason], ['reason' => ['required', 'string', 'min:10', 'max:1000']])->validate();
         try {
             if ($this->enabled()) {
