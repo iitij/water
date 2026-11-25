@@ -1,0 +1,29 @@
+{
+  "round117": {
+    "source": "40849e614d60275144542a7963119e29227ac4ae",
+    "branch": "qa/held-cash-release-documents-round117",
+    "run": 45677562709,
+    "status": "SQLITE_PASS_MYSQL_PENDING",
+    "sqlite": {
+      "id": 139429064611,
+      "tests": 186,
+      "assertions": 1827,
+      "exit": 0
+    },
+    "mysql": {
+      "id": 139429065087,
+      "status": "in_progress"
+    }
+  },
+  "round118": {
+    "base": "40849e614d60275144542a7963119e29227ac4ae",
+    "source": "1833f30999a873883b362a9ba8612fcb01830b59",
+    "branch": "qa/held-cash-release-coverage-round118",
+    "run": 45678565274,
+    "status": "STAGED_RUNTIME_UNVERIFIED",
+    "scope": "Global bidirectional proposal and withdrawal audit coverage under scope/issuance gate; verify historical allocation revision hash, source/account/subscriber, exact amounts, period, distinct actors and withdrawal audit order. Distinguish current, stale and withdrawn proposals for inspected account. Existing propose/withdraw call verifier before writes. Tests verify all three states and orphan audit rejection.",
+    "limits": "No actual release/reinstatement event or reserve reduction. Historical liquidity snapshot is matched to the recorded audit, not independently reconstructed as-of historical time. No full origin proof or global source coverage; audit rows could be forged with matching documents by a privileged database writer. Both rounds require MySQL acceptance before promotion. No production or real data changes."
+  },
+  "coordination": "Independent receipt; central register large update remains pending.",
+  "next": "Confirm round117 and round118 tests; then add actual release/reinstatement journal in inactive candidate, atomically integrate all allocation-changing writers before enabling spend."
+}
