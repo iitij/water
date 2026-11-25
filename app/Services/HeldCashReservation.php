@@ -28,7 +28,7 @@ final class HeldCashReservation
         if ($account === null) throw new DomainException('held_cash_reservation_account');
         if ($account->channel !== 'cash') return;
 
-        $held = $this->outstandingForAccount($accountId);
+        $held = $this->protectedForAccount($accountId);
         if ($held === 0) return;
 
         $balance = TreasuryMoney::document($account->opening_minor);
@@ -44,6 +44,41 @@ final class HeldCashReservation
             throw new DomainException('held_cash_reserved');
         }
     }
+    /**
+     * Until all invoice/refund writers share a proven fence, do not release
+     * cash on the strength of a mutable allocation snapshot. Reserve the full
+     * amount reclassified as subscriber credit, including applied credit.
+     * This is a conservative liquidity ceiling, not a new liability balance.
+     */
+    public function subscriberCreditReserveForAccount(int $accountId): int
+    {
+        if (DB::transactionLevel() <= 0) throw new DomainException('held_cash_reservation_context');
+        $total = 0;
+        foreach (DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
+            ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get() as $adjustment) {
+            // Source-linked release validation must run even if the outstanding
+            // held liability itself has reached zero.
+            app(TreasuryHeldCashLiabilityService::class)->releasedForAdjustment((int) $adjustment->id);
+            $credits = DB::table('treasury_held_cash_credits as c')
+                ->join('treasury_held_cash_assignments as a', 'a.operation_uuid', '=', 'c.assignment_uuid')
+                ->join('treasury_held_cash_liabilities as l', 'l.id', '=', 'a.liability_id')
+                ->where('l.treasury_cash_adjustment_id', $adjustment->id)->orderBy('c.id')
+                ->select('c.amount')->lockForUpdate()->get();
+            foreach ($credits as $credit) {
+                $minor = \App\Support\MoneyBoundary::readDecimal($credit->amount, \App\Support\DecimalDomain::D12,
+                    DB::getDriverName(), signed: true);
+                if ($minor <= 0) throw new DomainException('held_cash_credit_source');
+                $total = SignedMinor::add($total, $minor);
+            }
+        }
+        return $total;
+    }
+
+    public function protectedForAccount(int $accountId): int
+    {
+        return SignedMinor::add($this->outstandingForAccount($accountId), $this->subscriberCreditReserveForAccount($accountId));
+    }
+
     /** Caller owns the issuance lock and account lock. No scope acquisition. */
     public function outstandingForAccount(int $accountId): int
     {
