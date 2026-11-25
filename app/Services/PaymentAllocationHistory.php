@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\FinancialAmount;
+
 use App\Models\Subscriber;
 use Illuminate\Support\Facades\DB;
 
@@ -31,18 +33,18 @@ class PaymentAllocationHistory
             if (! array_key_exists($sourceKey, $bySource)) {
                 throw new \LogicException('Unknown allocation credit source.');
             }
-            $bySource[$sourceKey] += $row['amount_minor'];
+            $bySource[$sourceKey] = FinancialAmount::add($bySource[$sourceKey], $row['amount_minor']);
             if ($row['invoice_id'] === null) {
-                $unallocated += $row['amount_minor'];
+                $unallocated = FinancialAmount::add($unallocated, $row['amount_minor']);
             } else {
                 if (! array_key_exists($row['invoice_id'], $byInvoice)) {
                     throw new \LogicException('Allocation outside the account invoice set.');
                 }
-                $allocated += $row['amount_minor'];
-                $byInvoice[$row['invoice_id']] += $row['amount_minor'];
+                $allocated = FinancialAmount::add($allocated, $row['amount_minor']);
+                $byInvoice[$row['invoice_id']] = FinancialAmount::add($byInvoice[$row['invoice_id']], $row['amount_minor']);
             }
         }
-        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || $allocated + $unallocated !== $available) {
+        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || FinancialAmount::add($allocated, $unallocated) !== $available) {
             throw new \LogicException('Allocation snapshot does not conserve money.');
         }
         $integrity = app(AllocationSnapshotIntegrity::class);

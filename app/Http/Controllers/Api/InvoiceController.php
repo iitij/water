@@ -524,7 +524,7 @@ class InvoiceController extends ApiController
         try {
             $payment = $paymentService->collectPayment(
                 $invoice->subscriber,
-                (float) $data['amount'],
+                $data['amount'],
                 $invoice->id,
                 $data['payment_method'],
                 $data['reference_number'] ?? null,

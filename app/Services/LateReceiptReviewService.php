@@ -168,7 +168,7 @@ final class LateReceiptReviewService
                     || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists(),
                     409, 'مرجع التسوية مستخدم مسبقاً.');
                 $payment = app(PaymentService::class)->collectPayment(
-                    subscriber: $subscriber, amount: (float) $review->amount,
+                    subscriber: $subscriber, amount: $review->amount,
                     invoiceId: $review->invoice_id, paymentMethod: $review->payment_method,
                     referenceNumber: $review->reference_number, notes: $review->notes, reason: $review->reason,
                     userId: $review->collector_id, paymentDate: $review->payment_date,
