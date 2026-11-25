@@ -616,7 +616,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($oldRows, DB::table('payment_allocations')->where('revision_id', $prior->id)->get()->toArray());
         $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($prior));
         $this->assertTrue(app(\App\Services\PaymentAllocationReadService::class)->reconcile($subscriber)['matches']);
-        $this->assertSame(30, app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice)['allocated_minor']);
+        $projection = app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice);
+        $this->assertSame(30, $projection['allocated_minor']);
+        $creditRow = collect($projection['rows'])->first(fn ($row) => $row['held_cash_credit_id'] !== null);
+        $this->assertNotNull($creditRow);
+        $this->assertNull($creditRow['payment_id']);
+        $this->assertSame(20, $creditRow['amount_minor']);
+        $proof = $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $this->assertSame(20, $proof['applied_minor']);
+        $this->assertSame(0, $proof['unapplied_minor']);
+        $this->assertSame(20, $proof['protected_minor']);
+        $this->assertFalse($proof['spending_release_authorized']);
+        $report = app(\App\Services\FinancialReportingService::class)->movementsFromMinor('2026-11-25', '2026-11-25', null, 10);
+        $this->assertEquals(0.2, $report['held_cash_credits']);
+        $this->assertEquals(0.1, $report['gross_valid_receipts']);
         $this->rejects('held_cash_payout_capacity', fn () =>
             $this->payoutHeld($actor, 6, '55555555-5555-4555-8555-555555555555'));
         $result = $this->payoutHeld($actor, 5, '55555555-5555-4555-8555-555555555555');
@@ -680,6 +693,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, $report['held_cash_subscriber_credit_reserve_minor']);
         $this->assertSame(25, $report['held_cash_total_protected_minor']);
         $this->assertFalse($report['held_cash_credit_release_verified']);
+        $proof = $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $this->assertSame(0, $proof['applied_minor']);
+        $this->assertSame(25, $proof['unapplied_minor']);
+        $this->assertSame(25, $proof['protected_minor']);
+        $this->assertFalse($proof['spending_release_authorized']);
         $guard = app(\App\Services\HeldCashReservation::class);
         DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 10000, '2026-11-25'));
         $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
