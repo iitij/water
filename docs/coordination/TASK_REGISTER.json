@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 98,
+    "round": 99,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4370,6 +4370,40 @@
       "scope": "Changed only isolated GitHub MySQL service configuration via its exact job container ID: root sets log_bin_trust_function_creators=1, ordinary test user remains restricted. No application migration or trigger removed. Two actual integration test methods added for transfer boundary/replay and refund posting rejection with original refund document preserved and reconciliation gap visible. No product code changed in this round.",
       "limits": "Corrected 68b65dea exact CI-only commit passed 16 tests and 123 assertions on each engine. Extended 319f64b6 candidate passed 18 tests and 139 assertions on SQLite; extended MySQL still pending. Scoped verification only. Refund posting rejection is not proof of prior physical payout prevention; explicit authorization and incident recording remain necessary. Held liability settlement, subscriber credit, W18 proof, global coverage, concurrency and closure remain open. No main merge, live data, deployment, or change to production DB permissions.",
       "next": "Read final logs of both runs, resolve any proven defect, then implement explicit held-owner cash payout/settlement and subscriber noncash reclassification with independent verification."
+    },
+    "round99": {
+      "phase": "Identified held cash return, verified release and settlement evidence",
+      "status": "PRIOR_BOTH_ENGINES_PASS_PAYOUT_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "base": "319f64b6e4309de3f7237cd6fe7b6395bfde1a5c",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "8c7fff8e48517a915acd058dd479f712e9fa7e6f",
+      "runs": [
+        {
+          "id": 45635799680,
+          "head_sha": "319f64b6e4309de3f7237cd6fe7b6395bfde1a5c",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139280759558,
+              "engine": "sqlite",
+              "tests": 18,
+              "assertions": 139,
+              "conclusion": "success"
+            },
+            {
+              "id": 139280760268,
+              "engine": "mysql",
+              "tests": 18,
+              "assertions": 139,
+              "conclusion": "success"
+            }
+          ]
+        }
+      ],
+      "syntax_validation": "Six changed PHP files linted at exact 8c7fff8e on msi, exit 0.",
+      "scope": "Dedicated identified owner cash payout document and single negative treasury posting, same outer gated transaction as liability reduction and mandatory audit; independently approved, positive exact minor amount, no excess over identified assignment, original account and current date, replay, preserve other held claims and reject insufficient recorded cash. Reservation now subtracts only source-matched audited registered payouts; canonical payload reconstructed without scope lock acquisition from legacy issuance lock path. Count snapshot compatibility preserves old null-field bytes. Treasury report exposes outstanding amount. Three additional feature cases prepared for actual partial payout/replay, rollback/retry and audit corruption.",
+      "limits": "New source has not passed runtime yet. No subscriber credit settlement or prior physical cash authorization workflow; recorded evidence is not proof of actual receipt. No global verifier integration, protection of all entrypoints, immutable DB enforcement, complete UUID integration, W18 funded/mixed allocation proof or cross-period tests. New payout source still unsupported by general ledger registry verifier and subsequent gated cash count adjustment writer; deliberate fail-closed/unverified handling requires reviewed integration. No production, real DB or main changes.",
+      "next": "Verify final workflow on exact new SHA, correct any failures. Extend held liability discharge to independently authorized noncash subscriber settlement without new cash movement, handle cash count after payout and general independent verifier, then W18 and all-writer coverage."
     }
   }
 }
