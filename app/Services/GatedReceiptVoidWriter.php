@@ -31,40 +31,78 @@ final class GatedReceiptVoidWriter
         private FinancialPostingRegistry $registry,
     ) {}
 
-    public function request(User $actor, int $id, string $reason, DateTimeImmutable $now, ?string $uuid = null): array
+    public function request(User $actor, int $id, string $reason, DateTimeImmutable $now, ?string $uuid = null, ?string $intentUuid = null): array
     {
-        return $this->within($actor, $id, $now, function (User $actor, Payment $payment, Subscriber $subscriber, array $context) use ($reason, $uuid, $now): array {
+        return $this->within($actor, $id, $now, function (User $actor, Payment $payment, Subscriber $subscriber, array $context) use ($reason, $uuid, $now, $intentUuid): array {
             abort_unless($actor->hasAnyRole(['super_admin', 'admin']) || $actor->can('Void:Payment') || $actor->can('void_payment'), 403);
             $reason = trim($reason);
             $this->need(mb_strlen($reason) >= 10 && mb_strlen($reason) <= 1000, 'gated_void_reason');
-            if ($payment->isVoided()) {
-                $this->need($payment->voided_via === 'gated' && (int) $payment->voided_by === (int) $actor->id
-                    && $payment->void_reason === $reason, 'gated_void_replay_conflict');
-                return $this->register($payment, $uuid, $context, $now, true);
-            }
-            $pending = $payment->hasPendingVoidRequest();
-            if ($pending || $this->payments->requiresVoidApproval($payment)) {
-                $this->need($uuid === null, 'gated_void_pending_no_posting_uuid');
-                if ($pending) {
-                    $this->need((int) $payment->void_requested_by === (int) $actor->id
-                        && $payment->void_request_reason === $reason, 'gated_void_request_conflict');
-                    $requestId = $this->requestProof($payment);
-                    return ['request_id' => $requestId, 'payment' => $payment, 'pending' => true, 'registry_created' => false];
+            $this->need($intentUuid === null || $uuid === null, 'gated_void_intent_conflict');
+            if ($intentUuid !== null) {
+                $this->validUuid($intentUuid);
+                $intents = AuditEvent::query()->where('event', 'financial.void_intent')
+                    ->where('entity_type', 'void_intent')->where('entity_id', $intentUuid)->lockForUpdate()->get();
+                $this->need($intents->count() <= 1, 'gated_void_intent_conflict');
+                if ($intents->isNotEmpty()) {
+                    $intent = $intents->first();
+                    $proof = $intent->after;
+                    $this->need((int) $intent->actor_user_id === (int) $actor->id
+                        && ($proof['payment_id'] ?? null) === (int) $payment->id
+                        && ($proof['reason'] ?? null) === $reason, 'gated_void_intent_conflict');
+                    if (($proof['pending'] ?? null) === true) {
+                        $this->need($payment->hasPendingVoidRequest()
+                            && $this->requestProof($payment) === ($proof['request_id'] ?? null), 'gated_void_intent_resolved');
+                        return ['payment' => $payment, 'pending' => true, 'request_id' => $proof['request_id'],
+                            'registry_created' => false, 'intent_uuid' => $intentUuid];
+                    }
+                    $this->need(($proof['pending'] ?? null) === false && $payment->isVoided()
+                        && $payment->voided_via === 'gated' && (int) $payment->voided_by === (int) $actor->id
+                        && $payment->void_reason === $reason, 'gated_void_intent_conflict');
+                    return $this->register($payment, $intentUuid, $context, $now, true) + ['intent_uuid' => $intentUuid];
                 }
-                $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
-                $this->need($result['pending'], 'gated_void_expected_pending');
-                app(AuditLogger::class)->recordRequired('financial.void_request_gated', [
-                    'entity_type' => Payment::class, 'entity_id' => $payment->id, 'actor_user_id' => $actor->id,
-                    'after' => ['reason' => $reason, 'requested_at' => $result['payment']->getRawOriginal('void_requested_at')],
-                ]);
-                return $result + ['request_id' => $this->requestProof($result['payment']), 'registry_created' => false];
+                $this->need(! $payment->isVoided() && ! $payment->hasPendingVoidRequest(), 'gated_void_intent_conflict');
+                $this->unused($intentUuid);
+                $uuid = $this->payments->requiresVoidApproval($payment) ? null : $intentUuid;
             }
-            $this->unused($uuid);
-            $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
-            $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
-            $this->need(! $result['pending'], 'gated_void_expected_immediate');
-            $this->checkBalance($result['payment'], $subscriber, $before);
-            return $this->register($result['payment'], $uuid, $context, $now, false);
+            $result = (function () use ($actor, $payment, $subscriber, $context, $reason, $uuid, $now): array {
+                if ($payment->isVoided()) {
+                    $this->need($payment->voided_via === 'gated' && (int) $payment->voided_by === (int) $actor->id
+                        && $payment->void_reason === $reason, 'gated_void_replay_conflict');
+                    return $this->register($payment, $uuid, $context, $now, true);
+                }
+                $pending = $payment->hasPendingVoidRequest();
+                if ($pending || $this->payments->requiresVoidApproval($payment)) {
+                    $this->need($uuid === null, 'gated_void_pending_no_posting_uuid');
+                    if ($pending) {
+                        $this->need((int) $payment->void_requested_by === (int) $actor->id
+                            && $payment->void_request_reason === $reason, 'gated_void_request_conflict');
+                        $requestId = $this->requestProof($payment);
+                        return ['request_id' => $requestId, 'payment' => $payment, 'pending' => true, 'registry_created' => false];
+                    }
+                    $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
+                    $this->need($result['pending'], 'gated_void_expected_pending');
+                    app(AuditLogger::class)->recordRequired('financial.void_request_gated', [
+                        'entity_type' => Payment::class, 'entity_id' => $payment->id, 'actor_user_id' => $actor->id,
+                        'after' => ['reason' => $reason, 'requested_at' => $result['payment']->getRawOriginal('void_requested_at')],
+                    ]);
+                    return $result + ['request_id' => $this->requestProof($result['payment']), 'registry_created' => false];
+                }
+                $this->unused($uuid);
+                $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
+                $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
+                $this->need(! $result['pending'], 'gated_void_expected_immediate');
+                $this->checkBalance($result['payment'], $subscriber, $before);
+                return $this->register($result['payment'], $uuid, $context, $now, false);
+            })();
+            if ($intentUuid !== null) {
+                app(AuditLogger::class)->recordRequired('financial.void_intent', [
+                    'entity_type' => 'void_intent', 'entity_id' => $intentUuid, 'actor_user_id' => $actor->id,
+                    'source' => 'gated', 'after' => ['payment_id' => (int) $payment->id, 'reason' => $reason,
+                        'pending' => $result['pending'], 'request_id' => $result['request_id'] ?? null],
+                ]);
+                $result['intent_uuid'] = $intentUuid;
+            }
+            return $result;
         });
     }
 
