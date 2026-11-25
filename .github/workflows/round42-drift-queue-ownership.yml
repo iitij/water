@@ -14,13 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e
+          ref: ae24ef618861fb375eeae1c942894d2069072f9b
           persist-credentials: false
       - name: Exact source and ordinary writer inventory
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 'f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e'
+          test "$(git rev-parse HEAD)" = 'ae24ef618861fb375eeae1c942894d2069072f9b'
           test -z "$(git status --porcelain)"
           test ! -e .env && test ! -e .env.testing
           echo "SEQUENCE_CALLS"
@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e
+          ref: ae24ef618861fb375eeae1c942894d2069072f9b
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 'f50daf71b8e0a7e5fd707de6130b5da8f6fadb7e'
+          test "$(git rev-parse HEAD)" = 'ae24ef618861fb375eeae1c942894d2069072f9b'
           test -z "$(git status --porcelain)"
           test ! -e .env && test ! -e .env.testing
           printf '%s\n' \
