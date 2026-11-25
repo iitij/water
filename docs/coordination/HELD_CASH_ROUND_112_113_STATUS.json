@@ -1,0 +1,45 @@
+{
+  "round112": {
+    "source": "4538e7563cfaa991c1cfda43978145e69169d287",
+    "branch": "fix/central-g1a-surplus-liability",
+    "qa_branch": "qa/held-cash-invoice-fence-round112",
+    "run": 45655296804,
+    "status": "PASS_BOTH_ENGINES_PROMOTED",
+    "jobs": [
+      {
+        "id": 139350218712,
+        "engine": "sqlite",
+        "tests": 138,
+        "assertions": 1436,
+        "exit": 0
+      },
+      {
+        "id": 139350218157,
+        "engine": "mysql",
+        "tests": 142,
+        "assertions": 1508,
+        "exit": 0,
+        "concurrency": {
+          "tests": 7,
+          "assertions": 112
+        }
+      }
+    ],
+    "total": {
+      "tests": 280,
+      "assertions": 2944
+    },
+    "promotion": "Compared previous head 6454aeda; non-force ref update succeeded; verified identical to exact round112 source."
+  },
+  "round113": {
+    "base": "4538e7563cfaa991c1cfda43978145e69169d287",
+    "source": "f97bf6e511ecd6df12de17bcb41187fc5fe24ed7",
+    "branch": "qa/held-cash-meter-fence-round113",
+    "status": "STAGED_RUNTIME_IN_PROGRESS",
+    "run": 45657669321,
+    "scope": "Acquire issuance before subscriber/meter locks in SingleMeterService.replace. Preserve existing financial retirement and operational purge rules. Test held allocation revision and reserve conservation across meter replacement plus independent MySQL replacement versus held credit. Include affected single-meter and offline regressions and existing direct ledger update/delete/replace guard tests for each engine.",
+    "limits": "No new direct SQL protection or complete writer proof. LedgerProtection checks trigger presence and FK/index metadata, not all definitions or insert origins. FinancialMeterRetirementService has transaction-only precondition; direct callers and outer lock ordering require independent review. No release, no closure, no real data or main changes. Runtime acceptance pending."
+  },
+  "coordination": "Independent status receipts retained while historical TASK_REGISTER.json large-file update remains unresolved.",
+  "next": "Read exact round113 run and correct proven failures. Review direct ledger write and allocation revision authorization, preserve historical import compatibility, establish explicitly audited release and re-reserve only after full coverage."
+}
