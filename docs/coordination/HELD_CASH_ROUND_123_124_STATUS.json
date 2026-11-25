@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify all three CI jobs and correct confirmed failures only; then integrate direct void request and offline retry policy, actual receipt routes and complete release staging.",
+  "next": "Verify pinned Flutter run. Close legacy unbound bypass against gated pending requests at service boundary, then actual receipt entrypoints and direct/offline void policy.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -866,13 +866,44 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_void_mobile_decision": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "BACKEND_BOTH_ENGINES_PASS_FLUTTER_LOCKED_SDK_RERUN_PENDING",
     "base": "0d242c7eaa0a8821039f3f1cc8bba0809ae4a69c",
     "branch": "release/prospective-void-mobile-decision",
     "source": "54b74b64fc11a7fad1a528541c16eb9eb3fa15f5",
     "run": 45707829380,
     "scope": "Mobile bound decision contract preserves request_id from selected row, deterministic UUID v5 per approval, captured session, verifies response identity and void state; explicit null request cannot fall back. API rejects bound request if candidate disabled, echoes request/operation ID. Three new Dart cases, affected list regression and two HTTP tests per engine.",
-    "limits": "Runtime pending. Flutter direct void request and offline retry policy remain unresolved; legacy server without bound fields retains existing behavior; no production activation, real data, main merge or historical remediation. Flutter stable SDK channel used; lockfile unchanged check required.",
-    "next": "Verify all three CI jobs and correct confirmed failures only; then integrate direct void request and offline retry policy, actual receipt routes and complete release staging."
+    "limits": "Backend cases accepted; Flutter runtime pending. Staging only. Direct void request/offline policy and full entrypoint activation remain. Additional risk identified: flag-off legacy decision without explicit identity against a previously gated pending request; needs service-level guard against bypass before cutover. No historical remediation.",
+    "next": "Verify all three CI jobs and correct confirmed failures only; then integrate direct void request and offline retry policy, actual receipt routes and complete release staging.",
+    "jobs": [
+      {
+        "id": 139534228223,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 38,
+        "exit": 0
+      },
+      {
+        "id": 139534228750,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 38,
+        "exit": 0
+      },
+      {
+        "id": 139534228728,
+        "engine": "flutter",
+        "status": "FAILED_BEFORE_TESTS",
+        "cause": "Flutter stable 3.50.1 pinned eight different dependencies, lockfile mutation check blocked run."
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335",
+    "flutter_rerun": {
+      "source": "cae2f05417694c2bf96115b90923ed3d7aa1bcf8",
+      "branch": "release/prospective-void-mobile-decision-sdk",
+      "run": 45708028058,
+      "sdk": "3.44.0",
+      "pubspec_lock_sha256": "1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d",
+      "scope": "Workflow-only change; official 3.44.0 flutter_test/localizations pins match locked versions; enforce-lockfile and no-pub test. No repeat of accepted backend tests."
+    }
   }
 }
