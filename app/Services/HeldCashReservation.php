@@ -28,23 +28,8 @@ final class HeldCashReservation
         if ($account === null) throw new DomainException('held_cash_reservation_account');
         if ($account->channel !== 'cash') return;
 
-        $adjustments = DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
-            ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get();
-        if ($adjustments->isEmpty()) return;
-
-        // Reserve even historical, not-yet-adopted held surplus. Never infer
-        // release from an owner assignment or missing liability record.
-        $held = 0;
-        foreach ($adjustments as $adjustment) {
-            $posting = DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $adjustment->id)
-                ->lockForUpdate()->first();
-            $amount = SignedMinor::parse($adjustment->amount_minor);
-            if ($amount <= 0 || $posting === null
-                || ! app(TreasuryCashCountService::class)->checkAdjustmentPosting($posting)) {
-                throw new DomainException('held_cash_reservation_source');
-            }
-            $held = SignedMinor::add($held, $amount);
-        }
+        $held = $this->outstandingForAccount($accountId);
+        if ($held === 0) return;
 
         $balance = TreasuryMoney::document($account->opening_minor);
         foreach (DB::table('treasury_postings')->where('treasury_account_id', $accountId)
@@ -58,5 +43,31 @@ final class HeldCashReservation
         if (SignedMinor::subtract($balance, $held) < $minor) {
             throw new DomainException('held_cash_reserved');
         }
+    }
+    /** Caller owns the issuance lock and account lock. No scope acquisition. */
+    public function outstandingForAccount(int $accountId): int
+    {
+        if (DB::transactionLevel() <= 0) throw new DomainException('held_cash_reservation_context');
+        $adjustments = DB::table('treasury_cash_adjustments')->where('treasury_account_id', $accountId)
+            ->where('classification', 'unattributed_cash_held')->orderBy('id')->lockForUpdate()->get();
+
+
+        // Reserve even historical, not-yet-adopted held surplus. Never infer
+        // release from an owner assignment or missing liability record.
+        $held = 0;
+        foreach ($adjustments as $adjustment) {
+            $posting = DB::table('treasury_postings')->where('treasury_cash_adjustment_id', $adjustment->id)
+                ->lockForUpdate()->first();
+            $amount = SignedMinor::parse($adjustment->amount_minor);
+            if ($amount <= 0 || $posting === null
+                || ! app(TreasuryCashCountService::class)->checkAdjustmentPosting($posting)) {
+                throw new DomainException('held_cash_reservation_source');
+            }
+            $released = app(TreasuryHeldCashLiabilityService::class)->releasedForAdjustment((int) $adjustment->id);
+            if ($released < 0 || $released > $amount) throw new DomainException('held_cash_reservation_source');
+            $held = SignedMinor::add($held, SignedMinor::subtract($amount, $released));
+        }
+
+        return $held;
     }
 }
