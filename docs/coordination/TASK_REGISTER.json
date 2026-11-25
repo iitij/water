@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 93,
+    "round": 94,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4188,6 +4188,17 @@
       "scope": "Reviewed actual registry, period and closure migrations. Additive payload_format discriminator default 1 and part table referencing shared operation UUID and globally unique existing events; format 1 canonical bytes unchanged. Inactive group registry derives actual proof, inserts one header/two events/two date parts in one savepoint inside gate-first outer transaction, checks exact replay and source effect collision; old single-date registry refuses format 2 replay and old verifier holds scope-wide upon group header/parts to avoid omitting non-anchor effects. Four feature cases per engine prepared using actual isolated late receipt service: persistence/replay and prior format 1 bytes, old verifier hold, missing part rejection, closed origin period.",
       "limits": "No runtime validation or workflow creation after earlier restriction. Migration not applied to production; candidate registry only, no active W17 route. Part/event cross-owner relation is application-verified, not composite FK; complete grouped verifier, immutability, downgrade/recovery and fault injection/concurrency tests remain open. Old verifier deliberately blocks scope-wide verification when format 2 exists; cannot activate until replacement accepted. Group branch does not include R90 UUID candidate; integration and legacy adoption fencing required. No main merge or real data changes.",
       "next": "Implement group-aware independent historical and per-period verifier preserving format 1 digest, then verify schema, exact replay, fault rollback and global UUID compatibility before integrating W17."
+    },
+    "round94": {
+      "phase": "W17 inactive grouped historical source reconstruction and independent per-period group evidence verifier",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "e67122228e0548074b4f8c47af2a72ebfc13eb47",
+      "branch": "fix/central-g1b-dual-date-verifier",
+      "source": "24a7523b45a7c92292cff0c83157e3e877bb6c10",
+      "runs": [],
+      "scope": "Separate read-only historical policy for original epoch/version and canonical period boundaries; independent group verifier locks scope and periods, then issuance, reconstructs proof from review UUID and linked actual effects, checks both group parts, event ownership, anchor, recorded date and canonical hash, and reports per-period group digest/count without changing format 1. Four new isolated feature cases prepared: historical stable digest and correct period counts, missing non-anchor part, forged hash with recomputed payload, future original version. GitHub compare confirms three changed files and four commits.",
+      "limits": "No runtime execution or workflow creation; no operational acceptance. Group digest is separate, not integrated with format 1 registry or closure snapshot. Legacy verifier remains fail-closed. Historical source reconstruction still rejects unsupported later source transitions (void/reversal/pending void) via existing evidence checks; no claim of complete historical verification. Scope-wide scan/period locks require performance and concurrent lock-order review; no proof of immutable historical counters, complete coverage, same-month integration, fault rollback, R90 UUID compatibility or fenced legacy writers. No main merge, production activation or real database changes.",
+      "next": "Design and implement unified verifier preserving exact format 1 digest for periods without groups, bind local part membership for mixed periods and explicitly version closure snapshot; test same-month groups, historical reversal compatibility, source/part corruption, rollback and UUID integration. Keep old closure guard until both-engine validation and independent review."
     }
   }
 }
