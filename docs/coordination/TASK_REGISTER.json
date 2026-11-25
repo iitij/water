@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 66,
+    "round": 67,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3722,7 +3722,7 @@
     },
     "round66": {
       "phase": "First inactive gate-first treasury transfer writer",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "QA_FIX_REQUIRED",
       "base": "f6271daad0b4fde40ae7ea9236792e9a895f9f58",
       "source": "20261506c99e7cc8cbc44c7a9174aab575aee86b",
       "workflow": "78d3a8a04967d7418a817606fa3419ab9fbb95e8",
@@ -3731,12 +3731,51 @@
       "runs": [
         {
           "id": 45615786156,
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ],
+      "scope": "First isolated gate-first writer for actual treasury dispatch and receive; exact source proof and registry atomic with business operation; reject unregistered legacy source, conflict, frozen/closed/nested gate; test DB-trigger failure rollback. Four cases per engine.",
+      "limits": "No route/command activation, no global lock order or concurrency certification, no production coverage or complete closure. No main merge or production changes.",
+      "results": {
+        "sqlite": {
+          "job": 139210698574,
+          "tests": 4,
+          "assertions": 34,
+          "errors": 1,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 2
+        },
+        "mysql": {
+          "job": 139210699611,
+          "tests": 4,
+          "assertions": 34,
+          "errors": 1,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 2
+        }
+      },
+      "defect": "Test referenced nonexistent audit_logs table before failure injection. Three cases passed on each engine; rollback unproved. Actual model AuditEvent; no product change necessary for observed error."
+    },
+    "round67": {
+      "phase": "Corrected gate-first treasury transfer writer rollback test",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "20261506c99e7cc8cbc44c7a9174aab575aee86b",
+      "source": "52cda5bfe824beb813bcb31aab13bba2a78562cf",
+      "workflow": "f5a958e065bf1079fe5617876528271249a4d3d9",
+      "branch": "fix/central-g1b-gated-transfer-writer-qa",
+      "pr": 144,
+      "runs": [
+        {
+          "id": 45616218304,
           "status": "queued",
           "conclusion": null
         }
       ],
-      "scope": "First isolated gate-first writer for actual treasury dispatch and receive; exact source proof and registry atomic with business operation; reject unregistered legacy source, conflict, frozen/closed/nested gate; test DB-trigger failure rollback. Four cases per engine.",
-      "limits": "No route/command activation, no global lock order or concurrency certification, no production coverage or complete closure. No main merge or production changes."
+      "scope": "Correct audit test through AuditEvent model; strengthen zero operations/events and mandatory audit rollback plus positive exact retry. Product unchanged. Four affected cases per engine.",
+      "limits": "Pending runtime; no global writer fence, concurrent protocol certification, activation or main merge."
     }
   }
 }
