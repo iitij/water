@@ -104,9 +104,17 @@ final class ProspectiveSettlementEntry
                 || ($data['settlement_method'] ?? null) !== 'already_counted') {
                 return ['review' => $reviews->decide($id, $actor, $data)];
             }
+            // Filament and HTTP callers share this boundary. A nullable modal
+            // reference must be a validation error, never a typed argument error.
+            $reference = $data['evidence_reference'] ?? null;
+            if (! is_string($reference) || mb_strlen(trim($reference)) < 3 || mb_strlen(trim($reference)) > 150) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'evidence_reference' => 'يلزم مرجع تسوية مستقل وصالح.',
+                ]);
+            }
             $source = $this->source('late_receipt_reviews', $id);
             $result = app(GatedCountedCashWriter::class)->allocate($actor, $id, $source->payment_date,
-                $data['evidence_reference'], $data['evidence'], $source->sync_uuid, now()->toDateTimeImmutable());
+                $reference, $data['evidence'], $source->sync_uuid, now()->toDateTimeImmutable());
             return ['review' => $result['review']];
         });
     }
