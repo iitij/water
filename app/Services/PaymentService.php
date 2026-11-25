@@ -182,11 +182,39 @@ class PaymentService
      *
      * مرجع: خطة الإصدار 2.0 — الفصل 5.3.
      */
+    /**
+     * Once a receipt has entered the prospective registry it cannot return
+     * to an unregistered void path, even if a UI switch is disabled. This is
+     * evaluated after the issuance and receipt locks; source labels are not
+     * permissions. A missing registry leg does not erase an existing gated
+     * request's protection.
+     */
+    private function assertVoidWriter(Payment $payment, ?GatedReceiptVoidWriter $writer): void
+    {
+        if ($writer !== null && $writer->allowsMutation($payment)) {
+            return;
+        }
+
+        $ids = DB::table('transactions')->where('reference_type', Payment::class)
+            ->where('reference_id', $payment->id)->whereIn('type', ['payment', 'payment_reversal'])
+            ->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $registered = DB::table('financial_posting_events')->where('scope_key', 'water')
+            ->where('source_type', 'ledger_transaction')->whereIn('source_id', $ids)->exists();
+        $gatedRequest = DB::table('audit_events')->where('entity_type', Payment::class)
+            ->where('entity_id', (string) $payment->id)->where('event', 'financial.void_request_gated')->exists();
+        if ($registered || $gatedRequest || $writer !== null) {
+            throw ValidationException::withMessages([
+                'payment' => 'يجب تنفيذ إلغاء هذا السند عبر المسار المالي المعتمد.',
+            ]);
+        }
+    }
+
     public function voidPayment(
         Payment $payment,
         string $reason,
         ?int $userId = null,
         string $source = 'api',
+        ?GatedReceiptVoidWriter $gatedWriter = null,
     ): Payment {
         $reason = trim($reason);
         if (\Illuminate\Support\Str::length($reason) < 10) {
@@ -195,13 +223,14 @@ class PaymentService
             ]);
         }
 
-        return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+        return DB::transaction(function () use ($payment, $reason, $userId, $source, $gatedWriter) {
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $this->assertVoidWriter($payment, $gatedWriter);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
@@ -313,14 +342,16 @@ class PaymentService
         string $reason,
         ?int $userId = null,
         string $source = 'api',
+        ?GatedReceiptVoidWriter $gatedWriter = null,
     ): array {
-        return DB::transaction(function () use ($payment, $reason, $userId, $source) {
+        return DB::transaction(function () use ($payment, $reason, $userId, $source, $gatedWriter) {
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $this->assertVoidWriter($payment, $gatedWriter);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
@@ -346,7 +377,7 @@ class PaymentService
 
             $thresholdMinor = $this->voidApprovalThresholdMinor();
             if (! $this->exceedsVoidThreshold($payment, $thresholdMinor)) {
-                return ['payment' => $this->voidPayment($payment, $reason, $userId, $source), 'pending' => false];
+                return ['payment' => $this->voidPayment($payment, $reason, $userId, $source, $gatedWriter), 'pending' => false];
             }
 
             $payment->forceFill([
@@ -388,14 +419,16 @@ class PaymentService
         User $actor,
         ?string $notes = null,
         string $source = 'api',
+        ?GatedReceiptVoidWriter $gatedWriter = null,
     ): Payment {
-        return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source) {
+        return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source, $gatedWriter) {
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($payment->subscriber_id);
             $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $this->assertVoidWriter($payment, $gatedWriter);
             if (\App\Models\PaymentAccountTransfer::where('payment_id', $payment->id)->exists()
                 || DB::table('closed_cash_corrections')->where('duplicate_of_id', $payment->id)->exists()
                 || DB::table('late_receipt_reviews')->where('payment_id', $payment->id)->where('status', 'approved')->exists()
@@ -419,7 +452,7 @@ class PaymentService
 
             if ($approve) {
                 $voider = $actor;
-                $payment = $this->voidPayment($payment, $reason, $voider->id, 'approval');
+                $payment = $this->voidPayment($payment, $reason, $voider->id, 'approval', $gatedWriter);
                 $payment->forceFill([
                     'void_decision_notes' => $notes,
                     'void_decided_by' => $actor->id,
