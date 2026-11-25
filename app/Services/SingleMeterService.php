@@ -119,6 +119,11 @@ class SingleMeterService
     public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
     {
         return DB::transaction(function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
+            // Retirement may rewrite document provenance. Serialize with the
+            // issuance and held-credit writers before locking the subscriber.
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($oldMeter->subscriber_id);
             $old = Meter::query()->lockForUpdate()->findOrFail($oldMeter->getKey());
             abort_unless((int) $old->subscriber_id === (int) $subscriber->id, 409, 'تغير مالك العداد؛ حدّث البيانات.');

@@ -826,4 +826,39 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(25, $report['held_cash_total_protected_minor']);
         $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
     }
+    public function test_round113_meter_replacement_and_held_credit_preserve_original_financial_provenance(): void
+    {
+        [$now, $account, $subscriber, $lot, $assignment, $approver, $replacer] = $this->heldRaceFixture();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-RACE-RETIRE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $uuid = (string) Str::uuid();
+        $results = $this->race(
+            fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit(
+                User::findOrFail($approver->id), $assignment, 20, 'QA-HELD-RACE-RETIRE-CREDIT',
+                'Independent documented owner consent to apply held cash', $uuid, '2026-11-25', $now),
+            fn () => app(\App\Services\SingleMeterService::class)->replace(
+                Meter::findOrFail($meter->id), ['unique_code' => 'QA-HELD-RACE-NEW', 'initial_reading' => '0.00'],
+                '2026-11-25', 'Synthetic physical replacement', $replacer->id)['current_meter']->id,
+        );
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+        $this->assertSame(1, Meter::where('subscriber_id', $subscriber->id)->count());
+        $this->assertNull($invoice->fresh()->meter_id);
+        $this->assertSame((int) $meter->id, (int) $invoice->fresh()->retired_meter_id);
+        $this->assertSame('0.20', $invoice->fresh()->amount_paid);
+        $this->assertSame(-59980, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(2, Transaction::count());
+        $proof = DB::transaction(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $this->assertSame(20, $proof['applied_minor']);
+        $this->assertSame(0, $proof['unapplied_minor']);
+        $this->assertFalse($proof['spending_release_authorized']);
+        $report = app(\App\Services\TreasuryRegisterService::class)->inspect($approver, (int) $account['id']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+        $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
+    }
 }

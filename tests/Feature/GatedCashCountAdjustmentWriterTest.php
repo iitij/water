@@ -1062,4 +1062,35 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('transactions', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_meter_replacement_preserves_held_credit_allocation_and_cash_reserve(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic retirement tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-RETIRE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $this->creditHeld($actor, 25);
+        $proof = fn () => $this->gate(fn () => app(\App\Services\HeldCashCreditAllocationEvidence::class)->inspectAccount((int) $account['id']));
+        $before = $proof();
+        $postings = DB::table('treasury_postings')->orderBy('id')->get()->toArray();
+        $replacement = $this->assertIssuancePrecedesSubscriber(fn () =>
+            app(\App\Services\SingleMeterService::class)->replace($meter, ['unique_code' => 'QA-HELD-REPLACEMENT',
+                'initial_reading' => '0.00'], '2026-11-25', 'Synthetic physical replacement', $actor->id))['current_meter'];
+        $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+        $this->assertSame(1, \App\Models\Meter::where('subscriber_id', $subscriber->id)->count());
+        $this->assertNotSame($meter->id, $replacement->id);
+        $this->assertNull($invoice->fresh()->meter_id);
+        $this->assertSame((int) $meter->id, (int) $invoice->fresh()->retired_meter_id);
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertSame(15, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertEquals($before, $proof());
+        $this->assertEquals($postings, DB::table('treasury_postings')->orderBy('id')->get()->toArray());
+        $this->assertSame(25, DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('transactions', 2);
+    }
 }
