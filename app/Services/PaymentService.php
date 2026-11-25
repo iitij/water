@@ -517,7 +517,7 @@ class PaymentService
         bool $deferred = false,
         ?int $lateReviewId = null,
         ?GatedCashReceiptWriter $gatedWriter = null,
-        ?GatedCollectionWriter $settlementWriter = null,
+        GatedCollectionWriter|GatedCountedCashWriter|null $settlementWriter = null,
     ): Payment {
         return $this->postPayment($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason,
             $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, gatedWriter: $gatedWriter, settlementWriter: $settlementWriter);
@@ -540,7 +540,7 @@ class PaymentService
         ?int $lateReviewId = null,
         bool $clearedClaim = false,
         ?GatedCashReceiptWriter $gatedWriter = null,
-        ?GatedCollectionWriter $settlementWriter = null,
+        GatedCollectionWriter|GatedCountedCashWriter|null $settlementWriter = null,
     ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
@@ -575,7 +575,7 @@ class PaymentService
             if ($paymentMethod === 'cash' && $lateReviewId !== null && ! $clearedClaim) {
                 $registered = $syncUuid !== null && DB::table('financial_posting_operations')
                     ->where('scope_key', 'water')->where('operation_uuid', $syncUuid)->exists();
-                if ($settlementWriter === null || $syncUuid === null || ! $settlementWriter->allowsMutation('late_cash', $lateReviewId, $syncUuid)) {
+                if ($settlementWriter === null || $syncUuid === null || ! $settlementWriter->allowsMutation($settlementWriter instanceof GatedCountedCashWriter ? 'already_counted' : 'late_cash', $lateReviewId, $syncUuid)) {
                     if ($settlementWriter !== null || $registered || config('financial_candidate.late_cash_settlements') === true) {
                         throw new \DomainException('gated_late_cash_writer_required');
                     }
