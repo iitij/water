@@ -71,6 +71,63 @@ void main() {
       expect(await lock.unlock('1234'), UnlockResult.success);
     });
 
+    test('failed attempts and cooldown survive service recreation', () async {
+      final first = build();
+      await first.load();
+      await first.setPin('1234');
+      await first.unlock('0000');
+      await first.unlock('0001');
+      final restarted = build();
+      await restarted.load();
+      expect(restarted.failedAttempts, 2);
+      expect(await restarted.unlock('0002'), UnlockResult.wrongPin);
+      final third = build();
+      await third.load();
+      expect(third.isLockedOut, isTrue);
+      expect(await third.unlock('1234'), UnlockResult.lockedOut);
+      now = now.add(const Duration(seconds: 31));
+      expect(await third.unlock('0003'), UnlockResult.wrongPin);
+      final fourth = build();
+      await fourth.load();
+      expect(fourth.isLockedOut, isFalse);
+      expect(fourth.failedAttempts, 1);
+      expect(await fourth.unlock('1234'), UnlockResult.success);
+      final fifth = build();
+      await fifth.load();
+      expect(fifth.failedAttempts, 0);
+    });
+
+    test('concurrent guesses count serially and cannot skip lockout', () async {
+      final lock = build();
+      await lock.load();
+      await lock.setPin('1234');
+      lock.lockNow();
+      final outcomes = await Future.wait([
+        lock.unlock('0000'), lock.unlock('0001'),
+        lock.unlock('0002'), lock.unlock('1234'),
+      ]);
+      expect(outcomes, [UnlockResult.wrongPin, UnlockResult.wrongPin,
+        UnlockResult.wrongPin, UnlockResult.lockedOut]);
+      expect(lock.isLocked, isTrue);
+    });
+
+    test('changing an existing PIN without current PIN fails closed', () async {
+      final lock = build();
+      await lock.setPin('1234');
+      await expectLater(lock.setPin('5678'), throwsStateError);
+      expect(await lock.unlock('1234'), UnlockResult.success);
+    });
+
+    test('corrupt persisted attempt state cannot remove cooldown', () async {
+      final lock = build();
+      await lock.setPin('1234');
+      storage.values[AppLockService.attemptsKey] = '{"failed":-1}';
+      final restarted = build();
+      await restarted.load();
+      expect(restarted.isLockedOut, isTrue);
+      expect(await restarted.unlock('1234'), UnlockResult.lockedOut);
+    });
+
     test('النجاح يُصفّر عدّاد المحاولات', () async {
       final lock = build();
       await lock.load();

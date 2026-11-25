@@ -78,6 +78,7 @@ coverage/
 /mobile app/release/
 /mobile app/*.zip
 /mobile app/windows/flutter/ephemeral/
+/mobile app/linux/flutter/ephemeral/
 
 # Mobile app icon generator (scripts in "mobile app/tool")
 /mobile app/tool/node_modules/

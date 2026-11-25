@@ -7,6 +7,10 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Models\User;
+use App\Support\CashCustodyAmounts as Cash;
+use App\Support\DecimalDomain;
+use App\Support\MoneyBoundary;
+use App\Support\SignedMinor;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -28,9 +32,8 @@ final class LateReceiptReviewService
 
     public function submit(User $collector, array $data): array
     {
-        $amount = (float) $data['amount'];
-        if (! is_finite($amount) || $amount <= 0 || $amount > 9999999999.99 || round($amount, 2) != $amount
-            || ! Str::isUuid($data['sync_uuid'])) {
+        $amount = Cash::input($data['amount'], 'amount', DecimalDomain::D12, 1);
+        if (! Str::isUuid($data['sync_uuid'])) {
             throw ValidationException::withMessages(['amount' => 'مبلغ السند أو معرّف المزامنة غير صالح.']);
         }
         $claim = [
@@ -40,7 +43,7 @@ final class LateReceiptReviewService
             'subscriber_id' => (int) $data['subscriber_id'],
             'invoice_id' => isset($data['invoice_id']) ? (int) $data['invoice_id'] : null,
             'submitted_meter_id' => isset($data['meter_id']) ? (int) $data['meter_id'] : null,
-            'amount' => number_format($amount, 2, '.', ''),
+            'amount' => MoneyBoundary::writeDecimal($amount, DecimalDomain::D12),
             'payment_date' => \Carbon\CarbonImmutable::parse($data['payment_date'])->toDateString(),
             'payment_method' => $data['payment_method'],
             'reference_number' => $data['reference_number'] ?? null,
@@ -53,7 +56,7 @@ final class LateReceiptReviewService
             $existing = DB::table('late_receipt_reviews')->where('sync_uuid', $claim['sync_uuid'])->lockForUpdate()->first();
             if ($existing) {
                 foreach ($claim as $field => $value) {
-                    abort_unless($field === 'amount' ? (float) $existing->$field === (float) $value
+                    abort_unless($field === 'amount' ? $this->receiptMinor($existing->$field) === MoneyBoundary::numericInput($value, DecimalDomain::D12, false, 1)
                         : (string) $existing->$field === (string) $value, 409, 'معرّف المزامنة مرتبط بمراجعة مختلفة.');
                 }
                 return (array) $existing;
@@ -72,12 +75,25 @@ final class LateReceiptReviewService
             // Submitted meter is provenance only; never move money to a different subscriber.
             $id = DB::table('late_receipt_reviews')->insertGetId($claim + ['status' => 'pending',
                 'created_at' => now(), 'updated_at' => now()]);
-            app(AuditLogger::class)->recordRequired('late_receipt.submitted', [
+            $this->requiredAudit('late_receipt.submitted', [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'after' => $claim,
                 'actor_user_id' => $collector->id,
             ]);
             return (array) DB::table('late_receipt_reviews')->find($id);
         }, 3);
+    }
+
+    private function requiredAudit(string $event, array $context): void
+    {
+        $record = app(AuditLogger::class)->recordRequired($event, $context);
+        if (! $record->exists || $record->getKey() === null) {
+            throw new \RuntimeException('Late receipt operation requires a persisted audit event.');
+        }
+    }
+
+    private function receiptMinor(mixed $raw): int
+    {
+        return Cash::positiveStored($raw, DB::connection()->getDriverName(), DecimalDomain::D12);
     }
 
     /**
@@ -87,12 +103,12 @@ final class LateReceiptReviewService
      */
     public function countedCashAllocation(CashSession $session, bool $forApproval = false): array
     {
+        $driver = $session->getConnection()->getDriverName();
+        $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, DecimalDomain::D14, false, true);
+        $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, DecimalDomain::D14, false, true);
+        $variance = Cash::stored($session->getRawOriginal('variance_amount'), $driver, DecimalDomain::D14, true, true);
         $eligible = $session->isApproved() && $session->settlement_basis === 'physical_cash'
-            && $session->expected_amount !== null && $session->counted_amount !== null
-            && $session->variance_amount !== null;
-        $minor = static fn ($value): int => (int) round((float) $value * 100);
-        $variance = $minor($session->variance_amount);
-        $eligible = $eligible && $variance === $minor($session->counted_amount) - $minor($session->expected_amount);
+            && Cash::consistent($counted, $expected, $variance);
         $capacity = $eligible ? max(0, $variance) : 0;
         // Use a locking read when approving inside a transaction, not a stale MVCC snapshot.
         $query = DB::table('late_receipt_reviews')->where('cash_session_id', $session->id)
@@ -100,13 +116,15 @@ final class LateReceiptReviewService
         if ($forApproval) {
             $query->lockForUpdate();
         }
-        $allocated = $query->get(['amount'])->sum(fn ($row) => $minor($row->amount));
+        $allocated = SignedMinor::sum($query->orderBy('id')->get(['amount'])->map(fn ($row) => $this->receiptMinor($row->amount)));
+        // Preserve the observed allocation, but do not permit new approval against an inconsistent snapshot.
+        $eligible = $eligible && $allocated <= $capacity;
 
         return [
             'eligible' => $eligible,
             'capacity_minor' => $capacity,
             'allocated_minor' => $allocated,
-            'available_minor' => max(0, $capacity - $allocated),
+            'available_minor' => $eligible ? SignedMinor::subtract($capacity, $allocated) : 0,
         ];
     }
 
@@ -157,7 +175,7 @@ final class LateReceiptReviewService
                 }
                 if ($method === 'already_counted') {
                     $allocation = $this->countedCashAllocation($session, true);
-                    if (! $allocation['eligible'] || (int) round((float) $review->amount * 100) > $allocation['available_minor']) {
+                    if (! $allocation['eligible'] || $this->receiptMinor($review->amount) > $allocation['available_minor']) {
                         throw ValidationException::withMessages(['amount' => 'لا يوجد فائض نقدي أصلي مثبت وكافٍ لهذه التسوية.']);
                     }
                 }
@@ -168,7 +186,7 @@ final class LateReceiptReviewService
                     || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists(),
                     409, 'مرجع التسوية مستخدم مسبقاً.');
                 $payment = app(PaymentService::class)->collectPayment(
-                    subscriber: $subscriber, amount: $review->amount,
+                    subscriber: $subscriber, amount: MoneyBoundary::writeDecimal($this->receiptMinor($review->amount), DecimalDomain::D12),
                     invoiceId: $review->invoice_id, paymentMethod: $review->payment_method,
                     referenceNumber: $review->reference_number, notes: $review->notes, reason: $review->reason,
                     userId: $review->collector_id, paymentDate: $review->payment_date,
@@ -180,7 +198,7 @@ final class LateReceiptReviewService
                 'decided_at' => now(), 'settlement_method' => $method,
                 'evidence_reference' => $reference, 'evidence' => $evidence, 'updated_at' => now()];
             DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
-            app(AuditLogger::class)->recordRequired('late_receipt.'.$status, [
+            $this->requiredAudit('late_receipt.'.$status, [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'before' => (array) $review,
                 'after' => $decision + ['new_cash_movement' => false,
                     'counted_cash_allocation' => $approve && $method === 'already_counted'], 'actor_user_id' => $actor->id,
@@ -238,7 +256,7 @@ final class LateReceiptReviewService
             $approved = $this->decideInternal($id, $actor, ['approve' => true, 'settlement_method' => 'separate_handover',
                 'evidence_reference' => $reference, 'evidence' => $evidence], true);
             $record = ['late_receipt_review_id' => $id, 'treasury_account_id' => $accountId,
-                'amount_minor' => (int) round((float) $approved['amount'] * 100), 'received_on' => $receivedOn,
+                'amount_minor' => $this->receiptMinor($approved['amount']), 'received_on' => $receivedOn,
                 'reference' => $reference, 'evidence' => $evidence, 'received_by' => $actor->id];
             $receiptId = DB::table('treasury_late_cash_receipts')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
             $postingId = DB::table('treasury_postings')->insertGetId([
@@ -248,7 +266,7 @@ final class LateReceiptReviewService
             ]);
             $posting = DB::table('treasury_postings')->find($postingId);
             if (! $this->checkCashPosting($posting)) throw new \LogicException('Late cash receipt posting inconsistent.');
-            app(AuditLogger::class)->recordRequired('treasury.late_cash_received', [
+            $this->requiredAudit('treasury.late_cash_received', [
                 'entity_type' => 'treasury_late_cash_receipt', 'entity_id' => $receiptId, 'actor_user_id' => $actor->id,
                 'after' => $record + ['payment_id' => $approved['payment_id'], 'posting_id' => $postingId, 'original_till_changed' => false],
             ]);
@@ -279,9 +297,7 @@ final class LateReceiptReviewService
             || (int) $receipt->received_by !== (int) $posting->posted_by
             || $review->sync_uuid !== $payment->sync_uuid || $review->payment_date !== $payment->payment_date->toDateString()
             || ($review->reference_number ?? '') !== ($payment->reference_number ?? '')
-            || (int) $receipt->amount_minor <= 0 || (int) $receipt->amount_minor !== (int) round((float) $review->amount * 100)
-            || (int) $receipt->amount_minor !== (int) round((float) $payment->amount * 100)
-            || (int) $receipt->amount_minor !== (int) $posting->amount_minor
+            || ! $this->matchingCashAmounts($receipt, $review, $payment, $posting)
             || (int) $receipt->treasury_account_id !== (int) $posting->treasury_account_id
             || $receipt->reference !== $review->evidence_reference || $receipt->reference !== $posting->evidence_reference
             || $receipt->evidence !== $review->evidence || mb_strlen(trim($receipt->evidence)) < 10
@@ -291,9 +307,32 @@ final class LateReceiptReviewService
         $entries = \App\Models\Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
             ->where('type', 'payment')->get();
         return $entries->count() === 1 && (int) $entries->first()->subscriber_id === (int) $payment->subscriber_id
-            && (int) round((float) $entries->first()->amount * 100) === (int) $receipt->amount_minor
+            && $this->matchesReceiptLedger($entries->first(), $receipt)
             && (int) ($entries->first()->meter_id ?? 0) === (int) ($payment->meter_id ?? 0)
             && ! \App\Models\Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
                 ->where('type', 'payment_reversal')->exists();
     }
+
+    private function matchingCashAmounts(object $receipt, object $review, Payment $payment, object $posting): bool
+    {
+        try {
+            $minor = MoneyBoundary::readMinor($receipt->amount_minor, true, DecimalDomain::D12);
+            return $minor > 0 && $minor === $this->receiptMinor($review->amount)
+                && $minor === $this->receiptMinor($payment->getRawOriginal('amount'))
+                && $minor === MoneyBoundary::readMinor($posting->amount_minor, false, DecimalDomain::D12);
+        } catch (\InvalidArgumentException|\OverflowException) {
+            return false;
+        }
+    }
+
+    private function matchesReceiptLedger(\App\Models\Transaction $entry, object $receipt): bool
+    {
+        try {
+            return $this->receiptMinor($entry->getRawOriginal('amount'))
+                === MoneyBoundary::readMinor($receipt->amount_minor, true, DecimalDomain::D12);
+        } catch (\InvalidArgumentException|\OverflowException) {
+            return false;
+        }
+    }
+
 }
