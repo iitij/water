@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Locate round132 workflow by exact head SHA, verify logs and fix confirmed failures only. Then cover late receipt and remaining entrypoint/close gaps.",
+  "next": "Verify corrected round132 job logs and actual rollback assertions, not just initial failure message. Then target late receipt path; do not rerun accepted baseline.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -286,17 +286,43 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round132": {
-    "status": "TARGETED_CI_PUSHED_RUN_NOT_YET_VISIBLE",
+    "status": "CORRECTED_TARGETED_CI_IN_PROGRESS_UNVERIFIED",
     "base": "759683725502888aae196a3abe090d59fd19aedb",
     "branch": "qa/held-cash-noncash-atomicity-round132",
-    "source": "c7235089661808d0d47e3a5c52ec372633226cc9",
-    "run": null,
+    "source": "d29c3745e6e2f5843f6adf19aa60d91a4cd8ccaa",
+    "run": 45694340887,
     "source_review": [
       "NonCashClaimService::submit uses issuance and subscriber locks and creates only pending claim and audit; no receipt.",
       "PaymentService::clearNonCashClaim and clearLateNonCash use issuance/subscriber locks, validate independent approval and line amount/date, issue receipt through postPayment, link decision, confirm bank collection, then required audit within outer transaction.",
       "BankReconciliationService::confirmCollection locks issuance, subscriber, receipt and statement/account, validates proof and independence, creates collection, treasury posting and match with required audit."
     ],
     "scope": "Inject required noncash clearance final audit failure only after bank match, collection and shadow reinstatement exist. Compare exact snapshots of both ledgers, claim, sequence, bank line and evidence; verify successful retry and idempotency with unchanged actual cash reserve.",
-    "limits": "Only test/workflow changes, no product code change. Push verified, run ID and results not yet visible. Late receipt path reviewed but not yet tested in held-cash scenario. No historical remediation, real data, main merge, actual release or production activation."
+    "limits": "Corrected CI not yet accepted. Late receipt coverage still pending. Additional retired feature gate triggered automatically by test file push; not manually requested. No historical remediation, production, real data, main merge, or actual reserve release.",
+    "first_attempt": {
+      "source": "c7235089661808d0d47e3a5c52ec372633226cc9",
+      "run": 45694105584,
+      "status": "FAILED_TEST_ASSERTION",
+      "jobs": [
+        {
+          "id": 139486878923,
+          "engine": "sqlite",
+          "tests": 1,
+          "assertions": 5,
+          "failures": 1,
+          "exit": 1
+        },
+        {
+          "id": 139486878547,
+          "engine": "mysql",
+          "tests": 1,
+          "assertions": 5,
+          "failures": 1,
+          "exit": 1
+        }
+      ],
+      "cause": "AuditLogger::record logs the original SQL exception and returns null. recordRequired throws generic RuntimeException without previous exception. Test incorrectly searched exception chain for original SQL error; remaining rollback assertions did not execute. Product failure not established."
+    },
+    "additional_automatic_gate_run": 45694340759,
+    "correction": "Only test assertion changed: expect exact generic RuntimeException and verify Log warning event noncash_claim.cleared contains injected SQL error marker; original injection condition and all rollback/replay assertions retained. No product change."
   }
 }
