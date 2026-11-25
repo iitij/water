@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Mobile decision contract with captured request_id and deterministic approval UUID, API non-downgrade guard and explicit confirmation; immediate request/offline policy independent.",
+  "next": "Verify all three CI jobs and correct confirmed failures only; then integrate direct void request and offline retry policy, actual receipt routes and complete release staging.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -864,5 +864,15 @@
     "limits": "No production activation or complete writer cutover; stale approval and request UI exercised, direct reject UI and additional cases remain. Flutter integration pending. No history modification.",
     "next": "Verify MySQL, then integrate mobile request identity and operation UUID contract; verify permission and closed-period checks for all UI paths.",
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_mobile_decision": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "0d242c7eaa0a8821039f3f1cc8bba0809ae4a69c",
+    "branch": "release/prospective-void-mobile-decision",
+    "source": "54b74b64fc11a7fad1a528541c16eb9eb3fa15f5",
+    "run": 45707829380,
+    "scope": "Mobile bound decision contract preserves request_id from selected row, deterministic UUID v5 per approval, captured session, verifies response identity and void state; explicit null request cannot fall back. API rejects bound request if candidate disabled, echoes request/operation ID. Three new Dart cases, affected list regression and two HTTP tests per engine.",
+    "limits": "Runtime pending. Flutter direct void request and offline retry policy remain unresolved; legacy server without bound fields retains existing behavior; no production activation, real data, main merge or historical remediation. Flutter stable SDK channel used; lockfile unchanged check required.",
+    "next": "Verify all three CI jobs and correct confirmed failures only; then integrate direct void request and offline retry policy, actual receipt routes and complete release staging."
   }
 }
