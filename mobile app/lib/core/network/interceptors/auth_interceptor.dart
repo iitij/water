@@ -15,10 +15,14 @@ class AuthInterceptor extends Interceptor {
 
   static const String retriedFlag = 'authRetried';
   static const String sessionGenerationKey = 'authSessionGeneration';
+  static const String sessionServerKey = 'authSessionServer';
 
   bool _isStale(RequestOptions options) {
     final generation = options.extra[sessionGenerationKey];
-    return generation != null && generation != _storage.sessionGeneration;
+    final server = options.extra[sessionServerKey];
+    return (generation != null && generation != _storage.sessionGeneration) ||
+        (server != null && (server != options.baseUrl ||
+            (_retryClient != null && server != _retryClient.options.baseUrl)));
   }
 
   DioException _staleError(RequestOptions options) => DioException(
