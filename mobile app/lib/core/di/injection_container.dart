@@ -35,6 +35,7 @@ import '../database/offline_pack_downloader.dart';
 import '../diagnostics/api_log_manager.dart';
 import '../diagnostics/error_reporter.dart';
 import '../field_operations/field_operations_module.dart';
+import '../field_operations/field_session_scope.dart';
 import '../finance/finance_module.dart';
 import '../fouad/fouad_module.dart';
 import '../network/api_endpoints.dart';
@@ -221,13 +222,31 @@ Future<void> configureDependencies({String? appVersion}) async {
 
   // مزامنة بيانات الميدان المحلية (أعطال القراءة + زيارات الجولة) — كانت
   // محلية فقط وتموت بفقدان الجهاز؛ الآن تُرفع فور التسجيل وعند عودة الاتصال.
-  final fieldDataSync = FieldDataSyncService(
+  FieldSessionScope captureFieldScope() {
+    final userId = session.user?['id']?.toString();
+    final server = dioClient.dio.options.baseUrl;
+    final generation = secureStorage.sessionGeneration;
+    if (!session.isAuthenticated || userId == null || userId.isEmpty) {
+      throw StateError('Field data requires an authenticated owner.');
+    }
+    return FieldSessionScope(
+      server: server, userId: userId, generation: generation,
+      isCurrent: () => session.isAuthenticated &&
+          session.user?['id']?.toString() == userId &&
+          secureStorage.sessionGeneration == generation &&
+          dioClient.dio.options.baseUrl == server,
+    );
+  }
+
+  final fieldDataSync = FieldDataSyncService.scoped(
     dio: dioClient.dio,
-    faultLog: SharedPreferencesReadingFaultLog(),
-    visitStore: SharedPreferencesRouteVisitStore(),
+    captureScope: captureFieldScope,
   );
   getIt.registerSingleton<FieldDataSyncService>(fieldDataSync);
-  getIt.registerSingleton<RouteVisitStore>(SharedPreferencesRouteVisitStore());
+  getIt.registerFactory<ReadingFaultLog>(() =>
+      SharedPreferencesReadingFaultLog(scope: captureFieldScope()));
+  getIt.registerFactory<RouteVisitStore>(() =>
+      SharedPreferencesRouteVisitStore(scope: captureFieldScope()));
 
   // Dev 3: Finance Module (automatically binds `UnifiedFinanceSyncQueueAdapter` to `SyncQueueManager`).
   FinanceModule.ensure();
