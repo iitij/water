@@ -27,8 +27,12 @@ final class TreasuryController extends ApiController
             'opening_amount' => ['required', 'regex:/^\d{1,12}(?:\.\d{1,2})?$/D'],
             'opening_reference' => ['required', 'string', 'max:150'],
             'opening_evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        return response()->json(['account' => $service->open($request->user(), $data), 'certified_balance' => false]);
+        return $this->openingFundingEntry($request, $data, fn ($uuid, $input) =>
+            ['account' => app(\App\Services\GatedTreasuryOpeningFundingWriter::class)->open(
+                $request->user(), $input, $uuid, now()->toDateTimeImmutable())['account'], 'certified_balance' => false],
+            fn ($input) => ['account' => $service->open($request->user(), $input), 'certified_balance' => false]);
     }
 
     public function show(Request $request, int $id, TreasuryRegisterService $service)
@@ -46,11 +50,37 @@ final class TreasuryController extends ApiController
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'square_id' => ['nullable', 'integer', 'exists:squares,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'operation_uuid' => ['nullable', 'uuid'],
+            'issued_on' => ['prohibited'],
         ]);
         $collector = \App\Models\User::findOrFail($data['collector_id']);
-        $session = $sessions->openFunded($collector, $request->user(), $id, (string) $data['amount'],
-            $data['reference'], $data['evidence'], $data['square_id'] ?? null, $data['notes'] ?? null);
-        return response()->json(['cash_session' => $sessions->summary($session), 'certified_balance' => false]);
+        return $this->openingFundingEntry($request, $data, function ($uuid, $input) use ($collector, $request, $id, $sessions) {
+            $result = app(\App\Services\GatedTreasuryOpeningFundingWriter::class)->fund(
+                $collector, $request->user(), $id, (string) $input['amount'], $input['reference'], $input['evidence'],
+                $uuid, now()->toDateTimeImmutable(), $input['square_id'] ?? null, $input['notes'] ?? null);
+            return ['cash_session' => $sessions->summary($result['session']), 'certified_balance' => false];
+        }, function ($input) use ($collector, $request, $id, $sessions) {
+            $session = $sessions->openFunded($collector, $request->user(), $id, (string) $input['amount'],
+                $input['reference'], $input['evidence'], $input['square_id'] ?? null, $input['notes'] ?? null);
+            return ['cash_session' => $sessions->summary($session), 'certified_balance' => false];
+        });
+    }
+
+    private function openingFundingEntry(Request $request, array $data, callable $candidate, callable $legacy)
+    {
+        try {
+            $uuid = $data['operation_uuid'] ?? null;
+            unset($data['operation_uuid']);
+            if (config('financial_candidate.treasury_opening_funding') === true) {
+                abort_unless(app()->environment(['testing', 'staging']), 503);
+                $request->validate(['operation_uuid' => ['required', 'uuid']]);
+                return response()->json($candidate(strtolower($uuid), $data));
+            }
+            if ($uuid !== null) throw new \DomainException('gated_treasury_opening_funding_entry_disabled');
+            return response()->json($legacy($data));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 
     public function dispatchTransfer(Request $request, \App\Services\TreasuryTransferService $service)
