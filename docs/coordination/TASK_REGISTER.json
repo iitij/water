@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 89,
+    "round": 90,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4135,6 +4135,18 @@
       "scope": "Shared FinancialOperationIdentity service, connected on isolated branch to registry record and new PaymentService, NonCashClaimService, LateReceiptReviewService issuance under existing issuance lock. Reject unrelated registry operation consuming pending or rejected source UUID; reject new receipt/claim using registered operation UUID; permit exact reserved ordinary cash receipt and modern linked claim/review only with actual matching ledger and required treasury effects. Five tests per engine prepared: pending/rejected reservation, reverse conflict in three source services, valid cash replay, late-review reservation, actual bank clearance with missing-leg rollback and paired replay.",
       "limits": "Source-only candidate; modifies base services on isolated branch but not accepted base or main. No runtime validation or new workflow after earlier restriction. Pre-existing corrupt collisions, historical source ownership, submissions replay with conflicting historical operation, registry calls with an unreserved UUID referencing a receipt of different UUID, canonical UUID constraints on legacy source paths, cross-date W17, database write fencing and global lock order/concurrency remain open. W19 negative fixtures deliberately constructing incomplete/split registry pairs must be reclassified as rejection tests or isolated corrupted fixtures when integrating this guard; do not weaken accepted proof requirements. Existing W19 proof not integrated here. No live data changes.",
       "next": "Review global ownership gaps and direct DB mutation entrypoints; validate exact candidate and compatibility with accepted suites before integration; resolve multi-date recognition and counted cash coverage."
+    },
+    "round90": {
+      "phase": "Integration pass 4: reverse source UUID ownership and independent reversal identity",
+      "status": "SOURCE_REVIEW_PARTIAL_VALIDATION_BLOCKED",
+      "base": "d48053580e1317834959aeb64676c05f10f551c7",
+      "branch": "fix/central-g1b-uuid-ownership",
+      "source": "abea5ee662ede10ea78666643dd6e140f9bf70d6",
+      "writer_commit": "eeb294af072ef981958e6239bd4bad90225941d3",
+      "runs": [],
+      "scope": "Registry reservation now checks actual existing original payment transaction, bank collection posting and separate late cash receipt posting in reverse direction, resolving associated payment and linked claim/review under issuance lock. Reject alternate free UUID for a source with a known sync identity. Reversals/refunds/transfers retain separate operation identities; original UUID cannot be repurposed for reversal. Two new test methods per engine and two new negative cases within existing paired clearance test, seven methods per engine total; actual cash relabel rollback, distinct reversal and replay, paired or bank-only relabel rollback.",
+      "limits": "Static candidate only; no runtime validation or new workflow after earlier restriction. Generic registry remains able to receive nonbusiness evidence; missing/noncanonical source identity and null-UUID historical receipts remain separate coverage/transition gates. Preexisting collisions, historical replay conflicts, complete source identity and DB fencing/global lock order/concurrency remain open. Late cash reverse guard has no new dedicated runtime fixture; W17 dual-date and W18 excluded flows unresolved. No main merge or production data changes.",
+      "next": "Define explicit policy for dual-date W17 and accounting recognition of delayed receipts; complete source coverage and historical transition before integrating and running pending candidates."
     }
   }
 }
