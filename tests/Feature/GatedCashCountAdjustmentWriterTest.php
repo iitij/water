@@ -2803,6 +2803,69 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
 
+    public function test_release_refund_service_fence_protects_both_legs_and_handover_reserve(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $session = app(CashSessionService::class)->open($issuer);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id)['payment'];
+        $session = app(CashSessionService::class)->decide(app(CashSessionService::class)->close($session, '15.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id,
+            $accountId, '15.00', 'QA-REFUND-RESERVE-HANDOVER', '2026-11-25', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $writer = app(\App\Services\GatedRefundWriter::class);
+        $service = app(\App\Services\PaymentRefundService::class);
+        $treasury = app(TreasuryRegisterService::class);
+        $reference = 'QA-REFUND-FENCE';
+        $date = '2026-11-25';
+        $reason = 'Independent documented excess credit refund';
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $direct = fn (?\App\Services\GatedRefundWriter $candidate = null) =>
+            $service->record($receipt, $reviewer, '4.00', $reference, 'treasury_cash', $date, $reason, self::EVIDENCE, $candidate);
+        $record = fn () => $writer->record($reviewer, (int) $receipt->id, $accountId, '4.00',
+            $reference, 'treasury_cash', $date, $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['payments', 'payment_refunds', 'transactions', 'treasury_postings', 'audit_events',
+            'payment_allocation_revisions', 'payment_allocations', 'financial_posting_operations', 'financial_posting_events'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.refunds' => true]);
+        $this->rejects('gated_refund_writer_required', $direct);
+        $this->rejects('gated_refund_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $record);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $result = $record();
+        $this->assertTrue($result['registry_created']);
+        $refund = $result['refund'];
+        $post = fn (?\App\Services\GatedRefundWriter $candidate = null) =>
+            $treasury->post($reviewer, $accountId, 'payment_refund', (int) $refund->id, $candidate);
+        $this->rejects('gated_refund_writer_required', $post);
+        $this->rejects('gated_refund_writer_required', fn () => DB::transaction(fn () => $post($writer)));
+        $this->rejects('gated_refund_writer_required', $direct);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->assertFalse($record()['registry_created']);
+        config(['financial_candidate.refunds' => false]);
+        $this->rejects('gated_refund_writer_required', $post);
+        $this->rejects('gated_refund_writer_required', $direct);
+        $this->assertFalse($record()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-400, -400], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+        $this->assertSame(600, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $report = $treasury->inspect($reviewer, $accountId);
+        $this->assertSame(11125, $report['provisional_recorded_balance_minor']);
+        $this->assertSame(500, $report['held_cash_handover_surplus_reserve_minor']);
+        $this->assertSame(525, $report['held_cash_total_protected_minor']);
+        $this->assertSame(525, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
+
     public function test_round136_cash_refund_records_both_legs_and_keeps_reserve(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
