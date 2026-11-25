@@ -3454,7 +3454,14 @@
       "workflow": "b1a4be9e458bd1d6be8cbcc53023cba3c26b8fa6",
       "branch": "fix/central-g1b-treasury-transfer-evidence",
       "pr": 136,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45612707569,
+          "name": "Treasury transfer source evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "scope": "Read-only transfer evidence adapter validates actual dispatch/receipt source and posting, signs, account, date, actor, reference and matching dispatch. Stable dispatch hash after receipt. Two new cases per isolated engine; rollback, missing source and outer transaction precondition.",
       "limits": "Other treasury families, registry verifier integration, effective period binding, transit reconciliation, all-writer coverage, production activation and final closure remain open. Pending runtime."
     }
