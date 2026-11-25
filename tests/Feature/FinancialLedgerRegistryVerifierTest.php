@@ -76,15 +76,16 @@ final class FinancialLedgerRegistryVerifierTest extends TestCase
             $payment = app(PaymentService::class)->collectPayment($account, '10.25');
             $leg = $this->leg('payment', Payment::class, $payment->id);
             $this->assertTrue($registry->record($context, self::UUID, [$leg], $this->nowAt()));
-            // Explicit synthetic other-family leg, not a verified treasury source.
+            // Explicit synthetic unsupported family, not a verified business source.
             $this->assertTrue($registry->record($context, self::OTHER, [[
-                'source_type' => 'treasury_posting', 'source_id' => '1', 'leg' => 'treasury',
+                'source_type' => 'cash_session', 'source_id' => '1', 'leg' => 'cash',
                 'amount_minor' => 5, 'currency' => 'YER', 'source_hash' => str_repeat('a', 64),
             ]], $this->nowAt()));
             $before = $registry->verifyPeriod('water', $context['period_id']);
             $result = app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']);
             $this->assertSame($before['registry_hash'], $result['registry_hash']);
             $this->assertSame(1, $result['registered_ledger_legs_verified']);
+            $this->assertSame(0, $result['registered_treasury_legs_verified']);
             $this->assertSame(1, $result['other_registered_legs_unverified']);
             $this->assertFalse($result['source_coverage_verified']);
         });
