@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Support\FinancialAmount;
 use App\Support\ExactMoney;
+use App\Support\DecimalDomain;
+use App\Support\MoneyBoundary;
+use App\Support\CashCustodyAmounts;
 
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -478,7 +481,7 @@ class PaymentService
                     && (int) $review->subscriber_id === (int) $subscriber->id
                     && (int) $review->collector_id === (int) $userId
                     && (int) ($review->invoice_id ?? 0) === (int) ($invoiceId ?? 0)
-                    && FinancialAmount::parse($review->amount)->minor === $money->minor
+                    && CashCustodyAmounts::positiveStored($review->amount, DB::connection()->getDriverName(), DecimalDomain::D12) === $money->minor
                     && $review->payment_method === $paymentMethod
                     && ($clearedClaim && in_array($paymentMethod, ['bank_transfer', 'check'], true)
                         ? $paymentDate !== null && $paymentDate >= $review->payment_date : $review->payment_date === $paymentDate)
@@ -622,14 +625,15 @@ class PaymentService
             abort_unless($claim->status === 'pending', 409, 'سبق رفض الطلب.');
             $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('id', $lineId)->lockForUpdate()->first();
             abort_unless($line, 404);
-            if ((int) $line->amount_minor !== (int) $claim->amount_minor || $line->booked_on < $claim->instrument_on) {
+            $minor = MoneyBoundary::readMinor($claim->amount_minor, true, DecimalDomain::D12);
+            if ($minor <= 0 || MoneyBoundary::readMinor($line->amount_minor, false, DecimalDomain::D14) !== $minor || $line->booked_on < $claim->instrument_on) {
                 throw ValidationException::withMessages(['line_id' => 'يجب مطابقة مبلغ الطلب وتاريخ تحقق التحصيل.']);
             }
             abort_if(Payment::withTrashed()->where('sync_uuid', $claim->sync_uuid)->exists()
                 || DB::table('late_receipt_reviews')->where('sync_uuid', $claim->sync_uuid)->exists(), 409, 'معرف الطلب مستخدم في سند آخر.');
             // No till assignment. The actual clearance date, not the submission date,
             // determines receipt date. The bank service independently verifies the statement.
-            $payment = $this->postPayment($subscriber, ExactMoney::fromMinor((int) $claim->amount_minor)->decimal(),
+            $payment = $this->postPayment($subscriber, MoneyBoundary::writeDecimal($minor, DecimalDomain::D12),
                 $claim->invoice_id ? (int) $claim->invoice_id : null, $claim->payment_method,
                 $claim->instrument_reference, $claim->notes, null, (int) $claim->submitted_by,
                 $line->booked_on, null, $claim->sync_uuid, null, false, null, true);
@@ -639,7 +643,7 @@ class PaymentService
                 'decision_evidence' => trim($evidence), 'decided_at' => now(), 'updated_at' => now()];
             DB::table('noncash_collection_claims')->where('id', $id)->update($decision);
             $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $reference, $evidence);
-            app(AuditLogger::class)->recordRequired('noncash_claim.cleared', [
+            app(TreasuryRegisterService::class)->requiredAudit('noncash_claim.cleared', [
                 'entity_type' => 'noncash_collection_claim', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'after' => $decision + ['bank_collection_id' => $result['collection']['id']],
             ]);
@@ -688,8 +692,8 @@ class PaymentService
             }
             $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('id', $lineId)->lockForUpdate()->first();
             abort_unless($line, 404);
-            $minor = FinancialAmount::parse($review->amount)->minor;
-            if ($minor <= 0 || (int) $line->amount_minor !== $minor || $line->booked_on < $review->payment_date) {
+            $minor = CashCustodyAmounts::positiveStored($review->amount, DB::connection()->getDriverName(), DecimalDomain::D12);
+            if ($minor <= 0 || MoneyBoundary::readMinor($line->amount_minor, false, DecimalDomain::D14) !== $minor || $line->booked_on < $review->payment_date) {
                 throw ValidationException::withMessages(['line_id' => 'يجب مطابقة مبلغ المطالبة وتاريخ تحقق التحصيل.']);
             }
             abort_if(Payment::withTrashed()->where('sync_uuid', $review->sync_uuid)->exists()
@@ -704,7 +708,7 @@ class PaymentService
                 || DB::table('cash_handovers')->where('reference', $reviewReference)->exists()
                 || DB::table('payment_refunds')->where('disbursement_reference', $reviewReference)->exists(),
                 409, 'مرجع المراجعة مستخدم مسبقاً.');
-            $payment = $this->postPayment($subscriber, ExactMoney::fromMinor($minor)->decimal(),
+            $payment = $this->postPayment($subscriber, MoneyBoundary::writeDecimal($minor, DecimalDomain::D12),
                 $review->invoice_id ? (int) $review->invoice_id : null, $review->payment_method,
                 $review->reference_number, $review->notes, $review->reason, (int) $review->collector_id,
                 $line->booked_on, null, $review->sync_uuid, null, false, $id, true);
@@ -716,7 +720,7 @@ class PaymentService
                 'evidence' => $evidence, 'updated_at' => now()];
             DB::table('late_receipt_reviews')->where('id', $id)->update($decision);
             $result = $bank->confirmCollection($actor, $statementId, $lineId, $payment->id, $bankReference, $evidence);
-            app(AuditLogger::class)->recordRequired('late_receipt.approved', [
+            app(TreasuryRegisterService::class)->requiredAudit('late_receipt.approved', [
                 'entity_type' => 'late_receipt_review', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'before' => (array) $review, 'after' => $decision + [
                     'new_cash_movement' => false, 'bank_collection_id' => $result['collection']['id'],
