@@ -2050,7 +2050,7 @@
     },
     "round17": {
       "phase": "V3 integration of scoped P2 slices and G07",
-      "status": "COMPOSED_FROZEN_INTEGRATED_REGRESSION_PENDING",
+      "status": "INTEGRATED_REGRESSION_FAILED_HOLD",
       "base": "1a55c40e0219706d5942aa525c82660e218e1aa8",
       "g07": "0583e2161a491445c2e597793cfa91377cb7a87f",
       "branch": "integration/accounting-candidate-v3",
@@ -2060,7 +2060,83 @@
       "workflow_head": "f3ae0f2df42dbfe41ba706ad2cff57e164c0fc84",
       "pr": 92,
       "verified": "V2→product delta40 paths, P2→product exact four G07 paths; no overlap, zero behind. Four blob IDs verified equal exact G07 source. Existing workflow-only branch commits excluded. Manifest records scope and exclusions.",
-      "runtime": "Full Unit and Feature regression both isolated engines, 37 PHP lint checks and G07 standalone chain; workflow created, no runtime claim yet."
+      "runtime": "Full Unit and Feature regression both isolated engines, 37 PHP lint checks and G07 standalone chain; workflow created, no runtime claim yet.",
+      "results": {
+        "run": 45556586778,
+        "sqlite": {
+          "job": 139009994069,
+          "tests": 479,
+          "assertions": 15970,
+          "errors": 1,
+          "failures": 2,
+          "skipped": 25,
+          "risky": 1,
+          "exit": 2
+        },
+        "mysql": {
+          "job": 139009993796,
+          "tests": 479,
+          "assertions": 16204,
+          "errors": 3,
+          "failures": 3,
+          "skipped": 6,
+          "risky": 1,
+          "exit": 2
+        },
+        "g07_standalone": {
+          "sqlite": 25,
+          "mysql": 25,
+          "exit": 0
+        },
+        "evidence": "Actual hosted job logs inspected; no V3 acceptance."
+      }
+    },
+    "round18": {
+      "phase": "Central G02 integrated regression corrections",
+      "status": "TARGETED_RUNTIME_PENDING",
+      "base": "5e276faaba5671356f0d1bf60dc6be6645e0cc9a",
+      "findings": [
+        {
+          "id": "G02-18-01",
+          "evidence": "Receipt list preloads partial invoice missing amount_paid/subscriber_id. Both engines HTTP500.",
+          "fix": "Complete projection, hide extra nested fields to preserve list contract; assert exact receipt remaining."
+        },
+        {
+          "id": "G02-18-02",
+          "evidence": "Report synthetic fixture allocated60 to invoice40, incompatible with approved I06 fail-closed rule.",
+          "fix": "Use valid paid40, explicit changed status aggregate and separate invalid stored invoice no-mutation failure test. No financial guard weakened; other report SQL aggregation/P3 still open."
+        },
+        {
+          "id": "G02-18-03",
+          "evidence": "NonCashClaimTest bank audit mock did not return actual persisted event before intended claim failure.",
+          "fix": "Partial mock passthru first audit, preserve second exception and verify all financial/audit rollback."
+        },
+        {
+          "id": "G02-18-04",
+          "evidence": "Two MySQL LiveCollectionAmountTest errors read unrefreshed Eloquent float inputs, not PDO DECIMAL.",
+          "fix": "Rehydrate stored fixture before reads, preserve original assertions."
+        },
+        {
+          "id": "G02-18-05",
+          "evidence": "MySQL subscriber numeric path search total2 vs1. Possible Unicode collation matches digits in auto-increment-derived meter code; cause hypothesis, not confirmed.",
+          "fix": "Isolate deterministic nonnumeric codes, preserve search assertions; separate cross-engine text search contract review remains open."
+        }
+      ],
+      "pr93": {
+        "url": "https://github.com/iitij/water/pull/93",
+        "branch": "fix/central-v3-g02-regressions",
+        "source": "e9869cae5e8acc3bcd8e943f297e1d834c99c722",
+        "workflow": "a36d1497b77a5f4249daacedc7aedb10e64e35b1",
+        "scope": "4 changed source/test paths; five directly affected classes each engine"
+      },
+      "pr94": {
+        "url": "https://github.com/iitij/water/pull/94",
+        "branch": "fix/central-v3-g02-mysql-fixtures",
+        "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
+        "workflow": "9126803519f20d0b2d093d7adf1c7fea27e26abc",
+        "scope": "2 additional fixture paths; two affected classes each engine"
+      },
+      "next": "Retrieve actual PR93/94 hosted logs; investigate all residual failures, including full suite skips. If both targeted suites pass, compose exact corrected product head and obtain justified final integrated full regression. Keep main, V3, prior accepted heads and real data unchanged. Remaining L01, ACC09 P3/report/export/client, ACC14, closing/cheque return, G11/G12 remain open."
     }
   }
 }
