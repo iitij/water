@@ -200,6 +200,15 @@ final class TreasuryRegisterService
                 $entries[] = (array) $row + ['running_balance_minor' => $balance];
                 if ($balance < 0) $issues[] = ['code' => 'negative_recorded_subtotal', 'posting_id' => $row->id];
                 // This register does not assert source integrity from the net amount alone.
+                if ($row->kind === 'held_cash_payout') {
+                    if (! app(TreasuryHeldCashLiabilityService::class)->checkPayoutPosting($row)) {
+                        $issues[] = ['code' => 'held_cash_payout_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
+                if ($row->held_cash_payout_uuid !== null) {
+                    $issues[] = ['code' => 'unexpected_held_cash_payout_source', 'posting_id' => $row->id];
+                }
                 if ($row->kind === 'late_cash_receipt') {
                     if (! app(LateReceiptReviewService::class)->checkCashPosting($row)) {
                         $issues[] = ['code' => 'late_cash_source_mismatch', 'posting_id' => $row->id];
@@ -311,6 +320,7 @@ final class TreasuryRegisterService
                 }
                 $held = SignedMinor::add($held, $minor);
             }
+            $heldOutstanding = app(HeldCashReservation::class)->outstandingForAccount($accountId);
             $unpostedCollections = DB::table('treasury_bank_collections')->where('treasury_account_id', $accountId)
                 ->whereNotIn('id', DB::table('treasury_postings')->whereNotNull('treasury_bank_collection_id')->select('treasury_bank_collection_id'))->count();
             if ($unpostedCollections) $issues[] = ['code' => 'unposted_bank_collection', 'count' => $unpostedCollections];
@@ -338,6 +348,7 @@ final class TreasuryRegisterService
                 'unposted_bank_collection_count' => $unpostedCollections,
                 'unposted_cash_adjustment_count' => $unpostedAdjustments,
                 'unattributed_cash_held_minor' => $held,
+                'held_cash_outstanding_minor' => $heldOutstanding,
                 'unposted_bank_fee_count' => $unpostedFees,
                 'internal_transfers' => $transfers,
                 'unposted_funding_count' => $unpostedFunding,
