@@ -11,8 +11,10 @@ return new class extends Migration
     {
         Schema::create('treasury_held_cash_liabilities', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('treasury_cash_adjustment_id')->unique()->constrained()->restrictOnDelete();
-            $table->foreignId('treasury_posting_id')->unique()->constrained()->restrictOnDelete();
+            $table->foreignId('treasury_cash_adjustment_id')->unique('held_cash_adjustment_unique');
+            $table->foreign('treasury_cash_adjustment_id', 'held_cash_adjustment_fk')->references('id')->on('treasury_cash_adjustments')->restrictOnDelete();
+            $table->foreignId('treasury_posting_id')->unique('held_cash_posting_unique');
+            $table->foreign('treasury_posting_id', 'held_cash_posting_fk')->references('id')->on('treasury_postings')->restrictOnDelete();
             $table->uuid('operation_uuid')->unique();
             $table->foreign('operation_uuid')->references('operation_uuid')->on('financial_posting_operations')->restrictOnDelete();
             $table->bigInteger('amount_minor');
