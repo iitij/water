@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 35,
+    "round": 39,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2639,7 +2639,7 @@
     },
     "round34": {
       "phase": "Flutter backup collision and PIN cooldown persistence",
-      "status": "ANALYZER_FAILURE_CORRECTED_RETRY_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "b80195c2e461ba733ef27d1deee90551713091c6",
       "initial_source": "029fbe2b91eb73c53f388b94681b66d00c0e8f8e",
       "source": "e33b54ba7499c7bb92055aa8d982bcdb95a42763",
@@ -2650,7 +2650,17 @@
       "first_job": 139025712450,
       "failure": "Invalid filename regex source from replacement; corrected method and rerun, no bypass.",
       "retry": 45561769579,
-      "scope": "Exclusive backup file creation and suffix collisions; preserve format. Persistent local PIN attempts/cooldown, serialized single service attempts, require current PIN. Six new acceptance cases. No hardware clock or privileged-storage resistance claim."
+      "scope": "Exclusive backup file creation and suffix collisions; preserve format. Persistent local PIN attempts/cooldown, serialized single service attempts, require current PIN. Six new acceptance cases. No hardware clock or privileged-storage resistance claim.",
+      "results": {
+        "run": 45561769579,
+        "job": 139027009986,
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,26 infos",
+        "new_cases": 6
+      }
     },
     "round35": {
       "phase": "Exact security lock adoption",
@@ -2667,8 +2677,96 @@
       "limits": "Separate from Flutter and closure changes. Compose approved slices before final integrated release."
     },
     "remaining_field_sync_review": {
-      "status": "SOURCE_DEFECTS_CONFIRMED_NOT_IMPLEMENTED",
+      "status": "FIELD_FAULT_VISIT_SCOPED_ACCEPTED_DRIFT_AND_SERVER_PROVENANCE_OPEN",
       "scope": "Fault batch currently exceeds server max200; both fault/visit records have time-window omissions and unscoped SharedPreferences. Need fixed server+user scope, legacy unknown-owner quarantine without deletion or auto-claim, auth-generation guarded batch requests, complete scoped date enumeration, partial progress and exact server acknowledgement; backend duplicate-owner provenance and Drift queue/account isolation separate review. No widening unscoped upload before ownership guard."
+    },
+    "round36": {
+      "phase": "Field record ownership and batch correctness",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "e33b54ba7499c7bb92055aa8d982bcdb95a42763",
+      "source": "f925916d2032f257e5c63d89a48a58fac408cc4a",
+      "workflow": "9d3a75e611dc44831bec433754e36c3da3ff2b6d",
+      "branch": "fix/central-field-sync-ownership",
+      "pr": 113,
+      "run": 45562404724,
+      "job": 139029098257,
+      "results": {
+        "passed": 40,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,26 infos",
+        "new_cases": 5
+      },
+      "scope": "Immutable server/user scope for field faults/visits, fixed session generation and server guard, legacy untouched, all scoped historical days, max200/max500 batches, strict acknowledgement and partial progress. Production DI and screens use scoped stores.",
+      "limits": "No legacy auto-claim, no complete Drift finance queue ownership proof, backend source/user provenance review remains. Existing quarantined probes not enabled."
+    },
+    "round37": {
+      "phase": "G1B durable posting provenance registry",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "6c3d8c6b217ce323d8581947a37a51b3deb74abf",
+      "secure_composition": "c51c0c5cdfa6a3e250a08f6329ab41f69008c2a3",
+      "source": "e7da82b0ccd4801c4bfefa88430aa919aa085d4e",
+      "workflow": "b99ae13a9e97dc784b97d9f03ca09e5cacfabb01",
+      "branch": "fix/central-g1b-posting-registry",
+      "pr": 114,
+      "run": 45562647081,
+      "results": {
+        "sqlite": {
+          "job": 139029802907,
+          "tests": 6,
+          "assertions": 69,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139029803190,
+          "tests": 6,
+          "assertions": 69,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        },
+        "total": {
+          "tests": 12,
+          "assertions": 138
+        }
+      },
+      "scope": "Exact source leg unique per scope, canonical signed amount strings and stored signed BIGINT, checked context, atomic savepoint, identical open replay verification, corruption detection. Three new cases per engine plus three gate regressions on secure locks.",
+      "limits": "No production callers, immutable DB enforcement, complete source coverage, actor proof or closed-period replay."
+    },
+    "round38": {
+      "phase": "V5 secure cumulative Flutter composition",
+      "status": "HOSTED_FULL_PENDING",
+      "base": "f50143b985a5e70b4728c1b9a53b03b83e82f06d",
+      "flutter_source": "f925916d2032f257e5c63d89a48a58fac408cc4a",
+      "source": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
+      "workflow": "9a4c1aa96c48dde099a4f7340c348e025ae9d8cc",
+      "branch": "integration/accounting-candidate-v5",
+      "pr": 115,
+      "run": 45562767739,
+      "scope": "Exactly 37 accepted Flutter/hygiene path changes, all blob hashes and 12 symlink deletions verified, intermediate workflow excluded. Full Flutter on locked secure PHP deps, named skips, clean source.",
+      "limits": "Backend code equals secure accepted V4, closing not composed, G11 actual full result pending."
+    },
+    "round39": {
+      "phase": "G1B durable close command journal",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "e7da82b0ccd4801c4bfefa88430aa919aa085d4e",
+      "source": "b5ecf32d2d55f82f424039f15be3b77e496a3472",
+      "workflow": "07bc93c1d1c93bbba99c7ea3276fa1158faa768c",
+      "branch": "fix/central-g1b-close-command-journal",
+      "pr": 116,
+      "run": 45563040097,
+      "scope": "Canonical command journal and hash-chained state, closure bytes and snapshot hash. Freeze/prepare/approve/abort transaction and replay; no production proof binding; four synthetic tests per engine.",
+      "limits": "No trusted actual source coverage/predecessor/opening/carry/actor adapter, no writer calls, no DB immutable enforcement, no activation or return. Results pending."
+    },
+    "l01_source_followup": {
+      "status": "INCONCLUSIVE_NO_RESTRICTED_RETRY",
+      "source": "c930af1767b6ef63549a8fda5559826bb2d8db3c",
+      "findings": "Pending guard locking current read filters submitted_meter_id/status and order id; no matching index in prior evidence. LateReceiptReviewService::submit locks subscriber and issuance, not submitted meter, deliberately treats submitted meter as provenance; cannot infer it is current meter of subscriber. Removing current read or narrowing by subscriber could allow stale/foreign provenance deletion; index alone not proof of insert independence under REPEATABLE READ gap locking. No lock diagnostic escalation, product change or repeated baseline."
     }
   }
 }
