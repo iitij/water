@@ -2982,4 +2982,108 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $this->assertSame(9525, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
     }
+
+    public function test_round139_bank_fee_is_registered_atomically_without_subscriber_effect(): void
+    {
+        [, , $cash, , , $subscriber] = $this->held();
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-R139-BANK', 'name' => 'Synthetic bank fee account', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-R139-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $statement = $bank->import($importer, (int) $account['id'], [
+            'reference' => 'QA-R139-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-R139-DEBIT', 'booked_on' => $date, 'amount' => '-0.40']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $writer = app(\App\Services\GatedBankFeeWriter::class);
+        $reason = 'Independent documented bank service fee';
+        $record = fn () => $writer->record($reviewer, $statementId, $lineId, $date,
+            'QA-R139-FEE', $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $tables = ['payments', 'transactions', 'treasury_bank_fees', 'treasury_postings', 'bank_statement_matches',
+            'bank_statement_lines', 'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $record);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        try {
+            $writer->record($importer, $statementId, $lineId, $date, 'QA-R139-FEE',
+                $reason, self::EVIDENCE, $uuid, $this->nowAt());
+            $this->fail('Statement importer approved their own bank fee.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        $condition = "NEW.operation_uuid = '{$uuid}'";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r139_fee_registry'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r139_fee_registry'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r139_fee_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $record();
+                $this->fail('Bank fee committed despite registry failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r139_fee_registry', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r139_fee_registry');
+        }
+        $result = $record();
+        $this->assertTrue($result['registry_created']);
+        $this->assertTrue($result['reconciliation']['fully_matched']);
+        $this->assertSame(-40, (int) $result['posting']['amount_minor']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => -40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame($before['transactions'], $snapshot('transactions'));
+        $this->assertSame(9960, app(TreasuryRegisterService::class)->inspect($reviewer, (int) $account['id'])['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+        $this->assertFalse($record()['registry_created']);
+        $this->rejects('gated_bank_fee_operation_conflict', fn () => $writer->record($reviewer, $statementId, $lineId,
+            $date, 'QA-R139-FEE', $reason, self::EVIDENCE, '99999999-9999-4999-8999-999999999999', $this->nowAt()));
+        $this->assertDatabaseCount('treasury_bank_fees', 1);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(2, $verified['registered_treasury_legs_verified']);
+        $this->assertSame(0, $verified['registered_ledger_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
+
+    public function test_round139_legacy_bank_fee_cannot_be_silently_adopted(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-R139-LEGACY', 'name' => 'Synthetic bank fee account', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-R139-LEGACY-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $statement = $bank->import($importer, (int) $account['id'], [
+            'reference' => 'QA-R139-LEGACY-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-R139-LEGACY-DEBIT', 'booked_on' => $date, 'amount' => '-0.40']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $reason = 'Independent documented bank service fee';
+        $old = $bank->recordFee($reviewer, $statementId, $lineId, 'QA-R139-LEGACY-FEE', $reason, self::EVIDENCE);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->rejects('gated_bank_fee_operation_conflict', fn () => app(\App\Services\GatedBankFeeWriter::class)
+            ->record($reviewer, $statementId, $lineId, $date, 'QA-R139-LEGACY-FEE', $reason, self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->assertDatabaseCount('treasury_bank_fees', 1);
+        $this->assertDatabaseHas('treasury_postings', ['id' => $old['posting']['id'], 'amount_minor' => -40]);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+    }
 }
