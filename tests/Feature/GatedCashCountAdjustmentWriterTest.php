@@ -2797,20 +2797,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $approveUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
         $this->rejects('gated_void_pending_no_posting_uuid', fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt(), $approveUuid));
         $request = fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt());
-        $this->assertTrue($request()['pending']);
-        $this->assertTrue($request()['pending']);
+        $requested = $request();
+        $this->assertTrue($requested['pending']);
+        $requestId = $requested['request_id'];
+        $this->assertSame($requestId, $request()['request_id']);
         $this->assertSame(120, $ledger->accountBalanceMinor($subscriber));
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $approveUuid]);
         // Lowering the threshold never bypasses an existing request.
         \App\Models\Setting::set('void_approval_threshold', '0.00');
         $this->rejects('gated_void_pending_no_posting_uuid', fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt(), $approveUuid));
         try {
-            $writer->decide($issuer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid);
+            $writer->decide($issuer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid, $requestId);
             $this->fail('Requester approved their own void.');
         } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
             $this->assertSame(403, $error->getStatusCode());
         }
-        $approve = fn () => $writer->decide($reviewer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid);
+        $approve = fn () => $writer->decide($reviewer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid, $requestId);
         $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations', 'audit_events',
             'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
@@ -3486,5 +3488,49 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame('0.25', $invoice->fresh()->amount_paid);
         $this->assertFalse($result['period_closing_verified']);
         $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_release_void_approval_is_bound_to_latest_request_and_exact_replay(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $payment = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented receipt cancellation';
+        $id = (int) $payment->id;
+        $first = $writer->request($issuer, $id, $reason, $this->nowAt())['request_id'];
+        $writer->decide($reviewer, $id, false, 'Rejected first request', $this->nowAt(), requestId: $first);
+        $second = $writer->request($issuer, $id, $reason, $this->nowAt())['request_id'];
+        $this->assertNotSame($first, $second);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $approve = fn (?int $requestId) => $writer->decide($reviewer, $id, true, 'Independent decision',
+            $this->nowAt(), $uuid, $requestId);
+        $tables = ['payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_events', 'financial_posting_operations', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $this->rejects('gated_void_request_id_required', fn () => $approve(null));
+        $this->rejects('gated_void_replay_conflict', fn () => $approve($first));
+        $this->rejects('gated_void_request_id_required', fn () => $writer->decide($reviewer, $id, false,
+            'No request identity', $this->nowAt()));
+        $this->assertTrue($payment->fresh()->hasPendingVoidRequest());
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertTrue($approve($second)['registry_created']);
+        $this->assertTrue($payment->fresh()->isVoided());
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -30]);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->assertFalse($approve($second)['registry_created']);
+        $this->rejects('gated_void_replay_conflict', fn () => $approve($first));
+        $this->rejects('gated_void_request_id_required', fn () => $approve(null));
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 }
