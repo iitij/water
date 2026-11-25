@@ -1,0 +1,71 @@
+{
+  "round114": {
+    "source": "ca32d90759e09b72f4be5779fe62643b8d0576e1",
+    "run": 45659109470,
+    "status": "BOTH_ENGINES_PASS",
+    "jobs": [
+      {
+        "id": 139363773861,
+        "engine": "sqlite",
+        "tests": 182,
+        "assertions": 1752,
+        "exit": 0
+      },
+      {
+        "id": 139363773271,
+        "engine": "mysql",
+        "tests": 188,
+        "assertions": 1862,
+        "exit": 0
+      }
+    ]
+  },
+  "round115": {
+    "source": "ff0f6023556c82585a35fd7ce2c5e4859c10c9d1",
+    "branch": "fix/central-g1a-surplus-liability",
+    "run": 45660230679,
+    "status": "BOTH_ENGINES_PASS_PROMOTED",
+    "jobs": [
+      {
+        "id": 139367771727,
+        "engine": "sqlite",
+        "tests": 183,
+        "assertions": 1769,
+        "exit": 0
+      },
+      {
+        "id": 139367772312,
+        "engine": "mysql",
+        "tests": 189,
+        "assertions": 1879,
+        "exit": 0
+      }
+    ],
+    "promotion": "Verified round113 exact head and two-commit ancestry; non-force fast-forward succeeded; verified exact round115 head."
+  },
+  "round116": {
+    "base": "ff0f6023556c82585a35fd7ce2c5e4859c10c9d1",
+    "source": "c73b52d6f4dc6f2b7cb56b548af518556505789f",
+    "branch": "qa/held-cash-release-policy-round116",
+    "runs": [
+      {
+        "id": 45662081121,
+        "name": "Held cash release policy acceptance",
+        "status": "in_progress",
+        "conclusion": null,
+        "sha": "c73b52d6f4dc6f2b7cb56b548af518556505789f"
+      },
+      {
+        "id": 45662081039,
+        "name": "Retired feature removal gate",
+        "status": "in_progress",
+        "conclusion": null,
+        "sha": "c73b52d6f4dc6f2b7cb56b548af518556505789f"
+      }
+    ],
+    "status": "STAGED_RUNTIME_UNVERIFIED",
+    "scope": "Exact per-credit release bounds R<=A<=C, H+C-R protected, B-P-protected margin; prevent voluntary release masking existing deficit; per-credit reinstatement min(previous release,new allocation) without netting other credits; read-only readiness under current open-period scope gate, exact source evidence and existing conservative reserve. Test partial allocation, cancellation, unchanged cash, no spending authorization, per-credit reinstatement and deficit.",
+    "limits": "No release record or actual reserve change; no authorization, production binding, closure, or complete source coverage. Current reserve R=0. Before activation require immutable release/reinstatement documents, complete writer inventory and atomic hooks for every allocation-changing path, verified account lock ordering and actual-vs-optional correction handling."
+  },
+  "coordination": "Independent receipt; central register update still unresolved. No main merge or real data changes."
+}
