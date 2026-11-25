@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Test service-level registered receipt protection, including flag-off old API, direct service and exact gated paths.",
+  "next": "Verify targeted CI and correct confirmed failures. Then complete mobile direct void request and offline queue policy; actual receipt writer entrypoints and release integration.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -913,5 +913,15 @@
         "lock_unchanged": true
       }
     }
+  },
+  "release_void_service_fence": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "cae2f05417694c2bf96115b90923ed3d7aa1bcf8",
+    "branch": "release/prospective-void-service-fence",
+    "source": "55a5b80e0a29c1bc3812f53413f5d005efbbda03",
+    "run": 45708484787,
+    "scope": "All three PaymentService void entry methods reject registered receipt or gated request outside private mutation scope of final GatedReceiptVoidWriter, independent of flag, audit marker or source-label spoof. Check after issuance and receipt lock; nested legitimate immediate/approved reversal receives scoped writer. Two new targeted tests and directly affected backend/Filament void regressions on both engines.",
+    "limits": "Runtime pending. Only void methods protected; other financial writers and raw mutations remain separate. Legacy unregistered receipts retain current behavior, no historical adoption. No production activation or main merge.",
+    "next": "Verify targeted CI and correct confirmed failures. Then complete mobile direct void request and offline queue policy; actual receipt writer entrypoints and release integration."
   }
 }
