@@ -136,7 +136,7 @@ final class Acc12Acc13ReadingIntegrityTest extends TestCase
         return DB::table('readings')->insertGetId([
             'meter_id' => $reading->meter_id,
             'reading_date' => $reading->actual_reading_date->copy()->addDay()->toDateString(),
-            'actual_reading_date' => $reading->actual_reading_date->toDateString(),
+            'actual_reading_date' => $reading->getRawOriginal('actual_reading_date'),
             'period_basis' => 'observation',
             'period_start' => $reading->period_start,
             'period_end' => $reading->period_end,
@@ -199,6 +199,10 @@ final class Acc12Acc13ReadingIntegrityTest extends TestCase
         DB::table('readings')->where('id', $first->id)->update([
             'current_reading' => '134.25', 'consumption_units' => '34.25',
         ]);
+        $this->assertSame(
+            $first->getRawOriginal('actual_reading_date'),
+            Reading::findOrFail($duplicateId)->getRawOriginal('actual_reading_date')
+        );
         $before = $this->readingAndFinancialSnapshot();
         $this->artisan('water:audit-observation-intervals')
             ->expectsOutputToContain('DUPLICATE_OBSERVATION_DATE reading #'.$first->id)
