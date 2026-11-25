@@ -3863,4 +3863,66 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['sync_uuid'], 'amount_minor' => 50]);
         $this->assertSame(50, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
+
+    public function test_release_cash_filament_create_keeps_identity_on_conflict_and_replays_once(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Payment', 'ViewAny:Payment', 'View:Payment'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $session = app(CashSessionService::class)->open($actor);
+        config(['financial_candidate.cash_receipts' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $page = \App\Filament\Resources\PaymentResource\Pages\CreatePayment::class;
+        $component = \Livewire\Livewire::test($page);
+        $uuid = $component->get('data.sync_uuid');
+        $this->assertTrue(is_string($uuid) && \Illuminate\Support\Str::isUuid($uuid));
+        $data = ['subscriber_id' => $subscriber->id, 'amount' => '0.50',
+            'payment_date' => '2026-11-25', 'payment_method' => 'cash',
+            'cash_session_id' => $session->id, 'notes' => 'Synthetic Filament receipt', 'sync_uuid' => $uuid];
+        $component->fillForm($data);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $component->call('create')->assertHasErrors(['data.amount']);
+        $this->assertSame($uuid, $component->get('data.sync_uuid'));
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $component->call('create')->assertHasNoErrors();
+        $receipt = Payment::where('sync_uuid', $uuid)->sole();
+        $this->assertSame((int) $session->id, (int) $receipt->cash_session_id);
+        $this->assertSame('0.50', $receipt->amount);
+        $this->assertSame('Synthetic Filament receipt', $receipt->notes);
+        \Livewire\Livewire::test($page)->fillForm($data)->call('create')->assertHasNoErrors();
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => 50]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(50, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(50, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_cash_filament_omitted_original_till_refuses_without_posting(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Payment', 'ViewAny:Payment', 'View:Payment'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        app(CashSessionService::class)->open($actor);
+        config(['financial_candidate.cash_receipts' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $page = \App\Filament\Resources\PaymentResource\Pages\CreatePayment::class;
+        $component = \Livewire\Livewire::test($page);
+        $uuid = $component->get('data.sync_uuid');
+        $component->fillForm(['subscriber_id' => $subscriber->id, 'amount' => '1.00',
+            'payment_date' => '2026-11-25', 'payment_method' => 'cash', 'cash_session_id' => null])
+            ->call('create')->assertHasErrors(['data.amount']);
+        $this->assertSame($uuid, $component->get('data.sync_uuid'));
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }
