@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 74,
+    "round": 75,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3932,6 +3932,16 @@
       "runs": [],
       "scope": "Registered ordinary cash receipt only; approved original till where present; independent authorized actor, sorted subscriber locks, original receipt and till unchanged, full receipt reassignment with equal opposite subscriber effects recorded in one operation. Exact audit, balances and replay checks; no treasury movement. Five cases per engine prepared: actual transfer to account with existing credit, actor/destination/replay conflict, legacy original rejection, unapproved till and closed/frozen period, bilateral allocation history and audit rollback/retry.",
       "limits": "Independent branch from accepted round 69, rounds 70-73 remain unaccepted. Prior workflow creation restriction respected; no runtime evidence. No partial or noncash transfer, no historical adoption; allocation proof under indebted accounts, complete coverage, immutable decision evidence, global writer fencing and cross-period replay remain open. No main merge or production activation."
+    },
+    "round75": {
+      "phase": "Independent inactive gated retired-meter historical invoice correction",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "fc3e864fde3ba304e1e1f9e7eda7905aa421f314",
+      "branch": "fix/central-g1b-gated-historical-correction",
+      "runs": [],
+      "scope": "Registered original retired-meter invoice, explicit complete corrected quantities; verify original pricing evidence and independently recompute replacement lines using original prices, preserve original readings and payment rows, verify reversal and replacement pair, exact balance delta and audit, reject conflicting replay. Five cases per engine prepared including actual two-tariff correction with targeted receipt, unregistered original, reading and period conflicts, tampered replacement pricing and allocation/audit rollback.",
+      "limits": "Independent branch from accepted round 69; original invoice test fixture registers actual invoice explicitly under isolated gate, not unaccepted round 70 writer or historical adoption. No runtime evidence; earlier workflow creation restriction remains. Rounds 70-74 remain unaccepted. Full immutable invoice/decision provenance, active-meter corrections, all-writer fencing, global lock order and closure remain open. No production activation or main merge."
     }
   }
 }
