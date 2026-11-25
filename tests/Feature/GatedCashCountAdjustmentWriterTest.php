@@ -814,4 +814,26 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 10001, '2026-11-25')));
     }
 
+    public function test_held_settlement_reference_cannot_be_reused_across_document_families(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 20, self::NEXT, 'QA-HELD-SHARED');
+        $authorizer = $this->actor();
+        $executor = $this->actor();
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $this->rejects('held_cash_authorization_conflict', fn () => $service->authorizePayout($authorizer, $executor,
+            self::NEXT, 5, 'QA-HELD-SHARED', 'Independent documented authorization of held claim',
+            self::OTHER, '2026-11-25', $this->nowAt()));
+        $this->authorizeHeld($authorizer, $executor, 5);
+        $this->rejects('held_cash_credit_conflict', fn () => $service->credit($authorizer, self::NEXT, 1,
+            'QA-HELD-AUTH-'.self::OTHER, 'Independent documented owner consent for credit settlement',
+            '55555555-5555-4555-8555-555555555555', '2026-11-25', $this->nowAt()));
+        $this->rejects('held_cash_payout_conflict', fn () => $service->payout($executor, self::NEXT, 5,
+            'QA-HELD-SHARED', 'Independent acknowledgement of returned cash to owner',
+            self::OTHER, '2026-11-25', $this->nowAt()));
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
+        $this->assertDatabaseCount('treasury_held_cash_credits', 0);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(20, $this->gate(fn () => $service->inspect($lot))['identified_minor']);
+    }
 }
