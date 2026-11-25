@@ -74,6 +74,41 @@ final class HeldCashReleaseDocumentProtection
         return true;
     }
 
+    /** Verify the actual migration-defined reinstatement guards, not merely their names. */
+    public function reinstatementActive(): bool
+    {
+        $driver = DB::getDriverName();
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) return false;
+        $sqlite = $driver === 'sqlite';
+        $body = $sqlite ? "BEGIN SELECT RAISE(ABORT, 'Shadow reinstatement is immutable'); END"
+            : "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Shadow reinstatement is immutable'";
+        $table = 'held_cash_shadow_reinstatements';
+        $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', rtrim(trim($sql), ';'));
+        foreach (['UPDATE', 'DELETE'] as $event) {
+            $name = 'shadow_restore_reject_'.strtolower($event);
+            if ($sqlite) {
+                $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)
+                    ->where('tbl_name', $table)->first();
+                $expected = "CREATE TRIGGER {$name} BEFORE {$event} ON {$table} {$body}";
+                if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
+            } else {
+                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                    ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
+                    ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
+                if ($trigger === null || $normalize($trigger->ACTION_STATEMENT) !== $normalize($body)) return false;
+            }
+        }
+        if ($sqlite) {
+            $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', 'shadow_restore_reject_replace')
+                ->where('tbl_name', $table)->first();
+            $expected = "CREATE TRIGGER shadow_restore_reject_replace BEFORE INSERT ON held_cash_shadow_reinstatements
+                FOR EACH ROW WHEN EXISTS (SELECT 1 FROM held_cash_shadow_reinstatements s WHERE s.id = NEW.id
+                OR (s.journal_id = NEW.journal_id AND s.revision_id = NEW.revision_id)) {$body}";
+            if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
+        }
+        return true;
+    }
+
     public function install(): void
     {
         foreach ($this->definitions() as $name => $definition) {
