@@ -117,8 +117,9 @@ final class NonCashClaimTest extends TestCase
         $this->postJson('/api/noncash-claims/'.$id.'/clear', $clear)->assertStatus(409);
         $id2 = $this->actingAs($issuer, 'sanctum')->postJson('/api/noncash-claims', array_replace($data,
             ['sync_uuid' => (string) Str::uuid(), 'instrument_reference' => 'BANK-A-CHECK-002']))->assertCreated()->json('claim.id');
-        $this->mock(AuditLogger::class, function ($mock) {
-            $mock->shouldReceive('recordRequired')->with('treasury.bank_collection_confirmed', \Mockery::type('array'))->once();
+        // The preceding required bank audit must really persist before the injected failure.
+        $this->partialMock(AuditLogger::class, function ($mock) {
+            $mock->shouldReceive('recordRequired')->with('treasury.bank_collection_confirmed', \Mockery::type('array'))->once()->passthru();
             $mock->shouldReceive('recordRequired')->with('noncash_claim.cleared', \Mockery::type('array'))->once()
                 ->andThrow(new \RuntimeException('Synthetic required audit failure'));
         });
@@ -128,5 +129,9 @@ final class NonCashClaimTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('bank_statement_matches', 0);
+        $this->assertDatabaseCount('treasury_bank_collections', 0);
+        $this->assertDatabaseMissing('audit_events', ['event' => 'treasury.bank_collection_confirmed']);
+        $this->assertDatabaseMissing('audit_events', ['event' => 'noncash_claim.cleared']);
+        $this->assertSame(0.0, $subscriber->getAccountBalance());
     }
 }

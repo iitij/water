@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\RouteVisit;
+use App\Support\CashCustodyAmounts;
+use App\Support\DecimalDomain;
+use App\Support\MoneyBoundary;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -65,10 +69,7 @@ class RouteVisitController extends ApiController
 
         $data = $this->validatePayload($request);
 
-        $visit = RouteVisit::firstOrCreate(
-            ['sync_uuid' => $data['sync_uuid']],
-            $this->fillFromPayload($data, $request),
-        );
+        $visit = DB::transaction(fn () => $this->storeOrVerify($data, $request), 3);
 
         return response()->json([
             'message' => 'تم تسجيل الزيارة.',
@@ -94,22 +95,52 @@ class RouteVisitController extends ApiController
             'visits.*.sync_uuid' => ['required', 'uuid'],
         ]);
 
-        $synced = 0;
-        $duplicated = 0;
-
-        foreach ($data['visits'] as $item) {
-            $visit = RouteVisit::firstOrCreate(
-                ['sync_uuid' => $item['sync_uuid']],
-                $this->fillFromPayload($item, $request),
-            );
-            $visit->wasRecentlyCreated ? $synced++ : $duplicated++;
-        }
+        [$synced, $duplicated] = DB::transaction(function () use ($data, $request): array {
+            $synced = 0;
+            $duplicated = 0;
+            // Stable UUID order for concurrent overlapping batches.
+            $items = $data['visits'];
+            usort($items, fn (array $a, array $b) => strcmp($a['sync_uuid'], $b['sync_uuid']));
+            foreach ($items as $item) {
+                $visit = $this->storeOrVerify($item, $request);
+                $visit->wasRecentlyCreated ? $synced++ : $duplicated++;
+            }
+            return [$synced, $duplicated];
+        }, 3);
 
         return response()->json([
             'message' => 'تمت مزامنة الزيارات.',
             'synced_count' => $synced,
             'duplicate_count' => $duplicated,
         ]);
+    }
+
+    private function storeOrVerify(array $data, Request $request): RouteVisit
+    {
+        $owner = $request->user()?->id;
+        abort_unless($owner !== null, 401);
+        $amount = CashCustodyAmounts::input($data['collected_amount'] ?? 0, 'collected_amount', DecimalDomain::D12);
+        $data['collected_amount'] = MoneyBoundary::writeDecimal($amount, DecimalDomain::D12);
+        $visit = RouteVisit::firstOrCreate(
+            ['sync_uuid' => $data['sync_uuid']],
+            $this->fillFromPayload($data, $request),
+        );
+        if ($visit->wasRecentlyCreated) {
+            return $visit;
+        }
+
+        // A UUID is an operation identity, not authorization to read someone
+        // else's prior record. Never rewrite a historical record on replay.
+        abort_unless($visit->user_id !== null && (string) $visit->user_id === (string) $owner
+            && ($visit->meter_id === null ? null : (int) $visit->meter_id) === (isset($data['meter_id']) ? (int) $data['meter_id'] : null)
+            && $visit->route_date->toDateString() === substr($visit->fromDateTime($data['route_date']), 0, 10)
+            && $visit->meter_code === ($data['meter_code'] ?? null)
+            && $visit->status === ($data['status'] ?? null)
+            && $visit->notes === ($data['notes'] ?? null)
+            && MoneyBoundary::readDecimal($visit->getRawOriginal('collected_amount'), DecimalDomain::D12, $visit->getConnection()->getDriverName()) === $amount
+            && (! isset($data['visit_at']) || $visit->getRawOriginal('visit_at') === $visit->fromDateTime($data['visit_at'])),
+            409, 'معرّف المزامنة مرتبط بسجل مختلف أو غير مصرح بإعادته.');
+        return $visit;
     }
 
     private function validatePayload(Request $request): array
@@ -140,7 +171,7 @@ class RouteVisitController extends ApiController
             'square_id' => $squareId,
             'meter_code' => $data['meter_code'] ?? null,
             'status' => $data['status'],
-            'collected_amount' => (float) ($data['collected_amount'] ?? 0),
+            'collected_amount' => $data['collected_amount'],
             'notes' => $data['notes'] ?? null,
             'visit_at' => $data['visit_at'] ?? now(),
             'sync_uuid' => $data['sync_uuid'],

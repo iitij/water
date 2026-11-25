@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Support\FinancialAmount;
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
 
 use App\Models\Subscriber;
 use Illuminate\Support\Facades\DB;
@@ -29,22 +30,23 @@ class PaymentAllocationHistory
                 || ! is_int($row['amount_minor']) || $row['amount_minor'] <= 0) {
                 throw new \LogicException('Invalid allocation source or amount.');
             }
+            AccountMoney::positiveAllocation($row['amount_minor']);
             $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : 'transfer:'.$row['account_transfer_id'];
             if (! array_key_exists($sourceKey, $bySource)) {
                 throw new \LogicException('Unknown allocation credit source.');
             }
-            $bySource[$sourceKey] = FinancialAmount::add($bySource[$sourceKey], $row['amount_minor']);
+            $bySource[$sourceKey] = SignedMinor::add($bySource[$sourceKey], $row['amount_minor']);
             if ($row['invoice_id'] === null) {
-                $unallocated = FinancialAmount::add($unallocated, $row['amount_minor']);
+                $unallocated = SignedMinor::add($unallocated, $row['amount_minor']);
             } else {
                 if (! array_key_exists($row['invoice_id'], $byInvoice)) {
                     throw new \LogicException('Allocation outside the account invoice set.');
                 }
-                $allocated = FinancialAmount::add($allocated, $row['amount_minor']);
-                $byInvoice[$row['invoice_id']] = FinancialAmount::add($byInvoice[$row['invoice_id']], $row['amount_minor']);
+                $allocated = SignedMinor::add($allocated, $row['amount_minor']);
+                $byInvoice[$row['invoice_id']] = SignedMinor::add($byInvoice[$row['invoice_id']], $row['amount_minor']);
             }
         }
-        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || FinancialAmount::add($allocated, $unallocated) !== $available) {
+        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || SignedMinor::add($allocated, $unallocated) !== $available) {
             throw new \LogicException('Allocation snapshot does not conserve money.');
         }
         $integrity = app(AllocationSnapshotIntegrity::class);

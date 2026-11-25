@@ -6,6 +6,9 @@ use App\Models\CashSession;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Models\User;
+use App\Support\CashCustodyAmounts as Cash;
+use App\Support\DecimalDomain;
+use App\Support\MoneyBoundary;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -48,8 +51,11 @@ final class ClosedCashCorrectionService
                 || \App\Models\PaymentRefund::whereIn('payment_id', [$payment->id, $original->id])->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند مرتبط بتصحيح مالي آخر.']);
             }
+            $driver = $payment->getConnection()->getDriverName();
+            $minor = Cash::positiveStored($payment->getRawOriginal('amount'), $driver, DecimalDomain::D12);
+            $originalMinor = Cash::positiveStored($original->getRawOriginal('amount'), $driver, DecimalDomain::D12);
             if (! $session->isApproved() || $payment->isVoided() || $original->isVoided()
-                || $payment->amount !== $original->amount
+                || $minor !== $originalMinor
                 || $payment->payment_method !== $original->payment_method) {
                 throw ValidationException::withMessages(['payment' => 'يلزم صندوق معتمد وسندان ساريان بنفس المبلغ والطريقة.']);
             }
@@ -57,7 +63,7 @@ final class ClosedCashCorrectionService
                 ->where('reference_id', $original->id)->where('type', 'payment')->lockForUpdate()->get();
             if ($originalPosting->count() !== 1
                 || (int) $originalPosting->first()->subscriber_id !== (int) $subscriber->id
-                || $originalPosting->first()->amount !== $original->amount) {
+                || Cash::positiveStored($originalPosting->first()->getRawOriginal('amount'), $driver, DecimalDomain::D12) !== $originalMinor) {
                 throw ValidationException::withMessages(['duplicate_of_id' => 'لا يوجد قيد أصلي مطابق للسند الذي سيبقى سارياً.']);
             }
             $before = [
@@ -73,7 +79,7 @@ final class ClosedCashCorrectionService
                 'duplicate_of_id' => $original->id,
                 'approved_by' => $actor->id,
                 'reversal_transaction_id' => $reversal->id,
-                'amount' => $payment->amount,
+                'amount' => MoneyBoundary::writeDecimal($minor, DecimalDomain::D12),
                 'reason' => $reason,
                 'evidence' => $evidence,
                 'created_at' => now(),
@@ -83,14 +89,17 @@ final class ClosedCashCorrectionService
                 'voided_by' => $actor->id, 'voided_via' => 'closed_correction',
             ])->saveQuietly();
             app(PaymentService::class)->recalculateInvoices($subscriber);
-            app(AuditLogger::class)->recordRequired('cash_session.duplicate_corrected', [
+            $audit = app(AuditLogger::class)->recordRequired('cash_session.duplicate_corrected', [
                 'entity_type' => CashSession::class, 'entity_id' => $session->id,
                 'before' => $before,
                 'after' => ['correction_id' => $id, 'payment_id' => $payment->id,
-                    'duplicate_of_id' => $original->id, 'amount' => $payment->amount,
+                    'duplicate_of_id' => $original->id, 'amount' => MoneyBoundary::writeDecimal($minor, DecimalDomain::D12),
                     'cash_movement' => false, 'reason' => $reason, 'evidence' => $evidence],
                 'actor_user_id' => $actor->id, 'source' => 'api',
             ]);
+            if (! $audit->exists || $audit->getKey() === null) {
+                throw new \RuntimeException('Closed cash correction requires a persisted audit event.');
+            }
             return (array) DB::table('closed_cash_corrections')->find($id);
         }, 3);
     }
