@@ -8,11 +8,11 @@
       "scope": "collections, bank reconciliation, treasury and closing",
       "branch_observed": "fix/team-a-noncash-claim-proof",
       "sha_observed": "539c4ae1f8bba3a6843fc635096d44d9cb76ef06",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Round11: implement test-only bounded ordinary cross-account L01-R/I acceptance fixtures on qa/team-a-v2-cross-account-locks from exact40a216b, per PR72 #7151795774 and D ba3ea14 concurrence. Use valid controls, real normal services, independent accounts, bounded synchronization and cleanup; PASS only correct B commit before A release, FAIL only attributable cross-account lock interference; otherwise INCONCLUSIVE. No privileged diagnostics, restricted probes, schema/index/product edits, stress loops or production. Coordinate D; hand off exact SHA and focused commands to one cloud runner. Review B I01 boundary contract only, no B file edits.",
+      "next": "Freeze PR82 4f97ad3 (2 additions). D reviews ordinary fixture/controls, bounded cleanup and attribution before cloud. Two methods only, separate empty synthetic MySQL instances; diagnostics opt-in remains OFF, no privileged or previously restricted checks, no retry/escalation. If no attribution, INCONCLUSIVE, not a confirmed lock defect. No product/schema changes or repeated suites.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -64,7 +64,7 @@
       "status": "ASSIGNED",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Round11: start integration/team-b-p2-i01 from exact accepted V2 40a216b. Import exact four foundation paths from37ee7ea (CashMoney, SignedMinor, foundation report, pure test), preserve source blobs and existing ExactMoney/FinancialAmount. Implement P2-I01 only: new isolated storage/input/output boundary adapters and focused tests/docs for DECIMAL10/12/14 source caps, strict raw signed/unsigned minors, SQLite/MySQL real roundtrips incl float representation limits, legacy grammar compatibility, null vs zero, exact conversion and checked output strategy; document actual V2 affected callsite/field inventory and proposed I02 wiring. No existing service/controller/model changes, no API/wire/DDL/dependency edits, no authoritative SQL SUM/float coercion, no P2-I02..06 implementation, ACC14/closing/returns/P3 activation. New files only, request separate scope if existing files needed. Synthetic ordinary tests only; preserve foundation prior evidence, no routine reruns. Supply exact SHA, changed paths and tests to D/cloud.",
+      "next": "PR83 80ff9d9 (9 added paths, 4 exact foundation imports) received. Resolve supervisor B-I01-11-01: MoneyBoundary::numericMinor checks exponent cap before normalizing all-zero mantissa, whereas existing FinancialAmount::parse returns zero first; test explicitly rejects 0e257, a source-level compatibility difference (not reproduced endpoint defect). Preserve legacy zero normalization for numericInput within existing 256-character syntax limit, still enforce endpoint min/max; keep exponent cap for nonzero values and regex grammar unchanged. Add focused differential vectors 0e257, -0e-257, large all-zero exponent and nonzero overflow, positive-only zero rejection. Only new I01 files/tests/docs may change, preserve foundation and existing callers. Reconcile evidence on new SHA, D/A final review, then actual PDO sqlite/mysql script modes; existing 4898 pure and 1524 auxiliary observations reported, both PDO attempts exit255 before SQL due missing drivers, not a product defect. No I02 yet.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -130,11 +130,11 @@
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Round11: prepare only four ordinary G07 stored observation billing acceptance cases per engine on qa/team-c-v2-g07-stored-billing from40a216b, per PR72 #7151796814 and D ba3ea14 refinements. Duplicate actual period (distinct entry dates if needed), overlapping periods, broken billed predecessor, valid adjacent two-tariff control. Keep actual constraints, validate fixture and exact reason/no-write invariants; setup failure not a billing guard PASS. No product/InvoiceService/migration/schema edits; no rebase, delete, or repair of posted records. If negative cases issue invoice, preserve failing evidence and request separate correction scope. Coordinate D and hand off exact SHA/commands to cloud. No repeated accepted G07 suites.",
+      "next": "Freeze PR81 ef4eb04 (one added test file). D reviews four ordinary cases with valid fixtures and controls; after review run only V2StoredObservationBillingTest on SQLite and MySQL, four per engine, no product changes. Record actual domain rejection versus invalid fixture or issued invoice, exact financial/audit snapshots. No repair or invoice changes until supervisor separate authorization.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -196,7 +196,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Round11: reconcile supplied V2 report 62/632 and 3 G10 exits0 on40a216b with independent G00; record scoped acceptance in PR72. Review new B I01, A L01 and C G07 exact source/test branches and handoff. One sequential cloud runner on separate synthetic databases, no duplicate execution, no previously restricted probes. Verify controls/fixture validity, exact domain failures vs setup blocks, L01 causal attribution and bounded cleanup, actual storage/lexical compatibility. No product edits, merging, full regression or main change.",
+      "next": "Round11 final review of PR82 4f97ad3, PR81 ef4eb04, and corrected PR83 successor of80ff9d9. Verify exact new-only paths, A bounds/controls and no optional diagnostics, C real row-valid fixtures/positive control, B-I01-11-01 compatibility disposition and raw PDO scope. Record explicit acceptance or concrete defect per PR. Then hand reviewed A/C exact heads and B corrected head to one sequential cloud runner. No repeats of prior acceptance. V2 scoped runtime acceptance already reconciled; main frozen.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_10_V2_SCOPED_RUNTIME_ACCEPTED_ROUND_11_P2_I01_AND_TARGETED_QA_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_11_DELIVERIES_RECEIVED_TARGETED_COMPATIBILITY_CORRECTION_AND_QA_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1272,7 +1272,34 @@
       },
       "cloud": "Wait for reviewed exact new test/implementation heads. Execute only newly authorized ordinary focused tests sequentially on separate synthetic databases. Do not repeat frozen V2 62/632 or G10 3/3, prior137/1219, pure foundation or previous restricted checks. Report exact SHA, tests/controls, commands, counts/assertions/exits, environment, locks and isolation. No code changes by validation runner.",
       "gates": "Keep accepted V2 immutable. After I01 source/runtime acceptance authorize I02 separately; G07 and L01 confirmed defects require separate scope. No changes to main/V1/V2/team source refs by supervisor. G02/G11 full suites and G12 hosted CI/hosting/production/previous migration remediation held; no deployment.",
-      "limits": "User-provided Codex report reconciled against GitHub; raw artifacts not directly read. No supervisor runtime execution, product changes, or branch composition. Planned new tests not results."
+      "limits": "User-provided Codex report reconciled against GitHub; raw artifacts not directly read. No supervisor runtime execution, product changes, or branch composition. Planned new tests not results.",
+      "delivery_checkpoint": {
+        "heads": {
+          "A": "4f97ad349f4166c40f6492426bb59a8925f47a12",
+          "B": "80ff9d92ffeba22ac724c96ae0b4eb777f2d0568",
+          "C": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a"
+        },
+        "paths": {
+          "A": 2,
+          "B": 9,
+          "C": 1
+        },
+        "prs": {
+          "A": 82,
+          "B": 83,
+          "C": 81
+        },
+        "B_evidence": "Reported 4898 pure +1524 Python SQLite engine/JSON bridge =6422 new checks; actual PHP PDO sqlite and mysql both exit255 before SQL, driver missing. 7 lint reported. No runtime acceptance.",
+        "B_I01_11_01": {
+          "status": "SOURCE_CONFIRMED_COMPATIBILITY_DIFFERENCE_NOT_ENDPOINT_REPRODUCTION",
+          "source": "MoneyBoundary::numericMinor at80ff9d9 evaluates exponent bound before zero digits, existing FinancialAmount::parse at40a216b returns zero first. New pure test expects 0e257 OverflowException. A PR79 #7152070111 raised this. Preserve existing bounded lexical zero behavior, minimum/maximum still enforced, nonzero exponent and regex grammar unchanged.",
+          "scope": "Only new B I01 adapter/test/report. Targeted new evidence and final A/D review."
+        },
+        "A": "Two ordinary independent-account cases with embedded controls; exact methods and runner in docs/accounting/A_C_09_L01_ROUND11_QA.md. No diagnostics opt-in; no privileged checks. PASS/attributed FAIL/INCONCLUSIVE as documented, no setup failure as pass.",
+        "C": "Four per engine tests/Feature/V2StoredObservationBillingTest.php, only after D review; no runtime evidence yet.",
+        "cloud": "A and C after D exact-head acceptance; B after bounded compatibility correction and A/D review. One runner sequential, isolated synthetic databases. A each method fresh empty MySQL, C four per engine, B PDO script sqlite and mysql expected64/63 per current docs subject to corrected report. Report actual counts/exits/controls and limitations; no previously restricted checks or duplicated tests.",
+        "limits": "Supervisor verified GitHub refs and cumulative added paths, read B adapter/legacy comparison and test evidence, A runner contract and C test excerpts. No independent runtime, no final full source review of all tests, no product edits or merges. D final reviews pending. V2 and main unchanged."
+      }
     }
   }
 }
