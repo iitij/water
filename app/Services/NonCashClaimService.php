@@ -55,6 +55,7 @@ final class NonCashClaimService
                 }
                 return (array) $existing;
             }
+            app(FinancialOperationIdentity::class)->requireUnusedRegistryIdentity($record['sync_uuid']);
             abort_if(Payment::withTrashed()->where('sync_uuid', $record['sync_uuid'])->exists()
                 || DB::table('late_receipt_reviews')->where('sync_uuid', $record['sync_uuid'])->exists()
                 || DB::table('noncash_collection_claims')->where('payment_method', $record['payment_method'])
