@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_11_CENTRALIZED_SUPERVISOR_CODEX_ALL_SCOPED_RUNTIME_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_11_CENTRAL_CHAT_EXECUTION_CODEX_TEMPORARILY_UNAVAILABLE_HOLD_RUNTIME_GATES_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1325,6 +1325,23 @@
           "restrictions": "No repeated prior tests, restricted probes, schema/product edits, merge or deployment. Reuse existing exact-head evidence. Do not infer causal defect from timeout."
         },
         "limits": "All scoped source gates satisfied. Runtime report still pending; no supervisor execution or raw cloud artifacts access. I02 and main held."
+      },
+      "central_source_audit": {
+        "base": "40a216bec7ebd540b2d127bea4cdd9180cf0c52a",
+        "G07": {
+          "status": "SOURCE_GAP_CONFIRMED_RUNTIME_NOT_REPRODUCED",
+          "evidence": "InvoiceService.php d2439c3: obtains subscriber/current-meter locks and pending readings sorted by period, then calls quote without checking cross-row observation chain. HistoricalTariffService.php dd2a7e2 lines21–65 prices each row independently, validates its own interval/coverage, not duplicate actual date, cross-row overlap or billed predecessor. ReadingService.php 6b5fc28 lines68–126 protects latest anchor when extending chain, explicitly not full-chain audit; Reading.php flag-only updates do not invoke that validation. CurrentMeterBillingGuard checks identity only.",
+          "correction_contract": "Before tariff quote/number allocation or writes, validate selected pending observations and relevant current-meter predecessor/successor evidence under existing subscriber→meter→ordered reading lock discipline. Validate unique actual dates, intervals, previous/current exact hundredths and consumption delta, existing invoice/tariff provenance, and boundary against prior billed reading or installed/service initial anchor. Do not guess, delete, rebase or rewrite legacy/posted history. Distinguish legacy_calendar policy and reject ambiguous affected chain rather than reconstruct it; inspect compatibility before product patch. Existing QA-only ef4eb04 four cases per engine remain primary runtime evidence; no claim of actual failure."
+        },
+        "I02": {
+          "status": "SOURCE_CONTRACT_REVIEWED_IMPLEMENTATION_HELD_I01_RUNTIME",
+          "evidence": [
+            "CashSessionService 3b9ec21 lines187–238 uses float validation, SQL SUM and round-based conversion before authoritative expected/count/variance snapshot. Replace with exact per-source D12 cash receipts and D14 session storage, checked sums, signed variance; preserve existing public numeric shape/caps and immutable closed snapshot.",
+            "CashHandoverService 755e104 lines20–40/65–125 casts and rounds amounts, unchecked collection sum and subtraction. Use validated exact positive D14 handover, nonnegative approved counted, exact cumulative cap, checked signed arithmetic, same issuance→session→reference order, no extra subscriber receipt.",
+            "CashSessionService lines244/294 close/decision uses best-effort AuditLogger::record; AuditLogger aabd238 lines22–53 catches failures and recordRequired checks only non-null. Future scoped I02 close/decision should require actually persisted audit in same transaction; need explicit rollback/cancelled create coverage and avoid global shared AuditLogger edit without impact review."
+          ],
+          "limits": "Source review does not certify runtime. No application code modified; no new defect reproduction, no new tests. Existing I01 exact accepted-source head34d48fc and V2 stay frozen."
+        }
       }
     },
     "operating_model": {
@@ -1713,6 +1730,13 @@
         "qa/team-a-v2-cross-account-locks": "4f97ad349f4166c40f6492426bb59a8925f47a12",
         "integration/team-b-p2-i01": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
         "qa/team-c-v2-g07-stored-billing": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a"
+      },
+      "temporary_execution": {
+        "authority": "Owner reports Codex and Work usage exhausted; continue in current conversation alone until owner explicitly reports availability restored.",
+        "status": "CENTRAL_CHAT_ONLY",
+        "available": "GitHub connector read/write, isolated assistant PHP 8.4.24 CLI and pure checks; no Composer, PDO drivers, MySQL server or Docker CLI found in current runtime. No user-device or hosting access used.",
+        "policy": "Continue source inspection, implementation preparation and justified isolated pure tests in current chat; preserve exact accepted heads and existing QA gates. Do not repeat unavailable database tests, substitute simulated results as actual PDO/Laravel/MySQL acceptance, bypass restricted checks, or advance production/merge. No new team tasks or Codex assignments until owner notification.",
+        "remaining": "Round11 G07 and L01 actual ordinary tests and P2-I01 actual PDO remain unexecuted/unverified here. Reuse exact-head reports if already available. I02 remains held for actual I01 acceptance; prepare exact implementation contract only."
       }
     }
   }
