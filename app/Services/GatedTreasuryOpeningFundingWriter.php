@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedTreasuryOpeningFundingWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private TreasuryRegisterService $accounts,
@@ -32,7 +34,8 @@ final class GatedTreasuryOpeningFundingWriter
                 $existing = DB::table('treasury_accounts')->where('code', mb_strtoupper(trim($data['code'])))
                     ->lockForUpdate()->first();
                 $this->checkReplay($uuid, 'treasury_opening', 'opening', $existing ? (int) $existing->id : null);
-                $account = $this->accounts->open($actor, $data);
+                $account = $this->mutate(['opening', mb_strtoupper(trim($data['code'])), (int) $actor->id],
+                    fn () => $this->accounts->open($actor, $data, $this));
                 $leg = $this->evidence->opening((int) $account['id'], $context['effective_on']);
                 return ['account' => $account, 'registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
             });
@@ -64,14 +67,37 @@ final class GatedTreasuryOpeningFundingWriter
                     ->lockForUpdate()->first();
                 $posting = $existing ? $this->posting((int) $existing->id) : null;
                 $this->checkReplay($uuid, 'treasury_posting', 'treasury', $posting ? (int) $posting->id : null);
-                $session = $this->sessions->openFunded($collector, $issuer, $accountId, $amount,
-                    $reference, $evidence, $squareId, $notes);
+                $session = $this->mutate(['funding', $accountId, (int) $collector->id, (int) $issuer->id, mb_strtoupper(trim($reference))],
+                    fn () => $this->sessions->openFunded($collector, $issuer, $accountId, $amount,
+                        $reference, $evidence, $squareId, $notes, $this));
                 $funding = DB::table('cash_session_fundings')->where('cash_session_id', $session->id)->lockForUpdate()->sole();
                 $posting = $this->posting((int) $funding->id);
                 $leg = $this->evidence->funding((int) $posting->id, $context['effective_on']);
                 return ['session' => $session, 'posting_id' => (int) $posting->id,
                     'registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
             });
+    }
+
+    public function allowsOpening(string $code, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === ['opening', $code, $actorId];
+    }
+
+    public function allowsFunding(int $accountId, int $collectorId, int $issuerId, string $reference): bool
+    {
+        return DB::transactionLevel() > 0
+            && $this->mutationIdentity === ['funding', $accountId, $collectorId, $issuerId, $reference];
+    }
+
+    private function mutate(array $identity, callable $action): mixed
+    {
+        $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_opening_funding_mutation_scope');
+        $this->mutationIdentity = $identity;
+        try {
+            return $action();
+        } finally {
+            $this->mutationIdentity = null;
+        }
     }
 
     private function lock(string $uuid): void
