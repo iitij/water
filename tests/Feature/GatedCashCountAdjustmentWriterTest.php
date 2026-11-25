@@ -1399,4 +1399,83 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertStringContainsString('Held release journal is immutable', $error->getMessage());
         }
     }
+    public function test_round121_corrections_preserve_shadow_release_and_exact_account_balances(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic correction tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-SHADOW-CORRECTIONS']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $accountId = (int) $account['id'];
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-CORRECTION-PROPOSAL', 'Independent review of allocation evidence', $this->nowAt());
+        $actor = $this->actor();
+        $service->recordRelease($actor, $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $payments = app(PaymentService::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        $receipt = $payments->collectPayment($subscriber, '0.30');
+        $this->assertSame(40, $ledger->accountBalanceMinor($subscriber));
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '0.10',
+            'QA-SHADOW-REFUND', 'treasury_cash', '2026-11-25', 'Synthetic independently evidenced refund', 'Independent proof of completed disbursement');
+        $this->assertSame(30, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $transferReceipt = $payments->collectPayment($subscriber, '0.15');
+        $destination = Subscriber::create(['name' => 'Synthetic destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        app(\App\Services\PaymentAccountTransferService::class)->transfer($transferReceipt, (int) $destination->id, $actor,
+            'Synthetic documented receipt correction', 'Independent evidence of correct subscriber');
+        $this->assertSame(30, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(15, $ledger->accountBalanceMinor($destination));
+        $voidReceipt = $payments->collectPayment($subscriber, '0.05');
+        $payments->voidPayment($voidReceipt, 'Synthetic documented receipt cancellation', $actor->id);
+        $this->assertSame(30, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($destination)['matches']);
+        $report = $service->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(10, $report['shadow_released_minor']);
+        $this->assertSame(0, $report['reinstatement_due_minor']);
+        $this->assertSame(25, $report['actual_protected_minor']);
+        $this->assertFalse($report['spending_release_authorized']);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseCount('payment_account_transfers', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
+    public function test_round121_missing_intermediate_shadow_reinstatement_is_detected(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic intermediate tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-SHADOW-INTERMEDIATE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $accountId = (int) $account['id'];
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-INTERMEDIATE-PROPOSAL', 'Independent review of allocation evidence', $this->nowAt());
+        $reviewer = $this->actor();
+        $service->recordRelease($reviewer, $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
+        app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        // Deliberate corruption of disposable test data, never production.
+        DB::unprepared('DROP TRIGGER shadow_restore_reject_delete');
+        DB::table('held_cash_shadow_reinstatements')->delete();
+        $this->rejects('shadow_restore_missing_event', fn () => $service->inspectJournal($accountId, $this->nowAt()));
+        $this->rejects('shadow_restore_missing_event', fn () => app(PaymentService::class)->recalculateInvoices($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
 }

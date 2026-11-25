@@ -26,7 +26,7 @@ final class HeldCashShadowReinstatement
             ->orderByDesc('id')->lockForUpdate()->get()->unique('credit_id');
         foreach ($anchors as $anchor) {
             $credit = DB::table('treasury_held_cash_credits')->where('id', $anchor->credit_id)->first();
-            $before = $this->afterAnchor($anchor, $credit, $revisionId);
+            $before = $this->afterAnchor($anchor, $credit, $revisionId, true);
             $revision = $this->revision($revisionId, $credit);
             $applied = $this->applied($revision, $credit);
             $after = min($before, $applied);
@@ -40,30 +40,53 @@ final class HeldCashShadowReinstatement
     }
 
     /** Apply only the reductions following this journal entry, in revision order. */
-    public function afterAnchor(object $anchor, object $credit, ?int $throughRevision = null): int
+    public function afterAnchor(object $anchor, object $credit, ?int $throughRevision = null,
+        bool $allowPendingLatest = false): int
     {
         $this->need((int) $anchor->credit_id === (int) $credit->id, 'shadow_restore_identity');
         $before = SignedMinor::parse($anchor->after_minor);
         $priorRevision = (int) $anchor->revision_id;
         $next = DB::table('held_cash_release_journal')->where('credit_id', $credit->id)
             ->where('id', '>', $anchor->id)->orderBy('id')->lockForUpdate()->first();
+        $limit = $next === null ? $throughRevision : min((int) $next->revision_id, $throughRevision ?? PHP_INT_MAX);
+        $this->need($limit === null || $limit >= $priorRevision, 'shadow_restore_order');
         $events = DB::table('held_cash_shadow_reinstatements')->where('journal_id', $anchor->id)
-            ->orderBy('revision_id')->lockForUpdate()->get();
-        foreach ($events as $event) {
-            $id = (int) $event->revision_id;
-            $this->need($id > $priorRevision && ($next === null || $id <= (int) $next->revision_id)
-                && ($throughRevision === null || $id <= $throughRevision), 'shadow_restore_order');
+            ->orderBy('revision_id')->lockForUpdate()->get()->keyBy('revision_id');
+        $revisions = DB::table('payment_allocation_revisions')->where('subscriber_id', $credit->subscriber_id)
+            ->where('id', '>', $priorRevision)
+            ->when($limit !== null, fn ($q) => $q->where('id', '<=', $limit))
+            ->orderBy('id')->lockForUpdate()->get();
+        // Verify every intervening allocation, including a temporary drop that
+        // a subsequent increase could otherwise conceal.
+        foreach ($revisions as $revision) {
+            $id = (int) $revision->id;
+            $event = $events->get($id);
+            if ($before === 0) {
+                $this->need($event === null, 'shadow_restore_evidence');
+                continue;
+            }
             $revision = $this->revision($id, $credit);
             $applied = $this->applied($revision, $credit);
             $after = min($before, $applied);
+            if ($after === $before) {
+                $this->need($event === null, 'shadow_restore_evidence');
+                continue;
+            }
+            if ($event === null) {
+                // Only the revision being written in this very transaction may
+                // be missing its event. Never repair an older missing event.
+                $this->need($allowPendingLatest && $next === null && $id === $throughRevision,
+                    'shadow_restore_missing_event');
+                continue;
+            }
             $this->need(hash_equals($revision->allocation_hash, $event->allocation_hash)
                 && SignedMinor::parse($event->before_minor) === $before
                 && SignedMinor::parse($event->applied_minor) === $applied
-                && SignedMinor::parse($event->after_minor) === $after
-                && $after < $before, 'shadow_restore_evidence');
+                && SignedMinor::parse($event->after_minor) === $after, 'shadow_restore_evidence');
+            $events->forget($id);
             $before = $after;
-            $priorRevision = $id;
         }
+        $this->need($events->isEmpty(), 'shadow_restore_order');
         return $before;
     }
 
