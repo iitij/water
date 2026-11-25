@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 67,
+    "round": 68,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3757,11 +3757,12 @@
           "exit": 2
         }
       },
-      "defect": "Test referenced nonexistent audit_logs table before failure injection. Three cases passed on each engine; rollback unproved. Actual model AuditEvent; no product change necessary for observed error."
+      "defect": "Test referenced nonexistent audit_logs table before failure injection. Three cases passed on each engine; rollback unproved. Actual model AuditEvent; no product change necessary for observed error.",
+      "resolution": "Round 67 corrected QA accepted on both engines; original failed run preserved."
     },
     "round67": {
       "phase": "Corrected gate-first treasury transfer writer rollback test",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "20261506c99e7cc8cbc44c7a9174aab575aee86b",
       "source": "52cda5bfe824beb813bcb31aab13bba2a78562cf",
       "workflow": "f5a958e065bf1079fe5617876528271249a4d3d9",
@@ -3770,12 +3771,51 @@
       "runs": [
         {
           "id": 45616218304,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "scope": "Correct audit test through AuditEvent model; strengthen zero operations/events and mandatory audit rollback plus positive exact retry. Product unchanged. Four affected cases per engine.",
+      "limits": "Pending runtime; no global writer fence, concurrent protocol certification, activation or main merge.",
+      "results": {
+        "sqlite": {
+          "job": 139212177257,
+          "tests": 4,
+          "assertions": 47,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139212177548,
+          "tests": 4,
+          "assertions": 47,
+          "exit": 0
+        },
+        "total": {
+          "tests": 8,
+          "assertions": 94,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round68": {
+      "phase": "Inactive gated treasury opening and funding writer",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "52cda5bfe824beb813bcb31aab13bba2a78562cf",
+      "source": "8d533d71eed46aeb265f4b7942f77b34a5dd27de",
+      "workflow": "2f8b8fab123fe4dfadbc82bb9b05750983d52ccb",
+      "branch": "fix/central-g1b-gated-opening-funding",
+      "pr": 145,
+      "runs": [
+        {
+          "id": 45616644738,
           "status": "queued",
           "conclusion": null
         }
       ],
-      "scope": "Correct audit test through AuditEvent model; strengthen zero operations/events and mandatory audit rollback plus positive exact retry. Product unchanged. Four affected cases per engine.",
-      "limits": "Pending runtime; no global writer fence, concurrent protocol certification, activation or main merge."
+      "scope": "Gated opening and collector funding; exact open-period replay, registered opening prerequisite, actual date and amount proof, reject legacy adoption and UUID conflict; closed/frozen rejection and injected registry failure with audit rollback/retry. Four cases per engine.",
+      "limits": "No production activation, global writer fence or concurrent protocol certification; no main merge. Historical onboarding and cross-period replay policy remain open."
     }
   }
 }
