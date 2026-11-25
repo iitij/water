@@ -2,6 +2,11 @@
 
 namespace App\Services;
 
+use App\Support\ExactMoney;
+use App\Support\FinancialAmount;
+use App\Support\InvoiceAmounts;
+use App\Support\HistoricalTariffEvidence;
+
 use App\Models\HistoricalInvoiceCorrection;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -37,9 +42,10 @@ final class HistoricalInvoiceCorrectionService
             || ($requested === null && (! $validNumber($units) || ! $validNumber($price)))) {
             throw ValidationException::withMessages(['correction' => 'يلزم توثيق الوحدات والتعرفة التاريخية وسبب التصحيح.']);
         }
-        // DECIMAL values from the database may be numeric on SQLite.
-        $minor = static fn ($v): int => (int) round((float) $v * 100);
-        $decimal = static fn (int $v): string => intdiv($v, 100).'.'.str_pad((string) ($v % 100), 2, '0', STR_PAD_LEFT);
+        // Keep the existing wire syntax and bounds; parse actual values without
+        // binary arithmetic, including numeric SQLite DECIMAL representations.
+        $minor = static fn ($v): int => FinancialAmount::validated($v, 'correction')->minor;
+        $decimal = static fn (int $v): string => ExactMoney::fromMinor($v)->decimal();
         $requestedUnits = [];
         if ($requested !== null) {
             foreach ($requested as $row) {
@@ -104,44 +110,40 @@ final class HistoricalInvoiceCorrectionService
             \App\Models\Tariff::lockCatalog();
             $originalLines = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)
                 ->orderBy('reading_id')->lockForUpdate()->get();
-            if ($originalLines->isEmpty()) {
-                $originalLines = collect(app(HistoricalTariffService::class)->quote($readings)['lines'])
-                    ->map(fn ($line) => (object) $line);
-                $source = 'approved_historical_catalog';
-            } else {
-                $lineIds = $originalLines->pluck('reading_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-                if ($lineIds !== array_map('intval', $ids)
-                    || $originalLines->sum(fn ($line) => $minor($line->amount)) !== $minor($invoice->consumption_fee)) {
-                    throw ValidationException::withMessages(['invoice' => 'أدلة تسعير الفاتورة لا تطابق القراءات أو المبلغ التاريخي.']);
-                }
-                $source = 'original_invoice_snapshot';
+            // Never reconstruct a posted invoice's tariff from today's catalog.
+            // Even a coincidentally equal total does not establish line-level provenance.
+            try {
+                HistoricalTariffEvidence::verify(
+                    $readings->map(fn ($reading) => (object) [
+                        'id' => $reading->id,
+                        'period_start' => $reading->period_start ? \Carbon\CarbonImmutable::parse($reading->period_start)->toDateString() : null,
+                        'period_end' => $reading->period_end ? \Carbon\CarbonImmutable::parse($reading->period_end)->toDateString() : null,
+                        'consumption_units' => $reading->getRawOriginal('consumption_units'),
+                    ]),
+                    $originalLines,
+                    $invoice->getRawOriginal('consumption_fee'),
+                );
+            } catch (\DomainException|\InvalidArgumentException|\OverflowException) {
+                throw ValidationException::withMessages(['invoice' => 'أدلة التعرفة الأصلية مفقودة أو غير متطابقة؛ يلزم مراجعة محاسبية موثقة.']);
             }
-            $readingById = $readings->keyBy('id');
+            $source = 'original_invoice_snapshot';
             $lines = [];
             $prices = [];
             $u = 0;
             $amount = 0;
             foreach ($originalLines as $original) {
-                $reading = $readingById->get($original->reading_id);
-                if (! $reading || ! $reading->period_start || ! $reading->period_end
-                    || $original->period_start !== \Carbon\CarbonImmutable::parse($reading->period_start)->toDateString()
-                    || $original->period_end !== \Carbon\CarbonImmutable::parse($reading->period_end)->toDateString()) {
-                    throw ValidationException::withMessages(['invoice' => 'توجد أدلة تاريخية غير متطابقة؛ يلزم مراجعة محاسبية.']);
-                }
                 $p = $minor($original->unit_price);
                 if ($confirmedPrice !== null && $confirmedPrice !== $p) {
                     throw ValidationException::withMessages(['historical_unit_price' => 'السعر المدخل لا يطابق التعرفة التاريخية الموثقة.']);
                 }
-                $quantity = $requestedUnits[(int) $reading->id];
-                if ($p < 0 || ($p > 0 && $quantity > intdiv(PHP_INT_MAX - 50, $p))) {
-                    throw ValidationException::withMessages(['readings' => 'الوحدات أو التعرفة خارج النطاق المالي.']);
+                $quantity = $requestedUnits[(int) $original->reading_id];
+                try {
+                    $lineAmount = ExactMoney::tariffLine($decimal($quantity), $decimal($p))->minor;
+                    $u = ExactMoney::fromMinor(FinancialAmount::add($u, $quantity))->minor;
+                    $amount = ExactMoney::fromMinor(FinancialAmount::add($amount, $lineAmount))->minor;
+                } catch (\InvalidArgumentException|\OverflowException) {
+                    throw ValidationException::withMessages(['readings' => 'المبلغ أو الوحدات أو التعرفة المصححة تتجاوز الحد المالي.']);
                 }
-                $lineAmount = intdiv($quantity * $p + 50, 100);
-                if ($lineAmount > 999999999999 - $amount || $quantity > 999999999999 - $u) {
-                    throw ValidationException::withMessages(['readings' => 'المبلغ أو الوحدات المصححة تتجاوز الحد المالي.']);
-                }
-                $u += $quantity;
-                $amount += $lineAmount;
                 $prices[$p] = true;
                 $line = array_intersect_key((array) $original, array_flip([
                     'reading_id', 'tariff_id', 'tariff_name', 'period_start', 'period_end',
@@ -154,9 +156,9 @@ final class HistoricalInvoiceCorrectionService
             }
             $unitPrice = count($prices) === 1 ? $decimal((int) array_key_first($prices)) : null;
 
-            $before = $minor($subscriber->getAccountBalance());
-            $oldAmount = $minor($invoice->total_amount);
             $ledger = app(TransactionService::class);
+            $before = $ledger->accountBalanceMinor($subscriber);
+            $oldAmount = $minor($invoice->total_amount);
             $out = $ledger->reverseDocument($subscriber, $invoice, 'invoice');
             $invoice->forceFill(['status' => 'cancelled', 'voided_at' => now(), 'void_reason' => $reason,
                 'voided_by' => $actor->id, 'amount_paid' => 0])->saveQuietly();
@@ -165,21 +167,23 @@ final class HistoricalInvoiceCorrectionService
             // and the correction document reference the unchanged original.
             $allocator = app(PaymentService::class);
             $allocator->recalculateInvoices($subscriber);
-            $previous = Invoice::where('subscriber_id', $subscriber->id)->whereNotIn('status', ['draft', 'cancelled'])
-                ->get()->sum(fn ($i) => $i->getRemainingAmount());
+            $previousMinor = InvoiceAmounts::outstandingMinor(Invoice::where('subscriber_id', $subscriber->id)
+                ->whereNotIn('status', ['draft', 'cancelled'])->toBase()->get(['total_amount', 'amount_paid']));
+            $previous = FinancialAmount::storageDecimal($previousMinor, 'previous_balance');
+            $credit = $decimal(min($amount, max(0, $ledger->accountBalanceMinor($subscriber))));
             $replacement = new Invoice([
                 'subscriber_id' => $subscriber->id, 'meter_id' => null, 'invoice_type' => 'meter',
                 'bill_number' => Invoice::generateBillNumber(), 'bill_date' => now()->toDateString(),
                 'billing_period_start' => $invoice->billing_period_start, 'billing_period_end' => $invoice->billing_period_end,
                 'consumption_fee' => $decimal($amount), 'total_amount' => $decimal($amount),
-                'previous_balance' => $previous, 'credit_applied' => min($amount / 100, $subscriber->getAccountCredit()),
+                'previous_balance' => $previous, 'credit_applied' => $credit,
                 'amount_paid' => 0, 'status' => 'issued', 'notes' => 'تصحيح تاريخي للفاتورة '.$invoice->bill_number,
             ]);
             $replacement->forceFill(['retired_meter_id' => $invoice->retired_meter_id, 'retired_meter_code' => $invoice->retired_meter_code])->saveQuietly();
             DB::table('invoice_tariff_lines')->insert(array_map(fn ($line) => $line + ['invoice_id' => $replacement->id], $lines));
             InvoiceItem::create(['invoice_id' => $replacement->id, 'type' => 'consumption',
                 'description' => 'استهلاك مصحح وفق تفاصيل التعرفات التاريخية', 'amount' => $decimal($amount)]);
-            if ($previous > 0) {
+            if ($previousMinor > 0) {
                 InvoiceItem::create(['invoice_id' => $replacement->id, 'type' => 'previous_balance',
                     'description' => 'متأخرات سابقة', 'amount' => $previous]);
             }
@@ -187,11 +191,11 @@ final class HistoricalInvoiceCorrectionService
                 'replacement_invoice_id' => $replacement->id, 'approved_by' => $actor->id,
                 'corrected_units' => $decimal($u), 'historical_unit_price' => $unitPrice,
                 'corrected_amount' => $decimal($amount), 'reason' => $reason, 'evidence' => $evidence]);
-            $in = $ledger->recordTransaction($subscriber, 'invoice', -($amount / 100),
+            $in = $ledger->recordTransaction($subscriber, 'invoice', $decimal(-$amount),
                 'فاتورة تاريخية مصححة '.$replacement->bill_number, $replacement);
             $allocator->recalculateInvoices($subscriber);
-            $after = $minor($subscriber->getAccountBalance());
-            if ($after !== $before + $oldAmount - $amount) {
+            $after = $ledger->accountBalanceMinor($subscriber);
+            if ($after !== FinancialAmount::add($before, $oldAmount - $amount)) {
                 throw new \RuntimeException('Historical correction does not conserve the account.');
             }
             app(AuditLogger::class)->recordRequired('invoice.historical_corrected', [

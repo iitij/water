@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\FinancialAmount;
+
 use App\Models\CashSession;
 use App\Models\Payment;
 use App\Models\PaymentAccountTransfer;
@@ -56,36 +58,43 @@ final class PaymentAccountTransferService
                 || \App\Models\PaymentRefund::where('payment_id', $receipt->id)->exists()) {
                 throw ValidationException::withMessages(['payment' => 'السند ملغى أو قيد تصحيح، أو صندوقه غير معتمد.']);
             }
-            $amount = (float) $receipt->amount;
-            if (! is_finite($amount) || $amount <= 0) {
+            $money = FinancialAmount::validated($receipt->amount, 'payment');
+            if ($money->minor <= 0) {
                 throw ValidationException::withMessages(['payment' => 'مبلغ السند غير صالح.']);
             }
-            $before = ['from' => $from->getAccountBalance(), 'to' => $to->getAccountBalance()];
+            $ledger = app(TransactionService::class);
+            $before = ['from' => $ledger->accountBalanceMinor($from), 'to' => $ledger->accountBalanceMinor($to)];
             $transfer = PaymentAccountTransfer::create([
                 'payment_id' => $receipt->id,
                 'from_subscriber_id' => $from->id,
                 'to_subscriber_id' => $to->id,
                 'approved_by' => $actor->id,
-                'amount' => $receipt->amount,
+                'amount' => $money->decimal(),
                 'reason' => $reason,
                 'evidence' => $evidence,
             ]);
-            $ledger = app(TransactionService::class);
             $out = $ledger->reverseDocument($from, $receipt, 'payment');
-            $in = $ledger->recordTransaction($to, 'payment_transfer_in', $amount,
+            $in = $ledger->recordTransaction($to, 'payment_transfer_in', $money->decimal(),
                 'تصحيح تخصيص سند '.$receipt->receipt_number, $transfer);
             $allocator = app(PaymentService::class);
             $allocator->recalculateInvoices($from);
             $allocator->recalculateInvoices($to);
-            $after = ['from' => $from->getAccountBalance(), 'to' => $to->getAccountBalance()];
-            if ((int) round(($before['from'] - $after['from']) * 100) !== (int) round($amount * 100)
-                || (int) round(($after['to'] - $before['to']) * 100) !== (int) round($amount * 100)) {
+            $after = ['from' => $ledger->accountBalanceMinor($from), 'to' => $ledger->accountBalanceMinor($to)];
+            if ($after['from'] !== FinancialAmount::add($before['from'], -$money->minor)
+                || $after['to'] !== FinancialAmount::add($before['to'], $money->minor)) {
                 throw new \RuntimeException('Account transfer does not conserve money.');
             }
+            // Preserve the legacy audit presentation keys; exact minor values
+            // are additional evidence, never derived from their float projections.
+            $auditBalances = static fn (array $balances): array => [
+                'from' => (float) ($balances['from'] / 100),
+                'to' => (float) ($balances['to'] / 100),
+                'from_minor' => $balances['from'], 'to_minor' => $balances['to'],
+            ];
             app(AuditLogger::class)->recordRequired('payment.account_transferred', [
                 'entity_type' => PaymentAccountTransfer::class, 'entity_id' => $transfer->id,
-                'before' => $before,
-                'after' => $after + ['payment_id' => $receipt->id, 'from_subscriber_id' => $from->id,
+                'before' => $auditBalances($before),
+                'after' => $auditBalances($after) + ['payment_id' => $receipt->id, 'from_subscriber_id' => $from->id,
                     'to_subscriber_id' => $to->id, 'amount' => $receipt->amount, 'reason' => $reason,
                     'evidence' => $evidence, 'out_transaction_id' => $out->id, 'in_transaction_id' => $in->id,
                     'cash_movement' => false],
