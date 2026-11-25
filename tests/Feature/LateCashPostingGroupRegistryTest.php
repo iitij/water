@@ -194,4 +194,66 @@ final class LateCashPostingGroupRegistryTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
     }
+    private function verifyGroup(string $month): array
+    {
+        $id = (int) DB::table('financial_periods')->where('month', $month)->value('id');
+        return DB::transaction(fn () => app(\App\Services\LateCashPostingGroupVerifier::class)
+            ->verifyPeriod('water', $id));
+    }
+
+    public function test_historical_group_counts_only_its_own_effect_in_each_period(): void
+    {
+        [, $reviewer, , $account, , $review] = $this->fixture();
+        $this->post($reviewer, $review, $account);
+        $october = $this->verifyGroup('2026-10');
+        $november = $this->verifyGroup('2026-11');
+        foreach ([$october, $november] as $result) {
+            $this->assertSame(1, $result['group_operations']);
+            $this->assertSame(1, $result['group_events']);
+            $this->assertFalse($result['source_coverage_verified']);
+            $this->assertFalse($result['closure_authorized']);
+        }
+        $this->assertNotSame($october['group_registry_hash'], $november['group_registry_hash']);
+        DB::table('financial_periods')->where('month', '2026-10')->update(['state' => 'CLOSED', 'version' => 8]);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['fence_epoch' => 6]);
+        $this->assertSame($october, $this->verifyGroup('2026-10'));
+        $this->assertSame($november, $this->verifyGroup('2026-11'));
+    }
+
+    public function test_missing_non_anchor_part_blocks_verification_even_for_non_anchor_period(): void
+    {
+        [, $reviewer, , $account, , $review] = $this->fixture();
+        $this->post($reviewer, $review, $account);
+        DB::table('financial_posting_group_parts')->where('role', 'treasury')->delete();
+        foreach (['2026-10', '2026-11'] as $month) {
+            $this->rejects('late_cash_group_verifier_parts', fn () => $this->verifyGroup($month));
+        }
+    }
+
+    public function test_event_hash_and_rehashed_payload_cannot_replace_actual_source_proof(): void
+    {
+        [, $reviewer, , $account, , $review] = $this->fixture();
+        $this->post($reviewer, $review, $account);
+        $row = DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)->sole();
+        $payload = json_decode($row->canonical_payload, true, 512, JSON_THROW_ON_ERROR);
+        $fake = str_repeat('a', 64);
+        $payload['parts'][1]['leg']['source_hash'] = $fake;
+        $bytes = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+            ->update(['canonical_payload' => $bytes, 'payload_hash' => hash('sha256', $bytes)]);
+        DB::table('financial_posting_events')->where('operation_uuid', self::OTHER)->where('leg', 'treasury')
+            ->update(['source_hash' => $fake]);
+        foreach (['2026-10', '2026-11'] as $month) {
+            $this->rejects('late_cash_group_proof_mismatch', fn () => $this->verifyGroup($month));
+        }
+    }
+
+    public function test_future_original_version_is_rejected_by_historical_verifier(): void
+    {
+        [, $reviewer, , $account, , $review] = $this->fixture();
+        $this->post($reviewer, $review, $account);
+        DB::table('financial_posting_group_parts')->where('role', 'treasury')->update(['period_version' => 999]);
+        $this->rejects('late_cash_group_context', fn () => $this->verifyGroup('2026-10'));
+    }
+
 }
