@@ -72,16 +72,7 @@ class ReadingService
      */
     private function assertUnambiguousAnchor(Meter $meter, Reading $last, string $observed): void
     {
-        $siblings = Reading::where('meter_id', $meter->id)->whereKeyNot($last->id)
-            ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) = ?', [$observed]);
-        if (DB::transactionLevel() > 0) {
-            $siblings->lockForUpdate();
-        }
-        if ($siblings->first(['id'])) {
-            throw ValidationException::withMessages([
-                'period_start' => ['توجد قراءات متعددة في تاريخ الملاحظة السابقة؛ يلزم تدقيق التسلسل.'],
-            ]);
-        }
+        $this->assertUniqueObservationDate($meter, $last, $observed);
         if ($last->period_basis === 'legacy_calendar') {
             return;
         }
@@ -92,6 +83,11 @@ class ReadingService
             $previous->lockForUpdate();
         }
         $prior = $previous->first();
+        if ($prior) {
+            $this->assertUniqueObservationDate(
+                $meter, $prior, Carbon::parse($prior->actual_reading_date ?? $prior->reading_date)->toDateString()
+            );
+        }
         $anchor = $prior
             ? ($prior->actual_reading_date ?? $prior->reading_date)
             : ($meter->installed_at ?? $meter->subscriber?->subscription_start_date);
@@ -111,6 +107,21 @@ class ReadingService
             || $expected !== $from || $to < $from || $units !== $to - $from) {
             throw ValidationException::withMessages([
                 'period_start' => ['تسلسل القراءة السابقة أو كميتها غير متسق؛ يلزم تدقيق السجل قبل تسجيل قراءة جديدة.'],
+            ]);
+        }
+    }
+
+    /** A physical observation date must identify exactly one active reading. */
+    private function assertUniqueObservationDate(Meter $meter, Reading $reading, string $observed): void
+    {
+        $siblings = Reading::where('meter_id', $meter->id)->whereKeyNot($reading->id)
+            ->whereRaw('DATE(COALESCE(actual_reading_date, reading_date)) = ?', [$observed]);
+        if (DB::transactionLevel() > 0) {
+            $siblings->lockForUpdate();
+        }
+        if ($siblings->first(['id'])) {
+            throw ValidationException::withMessages([
+                'period_start' => ['توجد قراءات متعددة في تاريخ الملاحظة السابقة؛ يلزم تدقيق التسلسل.'],
             ]);
         }
     }

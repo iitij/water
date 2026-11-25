@@ -210,14 +210,28 @@ final class Acc12Acc13ReadingIntegrityTest extends TestCase
             ->assertFailed();
         $this->assertEquals($before, $this->readingAndFinancialSnapshot());
 
-        // Acceptance requirement, not a characterization of the current
-        // implementation. Static review indicates the current guard may fail
-        // this case; it must remain an explicit gate, not a skipped test.
-        $this->expectInvalid(fn () => app(ReadingService::class)
-            ->calculateReadingPeriod($meter->id, '2026-04-12'), 'period_start');
-        $this->postJson('/api/readings', [
+        $payload = [
             'meter_id' => $meter->id, 'reading_date' => '2026-04-12', 'current_reading' => '150.00',
-        ])->assertUnprocessable()->assertJsonValidationErrors('period_start');
+        ];
+        try {
+            app(ReadingService::class)->calculateReadingPeriod($meter->id, '2026-04-12');
+            $this->fail('Ambiguous predecessor was accepted.');
+        } catch (ValidationException $e) {
+            $this->assertSame(
+                ['توجد قراءات متعددة في تاريخ الملاحظة السابقة؛ يلزم تدقيق التسلسل.'],
+                $e->errors()['period_start'] ?? []
+            );
+        }
+        $this->assertEquals($before, $this->readingAndFinancialSnapshot());
+        $this->expectInvalid(fn () => Reading::create($payload), 'period_start');
+        $this->assertEquals($before, $this->readingAndFinancialSnapshot());
+        $this->postJson('/api/readings', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('period_start');
+        $this->assertEquals($before, $this->readingAndFinancialSnapshot());
+        $this->postJson('/api/readings/sync-batch', ['readings' => [$payload]])
+            ->assertOk()->assertJsonPath('success_count', 0)
+            ->assertJsonPath('results.0.success', false)
+            ->assertJsonPath('results.0.retryable', false);
         $this->assertEquals($before, $this->readingAndFinancialSnapshot());
     }
 
