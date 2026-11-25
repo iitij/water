@@ -45,6 +45,7 @@ class PaymentsRepositoryImpl
     CashSessionService? cashSessions,
     Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
+    this.prospectiveVoidRequests = const bool.fromEnvironment('WATER_PROSPECTIVE_VOID'),
   }) : _remote = remote,
        _invoices = invoices,
        _network = networkInfo,
@@ -75,6 +76,7 @@ class PaymentsRepositoryImpl
 
   /// تعطيل الطابور المحلي عند الحاجة في الاختبارات.
   final bool offlineEnabled;
+  final bool prospectiveVoidRequests;
 
   @override
   Future<List<PaymentModel>> list(PaymentQuery query) => _remote.list(query);
@@ -249,6 +251,33 @@ class PaymentsRepositoryImpl
         'اكتب سبب الإلغاء (10 أحرف على الأقل) ليُسجَّل في سجل التدقيق.',
         <String, List<String>>{},
       );
+    }
+
+    if (prospectiveVoidRequests) {
+      // Destructive correction is online-only in the candidate. A lost reply
+      // is an unknown outcome; never turn it into a new queued mutation.
+      scope?.ensureCurrent();
+      final online = await _network.isConnected;
+      scope?.ensureCurrent();
+      if (!online) {
+        throw const NetworkFailure('الإلغاء يحتاج اتصالاً مباشراً. لم يُرسل الطلب ولم يُحفظ للمزامنة.');
+      }
+      final intent = _uuid.v4();
+      try {
+        final outcome = await _remote.requestBoundVoid(
+          id, reason: trimmed, intentUuid: intent, sessionExtra: _sessionExtra(scope),
+        );
+        scope?.ensureCurrent();
+        return outcome;
+      } on AppFailure catch (failure) {
+        scope?.ensureCurrent();
+        if (_isNetworkLike(failure)) {
+          throw const NetworkFailure(
+            'نتيجة طلب الإلغاء غير مؤكدة. حدّث السند وراجع طلباته قبل أي محاولة جديدة؛ لم يُضف طلب للمزامنة.',
+          );
+        }
+        rethrow;
+      }
     }
 
     try {
