@@ -100,7 +100,10 @@ final class CrossAccountPendingReviewLockTest extends TestCase
         foreach (['subscribers', 'meters', 'readings', 'invoices', 'invoice_items', 'invoice_tariff_lines',
             'payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
             'payment_refunds', 'payment_account_transfers', 'cash_sessions', 'cash_handovers',
-            'treasury_accounts', 'treasury_postings', 'bank_statement_matches',
+            'treasury_accounts', 'treasury_postings', 'treasury_transfers', 'treasury_transfer_receipts',
+            'treasury_cash_counts', 'treasury_cash_count_reviews', 'treasury_cash_adjustments',
+            'bank_statements', 'bank_statement_lines', 'bank_statement_matches', 'treasury_bank_fees',
+            'treasury_bank_collections', 'closed_cash_corrections',
             'noncash_collection_claims', 'late_receipt_reviews', 'audit_events'] as $table) {
             $out[$table] = DB::table($table)->orderBy('id')->get()->map(fn ($r) => (array) $r)->all();
         }
@@ -253,9 +256,16 @@ final class CrossAccountPendingReviewLockTest extends TestCase
         if (! mkdir($dir, 0700)) {
             throw new \RuntimeException('L01 BLOCKED: cannot create coordination directory.');
         }
+        $evidence = ['mode' => $mode, 'control_ms' => $controlMs];
+        // Ordinary schema-local metadata; never change a plan or index.
+        try {
+            $evidence['index'] = DB::select('SHOW INDEX FROM late_receipt_reviews');
+            $evidence['plan'] = DB::select('EXPLAIN SELECT id FROM late_receipt_reviews WHERE submitted_meter_id=? AND status=? ORDER BY id LIMIT 1 FOR UPDATE', [$a['meter'], 'pending']);
+        } catch (Throwable $e) {
+            $evidence['plan_unavailable'] = get_class($e);
+        }
         DB::disconnect();
         $pids = [];
-        $evidence = ['mode' => $mode, 'control_ms' => $controlMs];
         $deadline = hrtime(true) + 30000000000;
         $joinError = null;
         try {
@@ -348,6 +358,18 @@ final class CrossAccountPendingReviewLockTest extends TestCase
             DB::purge();
         }
         $attributed = ! empty($evidence['wait']['rows']);
+        // A driver lock timeout alone is not causal evidence. Only an exact-table
+        // wait while the sole competing A transaction was held can corroborate it.
+        $bError = $evidence['B-result'] ?? [];
+        $exactWaitError = (int) ($bError['driver_code'] ?? 0) === 1205
+            && str_contains(strtolower((string) ($bError['sql'] ?? '')), 'late_receipt_reviews')
+            && isset($evidence['guard-held']['ns'], $bError['ns'], $evidence['release']['ns'])
+            && $evidence['guard-held']['ns'] < $bError['ns'] && $bError['ns'] < $evidence['release']['ns'];
+        // Preserve this evidence for D, but do not infer blocker identity from an
+        // error or timestamps alone when the observer cannot identify it.
+        if ($exactWaitError) {
+            fwrite(STDOUT, 'L01 exact-table 1205 while A held; blocker attribution requires review.'.PHP_EOL);
+        }
         if ($joinError !== null || ! ($evidence['A-result']['ok'] ?? false) || isset($evidence['coordination_error'])) {
             self::markTestIncomplete('L01 INCONCLUSIVE: worker/barrier failure; inspect L01_EVIDENCE.');
         }
