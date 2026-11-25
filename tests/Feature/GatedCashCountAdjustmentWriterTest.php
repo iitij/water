@@ -2870,4 +2870,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($legacy->fresh()->hasPendingVoidRequest());
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
+
+    public function test_round137_handover_registers_only_treasury_effect_and_preserves_original_till(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id)['payment'];
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $receive = fn () => $writer->receive($reviewer, (int) $session->id, $accountId, '0.40',
+            'QA-R137-HANDOVER-1', '2026-11-25', self::EVIDENCE, $uuid, $this->nowAt());
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings', 'audit_events',
+            'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $condition = "NEW.operation_uuid = '{$uuid}'";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r137_handover_registry'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r137_handover_registry'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r137_handover_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $receive();
+                $this->fail('Handover committed despite registry failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r137_handover_registry', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r137_handover_registry');
+        }
+        $this->assertTrue($receive()['registry_created']);
+        $this->assertFalse($receive()['registry_created']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => 40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $secondUuid = '99999999-9999-4999-8999-999999999999';
+        $this->assertTrue($writer->receive($reviewer, (int) $session->id, $accountId, '0.60', 'QA-R137-HANDOVER-2',
+            '2026-11-25', self::EVIDENCE, $secondUuid, $this->nowAt())['registry_created']);
+        $this->assertSame('complete', app(\App\Services\CashHandoverService::class)->summary($session)['status']);
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame($before['transactions'], $snapshot('transactions'));
+        $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(10125, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        $this->assertDatabaseCount('cash_handovers', 2);
+    }
 }
