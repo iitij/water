@@ -37,7 +37,7 @@ class FinancialReportsTest extends TestCase
             ->assertJsonPath('summary.total_outstanding', 430)
             ->assertJsonPath('summary.overdue_amount', 280)
             ->assertJsonPath('summary.invoices_count', 4)
-            ->assertJsonPath('summary.paid_invoices_count', 1)
+            ->assertJsonPath('summary.paid_invoices_count', 2)
             ->assertJsonPath('summary.overdue_invoices_count', 1)
             ->assertJsonPath('summary.readings_count', 0)
             ->assertJsonPath('summary.consumption_units', 0)
@@ -49,7 +49,7 @@ class FinancialReportsTest extends TestCase
             ->assertJsonCount(2, 'square_breakdown');
 
         $statuses = collect($response->json('status_breakdown'))->keyBy('key');
-        $this->assertEquals(['key' => 'paid', 'label' => 'مسددة', 'value' => 100, 'count' => 1], $statuses['paid']);
+        $this->assertEquals(['key' => 'paid', 'label' => 'مسددة', 'value' => 140, 'count' => 2], $statuses['paid']);
         $this->assertEquals(['key' => 'partially_paid', 'label' => 'مسددة جزئياً', 'value' => 200, 'count' => 1], $statuses['partially_paid']);
         $this->assertEquals(['key' => 'overdue', 'label' => 'متأخرة', 'value' => 300, 'count' => 1], $statuses['overdue']);
         $squares = collect($response->json('square_breakdown'))->keyBy('key');
@@ -158,6 +158,16 @@ class FinancialReportsTest extends TestCase
         $this->getJson('/api/admin/reports')->assertForbidden();
     }
 
+    public function test_dashboard_rejects_invalid_stored_invoice_allocation_without_mutating_it(): void
+    {
+        $subscriber = Square::create(['name' => 'Synthetic invalid allocation'])->subscribers()
+            ->create(['name' => 'Invalid allocation fixture', 'status' => 'active']);
+        $this->invoice($subscriber, ['total_amount' => 40, 'amount_paid' => 60]);
+        $before = Invoice::query()->get()->toArray();
+        $this->getJson('/api/admin/dashboard')->assertServerError();
+        $this->assertSame($before, Invoice::query()->get()->toArray());
+    }
+
     private function seedReport(): array
     {
         $first = Square::create(['name' => 'المربع الأول'])->subscribers()->create(['name' => 'المشترك الأول', 'status' => 'active']);
@@ -165,7 +175,8 @@ class FinancialReportsTest extends TestCase
         $this->invoice($first, ['total_amount' => 100, 'amount_paid' => 100, 'status' => 'paid']);
         $this->invoice($first, ['bill_date' => '2026-10-31', 'total_amount' => 200, 'amount_paid' => 50, 'previous_balance' => 900, 'status' => 'partially_paid']);
         $this->invoice($second, ['total_amount' => 300, 'amount_paid' => 20, 'previous_balance' => 600, 'status' => 'overdue']);
-        $this->invoice($second, ['total_amount' => 40, 'amount_paid' => 60]);
+        // Allocations cannot exceed the invoice's own billed amount. Excess funds belong to account credit.
+        $this->invoice($second, ['total_amount' => 40, 'amount_paid' => 40, 'status' => 'paid']);
         $this->invoice($first, ['bill_date' => '2026-09-30', 'total_amount' => 80]);
         $this->invoice($first, ['total_amount' => 900, 'deleted_at' => now()]);
         $this->payment($first, 50, '2026-10-01 00:00:00');
