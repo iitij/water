@@ -12,7 +12,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "latest_verified_change": "PR #62; three files: BankReconciliationService, PaymentService, NonCashClaimTest; exact base a5f2cac",
-      "next": "Round 7 scoped review: review B P1 corrections against the approved dispositions and C exact financial conservation and lock graph; finalize P2 acceptance contract from PR76 #7150148141, including cash14, portable signed bounds, audit rollback, consistent read snapshot. Design/review only, no product edits, actual closing/return posting, main merge or repeated tests.",
+      "next": "Round 8 scoped acceptance: independently review final B 8f52bdc proof, raw exact amounts, cap/replay and refund identity/lock ordering; review C 3572bf4 exact balance, financial retirement provenance and mixed pending deletion. Record issues or scoped approval in PR77/78; no product edits or repeat tests. Keep P2 design ready, no activation.",
       "evidence": "PR #62 comment: MySQL 297 pass/1 skip, 4547 assertions; SQLite 281 pass/17 skip, 4391 assertions; focused 24 pass/406 assertions; no new Flutter run; privileged trigger skip.",
       "round2": "Design only, PR62 handoff documented in PR comments, no new product changes reported. A-G1A-01 proposed first; designs not independently inspected in full.",
       "round3": {
@@ -54,10 +54,10 @@
       "scope": "ACC-11 then ACC-09/14 gated",
       "branch": "fix/accounting-acc-11",
       "sha": "e940764c5e480d6d3aeb262585171a6b4d945fc4",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
-      "next": "Round 7: new independent integration/team-b-acc09-p1-corrections from frozen d90643a. Authorize A-P1-01/02/03 source-confirmed/contract corrections: require immutable original tariff snapshot with full reading identity/period/quantity and exact original consumption total, fail closed on missing proof (mutable catalog/equal total alone insufficient); preserve valid snapshot route and do not invent legacy evidence. Strict authoritative internal remaining amount 0<=paid<=total; review callers, separate tolerant display if needed, preserve public wire and ACC11 Invoice.php. Refund original proof match canonical amount and active/retired meter identity, no bank posting changes. A-P1-04 add only missing targeted cases, including rollback/replay as justified. Freeze old P1, record exact changed SHA and focused ordinary SQLite/MySQL results. No C paths, candidate edits, schema/wire changes, P2 implementation or ACC14 activation. Coordinate A/D; no production data/main.",
+      "next": "Freeze 8f52bdc. Await single cloud runner exact focused tests specified in ACC_09_P1_CORRECTIONS_ROUND7_AR.md and A/D review; fix only confirmed failures in own branch with new SHA and targeted retest. No P2 implementation before approved integrated base. Preserve historical proof, strict cap, refund identity, ACC11 and API.",
       "evidence": "Team report: ACC-11 01fae90 focused SQLite and MySQL 3 pass/17 assertions each, Flutter 19 pass; full PHP 223 pass/1 fail/6 skip; hosting scheduler and lock store verification pending.",
       "deliverables": [
         {
@@ -102,15 +102,20 @@
       "round5": {
         "head": "d90643a34729a1dac40c369649e5430fd4aa417b",
         "evidence": "PR76 7149410355: eight changed paths, pure PHP 2018 checks exit0 reported, eight new DB integration cases unrun. Invoice.php untouched. Verified exact remote delta."
+      },
+      "round7": {
+        "head": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+        "files": 11,
+        "evidence": "PR77 #7150416613: 2052 pure checks reported (2020+32), exit0, 7 lint; 15 P1 +4 reversal per engine +2 MySQL races defined, not executed. 3 commits ahead of d90643a; 5 product,5 test,1 doc."
       }
     },
     "C": {
       "scope": "ACC-10 audit first, ACC-12/13 gated",
-      "status": "ASSIGNED",
+      "status": "REVIEW",
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "GitHub confirms 14 changed files, user deactivation and token revocation, trigger migration, tests and UI. Last available progress 11 SQLite pass/48 assertions; final counts and 16 acceptance criteria not retrieved.",
-      "next": "Round 7: implement approved bounded obsolete-meter unbilled deletion policy on independent integration/team-c-obsolete-meter-cleanup from frozen f043851, preserving C original branch. Reserved MeterDataPurger, FinancialMeterRetirementService, SingleMeterService, MeterController, Meter model, EditMeter and directly affected meter tests. Explicit obsolete cleanup/replacement intent only; validate survivor/IDs and permissions, subscriber then sorted meters/readings locks; delete only exact obsolete meter's unequivocally unbilled/unlinked operational readings in same transaction as removal/replacement. Preserve retained meter, billed/draft/ambiguous/financial links, ledger values, rollback, audit, offline stale-ID rejection, after-commit safe image cleanup. Mixed financial+pending allowed only on supported provenance schema after proof existing retirement preserves all posted records; otherwise reject. No broad generic delete/bulk allowance, no global guard bypass, no schema/FK weakening. Two named legacy migration call sites 2026_11_12_230000 and 2026_11_14_010000 may be reviewed and minimally adapt explicit intent if necessary, no schema/ledger changes; already-run migration cleanup plan only, no production cleanup. Legacy financial conflicts remain protected. Reintroduce original 20-unit pending case in dedicated product test, not merely clean simulation. Coordinate B/A on exact financial balance comparison; no shared financial writer edits. If dependencies require other paths, submit scope request. Synthetic tests only, no main merge.",
+      "next": "Freeze 3572bf4 until cloud tests and A/D review; two legacy methods require separate empty synthetic schema per method per engine, explicit opt-in; ordinary replacement and protection tests plus 2 bounded MySQL races. Fix confirmed scoped failures only. Already-applied migration forward cleanup plan remains separate; no production deletion. No shared financial writer edits.",
       "branch": "fix/accounting-acc-10",
       "sha": "76eac62805247dcc31a993da307333d8f8ab5b1b",
       "round3": {
@@ -147,6 +152,11 @@
       "round5": {
         "head": "2f17b8f2484531e8c48ee2c71cf988762741c7ae",
         "evidence": "Candidate includes C ancestry; prior D scoped acceptance unchanged."
+      },
+      "round7": {
+        "head": "3572bf4f9968821651c7621cbce725e7da542788",
+        "files": 12,
+        "evidence": "PR78 and PR69 #7150458113: PHP lint12/12, diff/push exit0, original20-unit product regression, 2 legacy methods and 2 races defined, no Laravel runtime. Actual historical migration call sites changed; no live data or already-run replay."
       }
     },
     "D": {
@@ -155,7 +165,7 @@
       "assignment_delivery": "confirmed_by_owner",
       "activity_report": "owner_reports_round_two_finished",
       "evidence": "Independent team report on 01fae90: full Laravel SQLite/MySQL 223 pass/1 fail/6 skip each; Flutter 757 pass/1 fail/25 skip. Focused ACC-11 passes. QA-D-001 historical inventory; QA-D-002 1200 vs 800; QA-D-003 CI; QA-D-004 concurrency not executed.",
-      "next": "Round 7: recover full existing Codex candidate/P1/G10 reports, validate exact SHAs, revision, counts/exits/locks and isolation; no repeated tests merely to retrieve evidence. Static G10 fixture scope accepted, runtime still needs evidence. Independently review B/C correction branches and focused acceptance cases; ensure original 20-unit product regression restored, financial protection unchanged, mixed/legacy rollback and no current-meter loss. Review C's G07 ambiguous stored reading concern via targeted ordinary synthetic test proposal before any shared InvoiceService edit. No product edits/main merge, no previously restricted checks.",
+      "next": "Round 8 independent acceptance of final PR77/78 and exact cloud logs. Verify G10 corrected scenario screenshot 1/0/0 exit0 (raw report/actual SHA not visible); retain original candidate legacy-clean exit1 and prior fresh/financial passes. Review final source and test coverage, especially historical schema per-method isolation, no silent skips, transactional financial protection. Both B and C modify FinancialConcurrencyTest.php; preserve both sets in eventual composition. Do not rerun cloud checks merely to duplicate; no restricted probes. G07 stored ambiguous billing targeted proposal remains separate, no shared writer edits; full candidate regression deferred.",
       "round2": "Latest accessible interim report: reproduced QA-D-001/002 on main and ACC-11; PR62 SQLite 281 pass/17 skip/0 fail; MySQL concurrency started; final report not recovered.",
       "round3": {
         "reported_evidence": "Partial independent review; ACC10 QA-D-008/009/010 findings; ACC14 isolated acceptance and ACC09 contract-level evidence; full ACC10/Flutter results not recovered due to remote timeout.",
@@ -409,7 +419,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_6_DESIGN_HANDOFF_ACCEPTED_ROUND_7_SCOPED_CORRECTIONS_HOLD_MAIN",
+    "decision": "ROUND_7_IMPLEMENTATION_HANDOFF_RECEIVED_ROUND_8_FOCUSED_ACCEPTANCE_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -744,6 +754,34 @@
       "cloud": "Owner reports completion, full candidate/P1/revised G10 artifacts not recovered from GitHub/library/context. Preserve prior 292/26209, Flutter27, standalone30048 as reported; G10 original 2/3 not reclassified. Request original reports from Set up water, no rerun. New targeted tests only after new correction SHA.",
       "gates": "D independent focused evidence and C policy tests, P1 exact DB tests and correction acceptance, candidate composition on supervisor new SHA, then P2/P3 and ACC14/closing. P2 design conditionally accepted, no implementation. G02/G11 full suites deferred; G12 hosting/CI outstanding.",
       "limitations": "No latest Codex execution results independently retrieved; no tests/product edits by supervisor this turn. Frozen refs verified. No production data deletion or main merge."
+    },
+    "round8": {
+      "phase": "Freeze corrected B and C heads for targeted runtime acceptance; then compose new candidate",
+      "B": {
+        "sha": "8f52bdc324eaf266f70bbe3678b3422e48e38e02",
+        "branch": "integration/team-b-acc09-p1-corrections",
+        "pr": 77,
+        "tests": "15 P1 and 4 changed reversal per engine, 2 new ordinary MySQL races only; exact report filter, separate synthetic schemas sequential, no restricted checks"
+      },
+      "C": {
+        "sha": "3572bf4f9968821651c7621cbce725e7da542788",
+        "branch": "integration/team-c-obsolete-meter-cleanup",
+        "pr": 78,
+        "tests": "Four directly related current meter/purge/Filament/offline suites on each engine; historical product two methods each in distinct empty synthetic schema per engine with explicit opt-in per PR78; two ordinary MySQL races only; no destructive resets or production data"
+      },
+      "G10": {
+        "status": "REPORTED_CORRECTED_FIXTURE_PASS",
+        "source": "Owner screenshot corrected legacy-clean 1 pass/0 fail/0 skip exit0, required PASS marker. Actual corrected SHA not visible. Previous fresh and legacy-financial pass at f043851, original legacy-clean exit1 preserved. No assertion count. Runtime obsolete policy is separate."
+      },
+      "composition": "No merge now. After A/D and runtime acceptance, integrate B/C/G10 test-only patch onto new supervisor-controlled candidate, preserve both sets of tests in shared FinancialConcurrencyTest.php; verify full B ancestry relative to candidate and C base; main unchanged.",
+      "cloud": "Use same published water session sequentially, only new scoped tests, retrieve prior reports if available without rerun. If unsupported check report blocked, no restricted retries. Full suites and P2/P3/ACC14/closing deferred until respective gates.",
+      "sources": [
+        "https://github.com/iitij/water/pull/77#issuecomment-7150416613",
+        "https://github.com/iitij/water/pull/78",
+        "https://github.com/iitij/water/pull/69#issuecomment-7150458113",
+        "https://github.com/iitij/water/pull/72#issuecomment-7150351161"
+      ],
+      "limitations": "Latest A/D reviews predate final B/C heads. Supervisor verified branch heads, exact changed paths, B report and C legacy test/PR scope; no runtime execution. Owner screenshot G10 scoped only; exact full P1/candidate prior reports not recovered in this turn. No new merge, product changes, or actual data deletion."
     }
   }
 }
