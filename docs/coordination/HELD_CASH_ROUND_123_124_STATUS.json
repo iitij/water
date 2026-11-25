@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Check run 45686786184 and inspect exact failing steps only if any. Continue forward writer regression, journal protection, entrypoint fencing, concurrency and closing. No repeat of round124 or accepted baselines.",
+  "next": "Round126: verify and harden release journal protection before new shadow approval or verified journal inspection; then remaining prospective writer regression and closure gates.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -93,12 +93,29 @@
     ]
   },
   "round125": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "d3167ff88b66b453c75e6b1e37e8d88ac5ff2b27",
     "branch": "qa/held-cash-actual-loss-round125",
     "source": "cc7a2c98d1604d77fcb3e5238ae0f95271e2bb2c",
     "run": 45686786184,
     "scope": "One new prospective actual-loss test on SQLite and MySQL. New synthetic count after a shadow release; record real-loss evidence without extinguishing held liability or subscriber credit; assert exact shortfall, block further proposal and ordinary funding, replay once, unchanged subscriber ledger and allocation evidence. Round123 base selected to exclude round124 historical correction test from new branch; prior evidence preserved.",
-    "limits": "Comparison confirms only test and incremental workflow changed; no product fix, no production, no main, no real data changes. CI not yet accepted; do not infer global safety or enable actual release."
+    "limits": "Exact source and raw logs verified. Only the new test ran per engine; not global financial safety. Product remains unchanged and actual reserve reduction is not authorized.",
+    "jobs": [
+      {
+        "id": 139461369395,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 33,
+        "exit": 0
+      },
+      {
+        "id": 139461369241,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 33,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
