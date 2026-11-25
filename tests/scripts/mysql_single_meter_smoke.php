@@ -2,156 +2,215 @@
 
 declare(strict_types=1);
 
-// Run ONLY on a disposable MySQL database after migrate:fresh.
-require dirname(__DIR__, 2).'/vendor/autoload.php';
-$app = require dirname(__DIR__, 2).'/bootstrap/app.php';
-$app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Validation\ValidationException;
 
-if (DB::connection()->getDriverName() !== 'mysql') {
-    throw new RuntimeException('Refusing to run: expected MySQL.');
-}
-if (! str_contains((string) DB::connection()->getDatabaseName(), 'test')) {
-    throw new RuntimeException('Refusing to run against a non-test database.');
-}
-if (Schema::hasColumn('meters', 'current_subscriber_id')) {
-    throw new RuntimeException('Obsolete generated current_subscriber_id must be removed.');
-}
-foreach (['ten'.'ant_name', 'ten'.'ant_phone'] as $column) {
-    if (Schema::hasColumn('meters', $column)) {
-        throw new RuntimeException('Obsolete identity column still exists: '.$column);
+/**
+ * Run only against an isolated synthetic MySQL water_test database.
+ * fresh: caller has migrated an empty database to the current schema.
+ * legacy-clean / legacy-financial: caller provides an entirely empty schema.
+ * Never dismantle a current schema to emulate a historical schema.
+ */
+function requireCondition(bool $condition, string $message): void
+{
+    if (! $condition) {
+        throw new RuntimeException($message);
     }
 }
 
-$square = DB::table('squares')->insertGetId(['name' => 'strict single meter MySQL smoke']);
-$subscriber = DB::table('subscribers')->insertGetId([
-    'name' => 'strict single meter MySQL subscriber',
-    'square_id' => $square,
-]);
-$old = DB::table('meters')->insertGetId([
-    'unique_code' => 'mysql-meter-old',
-    'subscriber_id' => $subscriber,
-    'status' => 'inactive',
-]);
-
-$expectDuplicate = static function (callable $operation): void {
+function expectMySqlError(callable $operation, int $code): void
+{
     try {
         $operation();
     } catch (QueryException $exception) {
-        if (($exception->errorInfo[1] ?? null) === 1062) {
+        if ((int) ($exception->errorInfo[1] ?? 0) === $code) {
             return;
         }
         throw $exception;
     }
-    throw new RuntimeException('BUG: database accepted a second physical meter.');
-};
-
-// Inactive is still the sole meter.
-$expectDuplicate(fn () => DB::table('meters')->insert([
-    'unique_code' => 'mysql-meter-duplicate',
-    'subscriber_id' => $subscriber,
-]));
-
-// Even legacy removed or soft-deleted rows must keep the slot occupied.
-DB::table('meters')->where('id', $old)->update([
-    'removed_at' => '2026-11-01',
-    'deleted_at' => now(),
-]);
-$expectDuplicate(fn () => DB::table('meters')->insert([
-    'unique_code' => 'mysql-meter-after-removal',
-    'subscriber_id' => $subscriber,
-]));
-
-// Replacement requires physical deletion of the prior meter.
-DB::table('meters')->where('id', $old)->delete();
-$new = DB::table('meters')->insertGetId([
-    'unique_code' => 'mysql-meter-replacement',
-    'subscriber_id' => $subscriber,
-]);
-if (DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1
-    || DB::table('meters')->where('id', $old)->exists()
-    || ! DB::table('meters')->where('id', $new)->exists()) {
-    throw new RuntimeException('BUG: prior meter still exists or replacement is missing.');
+    throw new RuntimeException("Expected MySQL error {$code}, but the write succeeded.");
 }
 
-
- // Simulate the prior schema with a current meter plus a historical one.
- // This proves the new migration removes pre-existing data, not just that
- // a freshly created database is valid.
- Schema::table('meters', function (Blueprint $table): void {
-     $table->dropUnique('meters_one_per_subscriber');
- });
- Schema::table('meters', function (Blueprint $table): void {
-     $table->unsignedBigInteger('current_subscriber_id')
-         ->nullable()
-         ->virtualAs('CASE WHEN removed_at IS NULL AND deleted_at IS NULL THEN subscriber_id ELSE NULL END');
-     $table->unique('current_subscriber_id', 'meters_one_current_per_subscriber');
- });
- $obsolete = DB::table('meters')->insertGetId([
-     'unique_code' => 'mysql-meter-obsolete-history',
-     'subscriber_id' => $subscriber,
-     'removed_at' => '2026-11-01',
- ]);
- $obsoleteInvoice = DB::table('invoices')->insertGetId([
-     'subscriber_id' => $subscriber,
-     'meter_id' => $obsolete,
-     'bill_number' => 'MYSQL-HIST-INV',
-     'bill_date' => '2026-11-14',
-     'invoice_type' => 'meter',
- ]);
- $obsoleteReceipt = DB::table('payments')->insertGetId([
-     'subscriber_id' => $subscriber,
-     'meter_id' => $obsolete,
-     'invoice_id' => $obsoleteInvoice,
-     'receipt_number' => 'MYSQL-HIST-REC',
-     'payment_date' => '2026-11-14',
-     'payment_method' => 'cash',
-     'amount' => 20,
- ]);
- $migration = require dirname(__DIR__, 2).'/database/migrations/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php';
- $migration->up();
- if (DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1
-     || DB::table('meters')->where('id', $obsolete)->exists()
-     || ! DB::table('meters')->where('id', $new)->exists()
-     || DB::table('invoices')->where('id', $obsoleteInvoice)->exists()
-     || DB::table('payments')->where('id', $obsoleteReceipt)->exists()
-     || Schema::hasColumn('meters', 'current_subscriber_id')) {
-     throw new RuntimeException('BUG: data backfill retained historical meter or finance.');
- }
- $expectDuplicate(fn () => DB::table('meters')->insert([
-     'unique_code' => 'mysql-meter-after-migration',
-     'subscriber_id' => $subscriber,
- ]));
- 
- echo "PASS: MySQL one physical meter, irreversible legacy backfill and linked finance cleanup.\n";
-// A database skipping the 2026-11-12 migration might still contain two
-// CURRENT meters. Run the older migration before the final strict migration
-// to prove that the older preflight no longer blocks the owner-requested
-// cleanup or silently reuses an obsolete meter.
-Schema::table('meters', function (Blueprint $table): void {
-    $table->dropUnique('meters_one_per_subscriber');
-});
-$latestId = DB::table('meters')->insertGetId([
-    'unique_code' => 'mysql-meter-new-current',
-    'subscriber_id' => $subscriber,
-]);
-$olderMigration = require dirname(__DIR__, 2).'/database/migrations/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php';
-$olderMigration->up();
-if (DB::table('meters')->where('id', $new)->exists()
-    || ! DB::table('meters')->where('id', $latestId)->exists()
-    || DB::table('meters')->where('subscriber_id', $subscriber)->count() !== 1) {
-    throw new RuntimeException('BUG: earlier migration did not erase duplicate current meter.');
+function assertForeignKey(): void
+{
+    requireCondition((int) DB::selectOne('SELECT @@SESSION.foreign_key_checks AS enabled')->enabled === 1,
+        'Foreign key checks must remain enabled.');
+    $foreignKeys = Schema::getForeignKeys('meters');
+    requireCondition(collect($foreignKeys)->contains(fn (array $key): bool =>
+        $key['columns'] === ['subscriber_id']
+        && $key['foreign_table'] === 'subscribers'
+        && $key['foreign_columns'] === ['id']
+        && strtolower($key['on_delete'] ?? '') === 'cascade'),
+        'The subscriber foreign key or its delete rule is missing.');
+    $missing = ((int) DB::table('subscribers')->max('id')) + 1;
+    expectMySqlError(fn () => DB::table('meters')->insert([
+        'unique_code' => 'qa-orphan-meter', 'subscriber_id' => $missing,
+    ]), 1452);
 }
-$migration->up();
-$expectDuplicate(fn () => DB::table('meters')->insert([
-    'unique_code' => 'mysql-meter-final-duplicate',
-    'subscriber_id' => $subscriber,
-]));
 
-echo "PASS: pre-existing duplicate current meters also purge before the legacy migration.\n";
+function assertStrictSchema(): void
+{
+    requireCondition(! Schema::hasColumn('meters', 'current_subscriber_id'), 'Obsolete generated column remains.');
+    foreach (['ten'.'ant_name', 'ten'.'ant_phone'] as $column) {
+        requireCondition(! Schema::hasColumn('meters', $column), 'Obsolete identity column remains: '.$column);
+    }
+    requireCondition(collect(Schema::getIndexes('meters'))->contains(fn (array $index): bool =>
+        $index['name'] === 'meters_one_per_subscriber'
+        && $index['columns'] === ['subscriber_id'] && $index['unique']),
+        'Final single-meter unique index is missing.');
+    assertForeignKey();
+}
 
+function subscriber(string $name): int
+{
+    $square = DB::table('squares')->insertGetId(['name' => $name]);
+    return (int) DB::table('subscribers')->insertGetId(['name' => $name, 'square_id' => $square]);
+}
 
+function meter(int $subscriber, string $code, array $attributes = []): int
+{
+    return (int) DB::table('meters')->insertGetId($attributes + [
+        'subscriber_id' => $subscriber, 'unique_code' => $code,
+    ]);
+}
+
+function expectDuplicateMeter(int $subscriber, string $code): void
+{
+    expectMySqlError(fn () => meter($subscriber, $code), 1062);
+}
+
+function migratePaths(array $paths): void
+{
+    requireCondition($paths !== [], 'No migration paths selected.');
+    $result = Artisan::call('migrate', ['--path' => $paths, '--realpath' => true, '--force' => true, '--no-interaction' => true]);
+    fwrite(STDOUT, Artisan::output());
+    requireCondition($result === 0, 'Migration command failed.');
+}
+
+function freshScenario(): void
+{
+    assertStrictSchema();
+    requireCondition(DB::table('meters')->count() === 0 && DB::table('subscribers')->count() === 0,
+        'Expected fresh synthetic schema with no subscriber or meter records.');
+    $subscriber = subscriber('QA fresh single meter');
+    $old = meter($subscriber, 'qa-fresh-old', ['status' => 'inactive']);
+    expectDuplicateMeter($subscriber, 'qa-fresh-duplicate');
+    DB::table('meters')->where('id', $old)->update(['removed_at' => '2026-11-01', 'deleted_at' => now()]);
+    expectDuplicateMeter($subscriber, 'qa-fresh-after-removal');
+    DB::table('meters')->where('id', $old)->delete();
+    $new = meter($subscriber, 'qa-fresh-replacement');
+    requireCondition(DB::table('meters')->where('subscriber_id', $subscriber)->count() === 1
+        && ! DB::table('meters')->where('id', $old)->exists()
+        && DB::table('meters')->where('id', $new)->exists(), 'Replacement did not preserve one physical meter.');
+    assertStrictSchema();
+    echo "PASS: fresh single-meter uniqueness and foreign key\n";
+}
+
+function legacyScenario(bool $financial): void
+{
+    requireCondition(Schema::getTables() === [], 'Legacy fixture requires an entirely empty disposable schema.');
+    $directory = dirname(__DIR__, 2).'/database/migrations';
+    $first = $directory.'/2026_11_12_230000_enforce_one_current_meter_per_subscriber.php';
+    $strict = $directory.'/2026_11_14_010000_enforce_one_meter_record_per_subscriber.php';
+    requireCondition(is_file($first) && is_file($strict), 'Expected historical migration boundary not found.');
+    $paths = glob($directory.'/*.php') ?: [];
+    sort($paths, SORT_STRING);
+    migratePaths(array_values(array_filter($paths, fn (string $path): bool => strcmp($path, $first) < 0)));
+    requireCondition(! Schema::hasColumn('meters', 'current_subscriber_id'), 'Unexpected historical schema.');
+    assertForeignKey();
+
+    $subscriber = subscriber('QA historical single meter');
+    $historical = meter($subscriber, 'qa-legacy-removed', ['removed_at' => '2026-11-01']);
+    $oldCurrent = meter($subscriber, 'qa-legacy-current-old');
+    $newCurrent = meter($subscriber, 'qa-legacy-current-new');
+    $softDeleted = meter($subscriber, 'qa-legacy-soft-deleted', ['deleted_at' => now()]);
+    $reading = DB::table('readings')->insertGetId([
+        'meter_id' => $historical, 'reading_date' => '2026-10-31',
+        'period_start' => '2026-10-01', 'period_end' => '2026-10-31',
+        'previous_reading' => 0, 'current_reading' => 20, 'consumption_units' => 20,
+    ]);
+
+    // The actual older migration must remove only the obsolete current meter.
+    migratePaths([$first]);
+    requireCondition(Schema::hasColumn('meters', 'current_subscriber_id')
+        && ! DB::table('meters')->where('id', $oldCurrent)->exists()
+        && DB::table('meters')->where('id', $newCurrent)->exists()
+        && DB::table('meters')->where('id', $historical)->exists()
+        && DB::table('meters')->where('id', $softDeleted)->exists(),
+        'Earlier migration did not preserve the expected historical/current rows.');
+    assertForeignKey();
+    expectDuplicateMeter($subscriber, 'qa-legacy-duplicate-current');
+
+    if ($financial) {
+        // Current MeterDataPurger must refuse to delete financial history.
+        $invoice = DB::table('invoices')->insertGetId([
+            'subscriber_id' => $subscriber, 'meter_id' => $historical,
+            'bill_number' => 'QA-LEGACY-INV', 'bill_date' => '2026-10-31',
+            'invoice_type' => 'meter', 'total_amount' => '50.00',
+        ]);
+        DB::table('payments')->insert([
+            'subscriber_id' => $subscriber, 'meter_id' => $historical, 'invoice_id' => $invoice,
+            'receipt_number' => 'QA-LEGACY-REC', 'payment_date' => '2026-11-01',
+            'payment_method' => 'cash', 'amount' => '20.00',
+        ]);
+        $snapshot = fn (): array => array_map(
+            fn (string $table) => DB::table($table)->orderBy('id')->get()->all(),
+            ['meters', 'invoices', 'payments', 'readings', 'transactions', 'subscribers']
+        );
+        $before = $snapshot();
+        $rejected = false;
+        try {
+            // Call the unchanged migration directly to inspect its domain exception.
+            (require $strict)->up();
+        } catch (ValidationException $exception) {
+            $rejected = array_key_exists('meter_id', $exception->errors());
+            if (! $rejected) {
+                throw $exception;
+            }
+        }
+        requireCondition($rejected, 'Strict migration did not reject a financially protected meter.');
+        requireCondition($before == $snapshot(), 'Financial rejection changed fixture records.');
+        requireCondition(Schema::hasColumn('meters', 'current_subscriber_id')
+            && ! DB::table('migrations')->where('migration', basename($strict, '.php'))->exists(),
+            'Rejected strict migration changed the schema or migration history.');
+        assertForeignKey();
+        expectDuplicateMeter($subscriber, 'qa-legacy-after-rejection');
+        echo "PASS: historical financial protection and rollback\n";
+        return;
+    }
+
+    migratePaths([$strict]);
+    requireCondition(DB::table('meters')->where('subscriber_id', $subscriber)->count() === 1
+        && DB::table('meters')->where('id', $newCurrent)->exists()
+        && ! DB::table('meters')->whereIn('id', [$oldCurrent, $historical, $softDeleted])->exists()
+        && ! DB::table('readings')->where('id', $reading)->exists(),
+        'Strict migration did not remove obsolete unbilled operational records.');
+    assertStrictSchema();
+    expectDuplicateMeter($subscriber, 'qa-legacy-final-duplicate');
+    echo "PASS: historical operational cleanup and final constraints\n";
+}
+
+try {
+    require dirname(__DIR__, 2).'/vendor/autoload.php';
+    $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
+    $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    requireCondition($app->environment('testing')
+        && DB::connection()->getDriverName() === 'mysql'
+        && DB::connection()->getDatabaseName() === 'water_test'
+        && getenv('WATER_SINGLE_METER_TEST_DB') === 'water_test',
+        'Refusing to run without explicit isolated MySQL water_test authorization.');
+    $mode = $argv[1] ?? 'fresh';
+    match ($mode) {
+        'fresh' => freshScenario(),
+        'legacy-clean' => legacyScenario(false),
+        'legacy-financial' => legacyScenario(true),
+        default => throw new InvalidArgumentException('Unknown smoke test mode.'),
+    };
+    exit(0);
+} catch (Throwable $exception) {
+    fwrite(STDERR, 'FAIL: '.get_class($exception).': '.$exception->getMessage().PHP_EOL);
+    exit(1);
+}
