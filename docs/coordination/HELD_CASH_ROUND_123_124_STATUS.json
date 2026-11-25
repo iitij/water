@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify targeted SQLite/MySQL CI at exact source; fix confirmed failures only. Review remaining ordinary cash bypasses and separate settlement source contracts; continue release integration.",
+  "next": "Verify new exact CI, fix only confirmed failures, then protect late cash settlement and direct lateReviewId bypass before wiring actual settlement entrypoints.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-cash-receipt-actions",
-      "commit": "2fe12d1a5490fd5bd860c53ace2ad02aad3cb0d8",
-      "run": 45711573711,
-      "sqlite": "1 test, 32 assertions",
-      "mysql": "1 test, 32 assertions",
-      "scope": "SubscriberResource and InvoiceResource collect_payment table actions share ProspectiveCashReceiptAction with stable mounted UUID, date, explicit original till, cash-only candidate options, server create permission, no float coercion, no legacy fallback on conflicts. One new Livewire case exercises both modals, closed gate, replay across routes and cash/reserve conservation."
+      "branch": "release/prospective-cash-receipt-fence",
+      "commit": "6f94a5286b5f9f1dea4befe9cc22c8eff6bb9f5c",
+      "run": 45712434833,
+      "sqlite": "1 test, 25 assertions",
+      "mysql": "1 test, 25 assertions",
+      "scope": "Ordinary cash PaymentService posting requires private verified GatedCashReceiptWriter subscriber/UUID scope when candidate switch enabled; ordinary registry UUID replay cannot bypass fence when switch disabled. Check after issuance lock before business effects. Targeted test covers direct bypass, passing inactive writer within transaction, closed period, exact gated replay, default-off distinct legacy operation and unchanged treasury."
     }
   },
   "round146": {
@@ -1108,12 +1108,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_cash_receipt_service_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "2fe12d1a5490fd5bd860c53ace2ad02aad3cb0d8",
     "branch": "release/prospective-cash-receipt-fence",
     "source": "6f94a5286b5f9f1dea4befe9cc22c8eff6bb9f5c",
     "scope": "Ordinary cash PaymentService posting requires private verified GatedCashReceiptWriter subscriber/UUID scope when candidate switch enabled; ordinary registry UUID replay cannot bypass fence when switch disabled. Check after issuance lock before business effects. Targeted test covers direct bypass, passing inactive writer within transaction, closed period, exact gated replay, default-off distinct legacy operation and unchanged treasury.",
-    "limits": "CI result not visible via connector (PR-filtered run lookup). No acceptance, full writer inventory, late/noncash settlement fence, raw mutation coverage or production activation. No historical remediation or main merge.",
-    "next": "Verify targeted SQLite/MySQL CI at exact source; fix confirmed failures only. Review remaining ordinary cash bypasses and separate settlement source contracts; continue release integration."
+    "limits": "Exact source, raw logs and lock hash verified. Targeted case only; no full writer inventory, settlement fence, production activation, real data or main changes.",
+    "next": "Protect distinct settlement source contracts without repeating accepted tests.",
+    "run": 45712434833,
+    "jobs": [
+      {
+        "id": 139549973837,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 25,
+        "exit": 0
+      },
+      {
+        "id": 139549973174,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 25,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_noncash_settlement_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "6f94a5286b5f9f1dea4befe9cc22c8eff6bb9f5c",
+    "branch": "release/prospective-noncash-settlement-fence",
+    "source": "ceff61814d61fffb69b9139f0208f6924e4ed1de",
+    "scope": "Private kind/claim ID/UUID mutation scope in GatedCollectionWriter; PaymentService ordinary noncash and late bank clearance require scope when isolated default-off noncash_settlements flag enabled; registered UUID protected even flag off. Two targeted new tests cover rejection, closed period, exact dual-leg registration and replay with unchanged cash reserve.",
+    "limits": "CI not yet verified. Actual HTTP/Filament settlement routes not yet wired; late cash, already-counted, direct lateReviewId issuance, bank direct writes and broader inventory separate. No real data, historical remediation, main merge or production activation.",
+    "next": "Verify new exact CI, fix only confirmed failures, then protect late cash settlement and direct lateReviewId bypass before wiring actual settlement entrypoints."
   }
 }
