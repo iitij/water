@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 64,
+    "round": 65,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3644,7 +3644,7 @@
     },
     "round64": {
       "phase": "Actual bank collection and separate late cash evidence",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "8fd4f214fe68f423fabda85c8c6230dac99193e8",
       "source": "802fd4449dafe425f714e532e28e0f1cfc23c749",
       "workflow": "f6a41d4336b3845b274846fe54e90e6caf438ad9",
@@ -3653,13 +3653,52 @@
       "runs": [
         {
           "id": 45614984136,
-          "name": "Treasury collection source evidence",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "scope": "Two new cases per engine and 14 affected verifier cases per engine. Actual bank clearance of legacy receipt linked to subscriber ledger and corruption rejection; separate late cash two-leg evidence and atomic rollback.",
+      "limits": "Claim clearing, already-counted late receipt and complete source coverage not certified. Legacy subscriber-first writers can invert issuance-first verifier locks; no concurrent production activation until fencing and reviewed lock protocol. No main merge or production data.",
+      "results": {
+        "sqlite": {
+          "job": 139207939940,
+          "tests": 16,
+          "assertions": 169,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139207939415,
+          "tests": 16,
+          "assertions": 169,
+          "exit": 0
+        },
+        "total": {
+          "tests": 32,
+          "assertions": 338,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round65": {
+      "phase": "Noncash claim and late collection source proof",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "802fd4449dafe425f714e532e28e0f1cfc23c749",
+      "source": "f6271daad0b4fde40ae7ea9236792e9a895f9f58",
+      "workflow": "ecf821a02402cd5c40106b91a965ed2f221e8305",
+      "branch": "fix/central-g1b-collection-claim-proof",
+      "pr": 142,
+      "runs": [
+        {
+          "id": 45615481772,
+          "name": "Collection claim source proof",
           "status": "queued",
           "conclusion": null
         }
       ],
-      "scope": "Two new cases per engine and 14 affected verifier cases per engine. Actual bank clearance of legacy receipt linked to subscriber ledger and corruption rejection; separate late cash two-leg evidence and atomic rollback.",
-      "limits": "Claim clearing, already-counted late receipt and complete source coverage not certified. Legacy subscriber-first writers can invert issuance-first verifier locks; no concurrent production activation until fencing and reviewed lock protocol. No main merge or production data."
+      "scope": "Bind linked claim and late bank review decision identity and original dates to treasury source hash. Three new cases and two directly affected regressions per engine: claim two-leg atomic rollback, date tamper rejection, late noncash two-leg clearance, already counted cash subscriber-only effect and allocation.",
+      "limits": "Independent already-counted allocation proof and complete source coverage remain open. Scope-first writer fencing and global lock order must be proved before activation. No main merge or production changes."
     }
   }
 }
