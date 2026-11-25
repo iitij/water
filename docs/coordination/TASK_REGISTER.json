@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 105,
+    "round": 106,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4748,7 +4748,7 @@
     },
     "round105": {
       "phase": "Append-only held source protection, reversal-safe credit evidence, shared evidence reference checks and mobile verification",
-      "status": "PRIOR_BOTH_ENGINES_CONFIRMED_NEW_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "status": "BOTH_ENGINES_PASS_FOCUSED_SELECTED_REGRESSIONS",
       "base": "647312ae112fcd6a80f1e39e0da9be4120d90874",
       "branch": "fix/central-g1a-surplus-liability",
       "source": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
@@ -4779,18 +4779,53 @@
           "head_sha": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
           "jobs": [
             {
-              "id": 139324299880,
-              "engine": "mysql",
-              "status": "in_progress",
-              "conclusion": null
-            },
-            {
               "id": 139324300214,
               "engine": "sqlite",
-              "status": "in_progress",
-              "conclusion": null
+              "status": "completed",
+              "conclusion": "success",
+              "focused": {
+                "tests": 41,
+                "assertions": 405,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 16,
+                "assertions": 152,
+                "exit": 0
+              },
+              "registry": {
+                "tests": 6,
+                "assertions": 48,
+                "exit": 0
+              },
+              "tests": 63,
+              "assertions": 605
+            },
+            {
+              "id": 139324299880,
+              "engine": "mysql",
+              "status": "completed",
+              "conclusion": "success",
+              "focused": {
+                "tests": 41,
+                "assertions": 399,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 13,
+                "assertions": 118,
+                "exit": 0
+              },
+              "registry": {
+                "tests": 6,
+                "assertions": 48,
+                "exit": 0
+              },
+              "tests": 60,
+              "assertions": 565
             }
-          ]
+          ],
+          "conclusion": "success"
         }
       ],
       "flutter": {
@@ -4806,8 +4841,97 @@
       },
       "syntax_validation": "Four changed PHP files linted at exact new SHA; exit 0; no working-tree checkout or database access. Retired feature gate exact 45648047272 success.",
       "scope": "Install append-only update/delete triggers for six held document families and explicit SQLite REPLACE protection for PK/unique document identities; three new feature methods prove actual source immutability, cancellation of an invoice restores unapplied credit without cash changes and all reserve remains, and shared evidence references cannot be reused across held document families. Existing corruption reconstruction case deliberately drops assignment protection only in isolated fixture then restores it; previous independent corruption assertions retained. Centralize reference conflicts on held writers with existing treasury evidence sources. Correct round104 MySQL test count from actual log.",
-      "limits": "New exact workflow acceptance pending unless subsequent exact jobs succeed. No DB-admin-proof security or full insert authorization, and existing legacy writers still require reverse reference and UUID fencing. Conservative reserve not released on invoice allocation because cancellation can restore credit. Flutter local focused tests passed with temporary dependency changes, not reproducible locked suite. No production, main or live data changes.",
+      "limits": "Exact workflow focused and selected regression suites passed; not final system acceptance. No DB-admin-proof security or full insert authorization, and existing legacy writers still require reverse reference and UUID fencing. Conservative reserve not released on invoice allocation because cancellation can restore credit. Flutter local focused tests passed with temporary dependency changes, not reproducible locked suite. No production, main or live data changes.",
       "next": "Check exact run 45648047245, correct confirmed failures, evaluate fenced release and replenishment invariant, independently review and finish task-one acceptance; do not claim global coverage, entrypoint fencing, concurrency or permanent closure."
+    },
+    "round106": {
+      "phase": "Guard held liquidity against documented unposted cash refunds",
+      "status": "ROUND105_BOTH_ENGINES_CONFIRMED_NEW_SOURCE_LINT_PASS_RUNTIME_PENDING",
+      "base": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
+      "branch": "fix/central-g1a-surplus-liability",
+      "source": "ddcb19da957b9b07094512bdd32a8d1b7a4b7c3a",
+      "runs": [
+        {
+          "id": 45648047245,
+          "head_sha": "8493e03032fd56425b8e0ef29794fc591ef4c1f7",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "id": 139324300214,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success",
+              "focused": {
+                "tests": 41,
+                "assertions": 405,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 16,
+                "assertions": 152,
+                "exit": 0
+              },
+              "registry": {
+                "tests": 6,
+                "assertions": 48,
+                "exit": 0
+              },
+              "tests": 63,
+              "assertions": 605
+            },
+            {
+              "id": 139324299880,
+              "engine": "mysql",
+              "status": "completed",
+              "conclusion": "success",
+              "focused": {
+                "tests": 41,
+                "assertions": 399,
+                "exit": 0
+              },
+              "regression": {
+                "tests": 13,
+                "assertions": 118,
+                "exit": 0
+              },
+              "registry": {
+                "tests": 6,
+                "assertions": 48,
+                "exit": 0
+              },
+              "tests": 60,
+              "assertions": 565
+            }
+          ]
+        },
+        {
+          "id": 45648747684,
+          "head_sha": "ddcb19da957b9b07094512bdd32a8d1b7a4b7c3a",
+          "jobs": [
+            {
+              "id": 139326993898,
+              "engine": "sqlite",
+              "status": "completed",
+              "conclusion": "success",
+              "results": [
+                "2026-11-25T15:47:42.5776767Z \u001b[30;42mOK (43 tests, 423 assertions)\u001b[0m",
+                "2026-11-25T15:47:43.6885651Z \u001b[30;42mOK (16 tests, 152 assertions)\u001b[0m",
+                "2026-11-25T15:47:44.8536216Z \u001b[30;42mOK (6 tests, 48 assertions)\u001b[0m"
+              ]
+            },
+            {
+              "id": 139326994296,
+              "engine": "mysql",
+              "status": "in_progress",
+              "conclusion": null
+            }
+          ]
+        }
+      ],
+      "syntax_validation": "All five changed PHP files linted at exact fetched SHA on msi; exit 0, no existing checkout or DB changed. Atomic Git tree commit, fast-forward with expected parent. Normal single-file connector update failed internally before commit; confirmed unchanged and used alternate tree commit.",
+      "scope": "Protect held cash against already executed cash refunds recorded but not yet posted to any account: exact channel-wide sum, conservative per-account deduction whenever held liabilities or held-derived credit reserve exist; exclude the exact cash refund being posted only once with verified amount and identity. Held payout authorization and execution require cash sufficient for both protected amounts and unposted cash refund evidence. Report channel-wide unposted cash amount separately and possible held cash liquidity shortfall; no invented account assignment. Refund recording takes existing issuance lock after subscriber lock, consistent with legacy payment order, to serialize creation with treasury reservation. Two new synthetic tests for exact spendable threshold and no double counting after posting, and possible one-minor shortfall blocking owner payout. Existing evidence remains recorded even if posting blocked.",
+      "limits": "No certification of physical cash or pre-disbursement control for ordinary cash refund, transfer or collector funding: those legacy services document already executed custody movement. Channel-wide reserve is deliberately conservative across multiple accounts, not additive account-level liabilities or proof of actual per-account deficit. No release of applied held-derived credit; invoice cancellation proves it can reopen. Existing lock-order inversion between legacy subscriber-first and gate-first writers requires comprehensive concurrency review; no concurrency acceptance claimed. New exact runtime results pending unless verified. Existing coverage checks do not yet prove all treasury posting sources. No main, production or real data changes.",
+      "next": "Read exact run 45648747684, address proven failures; run directly affected refund and treasury custody regressions, then design independently evidenced liquidity release after irrevocable financial close or fully fenced replenishment and verify source coverage; no premature task-one closure."
     }
   }
 }
