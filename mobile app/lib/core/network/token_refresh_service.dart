@@ -87,7 +87,8 @@ class TokenRefreshService {
         ApiEndpoints.refresh,
         options: Options(
           headers: <String, dynamic>{'Authorization': 'Bearer $current'},
-          extra: const <String, dynamic>{
+          extra: <String, dynamic>{
+            'authSessionGeneration': generation,
             'skipAuth': true,
             'skipRefresh': true,
             'skipOfflineCache': true,
