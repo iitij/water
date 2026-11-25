@@ -2561,7 +2561,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
         $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
         $this->assertFalse($verified['source_coverage_verified']);
-        $this->assertSame(2, $verified['registered_ledger_legs_verified']);
+        // Includes the independently registered held-credit ledger leg in this fixture.
+        $this->assertSame(3, $verified['registered_ledger_legs_verified']);
     }
 
     public function test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay(): void
@@ -2618,7 +2619,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
         $this->assertDatabaseCount('payment_account_transfers', 1);
         $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
-        $this->assertSame(3, $verified['registered_ledger_legs_verified']);
+        // Includes the independently registered held-credit ledger leg in this fixture.
+        $this->assertSame(4, $verified['registered_ledger_legs_verified']);
         $this->assertFalse($verified['source_coverage_verified']);
     }
 
