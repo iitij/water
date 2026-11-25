@@ -100,7 +100,7 @@ class CashSessionController extends ApiController
 
         $session = $this->sessions->open(
             $user,
-            (float) ($data['opening_amount'] ?? 0),
+            ($data['opening_amount'] ?? 0),
             $data['square_id'] ?? null,
             $data['notes'] ?? null,
         );
@@ -132,7 +132,7 @@ class CashSessionController extends ApiController
 
         $session = $this->sessions->close(
             $session,
-            (float) $data['counted_amount'],
+            $data['counted_amount'],
             $data['notes'] ?? null,
         );
 
@@ -239,7 +239,7 @@ class CashSessionController extends ApiController
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
         $session = CashSession::findOrFail($id);
-        $handover = $service->record($session, $request->user(), (float) $data['amount'],
+        $handover = $service->record($session, $request->user(), $data['amount'],
             $data['reference'], $data['received_on'], $data['evidence']);
 
         return response()->json([
