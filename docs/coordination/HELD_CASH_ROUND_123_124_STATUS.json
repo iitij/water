@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Integrate the verified request identity through PaymentController and Filament VoidRequestsTable, preserving authorization, compatibility and pending-request identity from display to submission. Test both normal entry points before activation.",
+  "next": "Round146: prove transit movements from verified dispatch and receipt documents at explicit period boundary; no historical adoption or closure.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -712,7 +712,7 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round145": {
-    "status": "TARGETED_CI_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "d3892e9fa5046ccc9d19ce5773056087673622c2",
     "branch": "qa/carry-continuity-round145",
     "source": "b5fc0cb0de1d034e67a6d4981c008045bbdbf327",
@@ -722,20 +722,21 @@
     "next": "Complete prospective writer behavior and connect verified entry points on a release candidate. First close the receipt void rejection replay gap. Preserve original decision audit and prevent duplicate effects.",
     "jobs": [
       {
-        "id": 139517348351,
-        "engine": "mysql",
-        "tests": 4,
-        "assertions": 33,
-        "exit": 0
-      },
-      {
         "id": 139517348750,
         "engine": "sqlite",
         "tests": 4,
         "assertions": 33,
         "exit": 0
+      },
+      {
+        "id": 139517348351,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 33,
+        "exit": 0
       }
-    ]
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "delivery_goal": {
     "status": "ACTIVE",
