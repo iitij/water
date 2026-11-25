@@ -19,7 +19,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class PaymentAccountTransferService
 {
-    public function transfer(Payment $receipt, int $destinationId, User $actor, string $reason, string $evidence): PaymentAccountTransfer
+    public function transfer(Payment $receipt, int $destinationId, User $actor, string $reason, string $evidence,
+        ?GatedInvoiceTransferWriter $gatedWriter = null): PaymentAccountTransfer
     {
         abort_unless($actor->hasRole('super_admin') ||
             ($actor->can('cash_sessions.approve') && $actor->can('payments.void.approve')), 403);
@@ -31,7 +32,7 @@ final class PaymentAccountTransferService
         if ($destinationId === (int) $receipt->subscriber_id) {
             throw ValidationException::withMessages(['to_subscriber_id' => 'يجب اختيار مشترك مختلف.']);
         }
-        return DB::transaction(function () use ($receipt, $destinationId, $actor, $reason, $evidence) {
+        return DB::transaction(function () use ($receipt, $destinationId, $actor, $reason, $evidence, $gatedWriter) {
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
@@ -50,7 +51,28 @@ final class PaymentAccountTransferService
                 abort_if((int) $session->user_id === (int) $actor->id, 403, 'لا يجوز اعتماد تصحيح صندوقك بنفسك.');
             }
             abort_if($receipt->user_id && (int) $receipt->user_id === (int) $actor->id, 403, 'لا يجوز اعتماد تصحيح سندك بنفسك.');
-            $existing = PaymentAccountTransfer::where('payment_id', $receipt->id)->first();
+            $existing = PaymentAccountTransfer::where('payment_id', $receipt->id)->lockForUpdate()->first();
+            $registered = false;
+            if ($existing !== null) {
+                $ids = \App\Models\Transaction::withTrashed()->where(function ($query) use ($receipt, $existing) {
+                    $query->where(fn ($q) => $q->where('reference_type', Payment::class)
+                        ->where('reference_id', $receipt->id)->where('type', 'payment_reversal'))
+                        ->orWhere(fn ($q) => $q->where('reference_type', PaymentAccountTransfer::class)
+                            ->where('reference_id', $existing->id)->where('type', 'payment_transfer_in'));
+                })->pluck('id');
+                foreach ($ids as $id) {
+                    if (DB::table('financial_posting_events')->where('scope_key', 'water')
+                        ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+                        ->where('source_id', (string) $id)->exists()) {
+                        $registered = true;
+                        break;
+                    }
+                }
+            }
+            if (! ($gatedWriter !== null && $gatedWriter->allowsTransfer((int) $receipt->id, $destinationId, (int) $actor->id))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.subscriber_transfers') === true)) {
+                throw new \DomainException('gated_subscriber_transfer_writer_required');
+            }
             if ($existing) {
                 abort_unless((int) $existing->to_subscriber_id === $destinationId, 409, 'سبق تحويل السند إلى حساب آخر.');
                 return $existing;
