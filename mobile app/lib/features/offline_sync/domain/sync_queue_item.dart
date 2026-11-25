@@ -10,6 +10,7 @@ class SyncQueueItem extends Equatable {
     required this.status,
     required this.createdAt,
     this.ownerUserId,
+    this.ownerServer,
     this.attempts = 0,
     this.lastError,
     this.nextAttemptAt,
@@ -22,6 +23,7 @@ class SyncQueueItem extends Equatable {
   final SyncQueueStatus status;
   final DateTime createdAt;
   final String? ownerUserId;
+  final String? ownerServer;
   final int attempts;
   final String? lastError;
 
@@ -54,6 +56,7 @@ class SyncQueueItem extends Equatable {
         status: status ?? this.status,
         createdAt: createdAt,
         ownerUserId: ownerUserId ?? this.ownerUserId,
+        ownerServer: ownerServer,
         attempts: attempts ?? this.attempts,
         lastError: clearError ? null : (lastError ?? this.lastError),
         nextAttemptAt:
@@ -69,6 +72,7 @@ class SyncQueueItem extends Equatable {
         'status': status.name,
         'created_at': createdAt.toIso8601String(),
         'owner_user_id': ownerUserId,
+        'owner_server': ownerServer,
         'attempts': attempts,
         'last_error': lastError,
         'next_attempt_at': nextAttemptAt?.toIso8601String(),
@@ -90,6 +94,7 @@ class SyncQueueItem extends Equatable {
         ),
         createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
         ownerUserId: json['owner_user_id']?.toString(),
+        ownerServer: json['owner_server']?.toString(),
         attempts: int.tryParse(json['attempts']?.toString() ?? '') ?? 0,
         lastError: json['last_error']?.toString(),
         nextAttemptAt: DateTime.tryParse(json['next_attempt_at']?.toString() ?? ''),
@@ -123,6 +128,7 @@ class SyncQueueItem extends Equatable {
         status,
         createdAt,
         ownerUserId,
+        ownerServer,
         attempts,
         lastError,
         nextAttemptAt,
