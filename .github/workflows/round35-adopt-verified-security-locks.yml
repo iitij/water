@@ -1,0 +1,59 @@
+name: Adopt verified dependency locks on isolated branch
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round35-adopt-verified-security-locks.yml']
+permissions:
+  contents: read
+jobs:
+  adopt:
+    if: github.repository == 'iitij/water' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/central-adopt-verified-security-locks'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: dd920a1dde29737cd42923c3be94c05364690231
+          persist-credentials: false
+      - name: Adopt the exact verified files only, with a non-force branch push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'dd920a1dde29737cd42923c3be94c05364690231'
+          test -z "$(git status --porcelain)"
+          test "$(gh api repos/iitij/water/git/ref/heads/integration/accounting-v4-secure-locks --jq .object.sha)" = 'dd920a1dde29737cd42923c3be94c05364690231'
+          gh api repos/iitij/water/actions/artifacts/14997921321/zip > "$RUNNER_TEMP/verified-locks.zip"
+          printf '%s  %s\n' 'e5c4fa67c1e7475287c8d88e77e05ae97a6605ae7a707372d92753dfa8558450' "$RUNNER_TEMP/verified-locks.zip" | sha256sum --check
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          expected={
+            'composer.json':'88ec4d0ed81ea583f9a93764b7da5a0fa4eed445e79d7054558fa0e43f660dc8',
+            'composer.lock':'62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335',
+            'package.json':'6806d10f2d2ea5dd0c12b78a19a2b945857a9f092d1f559acdc5ea0eb09abddd',
+            'package-lock.json':'4e49440cc7ed97bf3efa59fca5a4d892f89f9531bda9173ad5ad84777945ddd3',
+          }
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP'])/'verified-locks.zip') as z:
+              for name,digest in expected.items():
+                  assert z.namelist().count(name)==1,name
+                  data=z.read(name)
+                  assert hashlib.sha256(data).hexdigest()==digest,name
+                  json.loads(data)
+                  if name=='package.json':
+                      assert data==pathlib.Path(name).read_bytes(),name
+                  else:
+                      pathlib.Path(name).write_bytes(data)
+          PY
+          git add -- composer.json composer.lock package-lock.json
+          test "$(git diff --cached --name-only | LC_ALL=C sort | tr '\n' ' ')" = 'composer.json composer.lock package-lock.json '
+          git diff --exit-code
+          git -c user.name='water-qa[bot]' -c user.email='water-qa@users.noreply.github.com' commit -m 'Adopt exact audited and regression-tested V4 dependency locks'
+          test "$(git rev-parse HEAD^)" = 'dd920a1dde29737cd42923c3be94c05364690231'
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort | tr '\n' ' ')" = 'composer.json composer.lock package-lock.json '
+          git -c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' push https://github.com/iitij/water.git HEAD:refs/heads/integration/accounting-v4-secure-locks
+          echo "VERIFIED_LOCK_COMMIT=$(git rev-parse HEAD)"
