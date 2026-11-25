@@ -67,7 +67,8 @@ class _SubmitReadingScreenState extends State<SubmitReadingScreen> {
 
   late Meter _meter;
   late final ReadingFaultLog _faultLog =
-      widget.faultLog ?? SharedPreferencesReadingFaultLog();
+      widget.faultLog ?? (GetIt.I.isRegistered<ReadingFaultLog>()
+          ? GetIt.I<ReadingFaultLog>() : SharedPreferencesReadingFaultLog());
   late final FieldDataSyncService? _fieldDataSync =
       widget.fieldDataSync ?? _resolveSync();
   ReadingFault? _todayFault;

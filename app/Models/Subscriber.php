@@ -112,9 +112,14 @@ class Subscriber extends Model
      * Canonical signed subscriber account balance. Meter IDs are provenance,
      * not separate accounts. The ledger, not legacy balance caches, is authoritative.
      */
+    public function getAccountBalanceMinor(): int
+    {
+        return app(\App\Services\TransactionService::class)->accountBalanceMinor($this);
+    }
+
     public function getAccountBalance(): float
     {
-        return round((float) $this->transactions()->sum('amount'), 2);
+        return \App\Support\MoneyBoundary::numericMajorOutput($this->getAccountBalanceMinor());
     }
 
     public function getAccountCredit(): float
