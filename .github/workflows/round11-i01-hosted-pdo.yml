@@ -1,0 +1,91 @@
+name: Round 11 exact I01 PDO validation
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/team-b-p2-i01']
+    paths: ['.github/workflows/round11-i01-hosted-pdo.yml']
+permissions:
+  contents: read
+jobs:
+  exact-i01-pdo:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/central-i01-hosted-pdo'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout accepted I01 source only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 34d48fcce16dca573b9e7a0914d09eab16b226e8
+          persist-credentials: false
+      - name: Set up PHP 8.4 with actual PDO drivers
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, pdo_mysql
+          ini-values: serialize_precision=-1
+          coverage: none
+          tools: none
+      - name: Verify exact source and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 34d48fcce16dca573b9e7a0914d09eab16b226e8
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          git rev-parse HEAD
+          php -v
+          php -r 'if (PHP_INT_SIZE !== 8 || ini_get("serialize_precision") !== "-1" || !in_array("sqlite", PDO::getAvailableDrivers(), true) || !in_array("mysql", PDO::getAvailableDrivers(), true)) { exit(1); } echo json_encode(PDO::getAvailableDrivers()), PHP_EOL;'
+          sha256sum composer.lock package-lock.json 'mobile app/pubspec.lock'
+      - name: Run only the new PDO acceptance cases
+        shell: bash
+        env:
+          APP_ENV: testing
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/i01-evidence"
+          mkdir -p "$evidence"
+          set +e
+          php tests/Unit/acc09_p2_i01_check.php sqlite 2>&1 | tee "$evidence/sqlite.log"
+          sqlite_exit=${PIPESTATUS[0]}
+          set -e
+          echo "I01_SQLITE_EXIT=$sqlite_exit"
+          socketdir="$(mktemp -d "$RUNNER_TEMP/i01-socket.XXXXXX")"
+          chmod 777 "$socketdir"
+          name="water-i01-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          export MYSQL_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          export MYSQL_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MYSQL_ROOT_PASSWORD"
+          echo "::add-mask::$MYSQL_PASSWORD"
+          docker run -d --name "$name" --network none \
+            -v "$socketdir:/var/run/mysqld" \
+            -e MYSQL_ROOT_PASSWORD -e MYSQL_PASSWORD -e MYSQL_USER=water_qa -e MYSQL_DATABASE=water_test \
+            mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b \
+            --skip-networking --skip-log-bin --socket=/var/run/mysqld/mysqld.sock
+          export WATER_I01_MYSQL_DSN="mysql:unix_socket=$socketdir/mysqld.sock;dbname=water_test;charset=utf8mb4"
+          export WATER_I01_MYSQL_USER=water_qa
+          export WATER_I01_MYSQL_PASSWORD="$MYSQL_PASSWORD"
+          unset MYSQL_ROOT_PASSWORD MYSQL_PASSWORD
+          ready=0
+          for i in $(seq 1 90); do
+            if docker exec "$name" sh -c 'test "$(cat /proc/1/comm)" = mysqld' 2>/dev/null &&
+               php -r 'try { $p = new PDO(getenv("WATER_I01_MYSQL_DSN"), getenv("WATER_I01_MYSQL_USER"), getenv("WATER_I01_MYSQL_PASSWORD"), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $v=$p->query("SELECT VERSION(), DATABASE(), @@skip_networking")->fetch(PDO::FETCH_NUM); if (!preg_match("/^8\\.0\\.46(?:$|[-+])/", $v[0]) || $v[1] !== "water_test" || (int)$v[2] !== 1) { exit(2); } echo "MySQL ", $v[0], " synthetic ", $v[1], " socket-only", PHP_EOL; } catch (Throwable $e) { exit(1); }'; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'I01_MYSQL_BLOCKED: isolated genuine MySQL 8.0.46 not ready'
+            exit 1
+          fi
+          set +e
+          php tests/Unit/acc09_p2_i01_check.php mysql 2>&1 | tee "$evidence/mysql.log"
+          mysql_exit=${PIPESTATUS[0]}
+          set -e
+          echo "I01_MYSQL_EXIT=$mysql_exit"
+          test -z "$(git status --porcelain)"
+          test "$sqlite_exit" -eq 0
+          test "$mysql_exit" -eq 0
+          grep -Fx 'ACC09_P2_I01_SQLITE_PDO_PASS 64 checks' "$evidence/sqlite.log"
+          grep -Fx 'ACC09_P2_I01_MYSQL_PDO_PASS 63 checks' "$evidence/mysql.log"
