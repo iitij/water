@@ -6,6 +6,7 @@ use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\ReadingFault;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -70,10 +71,7 @@ class ReadingFaultController extends ApiController
         $data = $this->validatePayload($request);
 
         // Idempotency: إعادة الإرسال بنفس sync_uuid تعيد العطل الموجود دون تكرار.
-        $fault = ReadingFault::firstOrCreate(
-            ['sync_uuid' => $data['sync_uuid']],
-            $this->fillFromPayload($data, $request),
-        );
+        $fault = DB::transaction(fn () => $this->storeOrVerify($data, $request), 3);
 
         return response()->json([
             'message' => 'تم تسجيل عطل القراءة.',
@@ -97,22 +95,48 @@ class ReadingFaultController extends ApiController
             'faults.*.sync_uuid' => ['required', 'uuid'],
         ]);
 
-        $synced = 0;
-        $duplicated = 0;
-
-        foreach ($data['faults'] as $item) {
-            $fault = ReadingFault::firstOrCreate(
-                ['sync_uuid' => $item['sync_uuid']],
-                $this->fillFromPayload($item, $request),
-            );
-            $fault->wasRecentlyCreated ? $synced++ : $duplicated++;
-        }
+        [$synced, $duplicated] = DB::transaction(function () use ($data, $request): array {
+            $synced = 0;
+            $duplicated = 0;
+            // Stable UUID order for concurrent overlapping batches.
+            $items = $data['faults'];
+            usort($items, fn (array $a, array $b) => strcmp($a['sync_uuid'], $b['sync_uuid']));
+            foreach ($items as $item) {
+                $fault = $this->storeOrVerify($item, $request);
+                $fault->wasRecentlyCreated ? $synced++ : $duplicated++;
+            }
+            return [$synced, $duplicated];
+        }, 3);
 
         return response()->json([
             'message' => 'تمت مزامنة الأعطال.',
             'synced_count' => $synced,
             'duplicate_count' => $duplicated,
         ]);
+    }
+
+    private function storeOrVerify(array $data, Request $request): ReadingFault
+    {
+        $owner = $request->user()?->id;
+        abort_unless($owner !== null, 401);
+        $fault = ReadingFault::firstOrCreate(
+            ['sync_uuid' => $data['sync_uuid']],
+            $this->fillFromPayload($data, $request),
+        );
+        if ($fault->wasRecentlyCreated) {
+            return $fault;
+        }
+
+        // A UUID is an operation identity, not authorization to read someone
+        // else's prior record. Never rewrite a historical record on replay.
+        abort_unless($fault->user_id !== null && (string) $fault->user_id === (string) $owner
+            && ($fault->meter_id === null ? null : (int) $fault->meter_id) === (isset($data['meter_id']) ? (int) $data['meter_id'] : null)
+            && $fault->reading_date->toDateString() === substr($fault->fromDateTime($data['reading_date']), 0, 10)
+            && $fault->fault_type === ($data['fault_type'] ?? null)
+            && $fault->notes === ($data['notes'] ?? null)
+            && (! isset($data['recorded_at']) || $fault->getRawOriginal('recorded_at') === $fault->fromDateTime($data['recorded_at'])),
+            409, 'معرّف المزامنة مرتبط بسجل مختلف أو غير مصرح بإعادته.');
+        return $fault;
     }
 
     private function validatePayload(Request $request): array

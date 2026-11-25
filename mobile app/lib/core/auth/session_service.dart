@@ -79,6 +79,9 @@ class SessionService extends ChangeNotifier {
       throw const FormatException('استجابة تسجيل الدخول لا تحتوي على رمز دخول صالح.');
     }
 
+    // Do not expose the previous user with the newly stored token while
+    // login resolves the new account identity.
+    _user = null;
     _token = token;
     _rememberSession = rememberSession;
     await _secureStorage.writeAccessToken(token, persist: rememberSession);

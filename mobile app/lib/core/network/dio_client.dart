@@ -17,7 +17,9 @@ class DioClient {
     ErrorReporter? errorReporter,
     ApiLogManager? apiLogManager,
     String? appVersion,
-  })  : offlineCache = OfflineCacheInterceptor(),
+  })  : offlineCache = OfflineCacheInterceptor(
+          currentGeneration: () => secureStorage.sessionGeneration,
+        ),
         errorInterceptor = ErrorInterceptor(errorReporter: errorReporter),
         apiLogInterceptor = ApiLogInterceptor(logManager: apiLogManager),
         dio = Dio(
