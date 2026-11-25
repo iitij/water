@@ -176,6 +176,57 @@ final class FinancialOperationIdentityTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
 
+    public function test_unreserved_uuid_cannot_relabel_actual_cash_receipt(): void
+    {
+        $actor = $this->actor();
+        $subscriber = $this->subscriber();
+        $attempt = fn () => $this->gate(function (array $context) use ($actor, $subscriber): bool {
+            $payment = app(PaymentService::class)->collectPayment($subscriber, '10.25',
+                userId: $actor->id, paymentDate: '2026-11-25', syncUuid: self::UUID);
+            $entry = Transaction::query()->where('reference_type', Payment::class)
+                ->where('reference_id', $payment->id)->where('type', 'payment')->sole();
+            return app(FinancialPostingRegistry::class)->record($context, self::OTHER,
+                [app(FinancialLedgerEvidence::class)->leg((int) $entry->id)], $this->nowAt());
+        });
+        $this->rejects('financial_uuid_source_mismatch', $attempt);
+        foreach (['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        $this->assertSame(0, $subscriber->fresh()->getAccountBalanceMinor());
+        $result = app(GatedCashReceiptWriter::class)->collect($actor, $subscriber->id, '10.25', self::UUID, $this->nowAt());
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+    }
+
+    public function test_distinct_reversal_uuid_is_not_confused_with_receipt_issuance_uuid(): void
+    {
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = $this->subscriber();
+        $result = app(GatedCashReceiptWriter::class)->collect($actor, $subscriber->id, '10.25', self::UUID, $this->nowAt());
+        $reversalId = $this->gate(function (array $context) use ($reviewer, $result): int {
+            $payment = app(PaymentService::class)->voidPayment($result['payment'], 'Synthetic approved reversal', $reviewer->id);
+            $entry = Transaction::query()->where('reference_type', Payment::class)
+                ->where('reference_id', $payment->id)->where('type', 'payment_reversal')->sole();
+            $leg = app(FinancialLedgerEvidence::class)->leg((int) $entry->id);
+            $this->assertSame(-1025, $leg['amount_minor']);
+            $this->rejects('financial_uuid_effect_mismatch',
+                fn () => app(FinancialPostingRegistry::class)->record($context, self::UUID, [$leg], $this->nowAt()));
+            $this->assertTrue(app(FinancialPostingRegistry::class)->record($context, self::OTHER, [$leg], $this->nowAt()));
+            $this->assertFalse(app(FinancialPostingRegistry::class)->record($context, self::OTHER, [$leg], $this->nowAt()));
+            return (int) $entry->id;
+        });
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::UUID,
+            'source_id' => (string) $result['transaction_id'], 'amount_minor' => 1025]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::OTHER,
+            'source_id' => (string) $reversalId, 'amount_minor' => -1025]);
+        $this->assertSame(0, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertDatabaseCount('financial_posting_operations', 2);
+        $this->assertDatabaseCount('financial_posting_events', 2);
+    }
+
     public function test_pending_late_review_reserves_uuid_against_unrelated_registry_operation(): void
     {
         $actor = $this->actor();
@@ -207,17 +258,19 @@ final class FinancialOperationIdentityTest extends TestCase
             'lines' => [['bank_reference' => 'QA-IDENTITY-CREDIT', 'booked_on' => '2026-11-25', 'amount' => '10.25']],
         ])['statement'];
         $line = DB::table('bank_statement_lines')->where('bank_statement_id', $statement['id'])->sole();
-        $post = function (bool $both) use ($reviewer, $claim, $statement, $line): bool {
-            return $this->gate(function (array $context) use ($reviewer, $claim, $statement, $line, $both): bool {
+        $post = function (bool $both, string $operationUuid = self::UUID, bool $bankOnly = false) use ($reviewer, $claim, $statement, $line): bool {
+            return $this->gate(function (array $context) use ($reviewer, $claim, $statement, $line, $both, $operationUuid, $bankOnly): bool {
                 $r = app(PaymentService::class)->clearNonCashClaim($reviewer, (int) $claim['id'],
                     (int) $statement['id'], (int) $line->id, 'QA-IDENTITY-CLEAR', self::EVIDENCE);
                 $entry = Transaction::query()->where('reference_type', Payment::class)
                     ->where('reference_id', $r['payment_id'])->where('type', 'payment')->sole();
-                $legs = [app(FinancialLedgerEvidence::class)->leg((int) $entry->id)];
-                if ($both) $legs[] = app(TreasuryCollectionEvidence::class)->leg((int) $r['bank']['posting']['id']);
-                return app(FinancialPostingRegistry::class)->record($context, self::UUID, $legs, $this->nowAt());
+                $legs = $bankOnly ? [] : [app(FinancialLedgerEvidence::class)->leg((int) $entry->id)];
+                if ($both || $bankOnly) $legs[] = app(TreasuryCollectionEvidence::class)->leg((int) $r['bank']['posting']['id']);
+                return app(FinancialPostingRegistry::class)->record($context, $operationUuid, $legs, $this->nowAt());
             });
         };
+        $this->rejects('financial_uuid_source_mismatch', fn () => $post(true, self::THIRD));
+        $this->rejects('financial_uuid_source_mismatch', fn () => $post(false, self::THIRD, true));
         $this->rejects('financial_uuid_effect_mismatch', fn () => $post(false));
         $this->assertDatabaseHas('noncash_collection_claims', ['id' => $claim['id'], 'status' => 'pending', 'payment_id' => null]);
         $this->assertDatabaseCount('payments', 0);
