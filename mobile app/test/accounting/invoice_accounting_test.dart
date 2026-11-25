@@ -174,7 +174,7 @@ void main() {
           invoice,
           siblings: <InvoiceModel>[invoice],
           gracePeriodDays: 14,
-          now: billDate.add(const Duration(days: 15)),
+          now: DateTime.utc(2026, 1, 16),
         ),
         InvoiceStatus.overdue,
       );
@@ -188,7 +188,7 @@ void main() {
           invoice,
           siblings: <InvoiceModel>[invoice],
           gracePeriodDays: 14,
-          now: billDate.add(const Duration(days: 3)),
+          now: DateTime.utc(2026, 1, 4),
         ),
         InvoiceStatus.issued,
       );
@@ -213,7 +213,7 @@ void main() {
         InvoiceAccounting.computeStatus(
           older,
           siblings: <InvoiceModel>[older, latest],
-          now: billDate.add(const Duration(days: 40)),
+          now: DateTime.utc(2026, 2, 10),
         ),
         InvoiceStatus.overdue,
       );
@@ -223,9 +223,120 @@ void main() {
       final invoice = _invoice(id: 1, totalAmount: 100, amountPaid: 40,
           billDate: billDate, isLatest: true);
       expect(InvoiceAccounting.computeStatus(invoice, siblings: [invoice],
-          now: DateTime(2026, 1, 15, 23, 59)), InvoiceStatus.partiallyPaid);
+          now: DateTime.utc(2026, 1, 15, 23, 59)), InvoiceStatus.partiallyPaid);
       expect(InvoiceAccounting.computeStatus(invoice, siblings: [invoice],
-          now: DateTime(2026, 1, 16)), InvoiceStatus.overdue);
+          now: DateTime.utc(2026, 1, 16)), InvoiceStatus.overdue);
+    });
+
+    test('QA-D-007: same instant gives the same status across time zones', () {
+      final cases = [
+        (
+          utc: DateTime.utc(2026, 1, 15, 23, 59, 59, 999, 999),
+          east: '2026-01-16T02:59:59.999999+03:00',
+          west: '2026-01-15T15:59:59.999999-08:00',
+          expected: InvoiceStatus.partiallyPaid,
+        ),
+        (
+          utc: DateTime.utc(2026, 1, 16),
+          east: '2026-01-16T03:00:00+03:00',
+          west: '2026-01-15T16:00:00-08:00',
+          expected: InvoiceStatus.overdue,
+        ),
+      ];
+      final invoice = _invoice(
+        id: 1,
+        totalAmount: 100,
+        amountPaid: 40,
+        billDate: DateTime.utc(2026, 1, 1),
+        isLatest: true,
+      );
+
+      for (final row in cases) {
+        // Dart parses explicit offsets to UTC. toLocal() also exercises
+        // an actual non-UTC DateTime under TZ=Asia/Aden or America/Los_Angeles.
+        final representations = [
+          row.utc,
+          row.utc.toLocal(),
+          DateTime.parse(row.east),
+          DateTime.parse(row.west),
+        ];
+        for (final instant in representations) {
+          expect(instant.isAtSameMomentAs(row.utc), isTrue);
+          expect(
+            InvoiceAccounting.computeStatus(
+              invoice,
+              siblings: [invoice],
+              now: instant,
+            ),
+            row.expected,
+            reason: 'Same instant: ${instant.toIso8601String()}',
+          );
+        }
+      }
+      expect(invoice.amountPaid, 40);
+    });
+
+    test('QA-D-007: bill date remains a calendar date, not an instant', () {
+      final calendarDates = [
+        DateTime(2026, 1, 1),
+        DateTime.utc(2026, 1, 1),
+      ];
+      for (final calendarDate in calendarDates) {
+        final invoice = _invoice(
+          id: 1,
+          totalAmount: 100,
+          amountPaid: 40,
+          billDate: calendarDate,
+        );
+        expect(
+          InvoiceAccounting.computeStatus(
+            invoice,
+            siblings: [invoice],
+            now: DateTime.utc(2026, 1, 15, 23, 59, 59),
+          ),
+          InvoiceStatus.partiallyPaid,
+        );
+        expect(
+          InvoiceAccounting.computeStatus(
+            invoice,
+            siblings: [invoice],
+            now: DateTime.utc(2026, 1, 16),
+          ),
+          InvoiceStatus.overdue,
+        );
+      }
+    });
+
+    test('QA-D-007: zero grace and month rollover follow UTC calendar', () {
+      final invoice = _invoice(
+        id: 1,
+        totalAmount: 100,
+        billDate: DateTime(2026, 1, 31),
+      );
+      final last = DateTime.utc(2026, 1, 31, 23, 59, 59);
+      final next = DateTime.utc(2026, 2, 1);
+      for (final instant in [last, last.toLocal()]) {
+        expect(
+          InvoiceAccounting.computeStatus(
+            invoice,
+            siblings: [invoice],
+            gracePeriodDays: 0,
+            now: instant,
+          ),
+          InvoiceStatus.issued,
+        );
+      }
+      for (final instant in [next, next.toLocal()]) {
+        expect(
+          InvoiceAccounting.computeStatus(
+            invoice,
+            siblings: [invoice],
+            gracePeriodDays: 0,
+            now: instant,
+          ),
+          InvoiceStatus.overdue,
+        );
+      }
     });
 
     test('strict_overdue_on_new_invoice ⇒ الأقدم تعتبر متأخرة فوراً', () {

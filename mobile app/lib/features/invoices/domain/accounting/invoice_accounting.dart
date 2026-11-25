@@ -83,7 +83,8 @@ class InvoiceAccounting {
     if (invoice.isDeleted || invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.cancelled) {
       return invoice.status;
     }
-    final reference = now ?? DateTime.now().toUtc();
+    // The reference is an instant; billDate below is a calendar date.
+    final reference = (now ?? DateTime.now()).toUtc();
     final billDate = invoice.billDate;
     final grace = gracePeriodDays.clamp(0, 365).toInt();
     final referenceDay = DateTime.utc(reference.year, reference.month, reference.day);
