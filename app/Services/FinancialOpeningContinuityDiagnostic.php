@@ -26,21 +26,47 @@ final class FinancialOpeningContinuityDiagnostic
         $current = $this->journal->inspect('water', $periodId)['state'];
         $snapshot = $this->snapshot($current);
         $issues = [];
+        $carryIssues = [];
+        $unchangedCarries = 0;
+        $currentCarries = $this->carries($snapshot, $current['next']);
         $prior = DB::table('financial_periods')->where('scope_key', 'water')
             ->where('next_on', $current['start'])->orderBy('id')->lockForUpdate()->get();
         $matched = 0;
         $priorHash = null;
         if ($prior->count() !== 1) {
             $issues[] = ['code' => 'independent_predecessor_required'];
+            $carryIssues[] = ['code' => 'carry_predecessor_required'];
         } else {
             $previous = $this->journal->inspect('water', (int) $prior[0]->id)['state'];
             if ($previous['state'] !== 'CLOSED') {
                 $issues[] = ['code' => 'predecessor_not_closed'];
+                $carryIssues[] = ['code' => 'carry_predecessor_not_closed'];
             } else {
                 $previousSnapshot = $this->snapshot($previous);
                 $priorHash = $previous['closure']['hash'];
                 if ($snapshot['predecessor_hash'] !== $priorHash) {
                     $issues[] = ['code' => 'predecessor_hash_mismatch'];
+                }
+                $priorCarries = $this->carries($previousSnapshot, $previous['next']);
+                foreach ($priorCarries as $id => $carry) {
+                    if (! isset($currentCarries[$id])) {
+                        $carryIssues[] = ['code' => 'carry_settlement_or_removal_requires_proof', 'id' => $id];
+                        continue;
+                    }
+                    $changes = [];
+                    foreach ($carry as $field => $value) {
+                        if ($currentCarries[$id][$field] !== $value) $changes[] = $field;
+                    }
+                    if ($changes !== []) {
+                        $carryIssues[] = ['code' => 'carry_change_requires_proof', 'id' => $id, 'fields' => $changes];
+                        continue;
+                    }
+                    $unchangedCarries++;
+                }
+                foreach ($currentCarries as $id => $carry) {
+                    if (! isset($priorCarries[$id])) {
+                        $carryIssues[] = ['code' => 'new_carry_requires_proof', 'id' => $id];
+                    }
                 }
                 $before = $this->rows($previousSnapshot);
                 $after = $this->rows($snapshot);
@@ -69,7 +95,10 @@ final class FinancialOpeningContinuityDiagnostic
         return ['period_id' => $periodId, 'month' => $current['month'], 'predecessor_hash' => $priorHash,
             'matched_predecessor_rows' => $matched, 'issues' => $issues,
             'adjacent_snapshots_match' => $issues === [], 'root_opening_verified' => false,
-            'opening_source_verified' => false, 'carry_continuity_verified' => false, 'closure_authorized' => false];
+            'opening_source_verified' => false,
+            'carry_snapshot_issues' => $carryIssues, 'unchanged_carries' => $unchangedCarries,
+            'carry_snapshots_unchanged' => $issues === [] && $carryIssues === [],
+            'carry_continuity_verified' => false, 'closure_authorized' => false];
     }
 
     private function snapshot(array $state): array
@@ -89,6 +118,45 @@ final class FinancialOpeningContinuityDiagnostic
         }
         $this->rows($snapshot);
         return $snapshot;
+    }
+
+    /** Verify carry identity, amount, dates and exact per-row conservation.
+     * Structural validity does not prove payment, renewal or new custody.
+     */
+    private function carries(array $snapshot, string $next): array
+    {
+        if (! is_array($snapshot['carries'] ?? null) || ! array_is_list($snapshot['carries'])) {
+            throw new DomainException('carry_snapshot_invalid');
+        }
+        $rows = $this->rows($snapshot);
+        $carries = [];
+        $totals = [];
+        $sectors = ['custody', 'liability', 'recoverable', 'transit'];
+        foreach ($snapshot['carries'] as $carry) {
+            if (! is_array($carry) || ! is_string($carry['id'] ?? null) || $carry['id'] === ''
+                || isset($carries[$carry['id']]) || ! is_string($carry['row'] ?? null)
+                || ! isset($rows[$carry['row']]) || ! in_array(explode(':', $carry['row'], 2)[0], $sectors, true)
+                || ! is_string($carry['amount'] ?? null) || ! is_int($carry['owner'] ?? null) || $carry['owner'] <= 0
+                || ! is_string($carry['due_on'] ?? null) || ! is_string($carry['evidence_hash'] ?? null)
+                || preg_match('/\A[0-9a-f]{64}\z/', $carry['evidence_hash']) !== 1) {
+                throw new DomainException('carry_snapshot_invalid');
+            }
+            $due = \DateTimeImmutable::createFromFormat('!Y-m-d', $carry['due_on'], new \DateTimeZone('Asia/Aden'));
+            $amount = SignedMinor::parse($carry['amount']);
+            if ($amount <= 0 || ! $due || $due->format('Y-m-d') !== $carry['due_on'] || $carry['due_on'] < $next) {
+                throw new DomainException('carry_snapshot_invalid');
+            }
+            $carries[$carry['id']] = ['row' => $carry['row'], 'amount' => $amount,
+                'owner' => $carry['owner'], 'due_on' => $carry['due_on'], 'evidence_hash' => $carry['evidence_hash']];
+            $totals[$carry['row']] = SignedMinor::add($totals[$carry['row']] ?? 0, $amount);
+        }
+        foreach ($rows as $key => $row) {
+            if (in_array(explode(':', $key, 2)[0], $sectors, true) && ($totals[$key] ?? 0) !== $row['closing']) {
+                throw new DomainException('carry_snapshot_conservation');
+            }
+        }
+        ksort($carries, SORT_STRING);
+        return $carries;
     }
 
     private function rows(array $snapshot): array
