@@ -2188,4 +2188,167 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('bank_statement_matches', 1);
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
+
+    public function test_round133_additional_proven_cash_loss_is_recorded_without_unlocking_reserve(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $accountId = (int) $account['id'];
+        $counter = $this->actor();
+        $reviewer = $this->actor();
+        $counts = app(TreasuryCashCountService::class);
+        $writer = app(GatedCashCountAdjustmentWriter::class);
+        $register = app(TreasuryRegisterService::class);
+        $observe = function (string $amount, string $ref) use ($counts, $counter, $reviewer, $accountId): int {
+            $count = $counts->record($counter, $accountId, $amount, $ref, self::EVIDENCE);
+            $id = (int) $count['count']['id'];
+            $counts->review($reviewer, $id, true, 'Independent review of actual physical cash count');
+            return $id;
+        };
+        $first = $observe('0.24', 'QA-R133-COUNT-1');
+        $writer->adjust($reviewer, $first, 'QA-R133-LOSS-1', 'confirmed_cash_loss', self::REASON, self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $before = $register->inspect($reviewer, $accountId);
+        $this->assertSame(1, $before['held_cash_possible_shortfall_minor']);
+        $this->assertSame(25, $before['held_cash_total_protected_minor']);
+        $second = $observe('0.20', 'QA-R133-COUNT-2');
+        $post = fn () => $writer->adjust($reviewer, $second, 'QA-R133-LOSS-2', 'confirmed_cash_loss',
+            self::REASON, self::EVIDENCE, '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(-4, (int) $result['posting']['amount_minor']);
+        $this->assertSame(20, $result['observation']['current_recorded_minor']);
+        $after = $register->inspect($reviewer, $accountId);
+        $this->assertSame(5, $after['held_cash_possible_shortfall_minor']);
+        $this->assertSame(25, $after['held_cash_total_protected_minor']);
+        $this->assertContains(['code' => 'held_cash_possible_liquidity_shortfall', 'amount_minor' => 5], $after['issues']);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('treasury_cash_adjustments', 3);
+        $this->assertDatabaseCount('treasury_postings', 3);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => '99999999-9999-4999-8999-999999999999',
+            'source_type' => 'treasury_posting', 'source_id' => (string) $result['posting']['id'], 'amount_minor' => -4]);
+        $this->rejects('held_cash_reserved', fn () => app(CashSessionService::class)->openFunded(
+            $this->actor(), $reviewer, $accountId, '0.01', 'QA-R133-FUND', 'Independent physical funding evidence'));
+        // A new unknown surplus is not allowed to masquerade as a recovery of protected cash.
+        $third = $observe('0.21', 'QA-R133-COUNT-3');
+        try {
+            $writer->adjust($reviewer, $third, 'QA-R133-UNKNOWN', 'unattributed_cash_held', self::REASON, self::EVIDENCE,
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+            $this->fail('Unknown surplus was accepted during an existing reserve shortfall.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(409, $error->getStatusCode());
+        }
+        // Missing source evidence must remain a hard stop, even during a genuine shortfall.
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '1.00');
+        app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '0.01', 'QA-R133-PENDING-REFUND',
+            'treasury_cash', '2026-11-25', 'Synthetic refund of excess credit', 'Independent documented cash disbursement');
+        $fourth = $observe('0.19', 'QA-R133-COUNT-4');
+        try {
+            $writer->adjust($reviewer, $fourth, 'QA-R133-BLOCKED-LOSS', 'confirmed_cash_loss', self::REASON, self::EVIDENCE,
+                'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt());
+            $this->fail('A pending refund was incorrectly treated as a verified loss.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(409, $error->getStatusCode());
+        }
+        $this->assertDatabaseCount('treasury_cash_adjustments', 3);
+        $this->assertDatabaseCount('treasury_postings', 3);
+        $final = $register->inspect($reviewer, $accountId);
+        $this->assertSame(20, $final['provisional_recorded_balance_minor']);
+        $this->assertSame(25, $final['held_cash_total_protected_minor']);
+        $this->assertSame(1, $final['channel_unposted_cash_refund_minor']);
+        $this->assertSame(6, $final['held_cash_possible_shortfall_minor']);
+    }
+
+    public function test_round133_late_cash_handover_failure_rolls_back_receipt_and_reserve_evidence(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic late cash tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ROUND133-LATE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $accountId = (int) $account['id'];
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $release->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-ROUND133-PROPOSAL', 'Independent review of current allocation evidence', $this->nowAt());
+        $release->recordRelease($this->actor(), $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $claim = $late->submit($collector, [
+            'sync_uuid' => '88888888-8888-4888-8888-888888888888', 'cash_session_id' => $session->id,
+            'subscriber_id' => $subscriber->id, 'amount' => '0.30', 'payment_method' => 'cash', 'payment_date' => '2026-11-25',
+        ]);
+        $receive = fn () => $late->receiveCash((int) $claim['id'], $reviewer, $accountId, '2026-11-25',
+            'QA-R133-LATE-HANDOVER', 'Independent physical delivery of delayed receipt');
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $snapshot = fn (string $table) => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $sequence = fn () => DB::table('document_sequences')->orderBy('kind')->orderBy('period')->get()->map(fn ($row) => (array) $row)->all();
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'held_cash_release_journal', 'held_cash_shadow_reinstatements', 'treasury_postings', 'audit_events',
+            'late_receipt_reviews', 'treasury_late_cash_receipts', 'cash_sessions'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $beforeSequence = $sequence();
+        $beforeInvoice = $invoice->fresh()->getRawOriginal();
+        $condition = "NEW.event = 'treasury.late_cash_received' AND EXISTS (SELECT 1 FROM held_cash_shadow_reinstatements)
+            AND EXISTS (SELECT 1 FROM treasury_late_cash_receipts) AND EXISTS (SELECT 1 FROM treasury_postings WHERE kind = 'late_cash_receipt')";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_late_cash_final_audit'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_late_cash_final_audit'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_round133_late_audit BEFORE INSERT ON audit_events {$body}");
+        \Illuminate\Support\Facades\Log::spy();
+        try {
+            try {
+                $receive();
+                $this->fail('Late cash unexpectedly committed despite required final audit failure.');
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
+            }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with(
+                'audit.record_failed', \Mockery::on(static fn ($context) =>
+                    is_array($context) && ($context['event'] ?? null) === 'treasury.late_cash_received'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_late_cash_final_audit'))
+            )->once();
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeSequence, $sequence());
+            $this->assertSame($beforeInvoice, $invoice->fresh()->getRawOriginal());
+            $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+            $this->assertSame(10, $release->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_round133_late_audit');
+        }
+        $result = $receive();
+        $this->assertSame('approved', $result['review']['status']);
+        $this->assertSame(30, (int) $result['posting']['amount_minor']);
+        $this->assertSame(40, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertSame($before['cash_sessions'], $snapshot('cash_sessions'));
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $this->assertTrue($late->checkCashPosting(DB::table('treasury_postings')->find($result['posting']['id'])));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $committedSequence = $sequence();
+        $this->assertSame($result['posting']['id'], $receive()['posting']['id']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($committedSequence, $sequence());
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_late_cash_receipts', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
+    }
 }
