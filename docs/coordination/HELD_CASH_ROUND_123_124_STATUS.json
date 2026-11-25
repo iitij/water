@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact new CI; correct only confirmed failures; cover reserve proof corruption and late review ordering/replay, complete Flutter inventory; continue remaining disbursement entrypoints and safe reserve settlement.",
+  "next": "Verify exact SQLite/MySQL CI; fix confirmed defects only. Continue prospective reserve settlement design and actual bank fee/disbursement protection; finish Flutter inventory without archive download.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-shortage-handover",
-      "commit": "c1b346a42bc3684ee67f7a4de822a02851e12948",
-      "run": 45719617864,
-      "sqlite": "1 test, 21 assertions",
-      "mysql": "1 test, 21 assertions",
-      "scope": "Extend existing cash-only registered till handover to approved negative variance. Reconstruct expected cash from registered receipts/funding/voids, validate expected/count/variance against original approval, enforce actual counted amount limit, preserve original shortage and subscriber ledger. One new targeted case verifies 1000 minor expected, 800 counted, rejects 1000 handover, posts exactly 800 treasury-only, replay unchanged, held cash reserve unchanged."
+      "branch": "release/prospective-surplus-handover",
+      "commit": "b7b3a371be61108f0328cf86f3c7436eb4d02f47",
+      "run": 45720139567,
+      "sqlite": "1 test, 25 assertions",
+      "mysql": "1 test, 25 assertions",
+      "scope": "Full counted cash handover for verified positive till variance to one destination only; atomic required reserve audit linked to original approval, source, treasury posting and operation UUID. HandoverSurplusReservation reconstructs registered source and proof; added to ordinary outflow and existing held payout liquidity checks separately from existing liability lots. Full positive variance remains conservatively reserved even after already-counted subscriber allocation; no duplicate treasury movement. Targeted test verifies 1000 expected, 1500 counted, 500 new protected reserve plus 25 existing, rejects partial and 11001 outflow, exact replay before later review, 200 allocated without new treasury movement."
     }
   },
   "round146": {
@@ -1421,12 +1421,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_surplus_handover": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "c1b346a42bc3684ee67f7a4de822a02851e12948",
     "branch": "release/prospective-surplus-handover",
     "source": "b7b3a371be61108f0328cf86f3c7436eb4d02f47",
     "scope": "Full counted cash handover for verified positive till variance to one destination only; atomic required reserve audit linked to original approval, source, treasury posting and operation UUID. HandoverSurplusReservation reconstructs registered source and proof; added to ordinary outflow and existing held payout liquidity checks separately from existing liability lots. Full positive variance remains conservatively reserved even after already-counted subscriber allocation; no duplicate treasury movement. Targeted test verifies 1000 expected, 1500 counted, 500 new protected reserve plus 25 existing, rejects partial and 11001 outflow, exact replay before later review, 200 allocated without new treasury movement.",
-    "limits": "CI not verified. No split positive handover, release/discharge of new reserve, late reviews existing before handover or replay after a later review, exhaustive negative writer inventory, Flutter completion or production activation. Reserve is a conservative liquidity ceiling, not independent liability certification. No historical adoption or real data changes. Need missing/tampered reserve proof tests and review positive reserve contract across all source paths.",
-    "next": "Verify exact new CI; correct only confirmed failures; cover reserve proof corruption and late review ordering/replay, complete Flutter inventory; continue remaining disbursement entrypoints and safe reserve settlement."
+    "limits": "Exact source, raw logs and lockfile verified for full surplus handover and conservative reserve. No discharge, split handover, historical adoption or production activation.",
+    "next": "Verify proof corruption rejection and allocation ordering.",
+    "run": 45720139567,
+    "jobs": [
+      {
+        "id": 139576113247,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 25,
+        "exit": 0
+      },
+      {
+        "id": 139576112784,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 25,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_surplus_proof_ordering": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "b7b3a371be61108f0328cf86f3c7436eb4d02f47",
+    "branch": "release/prospective-surplus-proof-ordering",
+    "source": "3b6d16e4dfa8d35ef54486922f07ce9fb5823a8c",
+    "scope": "Reuse independent counted-cash session proof for positive-variance handover with prior late reviews; preserve original till and full reserve. Validate ordered approval, full custody receipt and reserve audits. Two new tests: allocation before and after handover then idempotent replay; tampered and missing reserve proof blocks ordinary outflow.",
+    "limits": "CI pending. Nonpositive variance with late reviews remains unsupported; closed corrections, split positive custody, reserve discharge, broader writer/entrypoint and Flutter coverage remain open. No main merge, production activation or historical changes.",
+    "next": "Verify exact SQLite/MySQL CI; fix confirmed defects only. Continue prospective reserve settlement design and actual bank fee/disbursement protection; finish Flutter inventory without archive download."
   }
 }
