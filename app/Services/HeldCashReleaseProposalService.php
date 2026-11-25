@@ -255,7 +255,7 @@ final class HeldCashReleaseProposalService
     private function verifyLocked(array $proof): array
     {
         $protection = app(HeldCashReleaseDocumentProtection::class);
-        $this->need($protection->active() && $protection->journalActive(), 'held_release_protection_missing');
+        $this->need($protection->active() && $protection->journalActive() && $protection->reinstatementActive(), 'held_release_protection_missing');
         $proposals = DB::table('held_cash_release_proposals')->orderBy('operation_uuid')->lockForUpdate()->get()->keyBy('operation_uuid');
         $withdrawals = DB::table('held_cash_release_withdrawals')->orderBy('proposal_uuid')->lockForUpdate()->get()->keyBy('proposal_uuid');
         $audits = AuditEvent::query()->whereIn('event', ['treasury.held_release_proposed', 'treasury.held_release_withdrawn'])
