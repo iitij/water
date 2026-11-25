@@ -516,9 +516,10 @@ class PaymentService
         ?int $requestedCashSessionId = null,
         bool $deferred = false,
         ?int $lateReviewId = null,
+        ?GatedCashReceiptWriter $gatedWriter = null,
     ): Payment {
         return $this->postPayment($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason,
-            $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId);
+            $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, gatedWriter: $gatedWriter);
     }
 
     private function postPayment(
@@ -537,6 +538,7 @@ class PaymentService
         bool $deferred = false,
         ?int $lateReviewId = null,
         bool $clearedClaim = false,
+        ?GatedCashReceiptWriter $gatedWriter = null,
     ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
@@ -547,12 +549,26 @@ class PaymentService
             throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
         }
         $amount = $money->decimal();
-        return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim) {
+        return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim, $gatedWriter) {
             // Acquire the shared issuance fence before subscriber/business locks.
             // Scope-gated writers already hold it; nested acquisition is reentrant.
             $issuer = DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first();
             if (! $issuer) {
                 throw new \LogicException('Payment issuance lock is missing.');
+            }
+            // Only the scope-first writer may issue or replay ordinary gated cash.
+            // Check under the issuance lock, before business effects. Late and
+            // noncash settlements keep their separate source contracts.
+            if ($paymentMethod === 'cash' && $lateReviewId === null && ! $clearedClaim) {
+                $registered = $syncUuid !== null && DB::table('financial_posting_operations')
+                    ->where('scope_key', 'water')->where('operation_uuid', $syncUuid)->exists();
+                if ($gatedWriter === null || ! $gatedWriter->allowsMutation((int) $subscriber->id, $syncUuid)) {
+                    if ($gatedWriter !== null || $registered || config('financial_candidate.cash_receipts') === true) {
+                        throw new \DomainException('gated_cash_writer_required');
+                    }
+                }
+            } elseif ($gatedWriter !== null) {
+                throw new \DomainException('gated_cash_writer_required');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
