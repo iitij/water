@@ -313,13 +313,11 @@ class PaymentController extends ApiController
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'disbursement_confirmed' => ['required', 'accepted'],
+            'treasury_account_id' => ['nullable', 'integer', 'min:1'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        $refund = app(\App\Services\PaymentRefundService::class)->record(
-            Payment::findOrFail($id), $request->user(), (string) $data['amount'],
-            $data['disbursement_reference'], $data['method'], $data['disbursed_on'],
-            $data['reason'], $data['evidence']
-        );
-        return response()->json(['refund' => $refund]);
+        return response()->json(app(\App\Services\ProspectiveRefundEntry::class)->record(
+            $request->user(), Payment::findOrFail($id), $data));
     }
 
     public function transferAccount(Request $request, int $id)
