@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\DB;
 
 /** Inactive handover adapter for reconciled cash-only tills, including
  * registered opening funding and registered pre-close ordinary voids.
- * Variances and late/closed corrections still require separate proof.
+ * Verified shortages preserve the original till variance; positive surplus
+ * and late/closed corrections still require separate proof.
  */
 final class GatedCashHandoverWriter
 {
@@ -54,23 +55,26 @@ final class GatedCashHandoverWriter
             $read = fn (string $field, bool $signed = false): ?int =>
                 Cash::stored($session->getRawOriginal($field), $driver, DecimalDomain::D14, $signed, true);
             $counted = $read('counted_amount');
+            $expected = $read('expected_amount');
+            $variance = $read('variance_amount', true);
             $openingMinor = $read('opening_amount');
             $this->need($session->isApproved() && $session->settlement_basis === 'physical_cash'
                 && $session->closed_at !== null && $session->approved_at !== null
                 && $session->closed_at <= $session->approved_at
                 && $date >= $session->closed_at->toDateString()
                 && (int) $session->approved_by > 0 && (int) $session->approved_by !== (int) $session->user_id
-                && $openingMinor !== null && $openingMinor >= 0 && $read('variance_amount', true) === 0
-                && $counted !== null && $counted > 0 && $read('expected_amount') === $counted,
+                && $openingMinor !== null && $openingMinor >= 0
+                && $counted !== null && $counted > 0 && $expected !== null && $variance !== null
+                && $variance <= 0 && Cash::consistent($counted, $expected, $variance),
                 'gated_handover_session_scope');
             $this->need(! DB::table('closed_cash_corrections')->where('cash_session_id', $sessionId)->exists()
                 && ! DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)->exists(), 'gated_handover_session_scope');
             $approval = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
                 ->where('entity_id', (string) $sessionId)->lockForUpdate()->sole();
             $this->need((int) $approval->actor_user_id === (int) $session->approved_by
-                && ($approval->after['expected_amount'] ?? null) === SignedMinor::decimal($counted)
+                && ($approval->after['expected_amount'] ?? null) === SignedMinor::decimal($expected)
                 && ($approval->after['counted_amount'] ?? null) === SignedMinor::decimal($counted)
-                && ($approval->after['variance_amount'] ?? null) === '0.00', 'gated_handover_approval');
+                && ($approval->after['variance_amount'] ?? null) === SignedMinor::decimal($variance), 'gated_handover_approval');
             $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
             $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
             if ($openingMinor > 0) {
@@ -108,7 +112,7 @@ final class GatedCashHandoverWriter
                 }
                 $total = SignedMinor::add($total, $leg['amount_minor']);
             }
-            $this->need($total === $counted, 'gated_handover_count_mismatch');
+            $this->need($total === $expected && SignedMinor::add($total, $variance) === $counted, 'gated_handover_count_mismatch');
             $existing = CashHandover::query()->where('reference', $reference)->lockForUpdate()->first();
             $op = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
             $replay = $existing !== null;
