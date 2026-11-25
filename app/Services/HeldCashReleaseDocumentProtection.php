@@ -45,8 +45,23 @@ final class HeldCashReleaseDocumentProtection
 
     public function active(): bool
     {
+        $driver = DB::getDriverName();
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) return false;
+        $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', rtrim(trim($sql), ';'));
         foreach ($this->definitions() as $name => $definition) {
-            if (! $this->exists($name)) return false;
+            if (! preg_match('/\ABEFORE (UPDATE|DELETE|INSERT) ON ([a-z_]+) (.*)\z/s', $definition, $parts)) return false;
+            [, $event, $table, $body] = $parts;
+            if ($driver === 'sqlite') {
+                $trigger = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)
+                    ->where('tbl_name', $table)->first();
+                if ($trigger === null || $normalize($trigger->sql) !== $normalize("CREATE TRIGGER {$name} {$definition}")) return false;
+            } else {
+                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                    ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
+                    ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
+                if ($trigger === null || ! str_starts_with($body, 'FOR EACH ROW ')
+                    || $normalize($trigger->ACTION_STATEMENT) !== $normalize(substr($body, strlen('FOR EACH ROW ')))) return false;
+            }
         }
         return true;
     }
