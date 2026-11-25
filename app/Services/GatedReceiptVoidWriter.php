@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedReceiptVoidWriter
 {
+    private ?int $mutatingPaymentId = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private PaymentService $payments,
@@ -49,7 +51,7 @@ final class GatedReceiptVoidWriter
                     $requestId = $this->requestProof($payment);
                     return ['request_id' => $requestId, 'payment' => $payment, 'pending' => true, 'registry_created' => false];
                 }
-                $result = $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated');
+                $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
                 $this->need($result['pending'], 'gated_void_expected_pending');
                 app(AuditLogger::class)->recordRequired('financial.void_request_gated', [
                     'entity_type' => Payment::class, 'entity_id' => $payment->id, 'actor_user_id' => $actor->id,
@@ -59,7 +61,7 @@ final class GatedReceiptVoidWriter
             }
             $this->unused($uuid);
             $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
-            $result = $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated');
+            $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
             $this->need(! $result['pending'], 'gated_void_expected_immediate');
             $this->checkBalance($result['payment'], $subscriber, $before);
             return $this->register($result['payment'], $uuid, $context, $now, false);
@@ -109,7 +111,7 @@ final class GatedReceiptVoidWriter
             if ($approve) $this->unused($uuid);
             else $this->need($uuid === null, 'gated_void_pending_no_posting_uuid');
             $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
-            $result = $this->payments->decideVoidRequest($payment, $approve, $actor, $notes, 'gated');
+            $result = $this->mutate($payment, fn () => $this->payments->decideVoidRequest($payment, $approve, $actor, $notes, 'gated', $this));
             if (! $approve) {
                 $this->need(! $result->isVoided() && ! $result->hasPendingVoidRequest()
                     && app(TransactionService::class)->accountBalanceMinor($subscriber) === $before, 'gated_void_rejection_effect');
@@ -118,6 +120,28 @@ final class GatedReceiptVoidWriter
             $this->checkBalance($result, $subscriber, $before);
             return $this->register($result, $uuid, $context, $now, false);
         });
+    }
+
+    /** The final writer grants access only during its own verified mutation,
+     * inside the enclosing scope-first transaction. Merely passing this
+     * service or the string 'gated' cannot authorize a legacy write.
+     */
+    public function allowsMutation(Payment $payment): bool
+    {
+        return $this->mutatingPaymentId === (int) $payment->id
+            && DB::transactionLevel() > 0;
+    }
+
+    private function mutate(Payment $payment, callable $action): mixed
+    {
+        $this->need($this->mutatingPaymentId === null && DB::transactionLevel() > 0,
+            'gated_void_mutation_scope');
+        $this->mutatingPaymentId = (int) $payment->id;
+        try {
+            return $action();
+        } finally {
+            $this->mutatingPaymentId = null;
+        }
     }
 
     private function within(User $actor, int $id, DateTimeImmutable $now, callable $action): array
