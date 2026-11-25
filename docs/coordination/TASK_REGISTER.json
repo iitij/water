@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_17_V3_COMPOSED_FROZEN_REGRESSION_PENDING_HOLD_MAIN",
+    "decision": "HOLD_MAIN_NO_PRODUCTION_WRITES",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 4,
+    "round": 31,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -2335,7 +2335,7 @@
     },
     "round24": {
       "phase": "G11 strict Dart typing correction",
-      "status": "ANALYZER_VECTORS_PASS_FULL_SUITE_REPORT_RETRY",
+      "status": "ORDINARY_FLUTTER_RUNTIME_PASS_25_SKIPS_GENERATED_HYGIENE_SEPARATELY_ACCEPTED",
       "base": "117f159990b24491953427caa7a44dd45768b63c",
       "source": "a879ad2b2c827061192e181a2367a3e8cd36cc23",
       "workflow": "5ed5297da4d3c13a3cb86cfde003cebc83d56b45",
@@ -2359,7 +2359,17 @@
         "suite": "Machine stream parser failed with AttributeError list has no get; actual suite counts unknown. No product failure inferred."
       },
       "corrected_workflow": "7661644424ead14a645160e20c9f41cbec8556e0",
-      "retry_run": 45559292224
+      "retry_run": 45559292224,
+      "retry_results": {
+        "run": 45559292224,
+        "job": 139018904148,
+        "passed": 766,
+        "skipped": 25,
+        "failed": 0,
+        "exit": 0,
+        "job_conclusion": "failure",
+        "reason": "Full suite passed; tracked generated Linux Flutter symlinks changed (12 paths). Separate round29 hygiene passed. Skips remain open: 9 screen regression probes, 8 core defect characterization probes, 1 screenshot diagnostic, 7 financial regression probes."
+      }
     },
     "round25": {
       "phase": "ACC14 integrated atomic document issuance",
@@ -2401,7 +2411,7 @@
     },
     "round26": {
       "phase": "V4 cumulative integration",
-      "status": "SQLITE_FULL_PASS_MYSQL_PENDING",
+      "status": "BOTH_ORDINARY_FULL_PASS_SKIP_GATES_OPEN",
       "base": "453a3de3272c8ee3dc93cc92193e73a904825622",
       "source": "dd920a1dde29737cd42923c3be94c05364690231",
       "workflow": "5c23dd4534d8503aace3775d5a07c19152ca1d10",
@@ -2422,14 +2432,28 @@
         },
         "mysql": {
           "job": 139019250641,
-          "status": "in_progress"
+          "tests": 487,
+          "passed": 481,
+          "assertions": 16317,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 6,
+          "exit": 0
         }
       },
-      "limits": "Full integrated backend only; closing/return/L01, G11 full suite result and G12/host remain open."
+      "limits": "Full integrated backend only; closing/return/L01, G11 full suite result and G12/host remain open.",
+      "total": {
+        "tests": 974,
+        "passed": 942,
+        "assertions": 32375,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 32
+      }
     },
     "round27": {
       "phase": "G1B inert persistent gate foundation",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "dd920a1dde29737cd42923c3be94c05364690231",
       "source": "6c3d8c6b217ce323d8581947a37a51b3deb74abf",
       "workflow": "340632d7ea4605fe77ef8e500aeaff7b94d5d02d",
@@ -2437,17 +2461,90 @@
       "run": 45559631266,
       "branch": "fix/central-g1b-durable-gate-foundation",
       "scope": "Import exact reviewed pure closing policy and its two tests; inert scope/month schema, fail-closed outer transaction gate with strict date/epoch/state checks, three synthetic DB tests. Default disabled, no seeded scopes or production caller. YER/Asia/Aden proposed single scope.",
-      "limits": "No actual closure, command/event registry, predecessor/carry/coverage verification, or all-writer/role integration; no activation, no actual data or main changes."
+      "limits": "No actual closure, command/event registry, predecessor/carry/coverage verification, or all-writer/role integration; no activation, no actual data or main changes.",
+      "results": {
+        "sqlite": {
+          "job": 139019943395,
+          "tests": 3,
+          "assertions": 39,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139019942951,
+          "tests": 3,
+          "assertions": 39,
+          "exit": 0
+        },
+        "total": {
+          "tests": 6,
+          "assertions": 78,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      }
     },
     "round28": {
       "phase": "G12 locked build readiness",
-      "status": "DRAFT_RUNTIME_PENDING",
+      "status": "BUILD_PASS_SECURITY_AUDIT_FAIL",
       "source": "dd920a1dde29737cd42923c3be94c05364690231",
       "workflow": "f828cc7dbccd832bb358eae6079f583e369c6b03",
       "pr": 104,
       "branch": "qa/central-v4-build-readiness",
       "scope": "Production composer no-dev check and Vite manifest file verification, current read-only advisory audit; isolated hosted build, no secrets or deployment.",
-      "limits": "Actual locked Symfony v8.1 requires PHP >=8.4.1 although root ^8.3. Actual host PHP CLI/web versions, permissions, cron/cache, protected ledger, device/build, final release not yet verified."
+      "limits": "Actual locked Symfony v8.1 requires PHP >=8.4.1 although root ^8.3. Actual host PHP CLI/web versions, permissions, cron/cache, protected ledger, device/build, final release not yet verified.",
+      "corrected_workflow": "4e31750e121a3d06c0538a859b8cfcf442c926ed",
+      "results": {
+        "run": 45559875924,
+        "job": 139020751190,
+        "composer_install": "pass",
+        "platform": "pass PHP 8.4.28",
+        "vite": "pass manifest 15 entries,15 files",
+        "composer_audit_exit": 1,
+        "composer_advisories": 52,
+        "affected_composer_packages": 16,
+        "npm_audit_exit": 1,
+        "npm_vulnerabilities": 6,
+        "npm_high": 4,
+        "npm_critical": 2,
+        "correction": "Permit empty generated JS only for verified comment-only entry source. All other assets still nonempty."
+      }
+    },
+    "round29": {
+      "phase": "Flutter generated-file hygiene",
+      "status": "HOSTED_SCOPED_PASS",
+      "base": "dd920a1dde29737cd42923c3be94c05364690231",
+      "source": "70221dc1cfa297f0c95eacb1d339dcf04da0edfa",
+      "workflow": "ad34c6594e1dd1719fac7b90630ab95845955b99",
+      "pr": 105,
+      "branch": "fix/central-flutter-generated-cleanup",
+      "run": 45560023865,
+      "job": 139021332130,
+      "scope": "Delete 12 tracked generated symlinks and ignore Linux ephemeral directory; exact changes verified; no product or dependency changes.",
+      "result": "FLUTTER_GENERATED_HYGIENE_PASS",
+      "limits": "Prior 25 skipped tests still require independent classification and remediation."
+    },
+    "round30": {
+      "phase": "Flutter collector refresh and partial-payment regressions",
+      "status": "HOSTED_PENDING",
+      "base": "70221dc1cfa297f0c95eacb1d339dcf04da0edfa",
+      "source": "b215c1d5d224b075843080765e4178ddea5ddeff",
+      "workflow": "41814747dca0155b3a705544a5ce0218db784f6c",
+      "pr": 106,
+      "branch": "fix/central-flutter-collector-refresh",
+      "run": 45560267891,
+      "scope": "Filter-aware refresh, stale response guards, confirmed partial invoice visibility, queued payment suppression within current cubit, current submission outcome and in-flight guard; four ordinary regression cases.",
+      "limits": "Pending runtime; no persistent offline suppression guarantee across restart. Remaining quarantined cases not accepted."
+    },
+    "round31": {
+      "phase": "Targeted security lockfile candidate",
+      "status": "DRAFT_CREATED_RUNTIME_PENDING",
+      "base": "dd920a1dde29737cd42923c3be94c05364690231",
+      "workflow": "48346c5a49de9a54ccef36e4602ccffe2d3e0bc5",
+      "pr": 107,
+      "branch": "qa/central-security-lock-remediation",
+      "scope": "Resolve 16 advisory-affected Composer packages with minimal changes and npm audit fix without force, in read-only hosted workflow. No root manifest change, package scripts, production writes or main merge; preserve candidate locks/audits as artifact.",
+      "limits": "No security remediation claimed until solve, independent audit, exact candidate review and full integrated runtime tests. Filament exact 5.6 constraint may require separate compatibility decision."
     }
   }
 }
