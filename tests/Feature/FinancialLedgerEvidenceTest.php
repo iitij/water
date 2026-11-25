@@ -123,7 +123,7 @@ final class FinancialLedgerEvidenceTest extends TestCase
         $this->assertSame('0', (string) DB::table('financial_posting_events')->value('amount_minor'));
     }
 
-    public function test_missing_wrong_amount_and_unsupported_source_are_not_proof(): void
+    public function test_missing_and_unsupported_source_are_not_proof(): void
     {
         $account = Square::create(['name' => 'Synthetic mismatched'])->subscribers()
             ->create(['name' => 'Synthetic account', 'status' => 'active']);
