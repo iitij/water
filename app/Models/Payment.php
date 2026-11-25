@@ -177,25 +177,4 @@ class Payment extends Model
         static::restoring($guard);
     }
 
-    /**
-     * توليد رقم سند قبض فريد
-     */
-    public static function generateReceiptNumber(): string
-    {
-        $prefix = 'REC-'.date('Ym').'-';
-        $lastPayment = static::withTrashed()
-            ->where('receipt_number', 'like', $prefix.'%')
-            ->orderByRaw('LENGTH(receipt_number) DESC')
-            ->orderByDesc('receipt_number')
-            ->lockForUpdate()
-            ->first();
-
-        if ($lastPayment) {
-            $lastNumber = (int) str_replace($prefix, '', $lastPayment->receipt_number);
-
-            return $prefix.str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
-        }
-
-        return $prefix.'0001';
-    }
 }
