@@ -10,10 +10,10 @@ use Illuminate\Support\Facades\Schema;
  * Irreversible transition from "one CURRENT + many historical meters" to
  * "at most ONE physically stored meter per subscriber".
  *
- * All data is experimental by explicit owner decision. For each subscriber,
+ * For each subscriber,
  * keep the highest-ID non-removed, non-deleted meter; permanently erase every
- * other meter and the readings, invoices, receipts, ledger and field records
- * belonging to it. If no usable meter remains, keep NONE rather than falsely
+ * other meter and financially unlinked operational readings. Financial conflicts
+ * must block cleanup at this historical schema boundary. If no usable meter remains, keep NONE rather than falsely
  * reactivating a removed/deleted physical meter.
  *
  * down() deliberately cannot restore data purged by up().
@@ -42,7 +42,7 @@ return new class extends Migration
                         if ($survivor !== null && $meter->id === $survivor->id) {
                             continue;
                         }
-                        $purger->purge((int) $meter->id);
+                        $purger->purgeLegacyObsolete((int) $meter->id, $survivor ? (int) $survivor->id : null);
                     }
                 });
 

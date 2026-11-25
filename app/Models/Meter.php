@@ -58,14 +58,34 @@ class Meter extends Model
         }, 3);
     }
 
+    /** Serialize ordinary Eloquent deletion with reading and replacement writers. */
+    public function delete()
+    {
+        if (! $this->exists) {
+            return parent::delete();
+        }
+        return \Illuminate\Support\Facades\DB::transaction(function () {
+            Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
+            $locked = self::withTrashed()->lockForUpdate()->findOrFail($this->getKey());
+            if ((int) $locked->subscriber_id !== (int) $this->subscriber_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'meter_id' => 'تغير مالك العداد؛ حدّث البيانات.',
+                ]);
+            }
+
+            return parent::delete();
+        }, 3);
+    }
+
     protected static function booted(): void
     {
         static::deleting(function (Meter $meter): void {
-            if ($meter->invoices()->withTrashed()->exists()
-                || $meter->payments()->withTrashed()->exists()
-                || $meter->transactions()->withTrashed()->exists()) {
+            if ($meter->readings()->withTrashed()->lockForUpdate()->first(['id']) !== null
+                || $meter->invoices()->withTrashed()->lockForUpdate()->first(['id']) !== null
+                || $meter->payments()->withTrashed()->lockForUpdate()->first(['id']) !== null
+                || $meter->transactions()->withTrashed()->lockForUpdate()->first(['id']) !== null) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'meter_id' => 'لا يجوز حذف عداد مرتبط بسجل مالي.',
+                    'meter_id' => 'لا يجوز حذف عداد له قراءات أو سجل مالي مباشرةً؛ استخدم الاستبدال المعتمد.',
                 ]);
             }
         });

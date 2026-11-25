@@ -167,7 +167,10 @@ class MeterController extends ApiController
         $this->authorizeApi(Meter::class, 'delete');
 
         return DB::transaction(function () use ($id, $purger) {
+            $candidate = Meter::findOrFail($id);
+            Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $meter = Meter::query()->lockForUpdate()->findOrFail($id);
+            abort_unless((int) $meter->subscriber_id === (int) $candidate->subscriber_id, 409, 'تغير مالك العداد.');
             if ($this->hasHistory($meter)) {
                 return response()->json(['message' => 'لا يمكن حذف عداد له قراءات أو فواتير أو سندات محفوظة.'], 409);
             }
@@ -186,7 +189,12 @@ class MeterController extends ApiController
         $deleted = 0;
         $skipped = [];
         DB::transaction(function () use ($data, &$deleted, &$skipped, $purger) {
-            foreach (Meter::whereIn('id', $data['ids'])->lockForUpdate()->get() as $meter) {
+            $candidates = Meter::whereIn('id', $data['ids'])->get()->keyBy('id');
+            Subscriber::query()->whereIn('id', $candidates->pluck('subscriber_id'))
+                ->orderBy('id')->lockForUpdate()->get();
+            foreach (Meter::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $meter) {
+                abort_unless($candidates->has($meter->id)
+                    && (int) $meter->subscriber_id === (int) $candidates[$meter->id]->subscriber_id, 409, 'تغير مالك العداد.');
                 if ($this->hasHistory($meter)) {
                     $skipped[] = $meter->id;
 
