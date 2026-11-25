@@ -92,8 +92,8 @@ final class GatedInvoiceCancellationWriter
                     $ids = array_map('intval', $readings->modelKeys());
                     HistoricalTariffEvidence::verify($readings->map(fn ($r) => (object) [
                         'id' => $r->id,
-                        'period_start' => CarbonImmutable::parse($r->period_start)->toDateString(),
-                        'period_end' => CarbonImmutable::parse($r->period_end)->toDateString(),
+                        'period_start' => $r->period_start ? CarbonImmutable::parse($r->period_start)->toDateString() : null,
+                        'period_end' => $r->period_end ? CarbonImmutable::parse($r->period_end)->toDateString() : null,
                         'consumption_units' => $r->getRawOriginal('consumption_units'),
                     ]), array_map(fn ($row) => (object) $row, $pricing), $invoice->getRawOriginal('consumption_fee'));
                     $observations = $readings->map(fn ($r) => $this->observation($r))->all();
