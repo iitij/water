@@ -2335,18 +2335,35 @@
     },
     "round24": {
       "phase": "G11 strict Dart typing correction",
-      "status": "IN_PROGRESS",
+      "status": "ANALYZER_VECTORS_PASS_FULL_SUITE_REPORT_RETRY",
       "base": "117f159990b24491953427caa7a44dd45768b63c",
       "source": "a879ad2b2c827061192e181a2367a3e8cd36cc23",
       "workflow": "5ed5297da4d3c13a3cb86cfde003cebc83d56b45",
       "pr": 100,
       "scope": "Explicit JSON vector list types; keep expectations and strict analyzer. Locked Flutter, vector scripts and full unit/widget checks.",
       "limits": "No acceptance until actual logs.",
-      "run": 45558632318
+      "run": 45558632318,
+      "results": {
+        "job": 139016724182,
+        "analyzer": {
+          "errors": 0,
+          "warnings": 0,
+          "infos": 25,
+          "exit": 0
+        },
+        "vectors": {
+          "product": 10107,
+          "oracle": 85,
+          "exit": 0
+        },
+        "suite": "Machine stream parser failed with AttributeError list has no get; actual suite counts unknown. No product failure inferred."
+      },
+      "corrected_workflow": "7661644424ead14a645160e20c9f41cbec8556e0",
+      "retry_run": 45559292224
     },
     "round25": {
       "phase": "ACC14 integrated atomic document issuance",
-      "status": "SQLITE_FOCUSED_PASS_MYSQL_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "117f159990b24491953427caa7a44dd45768b63c",
       "source": "453a3de3272c8ee3dc93cc92193e73a904825622",
       "workflow": "a164c17a35278465e37ea6e2badc6887d6ba953d",
@@ -2366,9 +2383,71 @@
         },
         "mysql": {
           "job": 139017512629,
+          "tests": 29,
+          "assertions": 313,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "exit": 0
+        }
+      },
+      "total": {
+        "tests": 56,
+        "assertions": 600,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "round26": {
+      "phase": "V4 cumulative integration",
+      "status": "SQLITE_FULL_PASS_MYSQL_PENDING",
+      "base": "453a3de3272c8ee3dc93cc92193e73a904825622",
+      "source": "dd920a1dde29737cd42923c3be94c05364690231",
+      "workflow": "5c23dd4534d8503aace3775d5a07c19152ca1d10",
+      "pr": 102,
+      "run": 45559419546,
+      "branch": "integration/accounting-candidate-v4",
+      "composition": "Exact ACC14 source + two Dart typed vector test files verified blobs e39c367b36083b507b12c91c805fafdfaf6a2afb and 367e54111273efddd34bf95ee65f1ab6289283e3. No lockfile modifications.",
+      "results": {
+        "sqlite": {
+          "job": 139019251467,
+          "tests": 487,
+          "passed": 461,
+          "assertions": 16058,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 26,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139019250641,
           "status": "in_progress"
         }
-      }
+      },
+      "limits": "Full integrated backend only; closing/return/L01, G11 full suite result and G12/host remain open."
+    },
+    "round27": {
+      "phase": "G1B inert persistent gate foundation",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "dd920a1dde29737cd42923c3be94c05364690231",
+      "source": "6c3d8c6b217ce323d8581947a37a51b3deb74abf",
+      "workflow": "340632d7ea4605fe77ef8e500aeaff7b94d5d02d",
+      "pr": 103,
+      "run": 45559631266,
+      "branch": "fix/central-g1b-durable-gate-foundation",
+      "scope": "Import exact reviewed pure closing policy and its two tests; inert scope/month schema, fail-closed outer transaction gate with strict date/epoch/state checks, three synthetic DB tests. Default disabled, no seeded scopes or production caller. YER/Asia/Aden proposed single scope.",
+      "limits": "No actual closure, command/event registry, predecessor/carry/coverage verification, or all-writer/role integration; no activation, no actual data or main changes."
+    },
+    "round28": {
+      "phase": "G12 locked build readiness",
+      "status": "DRAFT_RUNTIME_PENDING",
+      "source": "dd920a1dde29737cd42923c3be94c05364690231",
+      "workflow": "f828cc7dbccd832bb358eae6079f583e369c6b03",
+      "pr": 104,
+      "branch": "qa/central-v4-build-readiness",
+      "scope": "Production composer no-dev check and Vite manifest file verification, current read-only advisory audit; isolated hosted build, no secrets or deployment.",
+      "limits": "Actual locked Symfony v8.1 requires PHP >=8.4.1 although root ^8.3. Actual host PHP CLI/web versions, permissions, cron/cache, protected ledger, device/build, final release not yet verified."
     }
   }
 }
