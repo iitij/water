@@ -50,10 +50,11 @@ final class PaymentAllocationReadService
             ->leftJoin('payments as p', fn ($join) => $join->on('p.id', '=', DB::raw('COALESCE(a.payment_id, t.payment_id)')))
             ->where('a.revision_id', $revisionId)->where('a.'.$column, $value)
             ->orderBy('a.position')
-            ->get(['a.payment_id', 'a.account_transfer_id', 'a.invoice_id', 'a.amount_minor', 'i.bill_number', 'p.receipt_number'])
+            ->get(['a.payment_id', 'a.account_transfer_id', 'a.invoice_id', 'a.amount_minor', 'i.bill_number', 'p.receipt_number', 'a.held_cash_credit_id'])
             ->map(fn ($row) => [
                 'payment_id' => $row->payment_id === null ? null : (int) $row->payment_id,
                 'account_transfer_id' => $row->account_transfer_id === null ? null : (int) $row->account_transfer_id,
+                'held_cash_credit_id' => $row->held_cash_credit_id === null ? null : (int) $row->held_cash_credit_id,
                 'invoice_id' => $row->invoice_id === null ? null : (int) $row->invoice_id,
                 'bill_number' => $row->bill_number,
                 'receipt_number' => $row->receipt_number,
