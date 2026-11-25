@@ -1006,13 +1006,29 @@
     }
   },
   "release_cash_receipt_api": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "SQLITE_PASS_MYSQL_AND_WRITER_REGRESSIONS_PENDING",
     "base": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
     "branch": "release/prospective-cash-receipt-api",
     "source": "03175b307b0e7703ff0a7b6ebfd1040ee85867b2",
     "run": 45710132370,
     "scope": "Four actual API cash entrypoints share ProspectiveCashReceiptEntry and GatedCashReceiptWriter behind default-off staging/testing switch. Exact amount, notes, effective date, till, UUID and balance checks; same-day explicit deferred receipt supported, older new receipt rejected to review, registered earlier date replay allowed in open period with identical source. Two new targeted HTTP cases on both engines.",
     "limits": "Runtime pending; no production activation, legacy flag-off behavior unchanged. Dedicated receipt writer regressions also required because adapter changed. Filament receipt creation, existing queued-item attention, actual late/noncash settlement and all-writer fence still pending; no historical remediation.",
-    "next": "Verify exact HTTP test results, correct confirmed failures only, and run dedicated affected GatedCashReceiptWriterTest cases. Then integrate Filament receipt creation with stable identity."
+    "next": "Verify exact HTTP test results, correct confirmed failures only, and run dedicated affected GatedCashReceiptWriterTest cases. Then integrate Filament receipt creation with stable identity.",
+    "jobs": [
+      {
+        "id": 139542103326,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 35,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335",
+    "regression": {
+      "source": "dbd704ee6f5ac866357fd4f0284237b3b20e6fb2",
+      "branch": "release/prospective-cash-receipt-api-regression",
+      "run": 45710276439,
+      "scope": "Workflow-only branch; four directly affected GatedCashReceiptWriterTest cases on each engine, no repeat of the HTTP tests."
+    }
   }
 }
