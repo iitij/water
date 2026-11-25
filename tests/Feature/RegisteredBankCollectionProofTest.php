@@ -209,6 +209,44 @@ final class RegisteredBankCollectionProofTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 3);
     }
 
+    public function test_tampered_audit_evidence_rejected_even_with_unchanged_registered_legs(): void
+    {
+        [, $id] = $this->fixture();
+        $this->assertTrue($this->verify($id)['pair_verified']);
+        $cases = [
+            ['bank_statement.imported', 'line_count', 2, 'bank_pair_import_audit_mismatch'],
+            ['treasury.bank_collection_confirmed', 'subscriber_posting_created', true, 'bank_pair_confirmation_audit_mismatch'],
+            ['noncash_claim.submitted', 'instrument_on', '2026-11-23', 'bank_pair_submission_audit_mismatch'],
+            ['noncash_claim.cleared', 'decision_evidence', 'Changed approval evidence', 'bank_pair_decision_audit_mismatch'],
+        ];
+        $events = DB::table('financial_posting_events')->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        foreach ($cases as [$event, $field, $value, $reason]) {
+            $audit = AuditEvent::query()->where('event', $event)->sole();
+            $after = $audit->after;
+            $changed = $after;
+            $changed[$field] = $value;
+            DB::table('audit_events')->where('id', $audit->id)->update(['after' => json_encode($changed, JSON_THROW_ON_ERROR)]);
+            $this->rejects($reason, fn () => $this->verify($id));
+            DB::table('audit_events')->where('id', $audit->id)->update(['after' => json_encode($after, JSON_THROW_ON_ERROR)]);
+            $this->assertTrue($this->verify($id)['pair_verified']);
+        }
+        $this->assertSame($events, DB::table('financial_posting_events')->orderBy('id')->get()->map(fn ($row) => (array) $row)->all());
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
+    public function test_missing_required_audit_rejected_without_creating_replacement(): void
+    {
+        [, $id] = $this->fixture();
+        $audit = AuditEvent::query()->where('event', 'noncash_claim.cleared')->sole();
+        DB::table('audit_events')->where('id', $audit->id)->delete();
+        $this->rejects('bank_pair_audit_missing_or_duplicate', fn () => $this->verify($id));
+        $this->assertSame(0, AuditEvent::query()->where('event', 'noncash_claim.cleared')->count());
+        $this->assertDatabaseCount('financial_posting_events', 3);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
     public function test_requires_transaction_and_rejects_ordinary_cash_receipt(): void
     {
         $this->rejects('bank_pair_requires_outer_transaction',
