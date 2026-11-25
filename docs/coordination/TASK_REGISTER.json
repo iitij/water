@@ -2282,13 +2282,45 @@
     },
     "round22": {
       "phase": "Ordinary skipped V3 acceptance",
-      "status": "QUEUED",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "source": "6dd83043cbef475d12a2c1f9e0e0d5edca35ab2f",
       "pr": 98,
       "workflow": "319f9439e809e715a3ea50168ce1fdca1ec795e7",
       "run": 45558383753,
       "scope": "Historical inventory with exact reviewed refs, and two historical migration cases separately per engine on isolated empty databases.",
-      "limits": "Initial workflow interpolation corrupted regex; corrected workflow only. No result yet, no previously restricted or privileged cases."
+      "limits": "Initial invalid workflow corrected; all five corrected jobs completed zero failures/errors/skips, 75 assertions; no restricted or privileged cases rerun.",
+      "results": {
+        "inventory": {
+          "job": 139015867177,
+          "tests": 1,
+          "assertions": 7,
+          "exit": 0
+        },
+        "legacy_removal_sqlite": {
+          "job": 139015867582,
+          "tests": 1,
+          "assertions": 25,
+          "exit": 0
+        },
+        "legacy_rollback_sqlite": {
+          "job": 139015867481,
+          "tests": 1,
+          "assertions": 9,
+          "exit": 0
+        },
+        "legacy_removal_mysql": {
+          "job": 139015867680,
+          "tests": 1,
+          "assertions": 25,
+          "exit": 0
+        },
+        "legacy_rollback_mysql": {
+          "job": 139015867476,
+          "tests": 1,
+          "assertions": 9,
+          "exit": 0
+        }
+      }
     },
     "round23": {
       "phase": "G11 Flutter and writer inventory",
@@ -2303,13 +2335,25 @@
     },
     "round24": {
       "phase": "G11 strict Dart typing correction",
-      "status": "DRAFT_RUNTIME_PENDING",
+      "status": "IN_PROGRESS",
       "base": "117f159990b24491953427caa7a44dd45768b63c",
       "source": "a879ad2b2c827061192e181a2367a3e8cd36cc23",
       "workflow": "5ed5297da4d3c13a3cb86cfde003cebc83d56b45",
       "pr": 100,
       "scope": "Explicit JSON vector list types; keep expectations and strict analyzer. Locked Flutter, vector scripts and full unit/widget checks.",
-      "limits": "No acceptance until actual logs."
+      "limits": "No acceptance until actual logs.",
+      "run": 45558632318
+    },
+    "round25": {
+      "phase": "ACC14 integrated atomic document issuance",
+      "status": "QUEUED_NOT_ACCEPTED",
+      "base": "117f159990b24491953427caa7a44dd45768b63c",
+      "source": "453a3de3272c8ee3dc93cc92193e73a904825622",
+      "workflow": "a164c17a35278465e37ea6e2badc6887d6ba953d",
+      "pr": 101,
+      "run": 45558889129,
+      "scope": "Reviewed sequence allocator and migration, require existing outer transaction on issue; three inventoried writers, remove old generators and form defaults, preserve global payment issuance lock. New actual issuance/replay/rollback tests, distinct account invoice concurrency and relevant changed-path regressions.",
+      "limits": "No production activation, no real legacy-number inventory, no main merge. Need all-writer write fence, audit of legacy identifiers, no mixed versions, actual test results and subsequent cumulative integration. L01 causal attribution, closing and G12 remain open."
     }
   }
 }
