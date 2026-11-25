@@ -62,7 +62,7 @@ final class TreasuryRegisterService
         }
     }
 
-    public function open(User $actor, array $data): array
+    public function open(User $actor, array $data, ?GatedTreasuryOpeningFundingWriter $gatedWriter = null): array
     {
         $this->authorize($actor);
         $code = mb_strtoupper(trim($data['code']));
@@ -83,9 +83,16 @@ final class TreasuryRegisterService
             'opening_on' => $data['opening_on'], 'opening_minor' => $opening,
             'opening_reference' => $reference, 'opening_evidence' => $evidence, 'opened_by' => $actor->id,
         ];
-        return DB::transaction(function () use ($record, $actor): array {
+        return DB::transaction(function () use ($record, $actor, $gatedWriter): array {
             $this->lockRegister();
             $existing = DB::table('treasury_accounts')->where('code', $record['code'])->lockForUpdate()->first();
+            $registered = $existing !== null && DB::table('financial_posting_events')
+                ->where('scope_key', 'water')->where('source_type', 'treasury_opening')->where('leg', 'opening')
+                ->where('source_id', (string) $existing->id)->exists();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsOpening($record['code'], (int) $actor->id))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.treasury_opening_funding') === true)) {
+                throw new \DomainException('gated_treasury_opening_writer_required');
+            }
             if ($existing) {
                 foreach ($record as $field => $value) {
                     abort_unless((string) $existing->$field === (string) $value, 409, 'رمز الخزينة مستخدم بالفعل.');
