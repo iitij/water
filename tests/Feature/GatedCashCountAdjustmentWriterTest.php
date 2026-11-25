@@ -3456,6 +3456,74 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(9525, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
     }
 
+    public function test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit(): void
+    {
+        [, , $cash, , , $subscriber] = $this->held();
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-FEE-ENTRY', 'name' => 'Synthetic bank fee account', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-FEE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $statement = $bank->import($importer, (int) $account['id'], [
+            'reference' => 'QA-FEE-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-FEE-DEBIT', 'booked_on' => $date, 'amount' => '-0.40']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $writer = app(\App\Services\GatedBankFeeWriter::class);
+        $reason = 'Independent documented bank service fee';
+        $reference = 'QA-FEE-ENTRY-PROOF';
+        $direct = fn (?\App\Services\GatedBankFeeWriter $candidate = null) =>
+            $bank->recordFee($reviewer, $statementId, $lineId, $reference, $reason, self::EVIDENCE, $candidate);
+        $record = fn () => $writer->record($reviewer, $statementId, $lineId, $date,
+            $reference, $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $url = '/api/treasury/bank-statements/'.$statementId.'/fees';
+        $data = ['line_id' => $lineId, 'reference' => $reference, 'reason' => $reason,
+            'evidence' => self::EVIDENCE, 'operation_uuid' => $uuid];
+        $tables = ['payments', 'transactions', 'treasury_bank_fees', 'treasury_postings', 'bank_statement_matches',
+            'bank_statement_lines', 'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.bank_fees' => true]);
+        $this->rejects('gated_bank_fee_writer_required', $direct);
+        $this->rejects('gated_bank_fee_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+        \Laravel\Sanctum\Sanctum::actingAs($importer);
+        $this->postJson($url, $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
+        $this->postJson($url, $data + ['amount' => '1.00'])->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url, $data)->assertConflict();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $response = $this->postJson($url, $data)->assertOk()->assertJsonPath('reconciliation.fully_matched', true);
+        $postingId = $response->json('posting.id');
+        $this->assertSame(-40, (int) $response->json('posting.amount_minor'));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => -40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('posting.id', $postingId);
+        $this->postJson($url, array_replace($data, ['operation_uuid' => '99999999-9999-4999-8999-999999999999']))->assertConflict();
+        config(['financial_candidate.bank_fees' => false]);
+        $this->rejects('gated_bank_fee_writer_required', $direct);
+        $this->postJson($url, $data)->assertConflict();
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertConflict();
+        $this->assertFalse($record()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame($before['transactions'], $snapshot('transactions'));
+        $this->assertSame(9960, app(TreasuryRegisterService::class)->inspect($reviewer, (int) $account['id'])['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+    }
+
     public function test_round139_bank_fee_is_registered_atomically_without_subscriber_effect(): void
     {
         [, , $cash, , , $subscriber] = $this->held();
