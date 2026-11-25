@@ -1,0 +1,54 @@
+{
+  "round123": {
+    "source": "d3167ff88b66b453c75e6b1e37e8d88ac5ff2b27",
+    "run": 45684196418,
+    "status": "TARGETED_ALL_PASS",
+    "jobs": [
+      {
+        "id": 139452329811,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 28,
+        "exit": 0
+      },
+      {
+        "id": 139452330636,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 28,
+        "exit": 0
+      },
+      {
+        "id": 139452330608,
+        "engine": "mysql-race",
+        "tests": 1,
+        "assertions": 20,
+        "exit": 0
+      }
+    ],
+    "limits": "Race passed observed ordering; not proof of all interleavings. Product remains accepted round119."
+  },
+  "round124": {
+    "source": "15e43191cc2483f8e30ebac5f6b85be8168788c6",
+    "base": "d3167ff88b66b453c75e6b1e37e8d88ac5ff2b27",
+    "branch": "qa/held-cash-historical-correction-round124",
+    "runs": [
+      {
+        "id": 45684571286,
+        "name": "Held cash incremental historical correction acceptance",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 45684571218,
+        "name": "Retired feature removal gate",
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ],
+    "status": "STAGED_TARGETED_UNVERIFIED",
+    "scope": "Test actual historical correction of retired-meter invoice with existing shadow release, trigger-injected rollback of correction and reinstatement, successful retry, exact old/new invoice amounts, original reading linkage, balance conservation, replay and unchanged treasury. Conservative rule: committed intermediate allocation decline restores shadow release, later allocation rise does not automatically release again. Only tests and incremental workflow changed.",
+    "limits": "No actual reserve reduction. No new product changes. Prior baseline evidence retained for unchanged paths; broader shared writer regression still pending. No main merge, production or real data changes."
+  },
+  "next": "Check exact round124 jobs and fix only proven failures. Validate remaining affected writer regressions, journal protection and outflow/actual-loss handling before any real release."
+}
