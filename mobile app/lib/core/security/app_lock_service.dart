@@ -198,6 +198,7 @@ class AppLockService extends ChangeNotifier {
     if (!_loaded) await _load();
     if (!_hasPin) return UnlockResult.noPin;
     if (isLockedOut) return UnlockResult.lockedOut;
+    _lockedUntil = null; // expired cooldown must not accompany a fresh failed attempt
 
     final salt = await _storage.read(saltKey);
     final hash = await _storage.read(hashKey);
