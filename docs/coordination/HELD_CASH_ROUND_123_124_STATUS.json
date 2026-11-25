@@ -71,14 +71,15 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Establish future cutover/root evidence and per-family carry source contracts, prioritizing actual writer coverage and source-proven obligations over additional synthetic-only diagnostics.",
+  "next": "Complete prospective writer behavior and connect verified entry points on a release candidate. First close the receipt void rejection replay gap. Preserve original decision audit and prevent duplicate effects.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
     "authority": "Repository owner direction in ChatGPT: لا حاجة للتصحيحات التاريخية",
     "excluded": [
       "Retroactive correction/recalculation of previously stored invoices, balances, journals and historical accounting data",
-      "New historical data cleanup or backfill work and tests dedicated solely to retroactive remediation"
+      "New historical data cleanup or backfill work and tests dedicated solely to retroactive remediation",
+      "Proof or reconstruction of pre-system opening balances as a prerequisite for further development or delivery."
     ],
     "retained": [
       "Correct prospective accounting logic, exact financial amounts, liabilities and protection of held cash",
@@ -718,7 +719,7 @@
     "run": 45702907890,
     "scope": "Extend adjacent opening diagnostic with exact carry identity, owner, amount, due date, evidence hash, per-row conservation. Detect changed/removed/new carries even if total unchanged; no inference of settlement or renewal. Two new tests and two directly affected continuity regressions on each engine.",
     "limits": "Structural diagnostic only; actual source proof for carry creation, settlement, renewal and first opening still required. No production activation, historical correction, real data, main merge, actual close or reserve release.",
-    "next": "Establish future cutover/root evidence and per-family carry source contracts, prioritizing actual writer coverage and source-proven obligations over additional synthetic-only diagnostics.",
+    "next": "Complete prospective writer behavior and connect verified entry points on a release candidate. First close the receipt void rejection replay gap. Preserve original decision audit and prevent duplicate effects.",
     "jobs": [
       {
         "id": 139517348351,
@@ -735,5 +736,16 @@
         "exit": 0
       }
     ]
+  },
+  "delivery_goal": {
+    "status": "ACTIVE",
+    "objective": "مواصلة تطوير Water حتى تسليم الموقع للإنتاج",
+    "scope": "Prospective operations from a known test starting balance. Historical remediation and independent proof of pre-system opening balances are outside the delivery gates.",
+    "milestones": [
+      "Complete actual application entry points for prospective receipts, disbursements and settlement, including authorization, held-cash protection, replay and rollback.",
+      "Verify changed paths on SQLite and MySQL, then validate end-to-end on staging.",
+      "Verify deployment configuration, backup and restore, smoke tests and rollback before scheduling production cutover."
+    ],
+    "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery."
   }
 }
