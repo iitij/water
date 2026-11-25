@@ -2636,4 +2636,136 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
+
+    public function test_round136_cash_refund_records_both_legs_and_keeps_reserve(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '200.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedRefundWriter::class);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $reason = 'Independent documented excess credit refund';
+        $record = fn () => $writer->record($reviewer, (int) $receipt->id, $accountId, '40.00', 'QA-R136-REFUND',
+            'treasury_cash', '2026-11-25', $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $ledger = app(\App\Services\TransactionService::class);
+        $tables = ['payments', 'payment_refunds', 'transactions', 'treasury_postings', 'audit_events',
+            'payment_allocation_revisions', 'payment_allocations', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $record);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $condition = "NEW.operation_uuid = '{$uuid}' AND NEW.leg = 'treasury'";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r136_refund_registry'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r136_refund_registry'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r136_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $record();
+                $this->fail('Refund committed despite registry failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r136_refund_registry', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r136_registry');
+        }
+        $this->assertSame(20020, $ledger->accountBalanceMinor($subscriber));
+        $result = $record();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(16020, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-4000, -4000], $events->map(fn ($row) => (int) $row->amount_minor)->all());
+        $report = app(TreasuryRegisterService::class)->inspect($reviewer, $accountId);
+        $this->assertSame(6025, $report['provisional_recorded_balance_minor']);
+        $this->assertSame(25, $report['held_cash_total_protected_minor']);
+        $this->assertSame(0, $report['channel_unposted_cash_refund_minor']);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->assertFalse($record()['registry_created']);
+        $this->rejects('gated_refund_replay_conflict', fn () => $writer->record($reviewer, (int) $receipt->id, $accountId,
+            '40.00', 'QA-R136-REFUND', 'treasury_cash', '2026-11-25', 'Different documented refund reason',
+            self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->rejects('held_cash_reserved', fn () => $writer->record($reviewer, (int) $receipt->id, $accountId,
+            '60.01', 'QA-R136-OVER', 'treasury_cash', '2026-11-25', $reason, self::EVIDENCE,
+            '99999999-9999-4999-8999-999999999999', $this->nowAt()));
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(3, $verified['registered_ledger_legs_verified']);
+        $this->assertSame(2, $verified['registered_treasury_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
+
+    public function test_round136_refund_rejects_unregistered_prior_document_without_erasing_it(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $reason = 'Independent documented excess credit refund';
+        $prior = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
+            'QA-R136-PRIOR', 'treasury_cash', '2026-11-25', $reason, self::EVIDENCE);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->rejects('gated_refund_prior_unregistered', fn () => app(\App\Services\GatedRefundWriter::class)->record(
+            $reviewer, (int) $receipt->id, (int) $account['id'], '2.00', 'QA-R136-NEW',
+            'treasury_cash', '2026-11-25', $reason, self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->assertDatabaseHas('payment_refunds', ['id' => $prior->id]);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $this->assertSame(900, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(100, app(TreasuryRegisterService::class)->inspect($reviewer, (int) $account['id'])['channel_unposted_cash_refund_minor']);
+    }
+
+    public function test_round136_bank_refund_requires_registered_collection_and_records_both_legs(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-R136-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank', 'opening_on' => $date,
+            'opening_amount' => '100.00', 'opening_reference' => 'QA-R136-BANK-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $accountId = (int) $bank['id'];
+        $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, $accountId, [
+            'reference' => 'QA-R136-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '100.00', 'closing_amount' => '100.30', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-R136-IN', 'booked_on' => $date, 'amount' => '0.30']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+        $claimUuid = '88888888-8888-4888-8888-888888888888';
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+            'sync_uuid' => $claimUuid, 'subscriber_id' => $subscriber->id, 'amount' => '0.30',
+            'payment_method' => 'check', 'instrument_reference' => 'QA-R136-CHECK', 'instrument_on' => $date,
+        ]);
+        $cleared = app(\App\Services\GatedCollectionWriter::class)->clearClaim($reviewer, (int) $claim['id'], $statementId,
+            $lineId, $date, 'QA-R136-PROOF', self::EVIDENCE, $claimUuid, $this->nowAt());
+        $uuid = '99999999-9999-4999-8999-999999999999';
+        $record = fn () => app(\App\Services\GatedRefundWriter::class)->record($reviewer, (int) $cleared['payment_id'],
+            $accountId, '0.10', 'QA-R136-BANK-REFUND', 'bank_transfer', $date, 'Independent documented bank refund',
+            self::EVIDENCE, $uuid, $this->nowAt());
+        $this->assertTrue($record()['registry_created']);
+        $this->assertFalse($record()['registry_created']);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-10, -10], $events->map(fn ($row) => (int) $row->amount_minor)->all());
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(10020, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(2, $verified['registered_ledger_legs_verified']);
+        $this->assertSame(3, $verified['registered_treasury_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
 }
