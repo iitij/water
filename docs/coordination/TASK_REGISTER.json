@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 56,
+    "round": 57,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3367,6 +3367,18 @@
           "skipped": 0
         }
       }
+    },
+    "round57": {
+      "phase": "Actual historical invoice and retired meter provenance",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
+      "source": "dc6a415b1f85052c8d3aad9d6d96f71eb67199e7",
+      "workflow": "afe482002f74d23cef36c97d35d376917ccca081",
+      "branch": "qa/central-g1b-historical-ledger-evidence",
+      "pr": 134,
+      "runs": [],
+      "scope": "One new actual historical correction case per engine: invoice and receipt identity stable across meter retirement; reversal and replacement exact signs; atomic rollback and unchanged original reading provenance.",
+      "limits": "Synthetic explicit effective date; not production writer activation, complete source coverage, concurrency proof or final closure. Pending runtime."
     }
   }
 }
