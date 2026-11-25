@@ -3601,7 +3601,14 @@
       "workflow": "8a38ffabefc1d1d6117fef6bbebeac297eba6479",
       "branch": "fix/central-g1b-treasury-adjustment-evidence",
       "pr": 140,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45614625621,
+          "name": "Treasury fee and cash adjustment evidence",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "prerequisite": "Round 62 scoped runtime acceptance required before round 63 acceptance.",
       "scope": "Two new cases per engine: actual fee atomic rollback and corrupted source rejection; actual signed loss and held surplus with original count and review. Twelve changed-verifier regressions per engine. Read-only source evidence; existing fee and adjustment validators reused under issuance lock.",
       "limits": "No complete source coverage, bank collection/late cash adapter, reconciliation certification, all-writer activation or final closure."
