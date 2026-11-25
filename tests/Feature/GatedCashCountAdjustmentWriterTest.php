@@ -2768,4 +2768,106 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(3, $verified['registered_treasury_legs_verified']);
         $this->assertFalse($verified['source_coverage_verified']);
     }
+
+    public function test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $collect = fn (string $amount, string $uuid) => app(GatedCashReceiptWriter::class)
+            ->collect($issuer, (int) $subscriber->id, $amount, $uuid, $this->nowAt())['payment'];
+        $ledger = app(\App\Services\TransactionService::class);
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $first = $collect('0.30', '66666666-6666-4666-8666-666666666666');
+        $reason = 'Independent documented current receipt cancellation';
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $immediate = fn () => $writer->request($issuer, (int) $first->id, $reason, $this->nowAt(), $uuid);
+        $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $immediate);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $this->assertTrue($immediate()['registry_created']);
+        $this->assertFalse($immediate()['registry_created']);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -30]);
+        $second = $collect('1.00', '99999999-9999-4999-8999-999999999999');
+        $approveUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $this->rejects('gated_void_pending_no_posting_uuid', fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt(), $approveUuid));
+        $request = fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt());
+        $this->assertTrue($request()['pending']);
+        $this->assertTrue($request()['pending']);
+        $this->assertSame(120, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $approveUuid]);
+        // Lowering the threshold never bypasses an existing request.
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $this->rejects('gated_void_pending_no_posting_uuid', fn () => $writer->request($issuer, (int) $second->id, $reason, $this->nowAt(), $approveUuid));
+        try {
+            $writer->decide($issuer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid);
+            $this->fail('Requester approved their own void.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        $approve = fn () => $writer->decide($reviewer, (int) $second->id, true, 'Independent decision', $this->nowAt(), $approveUuid);
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations', 'audit_events',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $condition = "NEW.operation_uuid = '{$approveUuid}'";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_r137_void_registry'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_r137_void_registry'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_r137_void_registry BEFORE INSERT ON financial_posting_events {$body}");
+        try {
+            try {
+                $approve();
+                $this->fail('Void committed despite registry failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('qa_r137_void_registry', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertTrue($second->fresh()->hasPendingVoidRequest());
+            $this->assertSame(120, $ledger->accountBalanceMinor($subscriber));
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_r137_void_registry');
+        }
+        $this->assertTrue($approve()['registry_created']);
+        $this->assertFalse($approve()['registry_created']);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $approveUuid, 'amount_minor' => -100]);
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(5, $verified['registered_ledger_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
+
+    public function test_round137_rejected_request_creates_no_financial_posting_and_legacy_pending_is_not_adopted(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented current receipt cancellation';
+        $this->assertTrue($writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt())['pending']);
+        $before = DB::table('financial_posting_events')->count();
+        $this->assertFalse($writer->decide($reviewer, (int) $receipt->id, false, 'Rejected after review', $this->nowAt())['registry_created']);
+        $this->assertFalse($receipt->fresh()->isVoided());
+        $this->assertFalse($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertSame($before, DB::table('financial_posting_events')->count());
+        $this->assertSame(30, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $legacy = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.50',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt())['payment'];
+        app(PaymentService::class)->requestVoid($legacy, $reason, $issuer->id);
+        $this->rejects('gated_void_request_unverified', fn () => $writer->decide($reviewer, (int) $legacy->id, true,
+            'Independent decision', $this->nowAt(), '99999999-9999-4999-8999-999999999999'));
+        $this->assertTrue($legacy->fresh()->hasPendingVoidRequest());
+        $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }
