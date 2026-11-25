@@ -123,6 +123,13 @@ final class FinancialReconciliationService
                 $posting(PaymentRefund::class, $refund->id, 'payment_refund', (int) $refund->subscriber_id, SignedMinor::negate($amount));
             }
 
+            foreach (\App\Models\TreasuryHeldCashCredit::where('subscriber_id', $id)->orderBy('id')->get() as $credit) {
+                $amount = AccountMoney::stored($credit);
+                if ($amount <= 0) $issue('held_credit_document_mismatch', ['credit_id' => $credit->id]);
+                $posting(\App\Models\TreasuryHeldCashCredit::class, $credit->id, 'held_cash_credit', $id, $amount);
+                $sources['held:'.$credit->id] = $amount;
+            }
+
             // Also detect extra or orphan postings, including unsupported legacy adjustments.
             $actual = 0;
             foreach (Transaction::withTrashed()->where('subscriber_id', $id)->orderBy('id')->get() as $row) {
@@ -155,7 +162,7 @@ final class FinancialReconciliationService
                         $issue('allocation_amount_invalid');
                         continue;
                     }
-                    $key = $row->payment_id !== null ? 'payment:'.$row->payment_id : 'transfer:'.$row->account_transfer_id;
+                    $key = $row->payment_id !== null ? 'payment:'.$row->payment_id : ($row->account_transfer_id !== null ? 'transfer:'.$row->account_transfer_id : 'held:'.$row->held_cash_credit_id);
                     if (! array_key_exists($key, $bySource)) {
                         $issue('allocation_source_invalid', ['source' => $key]);
                     } else {
