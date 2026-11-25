@@ -228,10 +228,15 @@ final class TreasuryHeldCashLiabilityService
             && $when !== false && $when->format('Y-m-d\TH:i:s.u\Z') === $auth->authorized_at_utc
             && $when->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d') === $auth->effective_on
             && $auth->effective_on >= $assignment->effective_on, 'held_cash_authorization_source');
+        $adjustment = DB::table('treasury_cash_adjustments')->where('id', $original->treasury_cash_adjustment_id)->lockForUpdate()->first();
+        $count = $adjustment ? DB::table('treasury_cash_counts')->where('id', $adjustment->treasury_cash_count_id)->lockForUpdate()->first() : null;
+        $this->need($count !== null && ! in_array((int) $auth->executor_id, [(int) $count->counted_by, (int) $adjustment->approved_by], true)
+            && ! in_array((int) $auth->authorized_by, [(int) $count->counted_by, (int) $adjustment->approved_by], true),
+            'held_cash_authorization_source');
         $approvalId = $this->authorizationAudit('treasury.held_cash_payout_authorized', $auth->operation_uuid, (int) $auth->authorized_by, (array) $auth);
         $cancel = DB::table('treasury_held_cash_payout_cancellations')->where('operation_uuid', $auth->operation_uuid)->lockForUpdate()->first();
         $paid = DB::table('treasury_held_cash_payouts')->where('operation_uuid', $auth->operation_uuid)->lockForUpdate()->first();
-        $this->need(! ($cancel && $paid), 'held_cash_authorization_source');
+        $this->need(! ($cancel && $paid) && ($paid !== null || ! DB::table('financial_posting_operations')->where('operation_uuid', $auth->operation_uuid)->exists()), 'held_cash_authorization_source');
         if ($cancel) {
             $this->need((int) $cancel->cancelled_by !== (int) $auth->executor_id
                 && $cancel->effective_on >= $auth->effective_on, 'held_cash_cancel_independence');
