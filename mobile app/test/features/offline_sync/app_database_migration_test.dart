@@ -134,6 +134,7 @@ void main() {
       names,
       containsAll(<String>[
         'owner_user_id',
+        'owner_server',
         'next_attempt_at',
         'last_status_code',
       ]),
@@ -148,6 +149,7 @@ void main() {
     expect(row['next_attempt_at'], isNull);
     expect(row['last_status_code'], isNull);
     expect(row['owner_user_id'], isNull);
+    expect(row['owner_server'], isNull);
 
     final subscribers = await db.getCachedSubscribers();
     expect(subscribers.single['name'], 'مشترك قديم');
@@ -170,7 +172,7 @@ void main() {
     final version = await second
         .customSelect('PRAGMA user_version')
         .getSingle();
-    expect(version.data['user_version'], 6);
+    expect(version.data['user_version'], 7);
 
     final columns = await second
         .customSelect('PRAGMA table_info(pending_sync_actions)')
