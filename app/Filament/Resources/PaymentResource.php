@@ -274,6 +274,10 @@ class PaymentResource extends Resource
                             && ($user->hasRole('super_admin') || ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
                     })
                     ->form([
+                        Forms\Components\Hidden::make('operation_uuid')
+                            ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                            ->dehydrated(fn () => app(\App\Services\ProspectiveSubscriberTransferEntry::class)->enabled())
+                            ->required(fn () => app(\App\Services\ProspectiveSubscriberTransferEntry::class)->enabled()),
                         Forms\Components\Select::make('to_subscriber_id')
                             ->label('المشترك الصحيح')->searchable()->required()
                             ->getSearchResultsUsing(fn (string $search) => \App\Models\Subscriber::where('name', 'like', '%'.$search.'%')->limit(50)->pluck('name', 'id')->all())
@@ -285,9 +289,11 @@ class PaymentResource extends Resource
                     ->requiresConfirmation()
                     ->action(function (Payment $record, array $data): void {
                         abort_unless($data['no_new_cash_movement'] ?? false, 422);
-                        app(\App\Services\PaymentAccountTransferService::class)->transfer(
-                            $record, (int) $data['to_subscriber_id'], auth()->user(), $data['reason'], $data['evidence']
-                        );
+                        try {
+                            app(\App\Services\ProspectiveSubscriberTransferEntry::class)->transfer(auth()->user(), $record, $data);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
                         \Filament\Notifications\Notification::make()->title('تم تصحيح تخصيص المبلغ دون قبض جديد')->success()->send();
                     }),
                 \Filament\Actions\Action::make('generate_pdf')
