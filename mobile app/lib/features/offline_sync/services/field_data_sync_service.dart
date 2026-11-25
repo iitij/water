@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../../core/field_operations/field_session_scope.dart';
+import '../../../core/network/interceptors/auth_interceptor.dart';
 import '../../field_route/data/route_visit_store.dart';
 import '../../readings/data/reading_fault_log.dart';
 import '../../readings/domain/reading_fault.dart';
@@ -42,103 +44,144 @@ class FieldDataSyncService {
     required Dio dio,
     required ReadingFaultLog faultLog,
     required RouteVisitStore visitStore,
-  })  : _dio = dio,
-        _faultLog = faultLog,
-        _visitStore = visitStore;
+  }) : _dio = dio, _faultLog = faultLog, _visitStore = visitStore,
+       _captureScope = null;
+
+  /// Production always captures a fixed owner before reading or sending data.
+  FieldDataSyncService.scoped({
+    required Dio dio,
+    required FieldSessionScope Function() captureScope,
+  }) : _dio = dio, _captureScope = captureScope,
+       _faultLog = null, _visitStore = null;
 
   final Dio _dio;
-  final ReadingFaultLog _faultLog;
-  final RouteVisitStore _visitStore;
+  final ReadingFaultLog? _faultLog;
+  final RouteVisitStore? _visitStore;
+  final FieldSessionScope Function()? _captureScope;
 
-  /// كم يوماً نرفع من السجل المحلي في كل محاولة.
   static const int lookbackDays = 14;
-
   bool _faultsInFlight = false;
   bool _visitsInFlight = false;
 
-  /// رفع كل الأعطال غير المرفوعة في نافذة [lookbackDays] يوماً.
+  Options? _options(FieldSessionScope? scope) {
+    if (scope == null) return null;
+    scope.ensureCurrent();
+    return Options(extra: {
+      AuthInterceptor.sessionGenerationKey: scope.generation,
+      'skipOfflineCache': true,
+    });
+  }
+
   Future<FieldSyncResult> syncReadingFaults({DateTime? now}) async {
     if (_faultsInFlight) return const FieldSyncResult(synced: 0, skipped: 0);
     _faultsInFlight = true;
+    var synced = 0;
+    var skipped = 0;
     try {
+      final scope = _captureScope?.call();
+      final log = scope == null ? _faultLog! : SharedPreferencesReadingFaultLog(scope: scope);
       final reference = now ?? DateTime.now();
+      final days = log is SharedPreferencesReadingFaultLog && scope != null
+          ? await log.days()
+          : List.generate(lookbackDays, (ago) => reference.subtract(Duration(days: ago)));
       final faults = <ReadingFault>[];
-      for (var ago = 0; ago < lookbackDays; ago++) {
-        faults.addAll(await _faultLog.forDay(reference.subtract(Duration(days: ago))));
+      for (final day in days) {
+        faults.addAll(await log.forDay(day));
       }
-      if (faults.isEmpty) return const FieldSyncResult(synced: 0, skipped: 0);
-
-      final response = await _dio.post<dynamic>(
-        'readings/faults/sync-batch',
-        data: <String, dynamic>{
-          'faults': faults.map(_faultPayload).toList(growable: false),
-        },
-      );
-      final counts = _parseCounts(response.data);
-      return FieldSyncResult(synced: counts.$1, skipped: counts.$2);
-    } catch (error) {
-      return FieldSyncResult(synced: 0, skipped: 0, error: error);
-    } finally {
-      _faultsInFlight = false;
-    }
-  }
-
-  /// رفع تقدّم جولات الأيام الأخيرة (مربع × يوم × عدادات مُنجزة).
-  Future<FieldSyncResult> syncRouteVisits({DateTime? now}) async {
-    if (_visitsInFlight) return const FieldSyncResult(synced: 0, skipped: 0);
-    _visitsInFlight = true;
-    try {
-      final reference = now ?? DateTime.now();
-      final cutoff = reference.subtract(const Duration(days: lookbackDays));
-      final keys = await _visitStore.keys();
-      final fresh = keys.where((key) => !key.day.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).toList();
-      if (fresh.isEmpty) return const FieldSyncResult(synced: 0, skipped: 0);
-
-      final visits = <Map<String, dynamic>>[];
-      for (final key in fresh) {
-        final meterIds = await _visitStore.visited(squareId: key.squareId, day: key.day);
-        for (final meterId in meterIds) {
-          visits.add(<String, dynamic>{
-            'route_date': _dateString(key.day),
-            'meter_id': meterId,
-            'status': 'visited',
-            'visit_at': key.day.toIso8601String(),
-            'sync_uuid': visitSyncUuid(
-              squareId: key.squareId,
-              meterId: meterId,
-              day: key.day,
-            ),
-          });
-        }
-      }
-      if (visits.isEmpty) return const FieldSyncResult(synced: 0, skipped: 0);
-
-      // الدفعات الكبيرة تُقسّم حتى لا يتجاوز حد التحقق (500).
-      var synced = 0;
-      var skipped = 0;
-      for (var start = 0; start < visits.length; start += 500) {
-        final slice = visits.sublist(start, min(start + 500, visits.length));
+      for (var start = 0; start < faults.length; start += 200) {
+        final slice = faults.sublist(start, min(start + 200, faults.length));
         final response = await _dio.post<dynamic>(
-          'route-visits/sync-batch',
-          data: <String, dynamic>{'visits': slice},
+          'readings/faults/sync-batch',
+          data: {'faults': slice.map((fault) {
+            final payload = _faultPayload(fault);
+            if (scope != null) {
+              payload['sync_uuid'] = _deterministicUuid(
+                jsonEncode([scope.namespace, 'reading-fault', fault.meterId,
+                  _dateString(fault.recordedAt), fault.reason.code,
+                  fault.recordedAt.microsecondsSinceEpoch, fault.note]),
+              );
+            }
+            return payload;
+          }).toList(growable: false)},
+          options: _options(scope),
         );
-        final counts = _parseCounts(response.data);
+        scope?.ensureCurrent();
+        final counts = _parseCounts(response.data, slice.length);
         synced += counts.$1;
         skipped += counts.$2;
       }
       return FieldSyncResult(synced: synced, skipped: skipped);
     } catch (error) {
-      return FieldSyncResult(synced: 0, skipped: 0, error: error);
+      return FieldSyncResult(synced: synced, skipped: skipped, error: error);
+    } finally {
+      _faultsInFlight = false;
+    }
+  }
+
+  Future<FieldSyncResult> syncRouteVisits({DateTime? now}) async {
+    if (_visitsInFlight) return const FieldSyncResult(synced: 0, skipped: 0);
+    _visitsInFlight = true;
+    var synced = 0;
+    var skipped = 0;
+    try {
+      final scope = _captureScope?.call();
+      final store = scope == null ? _visitStore! : SharedPreferencesRouteVisitStore(scope: scope);
+      final reference = now ?? DateTime.now();
+      final cutoff = reference.subtract(const Duration(days: lookbackDays));
+      final keys = await store.keys();
+      final eligible = scope != null ? keys : keys.where((key) =>
+          !key.day.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day)));
+      final visits = <Map<String, dynamic>>[];
+      for (final key in eligible) {
+        final meterIds = await store.visited(squareId: key.squareId, day: key.day);
+        for (final meterId in meterIds) {
+          final legacyUuid = visitSyncUuid(squareId: key.squareId, meterId: meterId, day: key.day);
+          visits.add({
+            'route_date': _dateString(key.day),
+            'meter_id': meterId,
+            'status': 'visited',
+            'visit_at': key.day.toIso8601String(),
+            'sync_uuid': scope == null ? legacyUuid :
+                _deterministicUuid(jsonEncode([scope.namespace, legacyUuid])),
+          });
+        }
+      }
+      for (var start = 0; start < visits.length; start += 500) {
+        final slice = visits.sublist(start, min(start + 500, visits.length));
+        final response = await _dio.post<dynamic>(
+          'route-visits/sync-batch',
+          data: {'visits': slice},
+          options: _options(scope),
+        );
+        scope?.ensureCurrent();
+        final counts = _parseCounts(response.data, slice.length);
+        synced += counts.$1;
+        skipped += counts.$2;
+      }
+      return FieldSyncResult(synced: synced, skipped: skipped);
+    } catch (error) {
+      return FieldSyncResult(synced: synced, skipped: skipped, error: error);
     } finally {
       _visitsInFlight = false;
     }
   }
 
-  /// رفع كل شيء (تُستدعى عند عودة الاتصال أو بعد العمليات الميدانية).
-  Future<List<FieldSyncResult>> syncAll({DateTime? now}) async => [
-        await syncReadingFaults(now: now),
-        await syncRouteVisits(now: now),
-      ];
+  Future<List<FieldSyncResult>> syncAll({DateTime? now}) async {
+    FieldSessionScope? scope;
+    try {
+      scope = _captureScope?.call();
+    } catch (error) {
+      final failure = FieldSyncResult(synced: 0, skipped: 0, error: error);
+      return [failure, failure];
+    }
+    final faults = await syncReadingFaults(now: now);
+    try {
+      scope?.ensureCurrent();
+    } catch (error) {
+      return [faults, FieldSyncResult(synced: 0, skipped: 0, error: error)];
+    }
+    return [faults, await syncRouteVisits(now: now)];
+  }
 
   static Map<String, dynamic> _faultPayload(ReadingFault fault) => <String, dynamic>{
         'meter_id': fault.meterId,
@@ -179,12 +222,16 @@ class FieldDataSyncService {
   static String _dateString(DateTime day) =>
       '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
 
-  static (int, int) _parseCounts(Object? data) {
+  static (int, int) _parseCounts(Object? data, int expected) {
     if (data is Map) {
-      final synced = (data['synced_count'] as num?)?.toInt() ?? 0;
-      final duplicated = (data['duplicate_count'] as num?)?.toInt() ?? 0;
-      return (synced, duplicated);
+      final synced = data['synced_count'];
+      final duplicated = data['duplicate_count'];
+      if (synced is int && duplicated is int &&
+          synced >= 0 && duplicated >= 0 &&
+          synced <= expected && duplicated == expected - synced) {
+        return (synced, duplicated);
+      }
     }
-    return (0, 0);
+    throw const FormatException('Invalid field batch acknowledgement.');
   }
 }
