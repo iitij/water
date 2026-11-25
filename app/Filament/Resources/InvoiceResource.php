@@ -479,6 +479,7 @@ class InvoiceResource extends Resource
                     ->color('success')
                     ->visible(fn (Invoice $record) => $record->canCollect() && auth()->user()?->can('create', Payment::class))
                     ->form([
+                        ...\App\Filament\Actions\ProspectiveCashReceiptAction::fields(),
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
                             ->default(fn (Invoice $record) => $record->getCollectibleAmount())
@@ -489,11 +490,7 @@ class InvoiceResource extends Resource
 
                         Forms\Components\Select::make('payment_method')
                             ->label('طريقة الدفع')
-                            ->options([
-                                'cash' => 'نقدي',
-                                'bank_transfer' => 'تحويل بنكي',
-                                'check' => 'شيك',
-                            ])
+                            ->options(fn () => \App\Filament\Actions\ProspectiveCashReceiptAction::methods())
                             ->default('cash')
                             ->reactive()
                             ->required(),
@@ -513,17 +510,7 @@ class InvoiceResource extends Resource
                     ])
                     ->action(function (Invoice $record, array $data): void {
                         \Illuminate\Support\Facades\Gate::authorize('create', Payment::class);
-                        $service = new PaymentService();
-                        $payment = $service->collectPayment(
-                            subscriber: $record->subscriber,
-                            amount: (float) $data['amount'],
-                            invoiceId: $record->id,
-                            paymentMethod: $data['payment_method'],
-                            referenceNumber: $data['reference_number'] ?? null,
-                            notes: $data['notes'] ?? null,
-                            reason: $data['reason'] ?? null,
-                            userId: auth()->id(),
-                        );
+                        $payment = \App\Filament\Actions\ProspectiveCashReceiptAction::collect($record->subscriber, $data, (int) $record->id);
 
                         Notification::make()
                             ->title('تم التحصيل بنجاح')
