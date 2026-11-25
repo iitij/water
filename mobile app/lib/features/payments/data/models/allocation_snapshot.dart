@@ -41,10 +41,11 @@ class AllocationSnapshot extends Equatable {
 }
 
 class AllocationRow extends Equatable {
-  const AllocationRow({this.paymentId, this.accountTransferId, this.invoiceId,
+  const AllocationRow({this.paymentId, this.accountTransferId, this.heldCashCreditId, this.invoiceId,
     this.billNumber, this.receiptNumber, required this.amountMinor});
   final int? paymentId;
   final int? accountTransferId;
+  final int? heldCashCreditId;
   final int? invoiceId;
   final String? billNumber;
   final String? receiptNumber;
@@ -53,6 +54,7 @@ class AllocationRow extends Equatable {
   factory AllocationRow.fromJson(Map<String, dynamic> json) => AllocationRow(
     paymentId: JsonUtils.asIntOrNull(json['payment_id']),
     accountTransferId: JsonUtils.asIntOrNull(json['account_transfer_id']),
+    heldCashCreditId: JsonUtils.asIntOrNull(json['held_cash_credit_id']),
     invoiceId: JsonUtils.asIntOrNull(json['invoice_id']),
     billNumber: JsonUtils.asStringOrNull(json['bill_number']),
     receiptNumber: JsonUtils.asStringOrNull(json['receipt_number']),
@@ -60,8 +62,9 @@ class AllocationRow extends Equatable {
   );
 
   Map<String, dynamic> toJson() => {'payment_id': paymentId, 'account_transfer_id': accountTransferId,
+    'held_cash_credit_id': heldCashCreditId,
     'invoice_id': invoiceId, 'bill_number': billNumber, 'receipt_number': receiptNumber, 'amount_minor': amountMinor};
 
   @override
-  List<Object?> get props => [paymentId, accountTransferId, invoiceId, billNumber, receiptNumber, amountMinor];
+  List<Object?> get props => [paymentId, accountTransferId, heldCashCreditId, invoiceId, billNumber, receiptNumber, amountMinor];
 }
