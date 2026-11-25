@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_13_I03_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
+    "decision": "ROUND_13_I03_SQLITE_ACCEPTED_MYSQL_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1923,7 +1923,7 @@
     },
     "round13": {
       "phase": "P2-I03 exact treasury register, transfers and cash counts",
-      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
+      "status": "SQLITE_ACCEPTED_MYSQL_PENDING",
       "base": "ef299515f9d599aec4039222c422418518ecb71d",
       "scope": "Replace unchecked native casts and addition with accepted SignedMinor/MoneyBoundary at authoritative raw amounts; exact D14 document amounts and portable signed accumulated balances, gross inflow/outflow, custody-in-transit, physical counted-minus-recorded variance. Preserve fingerprint serialization and existing evidence, locks, identity, classification, response shapes and validation caps. Audit integrity in touched operations. Test exact bounds, intermediate overflow, transfer conservation, replay, cash adjustment, malformed stored amounts, and changed-path regressions. No bank I04 changes except inventory, no new schema/dependencies or production deployment.",
       "product_test_head": "9c803d0e32e48d097691c0e6f3f12de22219f158",
@@ -1936,7 +1936,11 @@
         "TreasuryTransferService exact conservation, matching and persisted audit",
         "TreasuryCashCountService exact count variance and unchanged snapshot hash serialization"
       ],
-      "remaining": "Hosted evidence; I04 bank, I05-I06, P3, remaining G07 integration and L01 inconclusive review; no deployment or main merge."
+      "remaining": "Hosted evidence; I04 bank, I05-I06, P3, remaining G07 integration and L01 inconclusive review; no deployment or main merge.",
+      "run": 45555035451,
+      "sqlite_evidence": "job 139004928609: 10 tests, 212 assertions, zero errors/failures/skips, exit 0; five PHP lints passed.",
+      "mysql_evidence": "job 139004928326: in_progress / no conclusion; no acceptance claimed",
+      "bank_i04_inventory": "BankReconciliationService 605 lines: signed D14 statement opening/closing and line input; exact raw receipt D12 and claim evidence; canonical hash; adjacent statement continuity; checked ledger and unmatched sums/differences; local persisted audit; preserve reconciliation identity and separate bank custody from subscriber credit. Source inventory only; no I04 modification."
     }
   }
 }
