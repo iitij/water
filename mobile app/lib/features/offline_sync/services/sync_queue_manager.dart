@@ -8,6 +8,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/auth/session_service.dart';
+import '../../../core/field_operations/field_session_scope.dart';
+import '../../../core/network/interceptors/auth_interceptor.dart';
+import '../data/drift_sync_queue_repository.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/network_info.dart';
 import '../../../core/sync/sync_retry_policy.dart';
@@ -25,11 +28,13 @@ class SyncQueueManager extends ChangeNotifier {
     required NetworkInfo networkInfo,
     required SessionService session,
     SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
+    FieldSessionScope Function()? captureScope,
   })  : _dio = dio,
         _repository = repository,
         _networkInfo = networkInfo,
         _session = session,
-        _retryPolicy = retryPolicy;
+        _retryPolicy = retryPolicy,
+        _captureScope = captureScope;
 
   static final RegExp _uuidPattern = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
@@ -40,6 +45,36 @@ class SyncQueueManager extends ChangeNotifier {
   final NetworkInfo _networkInfo;
   final SessionService _session;
   final SyncRetryPolicy _retryPolicy;
+  final FieldSessionScope Function()? _captureScope;
+
+  bool _owns(SyncQueueItem item, [FieldSessionScope? scope]) =>
+      _session.isAuthenticated && canSyncForUser(item,
+          scope?.userId ?? _session.user?['id']?.toString(),
+          server: _captureScope == null ? null : scope?.server ?? _dio.options.baseUrl);
+
+  FieldSessionScope? _scope() => _captureScope?.call();
+
+  /// Capture before the caller's first network or connectivity await.
+  FieldSessionScope? captureOwnerScope() => _scope();
+
+  void _checkScope(FieldSessionScope? scope, SyncQueueItem item) {
+    scope?.ensureCurrent();
+    if (!_owns(item, scope)) throw StateError('Offline action owner changed.');
+  }
+
+  Options _requestOptions(SyncQueueItem item, FieldSessionScope? scope, {String? key}) {
+    _checkScope(scope, item);
+    return Options(headers: {'Idempotency-Key': key ?? item.id}, extra: {
+      if (scope != null) AuthInterceptor.sessionGenerationKey: scope.generation,
+      if (scope != null) AuthInterceptor.sessionServerKey: scope.server,
+      'skipOfflineCache': true,
+    });
+  }
+
+  /// Only an aggregate count; never disclose unassigned payloads to a user.
+  int get quarantinedCount => _items.where((item) => item.ownerUserId == null ||
+      item.ownerUserId!.isEmpty || (_captureScope != null &&
+          (item.ownerServer == null || item.ownerServer!.isEmpty))).length;
 
   List<SyncQueueItem> _items = <SyncQueueItem>[];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -54,7 +89,7 @@ class SyncQueueManager extends ChangeNotifier {
   // UI consumers and counters must not reveal those other-account payloads.
   List<SyncQueueItem> get items => List<SyncQueueItem>.unmodifiable(
         _items.where(
-          (item) => canSyncForUser(item, _session.user?['id']?.toString()),
+          (item) => _owns(item),
         ),
       );
   bool get isSyncing => _isSyncing;
@@ -110,7 +145,8 @@ class SyncQueueManager extends ChangeNotifier {
             : item,
       ),
     ).toList(growable: true);
-    await _runRepositoryWrite(() => _repository.saveAll(_items));
+    // Do not reconcile a partial snapshot by marking absent rows synced.
+    // Recover interrupted owned work at the start of syncPending instead.
 
     _isOnline = await _networkInfo.isConnected;
     _session.addListener(_handleSessionChanged);
@@ -223,7 +259,7 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> retry(String id) async {
     final index = _items.indexWhere((item) => item.id == id);
     if (index < 0 ||
-        !canSyncForUser(_items[index], _session.user?['id']?.toString())) {
+        !_owns(_items[index])) {
       return;
     }
     final updated = _items[index].copyWith(
@@ -241,7 +277,7 @@ class SyncQueueManager extends ChangeNotifier {
   Future<void> retryFailed() async {
     final updatedItems = <SyncQueueItem>[];
     for (var i = 0; i < _items.length; i++) {
-      if (canSyncForUser(_items[i], _session.user?['id']?.toString()) &&
+      if (_owns(_items[i]) &&
           (_items[i].status == SyncQueueStatus.failed ||
               _items[i].status == SyncQueueStatus.needsAttention)) {
         final reset = _items[i].copyWith(
@@ -271,13 +307,18 @@ class SyncQueueManager extends ChangeNotifier {
   /// تنفيذات `SyncQueueRepository` (Drift وSharedPreferences على السواء).
   Future<void> discard(String id) async {
     if (_isSyncing) return;
-    final ownerId = _session.user?['id']?.toString();
     final selected = _items.where((item) => item.id == id).firstOrNull;
-    if (selected == null || !canSyncForUser(selected, ownerId)) return;
-    final remaining = (await _repository.loadAll())
-        .where((item) => item.id != id)
-        .toList(growable: false);
-    await _runRepositoryWrite(() => _repository.saveAll(remaining));
+    if (selected == null || !_owns(selected)) return;
+    final scope = _scope();
+    _checkScope(scope, selected);
+    final repo = _repository;
+    if (repo is DriftSyncQueueRepository) {
+      await _runRepositoryWrite(() => repo.discardOwned(selected));
+    } else {
+      final remaining = (await repo.loadAll()).where((item) => item.id != id).toList();
+      _checkScope(scope, selected);
+      await _runRepositoryWrite(() => repo.saveAll(remaining));
+    }
     _items.removeWhere((candidate) => candidate.id == id);
     notifyListeners();
   }
@@ -286,7 +327,16 @@ class SyncQueueManager extends ChangeNotifier {
     if (_isSyncing || !_session.isReady || !_session.isAuthenticated) return;
     // Lock before the first await so manual, automatic, and enqueue-triggered syncs
     // cannot submit the same UUID concurrently.
+    FieldSessionScope? scope;
+    try {
+      scope = _scope();
+    } on StateError {
+      return;
+    }
+    final startingUser = _session.user?['id']?.toString();
+    if (startingUser == null || startingUser.isEmpty) return;
     _isSyncing = true;
+    SyncQueueItem? inProgress;
     notifyListeners();
     try {
       // الترتيب: النقد أولاً ثم الأقدم؛ ومهلة التهدئة تُحترم داخل الحلقة.
@@ -310,9 +360,20 @@ class SyncQueueManager extends ChangeNotifier {
       // A shared device can retain queued work from a previously signed-in
       // account. Keep that work intact for its owner without attempting it
       // under another user's session or blocking this account's operations.
-      final activeUserId = _session.user?['id']?.toString();
+      scope?.ensureCurrent();
+      if (_session.user?['id']?.toString() != startingUser) return;
+      // Recover only interrupted rows owned by the current session.
+      for (var i = 0; i < _items.length; i++) {
+        final row = _items[i];
+        if (_owns(row, scope) && row.status == SyncQueueStatus.syncing) {
+          _checkScope(scope, row);
+          final recovered = row.copyWith(status: SyncQueueStatus.queued);
+          await _runRepositoryWrite(() => _repository.upsert(recovered));
+          _items[i] = recovered;
+        }
+      }
       final orderedIds = eligibleForSync(_items, now)
-          .where((item) => canSyncForUser(item, activeUserId))
+          .where((item) => _owns(item, scope))
           .map((item) => item.id)
           .toList(growable: false);
       _scheduleRetryWakeUp(now);
@@ -320,22 +381,15 @@ class SyncQueueManager extends ChangeNotifier {
       for (final id in orderedIds) {
         final index = _items.indexWhere((item) => item.id == id);
         if (index < 0) continue;
-        final currentUserId = _session.user?['id']?.toString();
-        var item = _items[index];
+        scope?.ensureCurrent();
+        if (_session.user?['id']?.toString() != startingUser) break;
+        final item = _items[index];
 
         // احترام مهلة التهدئة: عنصر واحد ينتظر لا يجوز أن يعطّل بقية الطابور،
         // لكن الترتيب الصارم (FIFO) يبقى قائماً لكل ما حان وقته.
         if (!item.isReadyAt(now) ||
-            !canSyncForUser(item, currentUserId)) {
+            !_owns(item, scope)) {
           continue;
-        }
-
-        // Adopt unowned legacy/field rows into the active authenticated account,
-        // while strictly protecting items owned by a different user ID.
-        if ((item.ownerUserId == null || item.ownerUserId!.isEmpty) &&
-            currentUserId != null &&
-            currentUserId.isNotEmpty) {
-          item = item.copyWith(ownerUserId: currentUserId);
         }
 
         final syncingItem = item.copyWith(
@@ -343,18 +397,22 @@ class SyncQueueManager extends ChangeNotifier {
           attempts: item.attempts + 1,
           clearError: true,
         );
+        _checkScope(scope, item);
+        inProgress = syncingItem;
         _items[index] = syncingItem;
         await _runRepositoryWrite(() => _repository.upsert(syncingItem));
         notifyListeners();
 
         try {
-          await _send(syncingItem);
+          _checkScope(scope, syncingItem);
+          await _send(syncingItem, scope);
+          inProgress = null;
           _items.removeWhere((candidate) => candidate.id == id);
           notifyListeners();
         } catch (error) {
           final currentIndex = _items.indexWhere((candidate) => candidate.id == id);
           if (currentIndex >= 0) {
-            final recorded = _applyFailure(_items[currentIndex], error);
+            final recorded = _applyFailure(syncingItem, error);
             _items[currentIndex] = recorded;
             await _runRepositoryWrite(
               () => _repository.recordSyncFailure(
@@ -365,6 +423,7 @@ class SyncQueueManager extends ChangeNotifier {
             );
             notifyListeners();
           }
+          inProgress = null;
           await _refreshOnlineState();
           // Keep strict FIFO ordering: later operations may depend on the first failure.
           break;
@@ -372,7 +431,7 @@ class SyncQueueManager extends ChangeNotifier {
       }
     } catch (error) {
       final syncingIndex = _items.indexWhere(
-        (item) => item.status == SyncQueueStatus.syncing,
+        (item) => inProgress != null && item.id == inProgress.id && item.status == SyncQueueStatus.syncing,
       );
       if (syncingIndex >= 0) {
         final recorded = _applyFailure(_items[syncingIndex], error);
@@ -403,7 +462,8 @@ class SyncQueueManager extends ChangeNotifier {
     Map<String, dynamic> payload, {
     String? preferredId,
   }) async {
-    final ownerUserId = _session.user?['id']?.toString();
+    final scope = _scope();
+    final ownerUserId = scope?.userId ?? _session.user?['id']?.toString();
     if (!_session.isReady ||
         !_session.isAuthenticated ||
         ownerUserId == null ||
@@ -412,12 +472,13 @@ class SyncQueueManager extends ChangeNotifier {
     }
 
     final itemId = _ensureUuid(preferredId);
-    final existingIndex = _items.indexWhere((existing) => existing.id == itemId);
-    if (existingIndex >= 0) {
-      final existing = _items[existingIndex];
+    payload = {...payload, 'sync_uuid': itemId};
+    final existing = (await _repository.loadAll()).where((row) => row.id == itemId).firstOrNull;
+    scope?.ensureCurrent();
+    if (existing != null) {
       // An explicit UUID supplied by another account must never return that
       // user's payload, nor silently turn this user's action into theirs.
-      if (!canSyncForUser(existing, ownerUserId)) {
+      if (!_owns(existing, scope)) {
         throw StateError('معرّف العملية مرتبط بحساب مستخدم آخر.');
       }
       if (existing.type != type ||
@@ -434,40 +495,33 @@ class SyncQueueManager extends ChangeNotifier {
       status: SyncQueueStatus.queued,
       createdAt: DateTime.now(),
       ownerUserId: ownerUserId,
+      ownerServer: scope?.server,
     );
+    _checkScope(scope, item);
+    await _runRepositoryWrite(() => _repository.upsert(item));
     _items.add(item);
     _items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    await _runRepositoryWrite(() => _repository.upsert(item));
     notifyListeners();
     unawaited(syncPending());
     return item;
   }
 
-  Future<void> _send(SyncQueueItem item) async {
-    final currentUserId = _session.user?['id']?.toString();
-    // الصفوف القديمة بلا مالك تُنسب للمستخدم الحالي عند المزامنة (سياسة التبنّي)،
-    // أما أي اختلاف صريح في المالك فيُوقف الإرسال لحماية بيانات الحساب الآخر.
-    if (item.ownerUserId != null &&
-        item.ownerUserId!.isNotEmpty &&
-        item.ownerUserId != currentUserId) {
-      throw StateError(
-        'هذه العملية محفوظة لحساب مستخدم آخر؛ سجّل الدخول بالحساب نفسه لمزامنتها.',
-      );
-    }
+  Future<void> _send(SyncQueueItem item, FieldSessionScope? scope) async {
+    _checkScope(scope, item);
     switch (item.type) {
       case SyncQueueType.reading:
-        await _sendReading(item);
+        await _sendReading(item, scope);
       case SyncQueueType.payment:
-        await _sendPayment(item);
+        await _sendPayment(item, scope);
       case SyncQueueType.paymentVoid:
-        await _sendPaymentVoid(item);
+        await _sendPaymentVoid(item, scope);
       case SyncQueueType.cashSessionClose:
-        await _sendCashSessionClose(item);
+        await _sendCashSessionClose(item, scope);
     }
   }
 
   /// إلغاء سند قبض. الخادم يرفض طلباً بلا سبب واضح (10 أحرف على الأقل).
-  Future<void> _sendPaymentVoid(SyncQueueItem item) async {
+  Future<void> _sendPaymentVoid(SyncQueueItem item, FieldSessionScope? scope) async {
     final payload = Map<String, dynamic>.from(item.payload);
     payload.remove('owner_user_id');
     final paymentId = _toNullableInt(payload.remove('payment_id') ?? payload['id']);
@@ -485,8 +539,9 @@ class SyncQueueManager extends ChangeNotifier {
         'reason': reason,
         if (payload['sync_uuid'] != null) 'sync_uuid': payload['sync_uuid'],
       },
-      options: Options(headers: <String, dynamic>{'Idempotency-Key': item.id}),
+      options: _requestOptions(item, scope),
     );
+    _checkScope(scope, item);
     final responseMap = _asMap(response.data);
     await _runRepositoryWrite(
       () => _repository.markPaymentSynced(
@@ -498,7 +553,7 @@ class SyncQueueManager extends ChangeNotifier {
 
   /// إغلاق صندوق المحصّل. يُرسل النقد المعدود فقط؛ الأرقام المتوقعة تُحسب
   /// على الخادم من السندات الفعلية (خطة 2.0 — الفصل 5.2).
-  Future<void> _sendCashSessionClose(SyncQueueItem item) async {
+  Future<void> _sendCashSessionClose(SyncQueueItem item, FieldSessionScope? scope) async {
     final payload = Map<String, dynamic>.from(item.payload);
     payload.remove('owner_user_id');
     final sessionId = _toNullableInt(payload.remove('cash_session_id'));
@@ -514,8 +569,9 @@ class SyncQueueManager extends ChangeNotifier {
     final response = await _dio.post<dynamic>(
       ApiEndpoints.closeCashSession(sessionId),
       data: body,
-      options: Options(headers: <String, dynamic>{'Idempotency-Key': item.id}),
+      options: _requestOptions(item, scope),
     );
+    _checkScope(scope, item);
     final responseMap = _asMap(response.data);
     await _runRepositoryWrite(
       () => _repository.markPaymentSynced(
@@ -525,7 +581,7 @@ class SyncQueueManager extends ChangeNotifier {
     );
   }
 
-  Future<void> _sendReading(SyncQueueItem item) async {
+  Future<void> _sendReading(SyncQueueItem item, FieldSessionScope? scope) async {
     final payload = Map<String, dynamic>.from(item.payload);
     final localImage = payload.remove('local_image_path')?.toString();
     final fieldImage = payload.remove('image_path')?.toString();
@@ -556,8 +612,9 @@ class SyncQueueManager extends ChangeNotifier {
     final response = await _dio.post<dynamic>(
       ApiEndpoints.readingSyncBatch,
       data: body,
-      options: Options(headers: <String, dynamic>{'Idempotency-Key': syncUuid}),
+      options: _requestOptions(item, scope, key: syncUuid),
     );
+    _checkScope(scope, item);
     final responseMap = _asMap(response.data);
     final results = responseMap?['results'];
     if (results is! List || results.isEmpty) {
@@ -593,7 +650,7 @@ class SyncQueueManager extends ChangeNotifier {
     );
   }
 
-  Future<void> _sendPayment(SyncQueueItem item) async {
+  Future<void> _sendPayment(SyncQueueItem item, FieldSessionScope? scope) async {
     final payload = Map<String, dynamic>.from(item.payload);
     payload.remove('local_receipt_number');
     payload.remove('owner_user_id');
@@ -613,7 +670,7 @@ class SyncQueueManager extends ChangeNotifier {
       response = await _dio.post<dynamic>(
         endpoint,
         data: payload,
-        options: Options(headers: <String, dynamic>{'Idempotency-Key': syncUuid}),
+        options: _requestOptions(item, scope, key: syncUuid),
       );
     } on DioException catch (error) {
       if (error.response?.statusCode != 409 ||
@@ -625,7 +682,9 @@ class SyncQueueManager extends ChangeNotifier {
       final reviewResponse = await _dio.post<dynamic>(
         ApiEndpoints.lateReceiptReviews,
         data: payload,
+        options: _requestOptions(item, scope),
       );
+      _checkScope(scope, item);
       final review = _asMap(_asMap(reviewResponse.data)?['review']);
       final reviewId = review?['id'];
       if (reviewId == null) {
@@ -640,6 +699,10 @@ class SyncQueueManager extends ChangeNotifier {
       throw StateError('تعذر اعتماد عملية الدفع.');
     }
 
+    _checkScope(scope, item);
+    if (scope != null) {
+      ensurePaymentAcknowledged(response.data, payload, ownerUserId: scope.userId);
+    }
     final responseMap = _asMap(response.data);
     await _runRepositoryWrite(
       () => _repository.markPaymentSynced(
