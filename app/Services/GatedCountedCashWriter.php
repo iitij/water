@@ -25,6 +25,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCountedCashWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private LateReceiptReviewService $reviews,
@@ -79,8 +81,8 @@ final class GatedCountedCashWriter
                 }
                 $balance = app(TransactionService::class);
                 $before = $balance->accountBalanceMinor($subscriber);
-                $result = $this->reviews->decide($reviewId, $actor, ['approve' => true, 'settlement_method' => 'already_counted',
-                    'evidence_reference' => $reference, 'evidence' => $evidence]);
+                $result = $this->mutate($reviewId, $uuid, fn () => $this->reviews->decide($reviewId, $actor, ['approve' => true, 'settlement_method' => 'already_counted',
+                    'evidence_reference' => $reference, 'evidence' => $evidence], $this));
                 $row = (object) $result;
                 $leg = $this->allocationLeg($row, $session);
                 $this->need($leg['amount_minor'] === $minor && (int) $row->decided_by === (int) $actor->id
@@ -102,11 +104,30 @@ final class GatedCountedCashWriter
                     ]);
                     $this->checkProof($proof, $row, $leg, $session, (int) $approval->id, $variance, $allocated);
                 }
+                $created = $this->registry->record($context, $uuid, [$leg], $now);
+                $this->need($created === ! $replay, 'gated_counted_operation_conflict');
                 return ['review' => $result, 'transaction_id' => (int) $leg['source_id'],
-                    'allocation' => $snapshot, 'registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
+                    'allocation' => $snapshot, 'registry_created' => $created];
             });
     }
 
+
+    public function allowsMutation(string $kind, int $reviewId, string $uuid): bool
+    {
+        return $kind === 'already_counted' && $this->mutationIdentity === [$reviewId, $uuid]
+            && DB::transactionLevel() > 0;
+    }
+
+    private function mutate(int $reviewId, string $uuid, callable $action): array
+    {
+        $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_counted_mutation_scope');
+        $this->mutationIdentity = [$reviewId, $uuid];
+        try {
+            return $action();
+        } finally {
+            $this->mutationIdentity = null;
+        }
+    }
 
     /** Read-only independent invocation of the complete capacity proof; never creates or repairs effects. */
     public function verifySession(int $sessionId): array
