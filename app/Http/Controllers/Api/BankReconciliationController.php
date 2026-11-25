@@ -47,8 +47,13 @@ final class BankReconciliationController extends ApiController
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
         ]);
-        return response()->json($service->confirmCollection($request->user(), $id, (int) $data['line_id'],
-            (int) $data['payment_id'], $data['reference'], $data['evidence']));
+        try {
+            return response()->json($service->confirmCollection($request->user(), $id, (int) $data['line_id'],
+                (int) $data['payment_id'], $data['reference'], $data['evidence']));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'يجب اعتماد التحصيل عبر مسار التسوية المالية: '.$error->getMessage(), $error);
+        }
     }
 
     public function recordFee(Request $request, int $id, BankReconciliationService $service)
