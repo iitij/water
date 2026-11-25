@@ -130,8 +130,13 @@ final class FinancialSourceCoverageDiagnostic
         foreach ($rows('payment_refunds', 'disbursed_on') as $doc) {
             $documents++;
             $group = 'refund:'.$doc->id;
-            $ledger(PaymentRefund::class, (int) $doc->id, 'payment_refund', $doc->disbursed_on, $group);
-            $posting('payment_refund_id', (int) $doc->id, 'payment_refund', $doc->disbursed_on, $group);
+            // Eloquent's date cast persists midnight timestamps on SQLite,
+            // while the MySQL DATE column returns YYYY-MM-DD. Use the same
+            // authoritative document date as the refund/custody evidence.
+            $refund = PaymentRefund::query()->lockForUpdate()->findOrFail($doc->id);
+            $effectiveOn = $refund->disbursed_on->toDateString();
+            $ledger(PaymentRefund::class, (int) $doc->id, 'payment_refund', $effectiveOn, $group);
+            $posting('payment_refund_id', (int) $doc->id, 'payment_refund', $effectiveOn, $group);
         }
         foreach ($rows('treasury_held_cash_credits', 'effective_on') as $doc) {
             $documents++;
