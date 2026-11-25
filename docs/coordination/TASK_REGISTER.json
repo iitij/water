@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 87,
+    "round": 88,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4108,6 +4108,22 @@
       "runs": [],
       "limits": "Static partial review only, not full integration or runtime acceptance. Global UUID reservation across remaining operation families and submission paths remains open; distinct-date W17, excluded W18 flows and independent proof, W19 historical transition and closure completeness still open. Prior workflow restriction respected; no new runtime, no main merge, no live data changes.",
       "next": "Review remaining candidate contracts and all writer UUID ownership, audit/provenance binding and replay, then define explicit period recognition and independent evidence closure. Validate before integration."
+    },
+    "round88": {
+      "phase": "Integration source review pass 2: independent bank collection audit evidence",
+      "status": "SOURCE_REVIEW_PARTIAL_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "scope": "Compared actual late receipt, noncash claim, cash session and bank collection service contracts and audit payloads. W19 read-only verifier now requires unique mandatory submission, decision, bank statement import and collection confirmation audit events with matching actor and exact persisted fields; retained prior registered pair and account-opening checks. Added two test methods per engine for four isolated audit tamper cases and missing mandatory event, without repairing or reissuing financial effects.",
+      "revision": {
+        "round": 86,
+        "branch": "qa/central-g1b-bank-collection-pair",
+        "source": "d318a4ee8e4f2f7647907acdb3a0d0136ee145fb",
+        "writer_commit": "6d3677fd9c7ee2b721b267209485227cef9a09d9",
+        "added_cases_per_engine": 2
+      },
+      "runs": [],
+      "limits": "Source-only partial review; no runtime acceptance. Comparison of audit evidence cannot prove database immutability or coordinated tamper resistance; late-review verifier branch still lacks independent fixture. Global UUID reservation, W17 multi-date, W18 funded/mixed flows and completeness/fencing/closure remain open. Earlier workflow restriction respected; no workflow creation, main merge or production changes.",
+      "next": "Continue candidate contract QA review and explicit global UUID ownership/period recognition design; independently validate pending branches before activation."
     }
   }
 }
