@@ -3062,6 +3062,64 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
+    public function test_release_handover_service_fence_requires_atomic_custody_scope(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $handovers = app(\App\Services\CashHandoverService::class);
+        $treasury = app(TreasuryRegisterService::class);
+        $accountId = (int) $account['id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $reference = 'QA-HANDOVER-FENCE';
+        $date = '2026-11-25';
+        $direct = fn (?\App\Services\GatedCashHandoverWriter $candidate = null) =>
+            $handovers->record($session, $reviewer, '0.40', $reference, $date, self::EVIDENCE, $candidate);
+        $receive = fn () => $writer->receive($reviewer, (int) $session->id, $accountId, '0.40',
+            $reference, $date, self::EVIDENCE, $uuid, $this->nowAt());
+        $tables = ['cash_sessions', 'cash_handovers', 'payments', 'transactions', 'treasury_postings', 'audit_events',
+            'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.cash_handovers' => true]);
+        $reason = 'gated_handover_writer_required';
+        $this->rejects($reason, $direct);
+        $this->rejects($reason, fn () => DB::transaction(fn () => $direct($writer)));
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $receive);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $result = $receive();
+        $this->assertTrue($result['registry_created']);
+        $handover = $result['handover'];
+        $post = fn (?\App\Services\GatedCashHandoverWriter $candidate = null) =>
+            $treasury->post($reviewer, $accountId, 'cash_handover', (int) $handover->id, $candidate);
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $this->rejects($reason, $post);
+        $this->rejects($reason, fn () => DB::transaction(fn () => $post($writer)));
+        $this->rejects($reason, $direct);
+        $this->assertFalse($receive()['registry_created']);
+        config(['financial_candidate.cash_handovers' => false]);
+        $this->rejects($reason, $direct);
+        $this->rejects($reason, $post);
+        $this->assertFalse($receive()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['cash_sessions', 'payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => 40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame('0.60', $handovers->summary($session)['remaining_amount']);
+        $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
+
     public function test_round137_handover_registers_only_treasury_effect_and_preserves_original_till(): void
     {
         [, , $account, , , $subscriber] = $this->held();
