@@ -3086,4 +3086,108 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('treasury_postings', ['id' => $old['posting']['id'], 'amount_minor' => -40]);
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
+
+    public function test_round140_registered_documents_match_both_directions_without_authorizing_close(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic coverage tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-R140-METER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($issuer, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $writer->cancel($reviewer, (int) $invoice->id, 'Independent documented current cancellation',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt())['payment'];
+        $to = Subscriber::create(['name' => 'Synthetic coverage destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $writer->transfer($reviewer, (int) $receipt->id, (int) $to->id, 'Independent current receipt transfer',
+            self::EVIDENCE, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+        $tables = ['invoices', 'payments', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'payment_allocation_revisions'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $inspect = fn () => $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
+        $result = $inspect();
+        $this->assertSame([], $result['issues']);
+        $this->assertTrue($result['scanned_sources_match']);
+        $this->assertSame(11, $result['expected_legs']);
+        $this->assertSame(11, $result['matched_legs']);
+        $this->assertSame(11, $result['registry_events']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertSame($result, $inspect());
+        foreach ($before as $table => $records) $this->assertSame($records, $snapshot($table), $table);
+    }
+
+    public function test_round140_missing_receipt_and_handover_sources_detected_even_when_registry_valid(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $legacy = app(PaymentService::class)->collectPayment($subscriber, '0.30');
+        $entry = DB::table('transactions')->where('reference_type', Payment::class)->where('reference_id', $legacy->id)->sole();
+        $missingLedger = $legacy->replicate();
+        $missingLedger->receipt_number = 'QA-R140-NO-LEDGER';
+        $missingLedger->sync_uuid = '66666666-6666-4666-8666-666666666666';
+        $missingLedger->save();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($issuer);
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $handover = app(\App\Services\CashHandoverService::class)->record($session, $reviewer, '1.00',
+            'QA-R140-UNPOSTED', '2026-11-25', self::EVIDENCE);
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['scanned_sources_match']);
+        $this->assertContains(['code' => 'required_registry_leg_missing_or_duplicate', 'source' => 'ledger_transaction',
+            'id' => $entry->id.':subscriber'], $result['issues']);
+        $this->assertContains(['code' => 'document_ledger_missing_duplicate_or_deleted', 'source' => Payment::class,
+            'id' => $missingLedger->id.':payment'], $result['issues']);
+        $this->assertContains(['code' => 'document_treasury_posting_missing_or_duplicate', 'source' => 'cash_handover_id',
+            'id' => (string) $handover->id], $result['issues']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseMissing('treasury_postings', ['cash_handover_id' => $handover->id]);
+        $this->assertDatabaseHas('payments', ['id' => $missingLedger->id]);
+    }
+
+    public function test_round140_detects_correctly_hashed_wrong_date_and_split_refund_operation(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '10.00');
+        $entry = DB::table('transactions')->where('reference_type', Payment::class)->where('reference_id', $receipt->id)->sole();
+        app(FinancialWriteGate::class)->withinOpenPeriod('water', '2026-11-24', $this->nowAt(), function (array $context) use ($entry): void {
+            $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $entry->id);
+            $this->assertTrue(app(FinancialPostingRegistry::class)->record($context, '66666666-6666-4666-8666-666666666666', [$leg], $this->nowAt()));
+        });
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
+            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
+        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
+        $refundEntry = DB::table('transactions')->where('reference_type', \App\Models\PaymentRefund::class)->where('reference_id', $refund->id)->sole();
+        $this->gate(function (array $context) use ($refundEntry, $posting): void {
+            $registry = app(FinancialPostingRegistry::class);
+            $this->assertTrue($registry->record($context, '88888888-8888-4888-8888-888888888888',
+                [app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $refundEntry->id)], $this->nowAt()));
+            $this->assertTrue($registry->record($context, '99999999-9999-4999-8999-999999999999',
+                [app(\App\Services\TreasuryCustodyEvidence::class)->leg((int) $posting['id'])], $this->nowAt()));
+        });
+        $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['scanned_sources_match']);
+        $this->assertContains(['code' => 'registry_effective_date_mismatch', 'source' => 'ledger_transaction',
+            'id' => $entry->id.':subscriber'], $result['issues']);
+        $this->assertContains(['code' => 'multi_leg_operation_split', 'source' => 'operation_group',
+            'id' => 'refund:'.$refund->id], $result['issues']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('payment_refunds', 1);
+    }
 }
