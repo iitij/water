@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 68,
+    "round": 69,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3801,7 +3801,7 @@
     },
     "round68": {
       "phase": "Inactive gated treasury opening and funding writer",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "52cda5bfe824beb813bcb31aab13bba2a78562cf",
       "source": "8d533d71eed46aeb265f4b7942f77b34a5dd27de",
       "workflow": "2f8b8fab123fe4dfadbc82bb9b05750983d52ccb",
@@ -3810,12 +3810,51 @@
       "runs": [
         {
           "id": 45616644738,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "scope": "Gated opening and collector funding; exact open-period replay, registered opening prerequisite, actual date and amount proof, reject legacy adoption and UUID conflict; closed/frozen rejection and injected registry failure with audit rollback/retry. Four cases per engine.",
+      "limits": "No production activation, global writer fence or concurrent protocol certification; no main merge. Historical onboarding and cross-period replay policy remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139213645852,
+          "tests": 4,
+          "assertions": 51,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139213645252,
+          "tests": 4,
+          "assertions": 51,
+          "exit": 0
+        },
+        "total": {
+          "tests": 8,
+          "assertions": 102,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "round69": {
+      "phase": "Inactive gate-first ordinary cash receipt writer",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "8d533d71eed46aeb265f4b7942f77b34a5dd27de",
+      "source": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "workflow": "e86e7d04a199b7a0bd080701ba62445c92079090",
+      "branch": "fix/central-g1b-gated-cash-receipt",
+      "pr": 146,
+      "runs": [
+        {
+          "id": 45617005572,
           "status": "queued",
           "conclusion": null
         }
       ],
-      "scope": "Gated opening and collector funding; exact open-period replay, registered opening prerequisite, actual date and amount proof, reject legacy adoption and UUID conflict; closed/frozen rejection and injected registry failure with audit rollback/retry. Four cases per engine.",
-      "limits": "No production activation, global writer fence or concurrent protocol certification; no main merge. Historical onboarding and cross-period replay policy remain open."
+      "scope": "Ordinary current-day cash receipt, stable operation/receipt UUID, explicit till destination, actual ledger evidence and registry atomicity, exact replay, legacy/frozen/closed rejection and trigger rollback/retry. Four cases per engine.",
+      "limits": "Invoice-specific allocation tests, independent cash custody proof, noncash/late writer adapters, all-writer fencing, global lock order and concurrency unproved. No production activation or main merge."
     }
   }
 }
