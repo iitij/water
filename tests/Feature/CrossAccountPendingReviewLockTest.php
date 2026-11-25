@@ -249,6 +249,10 @@ final class CrossAccountPendingReviewLockTest extends TestCase
         self::assertNotSame($a['subscriber'], $b['subscriber']);
         self::assertNotSame($a['meter'], $b['meter']);
         $before = $this->snapshot();
+        foreach (['readings', 'invoices', 'payments', 'transactions'] as $table) {
+            self::assertFalse(DB::table($table)->where('meter_id', $a['meter'])->exists());
+        }
+        self::assertFalse(DB::table('late_receipt_reviews')->where('submitted_meter_id', $a['meter'])->exists());
         $ledger = app(TransactionService::class);
         $balance = fn (array $f) => $ledger->accountBalanceMinor(Subscriber::findOrFail($f['subscriber']));
         $balances = [$balance($a), $balance($b)];
@@ -300,15 +304,19 @@ final class CrossAccountPendingReviewLockTest extends TestCase
                 }
                 self::mark($dir, 'B-committed');
             });
-            $ar = self::await($dir, 'A-ready', 10);
-            $br = self::await($dir, 'B-ready', 10);
-            self::await($dir, 'guard-held', 10);
-            $start = self::await($dir, 'B-start', 10);
+            // All parent barriers share the hard join budget, leaving time to release/reap.
+            $awaitParent = static fn (string $name) => self::await($dir, $name,
+                min(10.0, max(0.0, ($deadline - hrtime(true) - 5000000000) / 1e9)));
+            $ar = $awaitParent('A-ready');
+            $br = $awaitParent('B-ready');
+            $awaitParent('guard-held');
+            $start = $awaitParent('B-start');
             $until = min($deadline - 5000000000, $start['ns'] + 5000000000);
             while (hrtime(true) < $until && self::read($dir, 'B-result') === null) {
                 usleep(10000);
             }
             $evidence['connections'] = [$ar['connection'], $br['connection']];
+            $evidence['observation_ms'] = (hrtime(true) - $start['ns']) / 1e6;
             if (self::read($dir, 'B-committed') === null && self::read($dir, 'B-result') === null) {
                 $evidence['wait'] = $this->waitEvidence($ar['connection'], $br['connection']);
             }
