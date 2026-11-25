@@ -517,9 +517,10 @@ class PaymentService
         bool $deferred = false,
         ?int $lateReviewId = null,
         ?GatedCashReceiptWriter $gatedWriter = null,
+        ?GatedCollectionWriter $settlementWriter = null,
     ): Payment {
         return $this->postPayment($subscriber, $amount, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason,
-            $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, gatedWriter: $gatedWriter);
+            $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, gatedWriter: $gatedWriter, settlementWriter: $settlementWriter);
     }
 
     private function postPayment(
@@ -539,6 +540,7 @@ class PaymentService
         ?int $lateReviewId = null,
         bool $clearedClaim = false,
         ?GatedCashReceiptWriter $gatedWriter = null,
+        ?GatedCollectionWriter $settlementWriter = null,
     ): Payment {
         $syncUuid = $syncUuid === null ? null : strtolower($syncUuid);
         if ($syncUuid !== null && ! \Illuminate\Support\Str::isUuid($syncUuid)) {
@@ -549,7 +551,7 @@ class PaymentService
             throw ValidationException::withMessages(['amount' => 'المبلغ يجب أن يكون موجباً وبحد أقصى منزلتين عشريتين.']);
         }
         $amount = $money->decimal();
-        return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim, $gatedWriter) {
+        return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim, $gatedWriter, $settlementWriter) {
             // Acquire the shared issuance fence before subscriber/business locks.
             // Scope-gated writers already hold it; nested acquisition is reentrant.
             $issuer = DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first();
@@ -569,6 +571,17 @@ class PaymentService
                 }
             } elseif ($gatedWriter !== null) {
                 throw new \DomainException('gated_cash_writer_required');
+            }
+            if ($paymentMethod === 'cash' && $lateReviewId !== null && ! $clearedClaim) {
+                $registered = $syncUuid !== null && DB::table('financial_posting_operations')
+                    ->where('scope_key', 'water')->where('operation_uuid', $syncUuid)->exists();
+                if ($settlementWriter === null || $syncUuid === null || ! $settlementWriter->allowsMutation('late_cash', $lateReviewId, $syncUuid)) {
+                    if ($settlementWriter !== null || $registered || config('financial_candidate.late_cash_settlements') === true) {
+                        throw new \DomainException('gated_late_cash_writer_required');
+                    }
+                }
+            } elseif ($settlementWriter !== null) {
+                throw new \DomainException('gated_late_cash_writer_required');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
 
