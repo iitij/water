@@ -3493,7 +3493,14 @@
       "workflow": "5d6c484df33d63bf6000d0f34821c82dfd3784b0",
       "branch": "fix/central-g1b-treasury-registry-verification",
       "pr": 137,
-      "runs": [],
+      "runs": [
+        {
+          "id": 45613233598,
+          "name": "Treasury registry source verification",
+          "status": "queued",
+          "conclusion": null
+        }
+      ],
       "scope": "Mixed subscriber ledger and actual treasury transfer registry verifier; issuance lock before source locks, treasury effective date must equal registry date, missing sources fail, other existing treasury kinds explicitly unverified, coverage false. Four new and three changed verifier regressions per engine.",
       "limits": "No other treasury family evidence, complete writer coverage, production activation, final closure or main merge. Pending runtime."
     }
