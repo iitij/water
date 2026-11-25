@@ -174,17 +174,21 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'void');
 
+        $candidate = $this->prospectiveVoidApi();
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
 
         $payment = Payment::findOrFail($id);
-        $result = $paymentService->requestVoid(
-            $payment,
-            (string) $data['reason'],
-            $request->user()->id,
-            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
-        );
+        $result = $candidate
+            ? $this->voidCandidateCall(fn () => app(\App\Services\GatedReceiptVoidWriter::class)->request(
+                $request->user(), $id, (string) $data['reason'], now()->toDateTimeImmutable(),
+                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null))
+            : $paymentService->requestVoid(
+                $payment, (string) $data['reason'], $request->user()->id,
+                $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+            );
 
         /** @var Payment $payment */
         $payment = $result['payment'];
@@ -194,6 +198,7 @@ class PaymentController extends ApiController
             return response()->json([
                 'message' => 'السند يتجاوز حد الإلغاء المسموح؛ أُرسل طلب إلغاء لاعتماد المشرف.',
                 'pending_approval' => true,
+                ...($candidate ? ['request_id' => $result['request_id']] : []),
                 'payment' => $payment,
                 'receipt_data' => $this->receiptData($payment),
             ], 202);
@@ -216,11 +221,18 @@ class PaymentController extends ApiController
             ->voidRequested()
             ->with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
             ->latest('void_requested_at');
+        $candidate = $this->prospectiveVoidApi();
+        if ($candidate) {
+            $query->addSelect(['request_id' => DB::table('audit_events')->select('id')
+                ->whereColumn('entity_id', 'payments.id')->where('entity_type', Payment::class)
+                ->where('event', 'financial.void_request_gated')->orderByDesc('id')->limit(1)]);
+        }
         $this->applySorting($query, $request, self::LIST_SORTS['void_requests']);
         $payments = $query->paginate($this->perPage($request))->appends($request->query());
 
         return $payments->through(fn (Payment $payment) => [
             'id' => $payment->id,
+            ...($candidate ? ['request_id' => $payment->request_id === null ? null : (int) $payment->request_id] : []),
             'created_at' => $payment->created_at?->toISOString(),
             'square_id' => $payment->subscriber?->square_id,
             'square_name' => $payment->subscriber?->square?->name,
@@ -243,19 +255,27 @@ class PaymentController extends ApiController
     {
         $this->authorizeVoidApprover($request->user());
 
+        $candidate = $this->prospectiveVoidApi();
         $data = $request->validate([
             'approve' => ['required', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            ...($candidate ? [
+                'request_id' => ['required', 'integer', 'min:1'],
+                'operation_uuid' => [\Illuminate\Validation\Rule::requiredIf($request->boolean('approve')), 'nullable', 'uuid'],
+            ] : []),
         ]);
 
         $payment = Payment::findOrFail($id);
-        $payment = $paymentService->decideVoidRequest(
-            $payment,
-            (bool) $data['approve'],
-            $request->user(),
-            $data['notes'] ?? null,
-            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
-        );
+        $payment = $candidate
+            ? $this->voidCandidateCall(fn () => app(\App\Services\GatedReceiptVoidWriter::class)->decide(
+                $request->user(), $id, (bool) $data['approve'], $data['notes'] ?? null,
+                now()->toDateTimeImmutable(),
+                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null,
+                (int) $data['request_id']))['payment']
+            : $paymentService->decideVoidRequest(
+                $payment, (bool) $data['approve'], $request->user(), $data['notes'] ?? null,
+                $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+            );
 
         $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
 
@@ -424,6 +444,25 @@ class PaymentController extends ApiController
             'message_template' => app(WhatsAppService::class)->paymentMessage($payment),
             'pdf_url' => url('/api/payments/'.$payment->id.'/pdf'),
         ];
+    }
+
+    /** Explicitly restricted candidate; never activate in a production environment. */
+    private function prospectiveVoidApi(): bool
+    {
+        if (config('financial_candidate.void_api') !== true) return false;
+        abort_unless(app()->environment(['testing', 'staging']), 503, 'مسار الاختبار المالي غير متاح في الإنتاج.');
+        return true;
+    }
+
+    private function voidCandidateCall(callable $action): array
+    {
+        try {
+            return $action();
+        } catch (\DomainException $error) {
+            // Do not fall back to the legacy writer on a gate or identity failure.
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'تعذر تنفيذ العملية المالية: '.$error->getMessage(), $error);
+        }
     }
 
     /** اعتماد الإلغاء يحتاج صلاحية مشرف صريحة. */
