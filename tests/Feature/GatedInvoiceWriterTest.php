@@ -184,6 +184,42 @@ final class GatedInvoiceWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 0);
     }
 
+    public function test_invoice_cannot_consume_reserved_receipt_or_pending_claim_identity(): void
+    {
+        [$actor, $subscriber, $meter, $ids] = $this->fixture();
+        $writer = app(GatedInvoiceWriter::class);
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($actor, [
+            'sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id,
+            'payment_method' => 'check', 'amount' => '10.25',
+            'instrument_reference' => 'QA-RESERVED-CLAIM', 'instrument_on' => '2026-11-24',
+        ]);
+        $legacy = app(PaymentService::class)->collectPayment($subscriber, '1.00',
+            userId: $actor->id, paymentDate: '2026-11-25', syncUuid: self::OTHER);
+        $collector = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $actor);
+        $lateUuid = '33333333-3333-4333-8333-333333333333';
+        $late = app(\App\Services\LateReceiptReviewService::class)->submit($collector, [
+            'sync_uuid' => $lateUuid, 'cash_session_id' => $session->id,
+            'subscriber_id' => $subscriber->id, 'payment_method' => 'cash',
+            'amount' => '2.00', 'payment_date' => '2026-11-25',
+        ]);
+        foreach ([self::UUID, self::OTHER, $lateUuid] as $reserved) {
+            $this->rejects('gated_invoice_uuid_reserved',
+                fn () => $writer->issue($actor, $subscriber->id, $meter->id, $ids, $reserved, $this->nowAt()));
+        }
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('financial_posting_operations', 0);
+        $this->assertDatabaseCount('financial_posting_events', 0);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('noncash_collection_claims', ['id' => $claim['id'], 'status' => 'pending']);
+        $this->assertDatabaseHas('late_receipt_reviews', ['id' => $late['id'], 'status' => 'pending']);
+        $this->assertSame(self::OTHER, $legacy->fresh()->sync_uuid);
+        $this->assertSame(2, \App\Models\Reading::whereIn('id', $ids)->where('is_invoiced', false)->count());
+        $this->assertTrue($writer->issue($actor, $subscriber->id, $meter->id, $ids,
+            '44444444-4444-4444-8444-444444444444', $this->nowAt())['registry_created']);
+    }
+
     private function allocation(Subscriber $subscriber): array
     {
         $revision = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)
