@@ -1399,7 +1399,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertStringContainsString('Held release journal is immutable', $error->getMessage());
         }
     }
-    public function test_round121_corrections_preserve_shadow_release_and_exact_account_balances(): void
+    public function test_round122_corrections_restore_shadow_release_and_preserve_exact_account_balances(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
         \App\Models\Tariff::create(['name' => 'Synthetic correction tariff', 'unit_price' => '0.10', 'is_active' => true]);
@@ -1420,12 +1420,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'Independent approval of shadow release', $this->nowAt());
         $payments = app(PaymentService::class);
         $ledger = app(\App\Services\TransactionService::class);
-        $receipt = $payments->collectPayment($subscriber, '0.30');
+        $receipt = $payments->collectPayment($subscriber, '0.30', paymentDate: '2026-11-25');
         $this->assertSame(40, $ledger->accountBalanceMinor($subscriber));
+        // Same-day receipts precede held credit in the canonical allocator.
+        // The new receipt covers the invoice; the formerly applied held credit
+        // is unapplied and the prior shadow release must be fully reinstated.
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->applied_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
         $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $actor, '0.10',
             'QA-SHADOW-REFUND', 'treasury_cash', '2026-11-25', 'Synthetic independently evidenced refund', 'Independent proof of completed disbursement');
         $this->assertSame(30, $ledger->accountBalanceMinor($subscriber));
-        $this->assertSame(10, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
         $transferReceipt = $payments->collectPayment($subscriber, '0.15');
         $destination = Subscriber::create(['name' => 'Synthetic destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         app(\App\Services\PaymentAccountTransferService::class)->transfer($transferReceipt, (int) $destination->id, $actor,
@@ -1439,11 +1447,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
         $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($destination)['matches']);
         $report = $service->inspectJournal($accountId, $this->nowAt());
-        $this->assertSame(10, $report['shadow_released_minor']);
+        $this->assertSame(0, $report['shadow_released_minor']);
         $this->assertSame(0, $report['reinstatement_due_minor']);
         $this->assertSame(25, $report['actual_protected_minor']);
         $this->assertFalse($report['spending_release_authorized']);
-        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
         $this->assertDatabaseCount('payment_refunds', 1);
         $this->assertDatabaseCount('payment_account_transfers', 1);
         $this->assertDatabaseCount('treasury_postings', 1);

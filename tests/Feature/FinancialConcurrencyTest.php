@@ -861,4 +861,52 @@ class FinancialConcurrencyTest extends TestCase
         $this->assertSame(25, $report['held_cash_total_protected_minor']);
         $this->assertSame(10025, $report['provisional_recorded_balance_minor']);
     }
+    public function test_round122_release_approval_and_invoice_cancellation_are_serialized(): void
+    {
+        [$now, $account, $subscriber, $lot, $assignment, $creditActor, $proposer, $reviewer] = $this->heldRaceFixture();
+        $accountId = (int) $account['id'];
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-RACE-RELEASE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(InvoiceService::class)->generateInvoice($subscriber, $meter);
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit(
+            $creditActor, $assignment, 20, 'QA-HELD-RACE-RELEASE-CREDIT',
+            'Independent documented owner consent to apply held cash', (string) Str::uuid(), '2026-11-25', $now);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $proposal = (string) Str::uuid();
+        $release = (string) Str::uuid();
+        app(\App\Services\HeldCashReleaseProposalService::class)->propose(
+            $proposer, $accountId, (int) $credit->id, 20, $proposal,
+            'QA-HELD-RACE-RELEASE-PROPOSAL', 'Independent review of allocation evidence', $now);
+        $results = $this->race(
+            fn () => app(\App\Services\HeldCashReleaseProposalService::class)->recordRelease(
+                User::findOrFail($reviewer->id), $accountId, $proposal, $release,
+                'Independent approval of shadow release', $now),
+            fn () => app(\App\Services\InvoiceCancellationService::class)->cancel(
+                Invoice::findOrFail($invoice->id), 'Synthetic independently documented invoice cancellation', $proposer->id)->id,
+        );
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        if ($results[0]['ok']) {
+            $this->assertDatabaseCount('held_cash_release_journal', 1);
+            $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
+            $event = DB::table('held_cash_shadow_reinstatements')->sole();
+            $this->assertSame(20, (int) $event->before_minor);
+            $this->assertSame(0, (int) $event->after_minor);
+        } else {
+            $this->assertSame(\DomainException::class, $results[0]['error']);
+            $this->assertSame('held_release_journal_stale', $results[0]['message']);
+            $this->assertDatabaseCount('held_cash_release_journal', 0);
+            $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        }
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(20, app(TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $report = app(\App\Services\HeldCashReleaseProposalService::class)->inspectJournal($accountId, $now);
+        $this->assertSame(0, $report['shadow_released_minor']);
+        $this->assertSame(0, $report['reinstatement_due_minor']);
+        $this->assertSame(25, $report['actual_protected_minor']);
+        $this->assertFalse($report['spending_release_authorized']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('transactions', 3);
+    }
 }
