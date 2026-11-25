@@ -170,6 +170,35 @@ void main() {
     expect(m.items.single.status, SyncQueueStatus.needsAttention);
   });
 
+  test('durable attention state and HTTP code survive reload; partial save is not acknowledgement', () async {
+    await repo.upsert(action(firstId));
+    await repo.upsert(action(secondId, server: otherOrigin));
+    final originalForeign = await db.getSyncAction(secondId);
+    final rejected = action(firstId).copyWith(
+      status: SyncQueueStatus.needsAttention, attempts: 1, lastStatusCode: 422,
+      lastError: 'Synthetic rejection',
+    );
+    await repo.recordSyncFailure(item: rejected, error: 'Synthetic rejection');
+    final reopened = DriftSyncQueueRepository(database: db);
+    final stored = (await reopened.loadAll()).singleWhere((item) => item.id == firstId);
+    expect(stored.status, SyncQueueStatus.needsAttention);
+    expect(stored.lastStatusCode, 422);
+    expect(stored.attempts, 1);
+    expect(stored.lastError, 'Synthetic rejection');
+    await reopened.saveAll([stored]);
+    expect(await db.getSyncAction(secondId), originalForeign);
+    await reopened.upsert(stored.copyWith(status: SyncQueueStatus.queued,
+        clearError: true, clearStatusCode: true, clearNextAttempt: true));
+    final reset = (await reopened.loadAll()).singleWhere((item) => item.id == firstId);
+    expect(reset.status, SyncQueueStatus.queued);
+    expect(reset.lastStatusCode, isNull);
+    expect(reset.lastError, isNull);
+    await reopened.markPaymentSynced(id: firstId, serverResponseJson: '{"payment":{"id":123}}');
+    final confirmed = await db.getSyncAction(firstId);
+    await expectLater(reopened.recordSyncFailure(item: rejected, error: 'Late failure'), throwsStateError);
+    expect(await db.getSyncAction(firstId), confirmed);
+  });
+
   test('manual discard keeps evidence and cannot erase another server row', () async {
     when(() => network.isConnected).thenAnswer((_) async => false);
     await repo.upsert(action(firstId, server: otherOrigin));
