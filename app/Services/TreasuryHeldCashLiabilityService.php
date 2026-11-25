@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Inactive held-cash subledger. Recognition is atomic with the cash adjustment.
  * Assignment changes the creditor, not the cash balance or subscriber balance.
- * No discharge, revenue recognition, legacy adoption or closure authorization.
+ * Cash return discharges only a documented identified claim. No revenue, legacy adoption or closure authorization.
  */
 final class TreasuryHeldCashLiabilityService
 {
@@ -163,7 +163,8 @@ final class TreasuryHeldCashLiabilityService
                 ]);
                 $this->treasury->requiredAudit('treasury.held_cash_paid', ['entity_type' => 'held_cash_payout',
                     'entity_id' => $uuid, 'actor_user_id' => $actor->id, 'after' => $row]);
-                return $this->inspectLocked($lot) + ['created' => true];
+                return array_replace($this->inspectLocked($lot), ['created' => true,
+                    'cash_movement_created' => true, 'discharge_created' => true]);
             });
     }
 
@@ -219,6 +220,14 @@ final class TreasuryHeldCashLiabilityService
                 'treasury_transfer_receipt_id', 'treasury_bank_fee_id', 'treasury_cash_adjustment_id',
                 'treasury_bank_collection_id', 'treasury_late_cash_receipt_id'] as $column) {
                 $this->need($posting->$column === null, 'held_cash_payout_source');
+            }
+            $audit = \App\Models\AuditEvent::query()->where('event', 'treasury.held_cash_paid')
+                ->where('entity_type', 'held_cash_payout')->where('entity_id', $row->operation_uuid)->lockForUpdate()->get();
+            $this->need($audit->count() === 1 && (int) $audit->first()->actor_user_id === (int) $row->approved_by,
+                'held_cash_payout_audit');
+            foreach (['operation_uuid', 'assignment_uuid', 'approved_by', 'amount_minor', 'effective_on', 'reference', 'evidence'] as $key) {
+                $this->need(array_key_exists($key, $audit->first()->after ?? [])
+                    && (string) $audit->first()->after[$key] === (string) $row->$key, 'held_cash_payout_audit');
             }
             $this->registered($row->operation_uuid, $row->effective_on, $this->payoutLegs($row, $assignment, $lot), true, $periodProof);
             $paid = SignedMinor::add($paid, $minor);
@@ -352,7 +361,20 @@ final class TreasuryHeldCashLiabilityService
                 $this->need((string) $row->$key === (string) $value, 'held_cash_registry_mismatch');
             }
         }
-        $this->need(hash_equals(hash('sha256', $op->canonical_payload), $op->payload_hash), 'held_cash_registry_mismatch');
+        $canonical = [];
+        foreach ($legs as $leg) {
+            $key = $leg['source_type'].'|'.$leg['source_id'].'|'.$leg['leg'];
+            $canonical[$key] = ['source_type' => $leg['source_type'], 'source_id' => $leg['source_id'],
+                'leg' => $leg['leg'], 'amount_minor' => (string) $leg['amount_minor'], 'currency' => $leg['currency'],
+                'source_hash' => $leg['source_hash']];
+        }
+        ksort($canonical, SORT_STRING);
+        $bytes = json_encode(['format' => 1, 'operation_uuid' => $uuid, 'scope' => 'water',
+            'period_id' => (int) $op->period_id, 'effective_on' => $date, 'epoch' => (int) $op->fence_epoch,
+            'version' => (int) $op->period_version, 'legs' => array_values($canonical)],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->need($bytes === $op->canonical_payload && hash_equals(hash('sha256', $bytes), $op->payload_hash),
+            'held_cash_registry_mismatch');
         if ($periodProof) $this->registry->verifyPeriod('water', (int) $op->period_id);
         return $op;
     }
