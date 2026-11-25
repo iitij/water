@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Implement prospective gated account transfer with registered original receipt and exact reversing/incoming legs; review separate refund evidence and posting dates. No partial API cutover.",
+  "next": "Discover corrected run, verify both engines, then review refund custody and scope-first registration without treating retrospective proof as authorization to spend.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -394,5 +394,35 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round135": {
+    "status": "CORRECTED_TARGETED_CI_PENDING_DISCOVERY",
+    "base": "70294542c29ff8c09558976fce068e76c2db6dee",
+    "branch": "qa/gated-invoice-transfer-round135-corrected",
+    "source": "38512079aec835e060e1a26bdcdbd6fd2b51bb31",
+    "first_attempt": {
+      "source": "747884e83e09c3458532ab1ce544ab25d35d4c25",
+      "run": 45696296279,
+      "jobs": [
+        {
+          "id": 139494455655,
+          "engine": "mysql",
+          "tests": 3,
+          "assertions": 73,
+          "failures": 2
+        },
+        {
+          "id": 139494456096,
+          "engine": "sqlite",
+          "tests": 3,
+          "assertions": 73,
+          "failures": 2
+        }
+      ],
+      "cause": "Final total ledger-leg assertions omitted held-credit subscriber ledger leg; TreasuryHeldCashLiabilityService::creditLegs returns this leg plus identified-liability leg. Legacy refusal test passed on both engines."
+    },
+    "scope": "Inactive invoice issuance, cancellation, subscriber-to-subscriber receipt transfer. Original registered proof, immutable original ledger row, exact reversal effects, scope-first gate, registry rollback and replay. Corrected counts only; rerun two failed cases, not already successful legacy refusal.",
+    "limits": "Corrected results not yet verified. No public route activation, cross-date collections, refund custody adapter, actual reserve release, production writes, main merge or historical remediation.",
+    "next": "Discover corrected run, verify both engines, then review refund custody and scope-first registration without treating retrospective proof as authorization to spend."
   }
 }
