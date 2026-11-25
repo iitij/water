@@ -127,11 +127,16 @@ function legacyScenario(bool $financial): void
     $oldCurrent = meter($subscriber, 'qa-legacy-current-old');
     $newCurrent = meter($subscriber, 'qa-legacy-current-new');
     $softDeleted = meter($subscriber, 'qa-legacy-soft-deleted', ['deleted_at' => now()]);
-    $reading = DB::table('readings')->insertGetId([
-        'meter_id' => $historical, 'reading_date' => '2026-10-31',
-        'period_start' => '2026-10-01', 'period_end' => '2026-10-31',
-        'previous_reading' => 0, 'current_reading' => 20, 'consumption_units' => 20,
-    ]);
+    // The clean scenario represents obsolete meters without pending consumption.
+    // Owner decision: exclude the synthetic pending observation from this fixture.
+    // Keep the separate financial-history fixture and its rollback coverage.
+    if ($financial) {
+        DB::table('readings')->insert([
+            'meter_id' => $historical, 'reading_date' => '2026-10-31',
+            'period_start' => '2026-10-01', 'period_end' => '2026-10-31',
+            'previous_reading' => 0, 'current_reading' => 20, 'consumption_units' => 20,
+        ]);
+    }
 
     // The actual older migration must remove only the obsolete current meter.
     migratePaths([$first]);
@@ -182,12 +187,14 @@ function legacyScenario(bool $financial): void
         return;
     }
 
+    requireCondition(! DB::table('readings')->whereIn('meter_id', [$oldCurrent, $historical, $softDeleted])->exists(),
+        'Clean fixture must not contain pending observations for obsolete meters.');
     migratePaths([$strict]);
     requireCondition(DB::table('meters')->where('subscriber_id', $subscriber)->count() === 1
         && DB::table('meters')->where('id', $newCurrent)->exists()
         && ! DB::table('meters')->whereIn('id', [$oldCurrent, $historical, $softDeleted])->exists()
-        && ! DB::table('readings')->where('id', $reading)->exists(),
-        'Strict migration did not remove obsolete unbilled operational records.');
+        && ! DB::table('readings')->whereIn('meter_id', [$oldCurrent, $historical, $softDeleted])->exists(),
+        'Strict migration did not remove obsolete clean meter records.');
     assertStrictSchema();
     expectDuplicateMeter($subscriber, 'qa-legacy-final-duplicate');
     echo "PASS: historical operational cleanup and final constraints\n";
