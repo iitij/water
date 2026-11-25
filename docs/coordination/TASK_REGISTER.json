@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 82,
+    "round": 83,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4036,6 +4036,17 @@
       "scope": "Actual bank clearance of ordinary check or bank-transfer claim; original claim submission and statement import audit checks, independent actor, registered bank opening and targeted invoice if specified, exact bank booking date and positive amount, stable claim UUID and paired subscriber/treasury effects, no till movement. Eight cases per engine prepared: check and transfer, amount/date/UUID mismatch, authority, unregistered opening/tampered submission, closed/frozen/rejected, legacy clearance, treasury registry leg failure with full rollback and retry.",
       "limits": "Independent branch from accepted round69; rounds70–75 and77–81 unaccepted. No runtime evidence or new workflow after earlier tool restriction. Targeted invoice path included but not independently exercised in new QA; submission/rejection/import still outside full gate; immutable audit and source completeness, cross-period replay and returned check handling remain open. No production activation, main merge or live data changes.",
       "next": "W16 late noncash clearance, then W17–W19; validate pending branches before integration."
+    },
+    "round83": {
+      "phase": "W16 independent inactive gated late noncash clearance",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "5f1212868bae13d50e70470b9c3314da2da7c0c4",
+      "branch": "fix/central-g1b-gated-late-noncash",
+      "runs": [],
+      "scope": "Late check or bank-transfer review, original submitted evidence and approved physical till snapshot, distinct review and bank clearance references, independent reviewer, registered bank opening and targeted invoice if specified, actual bank date and paired ledger/treasury registry effects under stable review UUID, unchanged original till and its receipt rows. Nine cases per engine prepared: late check and transfer, mismatch, authority, unregistered opening/tamper, closed/frozen/rejected review, legacy clearance, distinct reference and approved till, treasury-leg failure rollback/retry.",
+      "limits": "Independent branch from accepted round69. Rounds70–75 and77–82 unaccepted. No runtime evidence or new workflow after earlier tool restriction. Tests prepared for different days within November 2026, not across period boundaries; targeted invoice path not separately exercised. Submission/rejection/import/approval still outside full gate, immutable audit and global source coverage unproved. No activation, main merge or live data changes.",
+      "next": "W17 separately received late cash, then W18 already-counted allocation and W19 existing bank collection; validate pending branches before integration."
     }
   }
 }
