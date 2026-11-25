@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_15_I05_SCOPED_RUNTIME_ACCEPTED_I06_AUTHORIZED_HOLD_MAIN",
+    "decision": "ROUND_16_I06_IMPLEMENTED_VALIDATION_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -2018,8 +2018,13 @@
     "round16": {
       "phase": "P2-I06 invoice amounts and financial report projections",
       "base": "d1b630d65b9a47b13db0e5e558e97787f998ced7",
-      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
-      "scope": "Exact invoice remaining/cumulative/collectible/status arithmetic and subscriber API summary, statement, running balance and refund/transfer aggregation; preserve output keys and numeric types at checked presentation boundary. No printing-engine changes or closing policy activation; remaining report inventory and closing integration independently gated. No schema/dependency/main changes."
+      "status": "IMPLEMENTED_FROZEN_HOSTED_VALIDATION_PENDING",
+      "scope": "Exact invoice remaining/cumulative/collectible/status arithmetic and subscriber API summary, statement, running balance and refund/transfer aggregation; preserve output keys and numeric types at checked presentation boundary. No printing-engine changes or closing policy activation; remaining report inventory and closing integration independently gated. No schema/dependency/main changes.",
+      "product_test_head": "1a55c40e0219706d5942aa525c82660e218e1aa8",
+      "workflow_head": "fb389ff384cc50867eae2e394c737b6eda9cf3ce",
+      "pr": 91,
+      "tests": "3 new and 5 changed-path regressions per engine. Pending actual results.",
+      "limits": "This slice covers invoice model and subscriber controller; other report/export surfaces, closing integration and P3 are not yet accepted."
     }
   }
 }
