@@ -402,4 +402,159 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $guard->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-24')));
     }
 
+    private const DISCHARGE_A = '55555555-5555-4555-8555-555555555555';
+    private const DISCHARGE_B = '66666666-6666-4666-8666-666666666666';
+    private const DISCHARGE_C = '77777777-7777-4777-8777-777777777777';
+
+    private function dischargeCredit(User $actor, int $lot, Subscriber $subscriber, int $minor,
+        string $uuid = self::DISCHARGE_A, string $reference = 'QA-DISCHARGE-CREDIT'): array
+    {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->dischargeToSubscriber(
+            $actor, $lot, (int) $subscriber->id, $minor, $reference,
+            'Independent proof of subscriber credit discharge', $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    private function dischargeRefund(User $actor, int $lot, Subscriber $subscriber, int $minor,
+        string $uuid = self::DISCHARGE_B, string $reference = 'QA-DISCHARGE-REFUND', ?int $accountId = null): array
+    {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->dischargeByCashRefund(
+            $actor, $lot, (int) $subscriber->id, $minor, $reference,
+            'Independent proof of physical cash refund discharge', $uuid, '2026-11-25', $this->nowAt(), $accountId);
+    }
+
+    public function test_held_cash_discharge_to_subscriber_credit_conserves_capacity_and_releases_reservation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 20);
+
+        // Discharge 15 via subscriber credit
+        $result = $this->dischargeCredit($actor, $lot, $subscriber, 15);
+        $this->assertSame(25, $result['held_minor']);
+        $this->assertSame(20, $result['identified_minor']);
+        $this->assertSame(5, $result['unidentified_minor']);
+        $this->assertSame(15, $result['discharged_minor']);
+        $this->assertSame(10, $result['remaining_liability_minor']);
+        $this->assertSame(5, $result['undischarged_identified_minor']);
+        $this->assertSame(15, $result['discharged_by_subscriber'][(string) $subscriber->id]);
+        $this->assertSame(15, $result['discharged_by_method']['subscriber_credit']);
+        $this->assertSame(0, $result['discharged_by_method']['cash_refund']);
+        $this->assertFalse($result['cash_movement_created']);
+        $this->assertTrue($result['discharge_created']);
+
+        // Idempotent replay of discharge returns created => false
+        $this->assertFalse($this->dischargeCredit($actor, $lot, $subscriber, 15)['created']);
+
+        // Attempting to discharge 6 exceeds remaining 5 capacity for this subscriber
+        $this->rejects('held_cash_discharge_capacity_exceeded', fn () =>
+            $this->dischargeCredit($actor, $lot, $subscriber, 6, self::DISCHARGE_C, 'QA-DISCHARGE-OVER'));
+
+        // Discharging remaining 5 succeeds exactly
+        $final = $this->dischargeCredit($actor, $lot, $subscriber, 5, self::DISCHARGE_C, 'QA-DISCHARGE-EXACT');
+        $this->assertTrue($final['created']);
+        $this->assertSame(20, $final['discharged_minor']);
+        $this->assertSame(0, $final['undischarged_identified_minor']);
+        $this->assertSame(5, $final['remaining_liability_minor']);
+
+        // Subscriber credit discharge released 20 of held reservation in treasury
+        $guard = app(\App\Services\HeldCashReservation::class);
+        DB::transaction(fn () => $guard->assertOrdinaryOutflow((int) $account['id'], 10020, '2026-11-25'));
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            $guard->assertOrdinaryOutflow((int) $account['id'], 10021, '2026-11-25')));
+
+        $this->assertDatabaseCount('treasury_held_cash_discharges', 2);
+    }
+
+    public function test_held_cash_discharge_by_cash_refund_enforces_cash_reservation_and_records_payout(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 25);
+
+        // Cash refund of 10
+        $result = $this->dischargeRefund($actor, $lot, $subscriber, 10);
+        $this->assertSame(25, $result['held_minor']);
+        $this->assertSame(10, $result['discharged_minor']);
+        $this->assertSame(15, $result['remaining_liability_minor']);
+        $this->assertTrue($result['cash_movement_created']);
+        $this->assertTrue($result['discharge_created']);
+
+        // A negative treasury posting was created for the refund
+        $this->assertDatabaseHas('treasury_postings', [
+            'kind' => 'payment_refund',
+            'amount_minor' => -10,
+            'evidence_reference' => 'QA-DISCHARGE-REFUND',
+        ]);
+        $this->assertDatabaseCount('treasury_postings', 2);
+
+        // Account balance decreased from 10025 to 10015
+        $balance = (int) DB::table('treasury_postings')->where('treasury_account_id', $account['id'])->sum('amount_minor') + 10000;
+        $this->assertSame(10015, $balance);
+    }
+
+    public function test_held_cash_discharge_replay_is_idempotent_and_conflicts_are_rejected(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 25);
+
+        $this->dischargeCredit($actor, $lot, $subscriber, 10);
+        $this->assertFalse($this->dischargeCredit($actor, $lot, $subscriber, 10)['created']);
+
+        // Same UUID with conflicting amount
+        $this->rejects('held_cash_discharge_conflict', fn () =>
+            $this->dischargeCredit($actor, $lot, $subscriber, 9));
+
+        // UUID reserved by assignment
+        $this->rejects('held_cash_uuid_reserved', fn () =>
+            $this->dischargeCredit($actor, $lot, $subscriber, 5, self::NEXT, 'QA-DISCHARGE-CONFLICT-UUID'));
+    }
+
+    public function test_held_cash_coverage_detects_orphan_discharge_events_and_tampered_discharges(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 20);
+        $this->dischargeCredit($actor, $lot, $subscriber, 10);
+
+        $verify = fn () => $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage());
+        $initial = $verify();
+        $this->assertSame(25, $initial['held_minor']);
+        $this->assertSame(20, $initial['identified_minor']);
+        $this->assertSame(10, $initial['discharged_minor']);
+        $this->assertSame(15, $initial['remaining_liability_minor']);
+
+        // Tampering with discharge amount
+        DB::table('treasury_held_cash_discharges')->where('operation_uuid', self::DISCHARGE_A)->update(['amount_minor' => 9]);
+        $this->rejects('held_cash_registry_mismatch', $verify);
+
+        // Deleting discharge row causes orphan registry event
+        DB::table('treasury_held_cash_discharges')->where('operation_uuid', self::DISCHARGE_A)->delete();
+        $this->rejects('held_cash_coverage_orphan_discharge_event', $verify);
+    }
+
+    public function test_held_cash_discharge_rolls_back_atomically_on_fault(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 20);
+
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_discharge_failure BEFORE INSERT ON treasury_held_cash_discharges BEGIN SELECT RAISE(ABORT, 'synthetic_discharge_failure'); END"
+            : "CREATE TRIGGER qa_discharge_failure BEFORE INSERT ON treasury_held_cash_discharges FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_discharge_failure'";
+        DB::unprepared($trigger);
+        try {
+            $this->dischargeCredit($actor, $lot, $subscriber, 10);
+            $this->fail('Expected synthetic discharge failure.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_discharge_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_discharge_failure');
+        }
+
+        $this->assertDatabaseCount('treasury_held_cash_discharges', 0);
+        // After dropping trigger, retry succeeds
+        $this->assertTrue($this->dischargeCredit($actor, $lot, $subscriber, 10)['created']);
+        $this->assertDatabaseCount('treasury_held_cash_discharges', 1);
+    }
 }
