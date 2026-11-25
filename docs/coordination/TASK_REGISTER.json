@@ -4287,7 +4287,7 @@
     },
     "round98": {
       "phase": "MySQL isolated migration environment correction and actual transfer/refund reservation cases",
-      "status": "CI_ENVIRONMENT_CORRECTED_EXTENDED_QA_RUNNING",
+      "status": "CI_BASELINE_BOTH_ENGINES_PASS_EXTENDED_SQLITE_PASS_MYSQL_PENDING",
       "base": "e9cbab6809664be7614b196e6b1fd7e3dfd1b207",
       "branch": "fix/central-g1a-surplus-liability",
       "source": "319f64b6e4309de3f7237cd6fe7b6395bfde1a5c",
@@ -4321,7 +4321,7 @@
         {
           "id": 45635529155,
           "head_sha": "68b65deaa4093925baf83527dd98a8e7af05b458",
-          "status": "in_progress_at_observation",
+          "status": "completed",
           "jobs": [
             {
               "id": 139279820899,
@@ -4334,9 +4334,15 @@
             {
               "id": 139279821303,
               "engine": "mysql",
-              "status": "in_progress"
+              "status": "completed",
+              "conclusion": "success",
+              "tests": 16,
+              "assertions": 123,
+              "exit": 0,
+              "php": "8.4.28"
             }
-          ]
+          ],
+          "conclusion": "success"
         },
         {
           "id": 45635799680,
@@ -4347,7 +4353,11 @@
             {
               "id": 139280759558,
               "engine": "sqlite",
-              "status": "in_progress"
+              "status": "completed",
+              "conclusion": "success",
+              "tests": 18,
+              "assertions": 139,
+              "exit": 0
             },
             {
               "id": 139280760268,
@@ -4358,7 +4368,7 @@
         }
       ],
       "scope": "Changed only isolated GitHub MySQL service configuration via its exact job container ID: root sets log_bin_trust_function_creators=1, ordinary test user remains restricted. No application migration or trigger removed. Two actual integration test methods added for transfer boundary/replay and refund posting rejection with original refund document preserved and reconciliation gap visible. No product code changed in this round.",
-      "limits": "Current runs not fully concluded at observation. Refund posting rejection is not proof of prior physical payout prevention; explicit authorization and incident recording remain necessary. Held liability settlement, subscriber credit, W18 proof, global coverage, concurrency and closure remain open. No main merge, live data, deployment, or change to production DB permissions.",
+      "limits": "Corrected 68b65dea exact CI-only commit passed 16 tests and 123 assertions on each engine. Extended 319f64b6 candidate passed 18 tests and 139 assertions on SQLite; extended MySQL still pending. Scoped verification only. Refund posting rejection is not proof of prior physical payout prevention; explicit authorization and incident recording remain necessary. Held liability settlement, subscriber credit, W18 proof, global coverage, concurrency and closure remain open. No main merge, live data, deployment, or change to production DB permissions.",
       "next": "Read final logs of both runs, resolve any proven defect, then implement explicit held-owner cash payout/settlement and subscriber noncash reclassification with independent verification."
     }
   }
