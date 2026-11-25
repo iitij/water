@@ -2382,6 +2382,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $accountId = (int) $cash['id'];
             $act = fn () => $writer->receiveLateCash($reviewer, $id, $accountId, $date,
                 'QA-R134-CASH', self::EVIDENCE, $uuid, $this->nowAt());
+            $direct = fn (?\App\Services\GatedCollectionWriter $candidate = null) => $late->receiveCash($id, $reviewer, $accountId, $date, 'QA-R134-CASH', self::EVIDENCE, $candidate);
+            $directIssue = fn (?\App\Services\GatedCollectionWriter $candidate = null) => app(PaymentService::class)->collectPayment($subscriber, '0.30', userId: $issuer->id, paymentDate: $date, syncUuid: $uuid, lateReviewId: $id, settlementWriter: $candidate);
             $this->rejects('gated_collection_effective_date', fn () => $writer->receiveLateCash($reviewer, $id,
                 $accountId, '2026-11-24', 'QA-R134-CASH', self::EVIDENCE, $uuid, $this->nowAt()));
         } else {
@@ -2431,9 +2433,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $beforeOps = $ops();
         $beforeSeq = $seq();
         if ($fence) {
-            config(['financial_candidate.noncash_settlements' => true]);
-            $this->rejects('gated_collection_writer_required', $direct);
-            $this->rejects('gated_collection_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
+            $cashFence = $kind === 'late_cash';
+            $switch = $cashFence ? 'financial_candidate.late_cash_settlements' : 'financial_candidate.noncash_settlements';
+            $reason = $cashFence ? 'gated_late_cash_writer_required' : 'gated_collection_writer_required';
+            config([$switch => true]);
+            $this->rejects($reason, $direct);
+            $this->rejects($reason, fn () => DB::transaction(fn () => $direct($writer)));
+            if ($cashFence) {
+                $this->rejects($reason, $directIssue);
+                $this->rejects($reason, fn () => DB::transaction(fn () => $directIssue($writer)));
+                $this->rejects($reason, fn () => $late->decide($id, $reviewer, [
+                    'approve' => true, 'settlement_method' => 'already_counted',
+                    'evidence_reference' => 'QA-R134-COUNTED', 'evidence' => self::EVIDENCE,
+                ]));
+            }
             DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
             $this->rejects('financial_period_not_open', $act);
             DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
@@ -2451,8 +2464,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             foreach ($tables as $table) $committed[$table] = $snapshot($table);
             $committedOps = $ops();
             $committedSeq = $seq();
-            config(['financial_candidate.noncash_settlements' => false]);
-            $this->rejects('gated_collection_writer_required', $direct);
+            config([$switch => false]);
+            $this->rejects($reason, $direct);
+            if ($cashFence) $this->rejects($reason, $directIssue);
             $this->assertFalse($act()['registry_created']);
             foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
             $this->assertSame($committedOps, $ops());
@@ -2506,6 +2520,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertSame($committedOps, $ops());
         $this->assertSame($committedSeq, $seq());
+    }
+
+    public function test_release_late_cash_fence_separate_handover(): void
+    {
+        $this->round134Collection('late_cash', false, true);
     }
 
     public function test_release_noncash_fence_claim(): void
