@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 86,
+    "round": 87,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4080,6 +4080,34 @@
       "scope": "Independent read-only proof for actual modern cleared claim or verified late noncash review: exactly one subscriber and one treasury leg, same UUID, amount and effective date, registered account opening, recomputed source hashes and canonical registry period. No additional posting. Eight cases per engine prepared using actual isolated ordinary claim clearance explicitly registered in synthetic fixture: check/transfer verification, missing bank leg, split operation, legacy unregistered clearance, unregistered opening, date tamper, transaction and cash-source rejection.",
       "limits": "Partial W19: W15/W16 should own new paired issuance; no third writer or automatic adoption of legacy receipts. Historical unpaired/noncash receipts require explicit transition and independent evidence review. Late-review verifier branch not separately exercised; source coverage and certified_balance remain false. No runtime evidence or new workflow after earlier restriction. No main merge or production changes.",
       "next": "Review outstanding candidates and actual signatures against accepted base; resolve dual-date and counted-cash gaps, transition policy, independent completeness and evidence writer protection before integration. Prioritize validation rather than treating source-only branches as accepted."
+    },
+    "round87": {
+      "phase": "Integration source review pass 1: date evidence normalization and reserved operation UUID",
+      "status": "SOURCE_REVIEW_PARTIAL_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "scope": "Reviewed pending candidate register, actual service contracts, model casts, allocation snapshot tables and helper signatures against accepted base. Corrected historical period normalization with nullable dates, cancellation nullable dates, and invoice UUID collision with existing receipt, pending noncash claim or late review; added one isolated fixture covering three collisions and subsequent distinct UUID issuance. Previous frozen references retained.",
+      "revisions": [
+        {
+          "round": 70,
+          "branch": "fix/central-g1b-gated-invoice",
+          "source": "2cf566d11785749fe22c1cbbfbab4bc9f52aed8b",
+          "writer_commit": "3e5d164ca049bd203ee8e04a1945c59ef762bbbf",
+          "added_cases_per_engine": 1
+        },
+        {
+          "round": 75,
+          "branch": "fix/central-g1b-gated-historical-correction",
+          "source": "68399af8b86d9da1ccf72005fafdf067163debcc"
+        },
+        {
+          "round": 77,
+          "branch": "fix/central-g1b-gated-invoice-cancellation",
+          "source": "e935334808d006bb77e7a2145a90dba1b2657f43"
+        }
+      ],
+      "runs": [],
+      "limits": "Static partial review only, not full integration or runtime acceptance. Global UUID reservation across remaining operation families and submission paths remains open; distinct-date W17, excluded W18 flows and independent proof, W19 historical transition and closure completeness still open. Prior workflow restriction respected; no new runtime, no main merge, no live data changes.",
+      "next": "Review remaining candidate contracts and all writer UUID ownership, audit/provenance binding and replay, then define explicit period recognition and independent evidence closure. Validate before integration."
     }
   }
 }
