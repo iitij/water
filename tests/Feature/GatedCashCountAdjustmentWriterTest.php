@@ -3799,4 +3799,68 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $next)->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
+
+    public function test_release_cash_api_all_four_entrypoints_share_registry_and_exact_replay(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic cash API tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-CASH-API']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        config(['financial_candidate.cash_receipts' => true]);
+        $data = ['subscriber_id' => $subscriber->id, 'amount' => '0.25', 'payment_method' => 'cash',
+            'payment_date' => '2026-11-25', 'sync_uuid' => '88888888-8888-4888-8888-888888888888',
+            'notes' => 'Synthetic office collection'];
+        $first = $this->postJson('/api/payments', $data)->assertCreated()->json('payment.id');
+        $this->postJson('/api/subscribers/'.$subscriber->id.'/collect-payment', $data)->assertCreated()->assertJsonPath('payment.id', $first);
+        $target = ['amount' => '0.40', 'payment_method' => 'cash', 'payment_date' => '2026-11-25',
+            'sync_uuid' => '99999999-9999-4999-8999-999999999999', 'invoice_id' => $invoice->id];
+        $second = $this->postJson('/api/invoices/'.$invoice->id.'/pay', $target)->assertCreated()->json('payment.id');
+        $this->postJson('/api/invoices/pay', $target)->assertCreated()->assertJsonPath('payment.id', $second);
+        $this->assertNotSame($first, $second);
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['sync_uuid'], 'amount_minor' => 25]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $target['sync_uuid'], 'amount_minor' => 40]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $target['sync_uuid'])->count());
+        $this->assertSame(-35, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame('0.65', $invoice->fresh()->amount_paid);
+        $this->assertSame('Synthetic office collection', Payment::findOrFail($first)->notes);
+        $this->postJson('/api/payments', array_replace($data, ['notes' => 'Changed request']))->assertConflict();
+        $this->postJson('/api/payments', array_replace($data, ['amount' => '0.26']))->assertConflict();
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_cash_api_deferred_identity_gate_and_late_review_no_fallback(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $session = app(CashSessionService::class)->open($actor);
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        config(['financial_candidate.cash_receipts' => true]);
+        $data = ['subscriber_id' => $subscriber->id, 'amount' => '0.50', 'payment_method' => 'cash',
+            'payment_date' => '2026-11-25', 'sync_uuid' => '88888888-8888-4888-8888-888888888888',
+            'cash_session_id' => $session->id, 'deferred_sync' => true];
+        $this->postJson('/api/payments', array_diff_key($data, ['sync_uuid' => true]))->assertUnprocessable();
+        $this->postJson('/api/payments', array_diff_key($data, ['cash_session_id' => true]))->assertConflict();
+        $this->postJson('/api/payments', array_replace($data, ['payment_date' => '2026-11-24']))->assertConflict();
+        $this->postJson('/api/payments', array_replace($data, ['payment_method' => 'check']))->assertUnprocessable();
+        $this->postJson('/api/payments', array_replace($data, ['amount' => '0.501']))->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson('/api/payments', $data)->assertConflict();
+        $this->assertDatabaseCount('payments', 0);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $id = $this->postJson('/api/payments', $data)->assertCreated()->json('payment.id');
+        $this->assertDatabaseHas('payments', ['id' => $id, 'cash_session_id' => $session->id, 'sync_uuid' => $data['sync_uuid']]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-26T08:30:00Z'));
+        $this->postJson('/api/payments', $data)->assertCreated()->assertJsonPath('payment.id', $id);
+        $this->postJson('/api/payments', array_replace($data, ['sync_uuid' => '99999999-9999-4999-8999-999999999999']))->assertConflict();
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['sync_uuid'], 'amount_minor' => 50]);
+        $this->assertSame(50, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
 }
