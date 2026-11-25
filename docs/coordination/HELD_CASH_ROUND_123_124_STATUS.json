@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Enforce prospective cash receipt service-level protection, including verified settlement callers with separate source contracts; finish writer inventory before activation.",
+  "next": "Verify targeted SQLite/MySQL CI at exact source; fix confirmed failures only. Review remaining ordinary cash bypasses and separate settlement source contracts; continue release integration.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1106,5 +1106,14 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_cash_receipt_service_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "2fe12d1a5490fd5bd860c53ace2ad02aad3cb0d8",
+    "branch": "release/prospective-cash-receipt-fence",
+    "source": "6f94a5286b5f9f1dea4befe9cc22c8eff6bb9f5c",
+    "scope": "Ordinary cash PaymentService posting requires private verified GatedCashReceiptWriter subscriber/UUID scope when candidate switch enabled; ordinary registry UUID replay cannot bypass fence when switch disabled. Check after issuance lock before business effects. Targeted test covers direct bypass, passing inactive writer within transaction, closed period, exact gated replay, default-off distinct legacy operation and unchanged treasury.",
+    "limits": "CI result not visible via connector (PR-filtered run lookup). No acceptance, full writer inventory, late/noncash settlement fence, raw mutation coverage or production activation. No historical remediation or main merge.",
+    "next": "Verify targeted SQLite/MySQL CI at exact source; fix confirmed failures only. Review remaining ordinary cash bypasses and separate settlement source contracts; continue release integration."
   }
 }
