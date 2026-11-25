@@ -1,0 +1,88 @@
+name: G12 V4 locked release build readiness
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round28-v4-build-readiness.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/central-v4-build-readiness'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      COMPOSER_NO_INTERACTION: '1'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: dd920a1dde29737cd42923c3be94c05364690231
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, ctype, curl, dom, fileinfo, gd, intl, mbstring, pdo_mysql, openssl, zip
+          tools: composer:2.9.8
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+      - name: Exact locked source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'dd920a1dde29737cd42923c3be94c05364690231'
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            'eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c  composer.lock' \
+            'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
+          php -v
+          composer --version
+          node --version
+          npm --version
+          composer validate --no-check-publish
+      - name: Production dependency and Vite build
+        run: |
+          set -euo pipefail
+          composer install --no-dev --no-scripts --no-progress --prefer-dist --optimize-autoloader
+          composer check-platform-reqs --no-dev
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path("public/build").resolve()
+          data=json.loads((root/"manifest.json").read_text())
+          assert data
+          for name in ("resources/css/app.css","resources/js/app.js"):
+              assert name in data and data[name].get("isEntry") is True, name
+          files=set()
+          for entry in data.values():
+              files.update([entry["file"],*entry.get("css",[]),*entry.get("assets",[])])
+              for key in (*entry.get("imports",[]),*entry.get("dynamicImports",[])):
+                  assert key in data,key
+          empty_js=data['resources/js/app.js']['file']
+          assert pathlib.Path('resources/js/app.js').read_text().strip() == '//'
+          for name in sorted(files):
+              p=(root/name).resolve()
+              assert p.is_relative_to(root) and p.is_file(),name
+              # The exact frozen JS entry is deliberately a comment-only file.
+              assert p.stat().st_size>0 or name==empty_js,name
+          print("VITE_MANIFEST_PASS entries=%d files=%d"%(len(data),len(files)))
+          PY
+          git diff --exit-code
+      - name: Current dependency advisories (read-only)
+        run: |
+          set +e
+          composer audit --locked --no-dev
+          composer_result=$?
+          npm audit --audit-level=high
+          npm_result=$?
+          set -e
+          echo "COMPOSER_AUDIT_EXIT=$composer_result NPM_AUDIT_EXIT=$npm_result"
+          test "$composer_result" -eq 0 && test "$npm_result" -eq 0

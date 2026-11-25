@@ -24,7 +24,7 @@ class PaymentController extends ApiController
         $query = Payment::with([
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number',
-            'invoice:id,bill_number,status,total_amount', 'user:id,name',
+            'invoice:id,bill_number,status,total_amount,amount_paid,subscriber_id,deleted_at', 'user:id,name',
             'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
         ])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id');
 
@@ -67,6 +67,8 @@ class PaymentController extends ApiController
 
         return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
             $payment->setAttribute('receipt_data', $this->receiptData($payment));
+            // The exact debt projection needs these columns; keep the existing list response contract.
+            $payment->invoice?->makeHidden(['amount_paid', 'subscriber_id', 'deleted_at']);
 
             return $payment;
         })->appends($request->query());
