@@ -455,7 +455,7 @@
     }
   ],
   "supervisor_review": {
-    "decision": "ROUND_11_I01_SCOPED_RUNTIME_ACCEPTED_I02_CENTRAL_IMPLEMENTATION_AUTHORIZED_G07_L01_HOSTED_PENDING_HOLD_MAIN",
+    "decision": "ROUND_12_G07_TARGETED_ACCEPTED_L01_INCONCLUSIVE_I02_SQLITE_PASS_MYSQL_PENDING_HOLD_MAIN",
     "main_sha": "c877e9feae9a077d0b8d6e170b5ddeeab20f29f6",
     "original_tasks_merged": 8,
     "original_tasks_total": 14,
@@ -1344,7 +1344,7 @@
         }
       },
       "central_g07_draft": {
-        "status": "DRAFT_PRODUCT_FIX_PURE_PASS_RUNTIME_PENDING",
+        "status": "SCOPED_G07_FOUR_CASES_BOTH_ENGINES_ACCEPTED_INTEGRATION_PENDING",
         "branch": "fix/central-v2-g07-billing-chain",
         "head": "0583e2161a491445c2e597793cfa91377cb7a87f",
         "base": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a",
@@ -1369,8 +1369,67 @@
       "hosted_qa": {
         "pr": 86,
         "head": "e80173f6deebfcb687bdbc853aec9e7dfa918482",
-        "status": "WORKFLOW_CREATED_RUNTIME_PENDING",
-        "scope": "G07 original baseline 4x2 and proposed fix4x2, L01 two MySQL methods separately; total18 new parent case executions expected; no I01 repeat. Each case isolated, no optional diagnostic probes; no merge."
+        "status": "TARGETED_RUN_COMPLETED_WITH_EXPECTED_BASELINE_FAILURES_AND_L01_INCOMPLETE",
+        "scope": "G07 original baseline 4x2 and proposed fix4x2, L01 two MySQL methods separately; total18 new parent case executions expected; no I01 repeat. Each case isolated, no optional diagnostic probes; no merge.",
+        "run": 45553956997,
+        "environment": "Hosted Ubuntu24.04 PHP8.4.28 Composer2.9.8 PHPUnit12.5.29 SQLite3.45.1 MySQL8.0.46 pinned image, isolated synthetic memory/socket DB; exact checkouts and three lock checks passed.",
+        "G07": {
+          "baseline": {
+            "sha": "ef4eb0429ac09a88b9d53ee2a6e1ccdfc2b0fc2a",
+            "sqlite": {
+              "job": 139001449721,
+              "tests": 4,
+              "assertions": 319,
+              "failures": 3,
+              "exit": 1
+            },
+            "mysql": {
+              "job": 139001449542,
+              "tests": 4,
+              "assertions": 319,
+              "failures": 3,
+              "exit": 1
+            },
+            "observed": "C01 duplicate and C02 overlapping each issued invoice80.00, ledger balance -8000; C03 pending mismatch issued30.00 after legitimate40.00, final ledger -7000. C04 passed."
+          },
+          "fix": {
+            "sha": "0583e2161a491445c2e597793cfa91377cb7a87f",
+            "sqlite": {
+              "job": 139001449640,
+              "tests": 4,
+              "assertions": 340,
+              "exit": 0
+            },
+            "mysql": {
+              "job": 139001449852,
+              "tests": 4,
+              "assertions": 340,
+              "exit": 0
+            },
+            "status": "SCOPED_RUNTIME_ACCEPTED",
+            "limits": "No full regression, historical tariff evidence integrity and legacy/mixed policy still need explicit coverage; no merge."
+          }
+        },
+        "L01": {
+          "status": "INCONCLUSIVE_OBSERVED_CROSS_ACCOUNT_DELAY",
+          "sha": "4f97ad349f4166c40f6492426bb59a8925f47a12",
+          "R": {
+            "job": 139001449332,
+            "assertions": 64,
+            "exit": 1,
+            "control_ms": 3.085952,
+            "observation_ms": 5010.011424
+          },
+          "I": {
+            "job": 139001449544,
+            "assertions": 56,
+            "exit": 1,
+            "control_ms": 2.957008,
+            "observation_ms": 5004.76538
+          },
+          "evidence": "Both workers OK, clean joins, B commits only after A releases. R delay at actual SELECT late_receipt_reviews id FOR UPDATE; I delay at INSERT late_receipt_reviews. No direct physical lock attribution, diagnostics intentionally disabled. One incomplete each, not ordinary failure or pass. Do not retry restricted diagnostics; no index-only remedy inferred."
+        },
+        "limits": "Raw GitHub logs and JUnit summary lines directly inspected; no independent raw JUnit XML downloaded. All prior evidence retained; exact product branches frozen."
       }
     },
     "operating_model": {
@@ -1823,8 +1882,30 @@
     "round12": {
       "phase": "P2-I02 central implementation",
       "base": "34d48fcce16dca573b9e7a0914d09eab16b226e8",
-      "status": "AUTHORIZED_SCOPED_IMPLEMENTATION",
-      "scope": "Begin exact session monetary operations and handover, then late reviews/closed corrections with focused tests. Use accepted boundary types, raw values, exact source/destination caps, checked sums and required persisted audit at close/decision. Preserve existing API wire and limits, lock order, no schema/dependency changes. I03–I06 remain separately gated. No merge until runtime acceptance."
+      "status": "I02_DRAFT_IMPLEMENTED_SQLITE_ACCEPTED_MYSQL_PENDING",
+      "scope": "CashCustodyAmounts; exact session opening/funding/expected/close/decision and reports; handover exact bounds/replay; late amount/counted surplus and cash posting match; closed correction exact source identity; API/Filament pass validated raw input. Local persisted audit guards; no global AuditLogger, schema, API shape, lock-order or dependency edits.",
+      "branch": "fix/central-p2-i02-cash-custody",
+      "product_head": "ef299515f9d599aec4039222c422418518ecb71d",
+      "workflow_head": "c78cbb74b437a234628026b3ff91a24a1dc120b7",
+      "pr": 87,
+      "run": 45554422007,
+      "results": {
+        "sqlite": {
+          "job": 139002938213,
+          "tests": 14,
+          "assertions": 247,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "exit": 0,
+          "lint": 8
+        },
+        "mysql": {
+          "job": 139002938509,
+          "status": "in_progress"
+        }
+      },
+      "policy": "Missing finalized expected amount fails closed; preserve stored history. Overallocated counted snapshot not eligible for new approvals. Direct service D14 cap preserved, API existing opening/close cap retained. No product activation or merge until both actual engines accepted and remaining gates assessed."
     }
   }
 }
