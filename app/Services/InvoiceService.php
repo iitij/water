@@ -116,12 +116,13 @@ class InvoiceService
             $totalAmount = $subtotal;
 
             // 8. إنشاء الفاتورة
+            $issuedAt = now();
             $invoice = Invoice::create([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
                 'invoice_type' => $invoiceType,
-                'bill_number' => Invoice::generateBillNumber(),
-                'bill_date' => now()->toDateString(),
+                'bill_number' => app(DocumentSequenceService::class)->reserveForIssue('INV', $issuedAt->format('Ym')),
+                'bill_date' => $issuedAt->toDateString(),
                 'billing_period_start' => $billingPeriodStart,
                 'billing_period_end' => $billingPeriodEnd,
                 'consumption_fee' => $consumptionFee,
