@@ -76,6 +76,14 @@ final class GatedLateCashWriter
                     && $review->payment_date >= $session->session_date->toDateString()
                     && $review->payment_date <= $session->closed_at->toDateString(),
                     'gated_late_cash_session_unverified');
+                $driver = $session->getConnection()->getDriverName();
+                $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, nullable: true);
+                $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, nullable: true);
+                $variance = Cash::stored($session->getRawOriginal('variance_amount'), $driver, signed: true, nullable: true);
+                $this->need(Cash::consistent($counted, $expected, $variance), 'gated_late_cash_session_unverified');
+                // A positive original surplus requires the W18 allocation
+                // decision before separately receiving another cash movement.
+                $this->need($variance <= 0, 'gated_late_cash_counted_surplus_requires_review');
                 $approval = $this->audit('cash_session.approved', CashSession::class, (int) $session->id);
                 $this->need((int) $approval->actor_user_id === (int) $session->approved_by
                     && ($approval->after['state'] ?? null) === 'approved'
@@ -136,7 +144,7 @@ final class GatedLateCashWriter
                 $doc = $result['receipt'];
                 $entry = $this->entry((int) $payment->id);
                 $ledger = $this->ledger->leg((int) $entry->id);
-                $bank = $this->collection->leg((int) $posting['id']);
+                $cashLeg = $this->collection->leg((int) $posting['id']);
                 $this->need($result['review']['status'] === 'approved' && $result['review']['settlement_method'] === 'separate_handover' && (int) $result['review']['decided_by'] === (int) $actor->id
                     && (int) $result['review']['payment_id'] === (int) $payment->id
                     && $payment->sync_uuid === $uuid && $payment->cash_session_id === null
@@ -152,7 +160,7 @@ final class GatedLateCashWriter
                     && (int) $doc['received_by'] === (int) $actor->id
                     && $doc['received_on'] === $context['effective_on']
                     && AccountMoney::stored($payment) === $minor
-                    && $ledger['amount_minor'] === $minor && $bank['amount_minor'] === $minor
+                    && $ledger['amount_minor'] === $minor && $cashLeg['amount_minor'] === $minor
                     && $balances->accountBalanceMinor($subscriber) === SignedMinor::add($before, $replay ? 0 : $minor)
                     && $session->fresh()->getRawOriginal() === $sessionBytes
                     && Payment::withTrashed()->where('cash_session_id', $session->id)->orderBy('id')->lockForUpdate()->get()
@@ -174,7 +182,7 @@ final class GatedLateCashWriter
                     && ($receiptAudit->after['amount_minor'] ?? null) === $minor,
                     'gated_late_cash_receipt_audit_mismatch');
                 return $result + ['transaction_id' => (int) $entry->id,
-                    'registry_created' => $this->registry->record($context, $uuid, [$ledger, $bank], $now)];
+                    'registry_created' => $this->registry->record($context, $uuid, [$ledger, $cashLeg], $now)];
             });
     }
 
