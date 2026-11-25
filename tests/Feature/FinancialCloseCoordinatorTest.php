@@ -50,6 +50,9 @@ final class FinancialCloseCoordinatorTest extends TestCase
             public bool $enabled = true;
             public bool $coverage = true;
             public bool $replay = true;
+            public ?string $predecessorHash = null;
+            public ?array $nextRows = null;
+            public ?array $nextCarries = null;
 
             public function authorize(string $scope, string $capability, int $actorId): bool
             {
@@ -61,7 +64,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
                 $h = str_repeat('a', 64);
                 $m = str_repeat('b', 64);
                 $facts = [
-                    'predecessor_verified' => true, 'predecessor_hash' => $h, 'writers_drained' => true,
+                    'predecessor_verified' => true, 'predecessor_hash' => $this->predecessorHash ?? $h, 'writers_drained' => true,
                     'coverage_verified' => $this->coverage, 'no_unexplained_variance' => true,
                     'carry_evidence_verified' => true, 'manifest_hash' => $m,
                     'snapshot_verified' => true, 'snapshot_hash' => $period['attempt']['prepared']['hash'] ?? null,
@@ -70,12 +73,12 @@ final class FinancialCloseCoordinatorTest extends TestCase
                 return ['facts' => $facts, 'snapshot' => [
                     'manifest_hash' => $m,
                     'coverage' => array_fill_keys(['allocation', 'bank', 'cash', 'custody', 'liability', 'recoverable', 'subscriber', 'transit'], true),
-                    'rows' => [
+                    'rows' => $this->nextRows ?? [
                         ['sector' => 'subscriber', 'key' => 'S1', 'opening' => -10025, 'movement' => 0, 'closing' => -10025, 'source_hash' => $h],
                         ['sector' => 'subscriber', 'key' => 'S2', 'opening' => 10025, 'movement' => 0, 'closing' => 10025, 'source_hash' => $h],
                         ['sector' => 'transit', 'key' => 'T1', 'opening' => 0, 'movement' => 101, 'closing' => 101, 'source_hash' => $h],
                     ],
-                    'carries' => [['id' => 'C1', 'sector' => 'transit', 'row_key' => 'T1', 'amount' => 101,
+                    'carries' => $this->nextCarries ?? [['id' => 'C1', 'sector' => 'transit', 'row_key' => 'T1', 'amount' => 101,
                         'owner' => 5, 'due_on' => '2026-12-10', 'evidence_hash' => $h]],
                 ]];
             }
@@ -203,5 +206,71 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->rejects('close_journal_hash', fn () => $this->prepare());
         $this->assertSame(1, DB::table('financial_close_commands')->count());
         $this->assertSame('FROZEN', DB::table('financial_periods')->where('month', '2026-11')->value('state'));
+    }
+
+    private function prepareFollowingPeriod(bool $shiftBalances = false): array
+    {
+        $this->freeze();
+        $prepared = $this->prepare();
+        $closed = $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']));
+        $this->proof->predecessorHash = $closed['result']['closure']['hash'];
+        $h = str_repeat('a', 64);
+        $this->proof->nextRows = [
+            ['sector' => 'subscriber', 'key' => 'S1', 'opening' => $shiftBalances ? -10000 : -10025,
+                'movement' => 0, 'closing' => $shiftBalances ? -10000 : -10025, 'source_hash' => $h],
+            ['sector' => 'subscriber', 'key' => 'S2', 'opening' => $shiftBalances ? 10000 : 10025,
+                'movement' => 0, 'closing' => $shiftBalances ? 10000 : 10025, 'source_hash' => $h],
+            ['sector' => 'transit', 'key' => 'T1', 'opening' => 101, 'movement' => 0, 'closing' => 101, 'source_hash' => $h],
+        ];
+        $this->proof->nextCarries = [['id' => 'C1', 'sector' => 'transit', 'row_key' => 'T1',
+            'amount' => 101, 'owner' => 5, 'due_on' => '2027-01-10', 'evidence_hash' => $h]];
+        $uuid = '55555555-5555-4555-8555-555555555555';
+        $now = new DateTimeImmutable('2027-01-01T00:00:00+03:00');
+        $this->coordinator->execute('water', '2026-12', 'freeze', 1, ['uuid' => $uuid, 'version' => 0,
+            'reason' => 'Following period close request'], $now);
+        $this->coordinator->execute('water', '2026-12', 'prepare', 2, [
+            'uuid' => '66666666-6666-4666-8666-666666666666', 'version' => 1, 'attempt_uuid' => $uuid], $now);
+        return $closed;
+    }
+
+    private function continuity(string $month): array
+    {
+        return DB::transaction(fn () => app(\App\Services\FinancialOpeningContinuityDiagnostic::class)->inspect(
+            (int) DB::table('financial_periods')->where('month', $month)->value('id')));
+    }
+
+    public function test_round144_adjacent_openings_match_but_first_root_and_carry_are_unverified(): void
+    {
+        $closed = $this->prepareFollowingPeriod();
+        $before = DB::table('financial_close_commands')->orderBy('period_id')->orderBy('result_version')->get()->toArray();
+        $result = $this->continuity('2026-12');
+        $this->assertTrue($result['adjacent_snapshots_match']);
+        $this->assertSame($closed['result']['closure']['hash'], $result['predecessor_hash']);
+        $this->assertSame(3, $result['matched_predecessor_rows']);
+        $this->assertFalse($result['root_opening_verified']);
+        $this->assertFalse($result['opening_source_verified']);
+        $this->assertFalse($result['carry_continuity_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $first = $this->continuity('2026-11');
+        $this->assertFalse($first['adjacent_snapshots_match']);
+        $this->assertSame([['code' => 'independent_predecessor_required']], $first['issues']);
+        $this->assertEquals($before, DB::table('financial_close_commands')->orderBy('period_id')->orderBy('result_version')->get()->toArray());
+        $this->assertSame('FROZEN', DB::table('financial_periods')->where('month', '2026-12')->value('state'));
+    }
+
+    public function test_round144_offsetting_opening_mismatches_and_corrupt_prior_journal_are_detected(): void
+    {
+        $this->prepareFollowingPeriod(true);
+        $result = $this->continuity('2026-12');
+        $this->assertFalse($result['adjacent_snapshots_match']);
+        $this->assertSame(1, $result['matched_predecessor_rows']);
+        $this->assertContains(['code' => 'opening_balance_mismatch', 'row' => 'subscriber:S1',
+            'expected_minor' => -10025, 'actual_minor' => -10000], $result['issues']);
+        $this->assertContains(['code' => 'opening_balance_mismatch', 'row' => 'subscriber:S2',
+            'expected_minor' => 10025, 'actual_minor' => 10000], $result['issues']);
+        $this->assertFalse($result['closure_authorized']);
+        DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)
+            ->update(['result_state_hash' => str_repeat('0', 64)]);
+        $this->rejects('close_journal_hash', fn () => $this->continuity('2026-12'));
     }
 }
