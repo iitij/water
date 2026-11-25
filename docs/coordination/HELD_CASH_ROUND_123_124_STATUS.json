@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Round137: gated receipt void request/approval and custody handover; preserve approval threshold and no historical adoption.",
+  "next": "Verify exact round137 CI, correct confirmed defects. Then complete broader handover/void coverage and other missing writers, including fee and bank return, before cutover.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -469,5 +469,15 @@
       }
     ],
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "round137": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "814f23b9b268bef7f9775a3749a626aed4ecc388",
+    "branch": "qa/gated-void-handover-round137",
+    "source": "70d2082c959d5c7a6869afaa3efedaba630f17c5",
+    "run": 45698360781,
+    "scope": "Inactive GatedReceiptVoidWriter: immediate cash void, pending request, independent approval/rejection under period gate, registered original and exact reversal, threshold cannot bypass pending request. Pending/rejected decisions have no posting UUID or ledger leg; rejection replay not implemented. GatedCashHandoverWriter: reconciled cash-only zero opening/variance tills, registered receipt and opening proofs, independent approval, exact partial/full custody postings without additional subscriber effects. Three targeted cases, both engines.",
+    "limits": "Runtime not accepted yet. Handover rejects funded tills, variances, voided receipts, late claims and closed corrections pending broader custody coverage. No activation; receipt decision permissions and request/rejection idempotency require full route review. No production/main/real data, historical remediation or actual release.",
+    "next": "Verify exact round137 CI, correct confirmed defects. Then complete broader handover/void coverage and other missing writers, including fee and bank return, before cutover."
   }
 }
