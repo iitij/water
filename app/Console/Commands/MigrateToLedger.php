@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Transaction;
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
 use Illuminate\Console\Command;
 
 /**
@@ -27,12 +29,20 @@ class MigrateToLedger extends Command
                     if ($type === 'invoice' && $doc->status === 'draft') {
                         $valid = $rows->isEmpty();
                     } else {
-                        $expected = (int) round((float) ($type === 'invoice' ? -$doc->total_amount : $doc->amount) * 100);
-                        $valid = $rows->count() === 1 && ! $rows->first()->trashed()
-                            && (int) $rows->first()->subscriber_id === (int) $doc->subscriber_id
-                            && (int) round((float) $rows->first()->amount * 100) === $expected
-                            && (int) ($rows->first()->meter_id ?? 0) === (int) ($doc->meter_id ?? 0)
-                            && (int) ($rows->first()->retired_meter_id ?? 0) === (int) ($doc->retired_meter_id ?? 0);
+                        try {
+                            $amount = AccountMoney::stored($doc, $type === 'invoice' ? 'total_amount' : 'amount');
+                            $expected = $type === 'invoice' ? SignedMinor::negate($amount) : $amount;
+                            $valid = ($type === 'invoice' ? $amount >= 0 : $amount > 0)
+                                && $rows->count() === 1 && ! $rows->first()->trashed()
+                                && (int) $rows->first()->subscriber_id === (int) $doc->subscriber_id
+                                && AccountMoney::stored($rows->first()) === $expected
+                                && (int) ($rows->first()->meter_id ?? 0) === (int) ($doc->meter_id ?? 0)
+                                && (int) ($rows->first()->retired_meter_id ?? 0) === (int) ($doc->retired_meter_id ?? 0);
+                        } catch (\InvalidArgumentException|\OverflowException) {
+                            // Malformed observed DECIMAL is evidence of a problem,
+                            // not permission to round and certify the source.
+                            $valid = false;
+                        }
                     }
                     if (! $valid) {
                         $issues++;

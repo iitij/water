@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:water_project/core/backup/local_backup.dart';
@@ -31,6 +32,7 @@ class _MemoryStorage extends BackupStorage {
 
   @override
   Future<String> write(String name, String contents) async {
+    if (files.containsKey(name)) throw const BackupNameConflict();
     files[name] = contents;
     return '/tmp/$name';
   }
@@ -102,6 +104,38 @@ void main() {
       expect((decoded['counts'] as Map<String, dynamic>)['readings'], 2);
       expect(decoded['checksum'], LocalBackupService.checksumOf(_sampleData()));
       expect(created.totalRows, 1 + 1 + 1 + 0 + 2 + 1 + 0);
+    });
+
+    test('same-second backups keep both snapshots', () async {
+      final first = await service.createBackup();
+      final original = storage.files[first.name];
+      store.data = _sampleData()..['meters'] = [{'server_id': 200}];
+      final second = await service.createBackup();
+      expect(second.name, 'water-backup-20261024-090507-0001.json');
+      expect(storage.files, hasLength(2));
+      expect(storage.files[first.name], original);
+      expect(storage.files[second.name], isNot(original));
+    });
+
+    test('concurrent physical writes cannot overwrite an existing backup', () async {
+      final dir = await Directory.systemTemp.createTemp('water-backup-test-');
+      addTearDown(() => dir.delete(recursive: true));
+      final firstStore = DeviceBackupStorage(directory: dir);
+      final secondStore = DeviceBackupStorage(directory: dir);
+      final firstService = LocalBackupService(store: store, storage: firstStore,
+          clock: () => DateTime.utc(2026, 10, 24, 9, 5, 7));
+      final otherStore = _MemoryStore(_sampleData()..['meters'] = [{'server_id': 200}]);
+      final secondService = LocalBackupService(store: otherStore, storage: secondStore,
+          clock: () => DateTime.utc(2026, 10, 24, 9, 5, 7));
+      final backups = await Future.wait([firstService.createBackup(), secondService.createBackup()]);
+      expect(backups.map((b) => b.name).toSet(), hasLength(2));
+      expect(await firstStore.list(), hasLength(2));
+      final original = await firstStore.read(backups.first.name);
+      await expectLater(firstStore.write(backups.first.name, 'replacement'),
+          throwsA(isA<BackupNameConflict>()));
+      expect(await firstStore.read(backups.first.name), original);
+      final other = jsonDecode(await secondStore.read(backups.last.name)) as Map;
+      expect(((other['data'] as Map)['meters'] as List).single, {'server_id': 200});
     });
 
     test('قاعدة فارغة تُرفض برسالة عربية واضحة', () async {
@@ -177,6 +211,16 @@ void main() {
         )),
       );
       expect(store.imports, 0);
+    });
+
+    test('listing marks checksum mismatch and fractional format version incompatible', () async {
+      final created = await service.createBackup();
+      final original = jsonDecode(storage.files[created.name]!) as Map<String, dynamic>;
+      storage.files[created.name] = jsonEncode({...original, 'checksum': 'bad'});
+      expect((await service.listBackups()).single.isCompatible, isFalse);
+      storage.files[created.name] = jsonEncode({...original, 'version': 1.5});
+      expect((await service.listBackups()).single.isCompatible, isFalse);
+      await expectLater(service.restore(created.name), throwsA(isA<BackupException>()));
     });
 
     test('ملف بلا بصمة يُرفض', () async {

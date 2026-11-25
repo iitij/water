@@ -105,6 +105,8 @@ class FinanceModule {
           invoices: getIt<InvoicesRemoteDataSource>(),
           networkInfo: getIt<NetworkInfo>(),
           syncQueue: getIt<FinanceSyncQueueRepository>(),
+          captureScope: getIt.isRegistered<SyncQueueManager>()
+              ? getIt<SyncQueueManager>().captureOwnerScope : null,
           cashSessions: getIt.isRegistered<CashSessionService>() ? getIt<CashSessionService>() : null,
           audit: getIt.isRegistered<AuditLogService>() ? getIt<AuditLogService>() : null,
         ),

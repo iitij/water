@@ -100,9 +100,9 @@ class PaymentResource extends Resource
 
                     Forms\Components\TextInput::make('receipt_number')
                         ->label('رقم سند القبض')
-                        ->default(fn () => Payment::generateReceiptNumber())
+                        ->placeholder('يُولّد عند إصدار السند')
                         ->disabled()
-                        ->dehydrated(fn (?Payment $record) => $record === null),
+                        ->dehydrated(false),
 
                     Forms\Components\TextInput::make('amount')
                         ->disabled(fn (?Payment $record) => $record !== null)
