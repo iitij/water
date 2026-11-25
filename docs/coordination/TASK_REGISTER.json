@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 73,
+    "round": 74,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3922,6 +3922,16 @@
       "runs": [],
       "scope": "Direct ordinary cash void only, super_admin-only candidate; positive explicit threshold required, exact locked amount strictly below threshold; zero/missing/invalid threshold fail closed, never bypass pending request, use actual requestVoid service. Verify registered original and reversal, durable threshold audit and exact replay even after threshold changes. Six cases per engine prepared: boundary/replay, fail-closed thresholds, pending request, legacy source rejection, closed/frozen/till, atomic rollback and retry.",
       "limits": "Independent branch from accepted round 69. Rounds 70-72 remain unaccepted. No runtime evidence; previous workflow creation restriction respected. Candidate stricter than existing policy for zero/missing threshold and permissions; explicit product decision before activation. Global writer fencing, audit immutability, cross-period replay and remaining correction paths open. Account transfer source reviewed but adapter not implemented. No production activation or main merge."
+    },
+    "round74": {
+      "phase": "Independent inactive gated ordinary cash receipt account reassignment",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "1754b30ae9ee392a1f2a81d5f15882ed948bb008",
+      "branch": "fix/central-g1b-gated-account-transfer",
+      "runs": [],
+      "scope": "Registered ordinary cash receipt only; approved original till where present; independent authorized actor, sorted subscriber locks, original receipt and till unchanged, full receipt reassignment with equal opposite subscriber effects recorded in one operation. Exact audit, balances and replay checks; no treasury movement. Five cases per engine prepared: actual transfer to account with existing credit, actor/destination/replay conflict, legacy original rejection, unapproved till and closed/frozen period, bilateral allocation history and audit rollback/retry.",
+      "limits": "Independent branch from accepted round 69, rounds 70-73 remain unaccepted. Prior workflow creation restriction respected; no runtime evidence. No partial or noncash transfer, no historical adoption; allocation proof under indebted accounts, complete coverage, immutable decision evidence, global writer fencing and cross-period replay remain open. No main merge or production activation."
     }
   }
 }
