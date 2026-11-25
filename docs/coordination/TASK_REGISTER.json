@@ -3370,7 +3370,7 @@
     },
     "round57": {
       "phase": "Actual historical invoice and retired meter provenance",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "88c7aae54ac8a6f165e119f9cbe3ab08791276b8",
       "source": "dc6a415b1f85052c8d3aad9d6d96f71eb67199e7",
       "workflow": "afe482002f74d23cef36c97d35d376917ccca081",
@@ -3379,13 +3379,33 @@
       "runs": [
         {
           "id": 45611998319,
-          "name": "Historical ledger source evidence",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "One new actual historical correction case per engine: invoice and receipt identity stable across meter retirement; reversal and replacement exact signs; atomic rollback and unchanged original reading provenance.",
-      "limits": "Synthetic explicit effective date; not production writer activation, complete source coverage, concurrency proof or final closure. Pending runtime."
+      "limits": "Scoped actual historical invoice and retired identity accepted; synthetic explicit gate; no concurrent retirement proof, production activation or complete source coverage.",
+      "results": {
+        "sqlite": {
+          "job": 139197627445,
+          "tests": 1,
+          "assertions": 39,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139197627075,
+          "tests": 1,
+          "assertions": 39,
+          "exit": 0
+        },
+        "total": {
+          "tests": 2,
+          "assertions": 78,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
