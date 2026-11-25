@@ -128,12 +128,24 @@ final class LateReceiptReviewService
         ];
     }
 
+    private function assertCashSettlementWriter(object $review, ?GatedCollectionWriter $writer): void
+    {
+        if ($writer !== null && $writer->allowsMutation('late_cash', (int) $review->id, $review->sync_uuid)) {
+            return;
+        }
+        $registered = DB::table('financial_posting_operations')->where('scope_key', 'water')
+            ->where('operation_uuid', $review->sync_uuid)->exists();
+        if ($writer !== null || $registered || config('financial_candidate.late_cash_settlements') === true) {
+            throw new \DomainException('gated_late_cash_writer_required');
+        }
+    }
+
     public function decide(int $id, User $actor, array $data): array
     {
         return $this->decideInternal($id, $actor, $data, false);
     }
 
-    private function decideInternal(int $id, User $actor, array $data, bool $verifiedCashDestination): array
+    private function decideInternal(int $id, User $actor, array $data, bool $verifiedCashDestination, ?GatedCollectionWriter $gatedWriter = null): array
     {
         abort_unless($this->canDecide($actor), 403);
         $candidate = DB::table('late_receipt_reviews')->find($id);
@@ -146,11 +158,14 @@ final class LateReceiptReviewService
             || ($approve && (mb_strlen($reference) < 3 || mb_strlen($reference) > 150))) {
             throw ValidationException::withMessages(['evidence' => 'يلزم دليل مستقل ومرجع تسوية صالح.']);
         }
-        return DB::transaction(function () use ($id, $actor, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination): array {
+        return DB::transaction(function () use ($id, $actor, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination, $gatedWriter): array {
             $this->lockIssuance();
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_if((int) $review->collector_id === (int) $actor->id, 403, 'لا يجوز اعتماد مطالبتك بنفسك.');
+            if ($approve && $review->payment_method === 'cash') {
+                $this->assertCashSettlementWriter($review, $gatedWriter);
+            }
             $status = $approve ? 'approved' : 'rejected';
             if ($review->status !== 'pending') {
                 abort_unless($review->status === $status && (int) $review->decided_by === (int) $actor->id
@@ -190,7 +205,7 @@ final class LateReceiptReviewService
                     invoiceId: $review->invoice_id, paymentMethod: $review->payment_method,
                     referenceNumber: $review->reference_number, notes: $review->notes, reason: $review->reason,
                     userId: $review->collector_id, paymentDate: $review->payment_date,
-                    syncUuid: $review->sync_uuid, lateReviewId: $id,
+                    syncUuid: $review->sync_uuid, lateReviewId: $id, settlementWriter: $gatedWriter,
                 );
                 $paymentId = $payment->id;
             }
@@ -208,7 +223,7 @@ final class LateReceiptReviewService
     }
 
     /** Separate physical receipt, outside the original counted till. */
-    public function receiveCash(int $id, User $actor, int $accountId, string $receivedOn, string $reference, string $evidence): array
+    public function receiveCash(int $id, User $actor, int $accountId, string $receivedOn, string $reference, string $evidence, ?GatedCollectionWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reference = mb_strtoupper(trim($reference));
@@ -221,11 +236,12 @@ final class LateReceiptReviewService
         }
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
-        return DB::transaction(function () use ($id, $actor, $accountId, $receivedOn, $reference, $evidence, $candidate): array {
+        return DB::transaction(function () use ($id, $actor, $accountId, $receivedOn, $reference, $evidence, $candidate, $gatedWriter): array {
             $this->lockIssuance();
             Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
             abort_unless((int) $review->subscriber_id === (int) $candidate->subscriber_id, 409);
+            $this->assertCashSettlementWriter($review, $gatedWriter);
             abort_if((int) $review->collector_id === (int) $actor->id, 403);
             $session = CashSession::query()->lockForUpdate()->findOrFail($review->cash_session_id);
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
@@ -254,7 +270,7 @@ final class LateReceiptReviewService
             // New decisions and exact historical separate-handover decisions can be
             // linked; never convert an already-counted allocation into a second receipt.
             $approved = $this->decideInternal($id, $actor, ['approve' => true, 'settlement_method' => 'separate_handover',
-                'evidence_reference' => $reference, 'evidence' => $evidence], true);
+                'evidence_reference' => $reference, 'evidence' => $evidence], true, $gatedWriter);
             $record = ['late_receipt_review_id' => $id, 'treasury_account_id' => $accountId,
                 'amount_minor' => $this->receiptMinor($approved['amount']), 'received_on' => $receivedOn,
                 'reference' => $reference, 'evidence' => $evidence, 'received_by' => $actor->id];
