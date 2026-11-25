@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Integrate actual cash receipt entrypoints under isolated candidate switch; explicitly handle offline and noncash claims without legacy bypass.",
+  "next": "Verify exact HTTP test results, correct confirmed failures only, and run dedicated affected GatedCashReceiptWriterTest cases. Then integrate Filament receipt creation with stable identity.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1004,5 +1004,15 @@
       "id": 139539359825,
       "status": "test and analyze steps successful; post-job cleanup in progress; final log unavailable (404)"
     }
+  },
+  "release_cash_receipt_api": {
+    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "base": "8cc7bcd327bc587d2ab33cde9d34fbafb201538d",
+    "branch": "release/prospective-cash-receipt-api",
+    "source": "03175b307b0e7703ff0a7b6ebfd1040ee85867b2",
+    "run": 45710132370,
+    "scope": "Four actual API cash entrypoints share ProspectiveCashReceiptEntry and GatedCashReceiptWriter behind default-off staging/testing switch. Exact amount, notes, effective date, till, UUID and balance checks; same-day explicit deferred receipt supported, older new receipt rejected to review, registered earlier date replay allowed in open period with identical source. Two new targeted HTTP cases on both engines.",
+    "limits": "Runtime pending; no production activation, legacy flag-off behavior unchanged. Dedicated receipt writer regressions also required because adapter changed. Filament receipt creation, existing queued-item attention, actual late/noncash settlement and all-writer fence still pending; no historical remediation.",
+    "next": "Verify exact HTTP test results, correct confirmed failures only, and run dedicated affected GatedCashReceiptWriterTest cases. Then integrate Filament receipt creation with stable identity."
   }
 }
