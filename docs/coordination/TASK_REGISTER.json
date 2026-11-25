@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 78,
+    "round": 79,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3992,6 +3992,17 @@
       "scope": "Both original and duplicate registered ordinary cash receipts of same subscriber and same independently approved physical-cash session, equal exact amounts and documented reason/evidence, preserve original receipt and approved custody snapshot and physical summary; reverse duplicate once, validate audit and exact replay; no treasury or refund movement. Six cases per engine prepared: actual duplicate correction and replay, authority/identity/evidence conflicts, unregistered source, unequal amounts, unapproved/closed/frozen rejection, registry fault with allocation and audit rollback/retry.",
       "limits": "Independent branch from accepted round69; rounds70–75 and77 remain unaccepted. No runtime execution; earlier workflow creation restriction respected. Same-till scope narrower than legacy service; evidence truth requires independent human verification, no automatic duplicate inference. Cross-till and noncash corrections, complete immutable decision proof, global fencing/concurrency and source coverage remain open. No production activation, main merge or live data changes.",
       "next": "W12 atomic cash handover and treasury posting; validate pending branches before integrated activation."
+    },
+    "round79": {
+      "phase": "W12 independent inactive atomic cash handover and treasury posting",
+      "status": "SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "source": "16d910154b97c5142c455e7ff46028212835e040",
+      "branch": "fix/central-g1b-gated-cash-handover",
+      "runs": [],
+      "scope": "Approved physical cash session and matching approval audit; registered receiving treasury opening, registered original ordinary uncorrected cash receipts and funding when present, previous handover postings registered; exact expected and counted custody, partial/full receipts, one positive treasury leg and no new subscriber credit. Eight cases per engine prepared: partial/full replay, funded till conservation, unregistered receipt/opening, prior unposted handover, excess/self/UUID conflicts, unapproved/closed/frozen, registry fault atomic rollback/retry.",
+      "limits": "Independent branch from accepted round69. Rounds70–75,77–78 remain unaccepted; no runtime evidence or new workflow after earlier tool restriction. Corrected/voided/late or noncash till receipts excluded; custody proof for those flows, prior account-opening lineage across all partial destinations, immutable approval audit, cross-period replay, global locking and all-writer activation remain open. No production data changes or main merge.",
+      "next": "W13 gated bank fee then W14 treasury cash-count adjustment; prioritize validation of pending branches before integration."
     }
   }
 }
