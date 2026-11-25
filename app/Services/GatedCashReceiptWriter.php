@@ -29,17 +29,20 @@ final class GatedCashReceiptWriter
 
     public function collect(User $actor, int $subscriberId, string $amount, string $uuid,
         DateTimeImmutable $now, ?int $cashSessionId = null, ?int $invoiceId = null,
-        ?int $meterId = null, ?string $reference = null, ?string $reason = null): array
+        ?int $meterId = null, ?string $reference = null, ?string $reason = null,
+        ?string $notes = null, ?string $effectiveOn = null, bool $deferred = false): array
     {
-        $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        $today = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        $date = $effectiveOn ?? $today;
+        $this->need(! $deferred || ($cashSessionId !== null && $effectiveOn !== null), 'gated_cash_deferred_identity_required');
         return $this->gate->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($actor, $subscriberId, $amount, $uuid, $now, $cashSessionId, $invoiceId, $meterId, $reference, $reason): array {
+            function (array $context) use ($actor, $subscriberId, $amount, $uuid, $now, $cashSessionId, $invoiceId, $meterId, $reference, $reason, $notes, $today, $deferred): array {
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
                     'gated_cash_issuance_lock_missing');
                 // Isolated candidate lock order. Unfenced legacy writers still use subscriber-first.
-                $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
                 abort_unless($actor->hasRole('super_admin') || $actor->can('Create:Payment'), 403);
                 $this->need(! DB::table('late_receipt_reviews')->where('sync_uuid', $uuid)->exists()
                     && ! DB::table('noncash_collection_claims')->where('sync_uuid', $uuid)->exists(),
@@ -57,22 +60,32 @@ final class GatedCashReceiptWriter
                         'gated_cash_unregistered_or_conflicting_source');
                 } else {
                     $this->need($operation === null, 'gated_cash_operation_conflict');
+                    $this->need($context['effective_on'] === $today, 'gated_cash_late_review_required');
                 }
+                if ($invoiceId !== null && $meterId !== null && $existing === null) {
+                    $invoice = \App\Models\Invoice::query()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($invoiceId);
+                    $this->need((int) $invoice->meter_id === $meterId, 'gated_cash_destination_mismatch');
+                }
+                $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
 
                 // Do not silently infer a till on behalf of the caller.
                 $payment = $this->payments->collectPayment($subscriber, $amount, invoiceId: $invoiceId,
-                    paymentMethod: 'cash', referenceNumber: $reference, reason: $reason, userId: (int) $actor->id,
+                    paymentMethod: 'cash', referenceNumber: $reference, notes: $notes, reason: $reason, userId: (int) $actor->id,
                     paymentDate: $context['effective_on'], requestedMeterId: $meterId,
-                    syncUuid: $uuid, requestedCashSessionId: $cashSessionId);
+                    syncUuid: $uuid, requestedCashSessionId: $cashSessionId, deferred: $deferred);
                 $this->need((int) ($payment->cash_session_id ?? 0) === (int) ($cashSessionId ?? 0)
                     && $payment->payment_date->toDateString() === $context['effective_on']
                     && (int) $payment->subscriber_id === $subscriberId
                     && (int) $payment->user_id === (int) $actor->id
-                    && $payment->sync_uuid === $uuid && $payment->payment_method === 'cash',
+                    && $payment->sync_uuid === $uuid && $payment->payment_method === 'cash'
+                    && $payment->notes === $notes
+                    && ($meterId === null || (int) ($payment->meter_id ?? $payment->retired_meter_id) === $meterId),
                     'gated_cash_destination_mismatch');
                 $entry = $this->entry($payment);
                 $leg = $this->evidence->leg((int) $entry->id);
-                $this->need($leg['amount_minor'] === AccountMoney::stored($payment), 'gated_cash_amount_mismatch');
+                $this->need($leg['amount_minor'] === AccountMoney::stored($payment)
+                    && app(TransactionService::class)->accountBalanceMinor($subscriber) === ($existing
+                        ? $before : \App\Support\SignedMinor::add($before, $leg['amount_minor'])), 'gated_cash_amount_mismatch');
                 return ['payment' => $payment, 'transaction_id' => (int) $entry->id,
                     'registry_created' => $this->registry->record($context, $uuid, [$leg], $now)];
             });
