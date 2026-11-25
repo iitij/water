@@ -54,6 +54,9 @@ class SyncQueueManager extends ChangeNotifier {
 
   FieldSessionScope? _scope() => _captureScope?.call();
 
+  /// Capture before the caller's first network or connectivity await.
+  FieldSessionScope? captureOwnerScope() => _scope();
+
   void _checkScope(FieldSessionScope? scope, SyncQueueItem item) {
     scope?.ensureCurrent();
     if (!_owns(item, scope)) throw StateError('Offline action owner changed.');
