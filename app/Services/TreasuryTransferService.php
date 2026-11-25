@@ -3,6 +3,10 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\CashCustodyAmounts as Cash;
+use App\Support\DecimalDomain;
+use App\Support\SignedMinor;
+use App\Support\TreasuryMoney as Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -26,7 +30,7 @@ final class TreasuryTransferService
         $reference = mb_strtoupper(trim($data['reference']));
         $evidence = trim($data['evidence']);
         $date = $data[$dateKey];
-        if (! preg_match('/^(\d{1,12})(?:\.(\d{1,2}))?$/D', (string) $data['amount'], $parts)
+        if (! preg_match('/^(\d{1,12})(?:\.(\d{1,2}))?$/D', (string) $data['amount'])
             || mb_strlen($reference) < 3 || mb_strlen($reference) > 150
             || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000
             || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
@@ -34,8 +38,7 @@ final class TreasuryTransferService
             || $date > now()->toDateString()) {
             $this->reject('transfer', 'بيانات التحويل أو الإثبات غير صالحة.');
         }
-        $minor = (int) $parts[1] * 100 + (int) str_pad($parts[2] ?? '', 2, '0');
-        if ($minor <= 0) $this->reject('amount', 'مبلغ التحويل يجب أن يكون موجباً.');
+        $minor = Cash::input($data['amount'], 'amount', DecimalDomain::D14, 1, digitsOnly: true);
         return ['amount_minor' => $minor, 'reference' => $reference, $dateKey => $date, 'evidence' => $evidence];
     }
 
@@ -74,7 +77,7 @@ final class TreasuryTransferService
         return ['id' => $transfer->id, 'dispatch' => (array) $transfer,
             'receipt' => $receipt ? (array) $receipt : null,
             'status' => $issues ? 'inconsistent' : ($receipt ? 'received' : 'in_transit'),
-            'in_transit_minor' => $issues ? null : ($receipt ? 0 : (int) $transfer->amount_minor),
+            'in_transit_minor' => $issues ? null : ($receipt ? 0 : Money::document($transfer->amount_minor, true)),
             'issues' => $issues];
     }
 
@@ -102,11 +105,11 @@ final class TreasuryTransferService
             $id = DB::table('treasury_transfers')->insertGetId($record + ['created_at' => now(), 'updated_at' => now()]);
             $posting = DB::table('treasury_postings')->insertGetId([
                 'treasury_account_id' => $from->id, 'treasury_transfer_id' => $id,
-                'kind' => 'internal_transfer_out', 'amount_minor' => -$record['amount_minor'],
+                'kind' => 'internal_transfer_out', 'amount_minor' => SignedMinor::negate($record['amount_minor']),
                 'effective_on' => $record['dispatched_on'], 'evidence_reference' => $record['reference'],
                 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
             ]);
-            app(AuditLogger::class)->recordRequired('treasury.transfer_dispatched', [
+            app(TreasuryRegisterService::class)->requiredAudit('treasury.transfer_dispatched', [
                 'entity_type' => 'treasury_transfer', 'entity_id' => $id, 'actor_user_id' => $actor->id,
                 'after' => $record + ['posting_id' => $posting, 'in_transit_minor' => $record['amount_minor']],
             ]);
@@ -132,7 +135,7 @@ final class TreasuryTransferService
                 return $result;
             }
             abort_if($this->issues($transfer, null), 409, 'قيد الإرسال غير متطابق.');
-            if ($record['amount_minor'] !== (int) $transfer->amount_minor
+            if ($record['amount_minor'] !== Money::document($transfer->amount_minor, true)
                 || $record['received_on'] < $transfer->dispatched_on || $record['received_on'] < $to->opening_on) {
                 $this->reject('amount', 'يلزم إثبات الاستلام الكامل المطابق؛ الفروق تحتاج تسوية مستقلة.');
             }
@@ -144,7 +147,7 @@ final class TreasuryTransferService
                 'effective_on' => $record['received_on'], 'evidence_reference' => $record['reference'],
                 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
             ]);
-            app(AuditLogger::class)->recordRequired('treasury.transfer_received', [
+            app(TreasuryRegisterService::class)->requiredAudit('treasury.transfer_received', [
                 'entity_type' => 'treasury_transfer_receipt', 'entity_id' => $receiptId, 'actor_user_id' => $actor->id,
                 'after' => $record + ['posting_id' => $posting, 'in_transit_minor' => 0],
             ]);
@@ -154,11 +157,20 @@ final class TreasuryTransferService
 
     public function validPosting(object $row): bool
     {
+        try {
+            return $this->validPostingExact($row);
+        } catch (\InvalidArgumentException|\OverflowException) {
+            return false;
+        }
+    }
+
+    private function validPostingExact(object $row): bool
+    {
         if ($row->cash_handover_id || $row->payment_refund_id || $row->cash_session_funding_id || $row->treasury_bank_fee_id || $row->treasury_cash_adjustment_id || $row->treasury_bank_collection_id || $row->treasury_late_cash_receipt_id) return false;
         if ($row->kind === 'internal_transfer_out' && $row->treasury_transfer_id && ! $row->treasury_transfer_receipt_id) {
             $transfer = DB::table('treasury_transfers')->find($row->treasury_transfer_id);
             return $transfer && (int) $row->treasury_account_id === (int) $transfer->from_account_id
-                && (int) $transfer->amount_minor > 0 && (int) $row->amount_minor === -(int) $transfer->amount_minor
+                && Money::document($transfer->amount_minor, true) > 0 && Money::signed($row->amount_minor) === SignedMinor::negate(Money::document($transfer->amount_minor, true))
                 && $row->effective_on === $transfer->dispatched_on && $row->evidence_reference === $transfer->reference
                 && (int) $row->posted_by === (int) $transfer->dispatched_by;
         }
@@ -166,8 +178,8 @@ final class TreasuryTransferService
             $receipt = DB::table('treasury_transfer_receipts')->find($row->treasury_transfer_receipt_id);
             $transfer = $receipt ? DB::table('treasury_transfers')->find($receipt->treasury_transfer_id) : null;
             return $transfer && (int) $row->treasury_account_id === (int) $transfer->to_account_id
-                && (int) $receipt->amount_minor === (int) $transfer->amount_minor
-                && (int) $receipt->amount_minor > 0 && (int) $row->amount_minor === (int) $receipt->amount_minor
+                && Money::document($receipt->amount_minor, true) === Money::document($transfer->amount_minor, true)
+                && Money::signed($row->amount_minor) === Money::document($receipt->amount_minor, true)
                 && $row->effective_on === $receipt->received_on && $row->evidence_reference === $receipt->reference
                 && (int) $row->posted_by === (int) $receipt->received_by;
         }
@@ -200,7 +212,7 @@ final class TreasuryTransferService
         foreach ($transfers as $transfer) {
             $item = $this->result($transfer);
             $items[] = $item;
-            $transit += $item['in_transit_minor'] ?? 0;
+            $transit = SignedMinor::add($transit, $item['in_transit_minor'] ?? 0);
             foreach ($item['issues'] as $code) $issues[] = ['code' => $code, 'transfer_id' => $transfer->id];
         }
         return ['in_transit_minor' => $issues ? null : $transit, 'issues' => $issues, 'transfers' => $items,
