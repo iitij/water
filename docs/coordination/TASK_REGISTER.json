@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 48,
+    "round": 54,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -3000,7 +3000,7 @@
     },
     "round47": {
       "phase": "Scoped authenticated HTTP memory cache",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "2c60c4b7c6261d5cb7e05b9af5e644dbfb33fa13",
       "source": "7bd273ce98906a0ef7dd0099a20efd74c87c0d87",
       "workflow": "723f491619580ac7ae659545b9218faf0e82b812",
@@ -3009,18 +3009,239 @@
       "run": 45566822995,
       "job": 139043601248,
       "scope": "Generation/clear epoch on opt-in authenticated GETs, no fallback on HTTP error, full URI key, independent JSON bytes; four new tests.",
-      "limits": "Pending runtime; not Drift field cache partition."
+      "limits": "Pending runtime; not Drift field cache partition.",
+      "results": {
+        "job": 139043601248,
+        "passed": 33,
+        "new_cases": 4,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,34 infos"
+      }
     },
     "round48": {
       "phase": "V7 integrated corrected replay and durable offline queue",
-      "status": "HOSTED_FULL_PENDING",
+      "status": "ORDINARY_INTEGRATED_PASS",
       "base": "ab840547a11ee28d031f9e4bcd4381fcc1fbc991",
       "source": "e2223fa0fec7775ce2a99ca30538bc3e1f9f0196",
       "workflow": "9858780e7c6fef1234e20ea88f19986aad420397",
       "branch": "integration/accounting-candidate-v7",
       "pr": 125,
       "scope": "18 verified exact Flutter blobs from round46 vs payment context common baseline, corrected V6 fixture. No QA workflow contamination; excludes pending HTTP cache. Full Laravel SQLite/MySQL and ordinary Flutter.",
-      "limits": "No permanent close activation, real production proof source, return workflow, L01 resolution, full backup origin or final release. Full tests pending."
+      "limits": "No permanent close activation, real production proof source, return workflow, L01 resolution, full backup origin or final release. Full tests pending.",
+      "run": 45566926327,
+      "results": {
+        "sqlite": {
+          "job": 139043875798,
+          "tests": 501,
+          "passed": 475,
+          "assertions": 16213,
+          "skipped": 26,
+          "failed": 0,
+          "errors": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139043876028,
+          "tests": 501,
+          "passed": 495,
+          "assertions": 16472,
+          "skipped": 6,
+          "failed": 0,
+          "errors": 0,
+          "exit": 0
+        },
+        "flutter": {
+          "job": 139043958578,
+          "passed": 802,
+          "skipped": 25,
+          "failed": 0,
+          "exit": 0,
+          "analyzer": "0 errors/warnings,31 infos"
+        },
+        "total": {
+          "passed": 1772,
+          "backend_assertions": 32685,
+          "skipped": 57,
+          "failed": 0
+        }
+      },
+      "correction": "V7 source unintentionally inherited round45 QA workflow; extra run 45566925935 skipped. No test result invalidated; exact temporary file removed in V8."
+    },
+    "round49": {
+      "phase": "Backup restore integrity",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "7bd273ce98906a0ef7dd0099a20efd74c87c0d87",
+      "initial_source": "68d19c1bd39efa933d5fe38f45e7ab36dd78c4ae",
+      "source": "b6ffe37e7ae13a8d5a27ed344dd95142e3bee503",
+      "workflow": "831b5eb30eab7ae990c3f2db245148fa03e7115d",
+      "branch": "fix/central-backup-restore-integrity",
+      "pr": 126,
+      "first_run": 45567693131,
+      "first_failure": "Strict analyzer empty list inference; corrected with explicit list type",
+      "run": 45568131620,
+      "job": 139047914313,
+      "results": {
+        "passed": 36,
+        "new_cases": 3,
+        "failed": 0,
+        "skipped": 0,
+        "exit": 0,
+        "analyzer": "0 errors/warnings,34 infos"
+      },
+      "scope": "Transactional export snapshot; queue row/UUID preflight, prevent replacement of synced/discarded rows and deletion of terminal evidence; strict backup format/version/checksum compatibility.",
+      "limits": "No authenticated backup origin, full cache partition, signed or encrypted local export, trusted import source, or explicit legacy recovery. Existing files retained."
+    },
+    "round50": {
+      "phase": "G1B period registry evidence verification",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "e2223fa0fec7775ce2a99ca30538bc3e1f9f0196",
+      "source": "d6e7097eec3661ed156b30b215ebe00ec36e4e2d",
+      "workflow": "398da012613ff9dc0197350fce294e7471e9401b",
+      "branch": "fix/central-g1b-evidence-verifier",
+      "pr": 127,
+      "run": 45568042160,
+      "results": {
+        "sqlite": {
+          "job": 139047566230,
+          "tests": 5,
+          "assertions": 46,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139047566661,
+          "tests": 5,
+          "assertions": 46,
+          "exit": 0
+        },
+        "total": {
+          "tests": 10,
+          "assertions": 92,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "scope": "Reconstruct canonical bytes from stored legs, validate scope/calendar/fence/version, stable digest across valid freeze, detect corrupt amount, chunked operation enumeration. Returns source_coverage_verified=false even when consistent.",
+      "limits": "No actual source coverage claim, DB immutable enforcement or production proof binding."
+    },
+    "round51": {
+      "phase": "G1B persisted subscriber ledger source evidence adapter",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
+      "base": "d6e7097eec3661ed156b30b215ebe00ec36e4e2d",
+      "source": "dda96d92612f9da9dbe271c9f256389854a02b40",
+      "workflow": "b158970725f2d92e8449bee1a31b56c75ed01517",
+      "branch": "fix/central-g1b-ledger-source-evidence",
+      "pr": 128,
+      "run": 45568501600,
+      "results": {
+        "sqlite": {
+          "job": 139049106886,
+          "tests": 8,
+          "assertions": 74,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139049106550,
+          "tests": 8,
+          "assertions": 74,
+          "exit": 0
+        },
+        "total": {
+          "tests": 16,
+          "assertions": 148,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "scope": "Internal read of persisted ledger and matching document, canonical original meter identity, exact cents and type. Real payment with registry in same outer transaction; zero invoice fixture permits zero ledger evidence only; unsupported/missing sources fail. Three new cases per engine; changed registry regressions.",
+      "limits": "No production callers, no proof of full writer/source coverage, no period inference from created_at, no proof of all reversal/transfer/refund variants or retirement race, no return adapter."
+    },
+    "round52": {
+      "phase": "V8 integrated backup/cache and period evidence",
+      "status": "SQLITE_PASS_MYSQL_FLUTTER_PENDING",
+      "base": "e2223fa0fec7775ce2a99ca30538bc3e1f9f0196",
+      "source": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
+      "workflow": "2ca5978924e35d00e8c76a0a8c8204921626c39c",
+      "branch": "integration/accounting-candidate-v8",
+      "pr": 129,
+      "run": 45568627462,
+      "results": {
+        "sqlite": {
+          "job": 139049519433,
+          "tests": 503,
+          "passed": 477,
+          "assertions": 16229,
+          "skipped": 26,
+          "failures": 0,
+          "errors": 0,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139049519586,
+          "status": "in_progress"
+        },
+        "flutter": {
+          "job": 139049585120,
+          "status": "in_progress"
+        }
+      },
+      "scope": "9 exact accepted paths from rounds47/49/50 plus deletion of accidentally inherited QA workflow, all 10 verified. Excludes round51 pending integration.",
+      "limits": "Not final acceptance, no permanent close activation."
+    },
+    "round53": {
+      "phase": "G1B exact frozen source writer inventory",
+      "status": "READ_ONLY_INVENTORY_COMPLETED_NOT_COVERAGE",
+      "base": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
+      "workflow": "4295870cfb5b3dceadbbe54f12eb1611a3dcd8c3",
+      "branch": "qa/central-g1b-writer-inventory",
+      "pr": 130,
+      "run": 45568716429,
+      "job": 139049798930,
+      "results": {
+        "transaction_candidates": {
+          "matches": 96,
+          "files": 47
+        },
+        "document_ledger_calls": {
+          "matches": 51,
+          "files": 25
+        },
+        "raw_table_references": {
+          "matches": 332,
+          "files": 34
+        },
+        "nonmodel_write_candidates": {
+          "matches": 21,
+          "files": 14
+        },
+        "hooks_scheduler": {
+          "matches": 31,
+          "files": 14
+        },
+        "gate_matches": {
+          "matches": 4,
+          "files": 3,
+          "actual_product_callers": 0
+        },
+        "paths": 179,
+        "exit": 0
+      },
+      "classification": "Needs manual call-graph classification, not all matches are writers. Outer entrypoints API/Filament/jobs/commands; nested invoice/payment/ledger/allocations/treasury/return/correction; scheduler status writes, model deletion/retirement, role/user changes, restore/import/cutover. ledger:migrate read-only but float found, round54 fixes. BackupTick invokes external runner; host/restore proof separate.",
+      "limits": "No privileged lock diagnostics or product activation. Static grep does not prove all dynamic writes or all source coverage."
+    },
+    "round54": {
+      "phase": "Exact legacy original-posting audit",
+      "status": "HOSTED_FOCUSED_PENDING",
+      "base": "8a914bf804b47edee8fc9ec6e6d484296321b28b",
+      "source": "f4f1eec2de8be1c7e9c21c184e196fd6e7c9b0c1",
+      "workflow": "0a147e8acb1759c1c35a4acd1b80002d75d2b8c2",
+      "branch": "fix/central-exact-legacy-ledger-audit",
+      "pr": 131,
+      "scope": "ledger:migrate remains read-only; AccountMoney raw exact instead of float rounding, invalid/mismatched data rejected. Two new synthetic cases per engine.",
+      "limits": "Pending runtime; originals only, not complete reconciliation or closure."
     }
   }
 }
