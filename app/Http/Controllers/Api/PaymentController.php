@@ -178,13 +178,19 @@ class PaymentController extends ApiController
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'operation_uuid' => ['nullable', 'uuid'],
+            'intent_uuid' => ['nullable', 'uuid'],
         ]);
 
+        $intent = isset($data['intent_uuid']) ? strtolower($data['intent_uuid']) : null;
+        abort_if(! $candidate && ($intent !== null || isset($data['operation_uuid'])), 409,
+            'مسار الإلغاء المالي المؤكد غير متاح.');
+        abort_if($candidate && ($intent === null && ! isset($data['operation_uuid'])), 409,
+            'يجب تأكيد طلب الإلغاء عبر اتصال مباشر ومعرّف عملية صالح.');
         $payment = Payment::findOrFail($id);
         $result = $candidate
             ? $this->voidCandidateCall(fn () => app(\App\Services\GatedReceiptVoidWriter::class)->request(
                 $request->user(), $id, (string) $data['reason'], now()->toDateTimeImmutable(),
-                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null))
+                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null, $intent))
             : $paymentService->requestVoid(
                 $payment, (string) $data['reason'], $request->user()->id,
                 $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
@@ -199,6 +205,7 @@ class PaymentController extends ApiController
                 'message' => 'السند يتجاوز حد الإلغاء المسموح؛ أُرسل طلب إلغاء لاعتماد المشرف.',
                 'pending_approval' => true,
                 ...($candidate ? ['request_id' => $result['request_id']] : []),
+                ...($intent !== null ? ['intent_uuid' => $result['intent_uuid']] : []),
                 'payment' => $payment,
                 'receipt_data' => $this->receiptData($payment),
             ], 202);
@@ -207,6 +214,7 @@ class PaymentController extends ApiController
         return response()->json([
             'message' => 'تم إلغاء سند القبض وإعادة احتساب الأرصدة.',
             'pending_approval' => false,
+            ...($intent !== null ? ['intent_uuid' => $result['intent_uuid']] : []),
             'payment' => $payment,
             'receipt_data' => $this->receiptData($payment),
         ]);
