@@ -473,7 +473,7 @@
       "https://github.com/iitij/water/pull/67#issuecomment-7148023756"
     ],
     "limitations": "No new test execution or product edits by supervisor. Candidate branch created at B seed only, no component merge. Owner reports raw paths but no files directly accessed. CI startup cause, hosting, full suites, remaining financial paths and deferred gates open.",
-    "round": 90,
+    "round": 91,
     "recovery": {
       "reason": "Owner reports device stopped under concurrent load; actual cause not diagnosed",
       "exclusive_local_test_slot": "D only; C released; A/B/C paused",
@@ -4147,6 +4147,19 @@
       "scope": "Registry reservation now checks actual existing original payment transaction, bank collection posting and separate late cash receipt posting in reverse direction, resolving associated payment and linked claim/review under issuance lock. Reject alternate free UUID for a source with a known sync identity. Reversals/refunds/transfers retain separate operation identities; original UUID cannot be repurposed for reversal. Two new test methods per engine and two new negative cases within existing paired clearance test, seven methods per engine total; actual cash relabel rollback, distinct reversal and replay, paired or bank-only relabel rollback.",
       "limits": "Static candidate only; no runtime validation or new workflow after earlier restriction. Generic registry remains able to receive nonbusiness evidence; missing/noncanonical source identity and null-UUID historical receipts remain separate coverage/transition gates. Preexisting collisions, historical replay conflicts, complete source identity and DB fencing/global lock order/concurrency remain open. Late cash reverse guard has no new dedicated runtime fixture; W17 dual-date and W18 excluded flows unresolved. No main merge or production data changes.",
       "next": "Define explicit policy for dual-date W17 and accounting recognition of delayed receipts; complete source coverage and historical transition before integrating and running pending candidates."
+    },
+    "round91": {
+      "phase": "W17 dual-date recognition policy and atomic two-date gate foundation",
+      "status": "PARTIAL_SOURCE_CREATED_VALIDATION_BLOCKED",
+      "base": "c542312de9573bb56b6b448b7559aaea9ae8bbd2",
+      "branch": "fix/central-g1b-dual-date-gate",
+      "source": "8e5454aa023d115d736bd4361811ec920ba360cc",
+      "gate_commit": "354a323837680ee3092f1e8fe868fbca634901ed",
+      "test_commit": "7063488903a3aeba92461b68b68edc5406a3b8f1",
+      "runs": [],
+      "scope": "Inactive withinOpenPeriods method validates one or two dates, deduplicates and sorts dates, locks scope then unique months chronologically and returns exact date contexts in one transaction before any business effects. Original single-date API unchanged. Five QA methods per engine prepared covering distinct months, same month and same day, closed/frozen/missing months, invalid/future dates and nested gate/atomic rollback of two synthetic registry probes. Design note specifies original subscriber receipt date vs actual treasury receipt date; both periods must be open; closed-period correction requires separate approved policy. No arbitrary UUID split or backdating.",
+      "limits": "No runtime validation after previous restriction; no new workflow. Gate alone is not W17 dual-date writer or multi-date registry. Group identity/payload schema, compatibility with format 1, independent completeness and closure proof, historical closed-period correction policy and production lock ordering remain open. Synthetic probes only; not business receipt proof. No integration into main or production changes.",
+      "next": "Design multi-date posting group and independent verification compatible with existing registry and UUID ownership; review closed-period exception and W18 completeness before activation."
     }
   }
 }
