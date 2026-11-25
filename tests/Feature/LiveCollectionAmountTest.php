@@ -31,14 +31,14 @@ class LiveCollectionAmountTest extends TestCase
             'subscriber_id' => $meter->subscriber_id,
             'meter_id' => $general ? null : $meter->id,
             'invoice_type' => 'meter',
-            'bill_number' => Invoice::generateBillNumber(),
+            'bill_number' => 'SYNTH-LIVE-'.\Illuminate\Support\Str::uuid(),
             'bill_date' => now()->toDateString(),
             'consumption_fee' => $total,
             'total_amount' => $total,
             'amount_paid' => $paid,
             'previous_balance' => $previous,
             'status' => $status,
-        ]));
+        ]))->fresh(); // Assert against actual persisted DECIMAL values, not the input float.
     }
 
     public function test_paid_historical_arrears_are_never_suggested_again(): void

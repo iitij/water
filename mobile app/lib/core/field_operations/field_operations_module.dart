@@ -11,6 +11,7 @@ import '../database/database_encryption.dart';
 import '../database/offline_pack_downloader.dart';
 import '../database/sync_queue_manager.dart';
 import '../database/sync_queue_repository.dart';
+import 'field_session_scope.dart';
 
 /// Composition root for the meter-reader feature set.
 ///
@@ -32,6 +33,7 @@ class FieldOperationsModule {
     AppDatabase? database,
     bool autoStartSync = true,
     String? Function()? ownerUserIdProvider,
+    FieldSessionScope Function()? captureScope,
     DatabaseKeyProvider keyProvider = const NoopDatabaseKeyProvider(),
   }) async {
     final appDatabase = database ?? await AppDatabase.open(keyProvider: keyProvider);
@@ -43,12 +45,16 @@ class FieldOperationsModule {
       dio: dio,
       database: appDatabase,
       ownerUserIdProvider: ownerUserIdProvider,
+      captureScope: captureScope,
     );
     final readingsRemote = ReadingsRemoteDataSource(dio);
     final syncManager = SyncQueueManager(
       database: appDatabase,
       sendBatch: readingsRemote.syncBatch,
     );
+    if (autoStartSync && captureScope != null) {
+      throw StateError('Use the unified scoped synchronization manager.');
+    }
     if (autoStartSync) {
       syncManager.startListening();
     }
