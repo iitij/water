@@ -39,6 +39,10 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Held cash and adjustment tests on SQLite
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/GatedCountedCashWriterTest.php
+      - name: Changed-path allocation, reports and ledger regressions on SQLite
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/PaymentAllocationHistoryTest.php tests/Feature/FinancialReportsTest.php
+      - name: Independent registry regressions on SQLite
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -98,3 +102,9 @@ jobs:
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Held cash and adjustment tests on MySQL
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/GatedCountedCashWriterTest.php
+      - name: Changed-path allocation and report regressions on MySQL
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_target_fifo_credit_and_void_create_conserved_immutable_revisions|test_failure_to_save_allocation_rolls_back_receipt_and_ledger|test_reconciliation_detects_wrong_invoice_paid_distribution_with_equal_totals' tests/Feature/PaymentAllocationHistoryTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialReportsTest.php
+      - name: Independent registry regressions on MySQL
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
