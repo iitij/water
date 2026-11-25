@@ -309,7 +309,7 @@ final class BankReconciliationService
     }
 
     /** A bank charge is an already executed outflow, never a balancing plug. */
-    public function recordFee(User $actor, int $id, int $lineId, string $reference, string $reason, string $evidence): array
+    public function recordFee(User $actor, int $id, int $lineId, string $reference, string $reason, string $evidence, ?GatedBankFeeWriter $gatedWriter = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reference = mb_strtoupper(trim($reference));
@@ -321,7 +321,7 @@ final class BankReconciliationService
             $this->reject('fee', 'يلزم مرجع فريد وسبب مستقل ودليل على رسوم البنك الفعلية.');
         }
 
-        return DB::transaction(function () use ($actor, $id, $lineId, $reference, $reason, $evidence): array {
+        return DB::transaction(function () use ($actor, $id, $lineId, $reference, $reason, $evidence, $gatedWriter): array {
             $this->lock();
             $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
             abort_unless($statement, 404);
@@ -341,6 +341,14 @@ final class BankReconciliationService
                 'reference' => $reference, 'reason' => $reason, 'evidence' => $evidence, 'approved_by' => $actor->id,
             ];
             $existing = DB::table('treasury_bank_fees')->where('bank_statement_line_id', $lineId)->lockForUpdate()->first();
+            $postingId = $existing === null ? null : DB::table('treasury_postings')->where('treasury_bank_fee_id', $existing->id)->value('id');
+            $registered = $postingId !== null && DB::table('financial_posting_events')
+                ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsMutation($id, $lineId, (int) $actor->id))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.bank_fees') === true)) {
+                throw new \DomainException('gated_bank_fee_writer_required');
+            }
             if ($existing) {
                 foreach ($record as $field => $value) {
                     abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل رسوم مختلفة لهذه الحركة.');
