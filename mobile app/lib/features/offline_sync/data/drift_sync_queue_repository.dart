@@ -55,7 +55,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
                 attemptCount: item.attempts,
                 createdAt: item.createdAt.toUtc().toIso8601String(),
                 lastError: item.lastError,
-                ownerUserId: item.ownerUserId ?? fallbackOwnerUserId,
+                ownerUserId: item.ownerUserId,
               );
             }
           }
@@ -94,7 +94,7 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
               state: 'pending',
               attemptCount: 0,
               createdAt: createdAt.toUtc().toIso8601String(),
-              ownerUserId: payload['owner_user_id']?.toString() ?? fallbackOwnerUserId,
+              ownerUserId: null,
             );
           }
         }
@@ -107,13 +107,13 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
 
   @override
   Future<List<SyncQueueItem>> loadAll() async {
-    final rows = await _database.getActiveSyncActions();
+    final rows = await _database.getActiveSyncActions(limit: null);
     return rows.map(_fromRow).toList(growable: true);
   }
 
   @override
   Future<void> saveAll(List<SyncQueueItem> items) async {
-    final existingRows = await _database.getActiveSyncActions();
+    final existingRows = await _database.getActiveSyncActions(limit: null);
     final incomingIds = items.map((item) => item.id).toSet();
 
     for (final row in existingRows) {
@@ -230,7 +230,6 @@ class DriftSyncQueueRepository implements SyncQueueRepository {
       state: retryAt == null ? 'failed' : 'retrying',
       attemptCount: item.attempts,
       lastError: error,
-      ownerUserId: item.ownerUserId,
       nextAttemptAt: retryAt?.toUtc().toIso8601String(),
       clearNextAttempt: retryAt == null,
     );
