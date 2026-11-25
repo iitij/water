@@ -3487,7 +3487,7 @@
     },
     "round60": {
       "phase": "Treasury registry source and effective date verification",
-      "status": "HOSTED_FOCUSED_PENDING",
+      "status": "SCOPED_RUNTIME_ACCEPTED",
       "base": "d9d607166413db1ee7490c41c2e609ae0430bb3b",
       "source": "495bf08e607fb29b6c7a00dd5cd0b7f800e30b7a",
       "workflow": "5d6c484df33d63bf6000d0f34821c82dfd3784b0",
@@ -3496,13 +3496,33 @@
       "runs": [
         {
           "id": 45613233598,
-          "name": "Treasury registry source verification",
-          "status": "queued",
-          "conclusion": null
+          "status": "completed",
+          "conclusion": "success"
         }
       ],
       "scope": "Mixed subscriber ledger and actual treasury transfer registry verifier; issuance lock before source locks, treasury effective date must equal registry date, missing sources fail, other existing treasury kinds explicitly unverified, coverage false. Four new and three changed verifier regressions per engine.",
-      "limits": "No other treasury family evidence, complete writer coverage, production activation, final closure or main merge. Pending runtime."
+      "limits": "Supported treasury transfer registry revalidation accepted. Other treasury families, complete writer coverage and final closure remain open.",
+      "results": {
+        "sqlite": {
+          "job": 139201900587,
+          "tests": 7,
+          "assertions": 40,
+          "exit": 0
+        },
+        "mysql": {
+          "job": 139201900090,
+          "tests": 7,
+          "assertions": 40,
+          "exit": 0
+        },
+        "total": {
+          "tests": 14,
+          "assertions": 80,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0
+        }
+      }
     }
   }
 }
