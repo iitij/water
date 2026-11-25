@@ -1,7 +1,7 @@
-name: Held cash incremental correction and race acceptance
+name: Held cash incremental fence and latest evidence acceptance
 on:
   push:
-    branches: ['qa/held-cash-reinstatement-race-round122']
+    branches: ['qa/held-cash-reinstatement-fence-round123']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round122_corrections_restore_shadow_release_and_preserve_exact_account_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round123_missing_latest_shadow_reinstatement_is_not_silently_repaired|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,7 +97,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Targeted release journal and affected proposal tests
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round122_corrections_restore_shadow_release_and_preserve_exact_account_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round123_missing_latest_shadow_reinstatement_is_not_silently_repaired|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql-race:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

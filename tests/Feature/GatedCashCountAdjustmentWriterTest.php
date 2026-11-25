@@ -1486,4 +1486,33 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('shadow_restore_missing_event', fn () => app(PaymentService::class)->recalculateInvoices($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
     }
+    public function test_round123_missing_latest_shadow_reinstatement_is_not_silently_repaired(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic intermediate tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-SHADOW-INTERMEDIATE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $accountId = (int) $account['id'];
+        $proposal = '66666666-6666-4666-8666-666666666666';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-INTERMEDIATE-PROPOSAL', 'Independent review of allocation evidence', $this->nowAt());
+        $reviewer = $this->actor();
+        $service->recordRelease($reviewer, $accountId, $proposal, '77777777-7777-4777-8777-777777777777',
+            'Independent approval of shadow release', $this->nowAt());
+        app(\App\Services\InvoiceCancellationService::class)->cancel($invoice, 'Synthetic independently documented cancellation', $reviewer->id);
+        $this->assertSame(0, $service->inspectJournal($accountId, $this->nowAt())['shadow_released_minor']);
+        // Deliberate corruption of disposable test data, never production.
+        DB::unprepared('DROP TRIGGER shadow_restore_reject_delete');
+        DB::table('held_cash_shadow_reinstatements')->delete();
+        $this->rejects('shadow_restore_missing_event', fn () => $service->inspectJournal($accountId, $this->nowAt()));
+        $this->rejects('shadow_restore_missing_event', fn () => app(PaymentService::class)->recalculateInvoices($subscriber));
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+    }
 }

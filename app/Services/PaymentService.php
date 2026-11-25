@@ -36,7 +36,10 @@ class PaymentService
 
             ['invoices' => $invoices, 'rows' => $allocationRows, 'paid' => $paid,
                 'available' => $availableMinor, 'source_amounts' => $sourceAmounts] = $this->allocationPlanLocked($subscriber);
+            $previousRevision = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)
+                ->orderByDesc('revision')->lockForUpdate()->first();
             $revisionId = app(PaymentAllocationHistory::class)->append($subscriber, $allocationRows, $paid, $availableMinor, $sourceAmounts);
+            $createdRevision = $previousRevision === null || (int) $previousRevision->id !== $revisionId;
 
             // Persist all allocations before deriving any cumulative status.
             foreach ($invoices as $invoice) {
@@ -49,7 +52,7 @@ class PaymentService
                 $invoice->updateStatus();
             }
             // Shadow evidence and invoice allocations commit or roll back together.
-            app(HeldCashShadowReinstatement::class)->synchronize($subscriber, $revisionId);
+            app(HeldCashShadowReinstatement::class)->synchronize($subscriber, $revisionId, $createdRevision);
         });
     }
 

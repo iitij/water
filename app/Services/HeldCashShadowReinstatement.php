@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class HeldCashShadowReinstatement
 {
-    public function synchronize(Subscriber $subscriber, int $revisionId): void
+    public function synchronize(Subscriber $subscriber, int $revisionId, bool $createdRevision): void
     {
         $this->need(DB::transactionLevel() > 0, 'shadow_restore_requires_transaction');
         $creditIds = DB::table('treasury_held_cash_credits')->where('subscriber_id', $subscriber->id)->pluck('id');
@@ -26,7 +26,7 @@ final class HeldCashShadowReinstatement
             ->orderByDesc('id')->lockForUpdate()->get()->unique('credit_id');
         foreach ($anchors as $anchor) {
             $credit = DB::table('treasury_held_cash_credits')->where('id', $anchor->credit_id)->first();
-            $before = $this->afterAnchor($anchor, $credit, $revisionId, true);
+            $before = $this->afterAnchor($anchor, $credit, $revisionId, $createdRevision);
             $revision = $this->revision($revisionId, $credit);
             $applied = $this->applied($revision, $credit);
             $after = min($before, $applied);

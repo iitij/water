@@ -8,6 +8,7 @@ use App\Support\HeldCashReleasePolicy;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Internal read-only planning boundary. The caller cannot supply proof,
@@ -26,6 +27,13 @@ final class HeldCashReleaseReadiness
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($accountId, $date, $reader): mixed {
+                // MySQL REPEATABLE READ may establish a snapshot on a metadata
+                // probe. Acquire the complete scope-first fence before any
+                // non-locking read, including trigger-presence checks.
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new DomainException('held_cash_issuance_lock');
+                }
                 if (! app(AllocationHistoryProtection::class)->active()
                     || ! app(HeldCashDocumentProtection::class)->active()) {
                     throw new DomainException('held_release_protection_missing');
