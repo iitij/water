@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact round129 jobs, fix confirmed failures only. Then inventory prospective financial writers affecting allocation and held cash, identify missing coverage and test only affected paths before any actual release.",
+  "next": "Round130: inventory prospective allocation and held-cash writers and verify uncovered paths; retain actual reserve.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -197,12 +197,29 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "round129": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "324fbf8474623bb637b5a9cf6ee171ef236aa93c",
     "branch": "qa/held-cash-proposal-definition-round129",
     "source": "a13ffc2cfdb7c028ed10585d18f1af03edcca92b",
     "run": 45692464215,
     "scope": "Verify full expected normalized SQL definitions for proposal and withdrawal guards, including SQLite unique-key replacement predicates. New test checks ineffective same-name guards, incomplete SQLite collision guard, rejection of propose/withdraw/approve/inspect with no financial or audit effects, successful restoration and withdrawal replay, unchanged actual reserve.",
-    "limits": "Candidate not yet accepted. Verification limited to expected trigger definitions; broader writer coverage, database privileges and permanent close still unproven. No historical data remediation, actual reserve reduction, production activation, real data or main changes."
+    "limits": "Candidate not yet accepted. Verification limited to expected trigger definitions; broader writer coverage, database privileges and permanent close still unproven. No historical data remediation, actual reserve reduction, production activation, real data or main changes.",
+    "jobs": [
+      {
+        "id": 139481199575,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 29,
+        "exit": 0
+      },
+      {
+        "id": 139481199753,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 26,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
