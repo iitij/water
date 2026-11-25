@@ -97,7 +97,8 @@ class CashSessionService
 
     /** Records cash already delivered, not authorization to disburse it. */
     public function openFunded(User $collector, User $issuer, int $accountId, string $amount,
-        string $reference, string $evidence, ?int $squareId = null, ?string $notes = null): CashSession
+        string $reference, string $evidence, ?int $squareId = null, ?string $notes = null,
+        ?GatedTreasuryOpeningFundingWriter $gatedWriter = null): CashSession
     {
         app(TreasuryRegisterService::class)->authorize($issuer);
         abort_if((int) $collector->id === (int) $issuer->id, 403, 'يلزم مسؤول خزينة مستقل عن المحصّل.');
@@ -110,7 +111,7 @@ class CashSessionService
         }
         $minor = Cash::input($amount, 'amount', DecimalDomain::D14, 1, digitsOnly: true);
 
-        return DB::transaction(function () use ($collector, $issuer, $accountId, $minor, $reference, $evidence, $squareId, $notes): CashSession {
+        return DB::transaction(function () use ($collector, $issuer, $accountId, $minor, $reference, $evidence, $squareId, $notes, $gatedWriter): CashSession {
             // Same lock order as treasury posting and payment issuance: global register,
             // treasury account, then collector and new till. No subscriber lock is needed.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -119,6 +120,14 @@ class CashSessionService
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
             abort_unless($account, 404);
             $existing = DB::table('cash_session_fundings')->where('reference', $reference)->lockForUpdate()->first();
+            $postingId = $existing === null ? null : DB::table('treasury_postings')->where('cash_session_funding_id', $existing->id)->value('id');
+            $registered = $postingId !== null && DB::table('financial_posting_events')
+                ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists();
+            if (! ($gatedWriter !== null && $gatedWriter->allowsFunding($accountId, (int) $collector->id, (int) $issuer->id, $reference))
+                && ($gatedWriter !== null || $registered || config('financial_candidate.treasury_opening_funding') === true)) {
+                throw new \DomainException('gated_collector_funding_writer_required');
+            }
             if ($existing) {
                 $session = CashSession::query()->findOrFail($existing->cash_session_id);
                 abort_unless((int) $existing->treasury_account_id === $accountId
