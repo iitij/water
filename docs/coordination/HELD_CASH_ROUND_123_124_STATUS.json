@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact round146 CI, fix confirmed failures only. Continue real prospective custody and held cash source proof, prioritizing production readiness over historical remediation.",
+  "next": "Use existing verified held liability and allocation evidence for prospective held reserve/obligation proof, then finish writer cutover and actual source coverage; do not remediate historical data or manufacture initial balances. Transit totals are source-backed for verified rows only, not an independently certified opening.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -758,13 +758,30 @@
     }
   },
   "round146": {
-    "status": "TARGETED_CI_IN_PROGRESS_UNVERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "b5fc0cb0de1d034e67a6d4981c008045bbdbf327",
     "branch": "qa/transit-source-round146",
     "source": "b81af57124bba86fd0e595135c70a33cda4baa1e",
     "run": 45705503025,
     "scope": "Read-only source-backed transit diagnostic at an explicit date inside the selected month; exact dispatch/receipt documents, treasury posting, audit fields and singleton registry operation proof; derive opening, dispatch, receipt and closing for verified transfers without applying later receipts to earlier boundaries. Detect unregistered and conflicting evidence. Two new cases on each engine.",
     "limits": "Runtime pending. Totals cover verified rows only. No independent root opening certification, exhaustive writer coverage, actual close, production activation, real data changes, main merge or historical repair. Completed pre-period transfers excluded.",
-    "next": "Verify exact round146 CI, fix confirmed failures only. Continue real prospective custody and held cash source proof, prioritizing production readiness over historical remediation."
+    "next": "Verify exact round146 CI, fix confirmed failures only. Continue real prospective custody and held cash source proof, prioritizing production readiness over historical remediation.",
+    "jobs": [
+      {
+        "id": 139526305758,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 33,
+        "exit": 0
+      },
+      {
+        "id": 139526306200,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 33,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   }
 }
