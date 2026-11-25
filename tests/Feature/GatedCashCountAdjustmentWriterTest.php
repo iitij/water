@@ -523,4 +523,92 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage()));
     }
 
+    private function creditHeld(User $actor, int $minor, string $uuid = self::OTHER): array
+    {
+        return app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit($actor, self::NEXT, $minor,
+            'QA-HELD-CREDIT-'.$uuid, 'Independent documented owner consent to apply held cash against subscriber account',
+            $uuid, '2026-11-25', $this->nowAt());
+    }
+
+    public function test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        \App\Models\Tariff::create(['name' => 'Synthetic credit tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HELD-CREDIT']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        app(PaymentService::class)->collectPayment($subscriber, '0.10', $invoice->id);
+        $prior = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->first();
+        $oldRows = DB::table('payment_allocations')->where('revision_id', $prior->id)->get()->toArray();
+        $assigner = $this->actor();
+        $this->assignHeld($assigner, $lot, $subscriber, 25);
+        $this->rejects('held_cash_credit_independence', fn () => $this->creditHeld($assigner, 1));
+        $actor = $this->actor();
+        $result = $this->creditHeld($actor, 20);
+        $this->assertTrue($result['subscriber_credit_created']);
+        $this->assertFalse($result['cash_movement_created']);
+        $this->assertSame(20, $result['credited_minor']);
+        $this->assertSame(5, $result['outstanding_minor']);
+        $this->assertSame('0.30', $invoice->fresh()->amount_paid);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(10025, app(TreasuryRegisterService::class)->inspect($actor, (int) $account['id'])['provisional_recorded_balance_minor']);
+        $this->assertSame(5, app(TreasuryRegisterService::class)->inspect($actor, (int) $account['id'])['held_cash_outstanding_minor']);
+        $this->assertFalse($this->creditHeld($actor, 20)['created']);
+        $this->assertEquals($oldRows, DB::table('payment_allocations')->where('revision_id', $prior->id)->get()->toArray());
+        $this->assertTrue(app(\App\Services\AllocationSnapshotIntegrity::class)->valid($prior));
+        $this->assertTrue(app(\App\Services\PaymentAllocationReadService::class)->reconcile($subscriber)['matches']);
+        $this->assertSame(30, app(\App\Services\PaymentAllocationReadService::class)->forInvoice($invoice)['allocated_minor']);
+        $this->rejects('held_cash_payout_capacity', fn () =>
+            $this->payoutHeld($actor, 6, '55555555-5555-4555-8555-555555555555'));
+        $result = $this->payoutHeld($actor, 5, '55555555-5555-4555-8555-555555555555');
+        $this->assertSame(0, $result['outstanding_minor']);
+        $this->assertSame(5, $result['paid_minor']);
+        $this->gate(function (array $context): void {
+            $result = app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']);
+            $this->assertSame(5, $result['registered_held_legs_verified']);
+            $this->assertFalse($result['source_coverage_verified']);
+        });
+    }
+
+    public function test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $trigger = DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER qa_held_credit_failure BEFORE INSERT ON payment_allocations BEGIN SELECT RAISE(ABORT, 'synthetic_credit_allocation_failure'); END"
+            : "CREATE TRIGGER qa_held_credit_failure BEFORE INSERT ON payment_allocations FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic_credit_allocation_failure'";
+        DB::unprepared($trigger);
+        try {
+            $this->creditHeld($actor, 25);
+            $this->fail('Expected allocation failure.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('synthetic_credit_allocation_failure', $error->getMessage());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_held_credit_failure');
+        }
+        $this->assertDatabaseCount('treasury_held_cash_credits', 0);
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertDatabaseCount('payment_allocation_revisions', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => self::OTHER]);
+        $this->assertSame(25, app(TreasuryRegisterService::class)->inspect($actor, (int) $account['id'])['held_cash_outstanding_minor']);
+        $this->assertSame(0, $this->creditHeld($actor, 25)['outstanding_minor']);
+        $this->assertSame(25, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
+    public function test_held_credit_missing_audit_prevents_release_and_new_settlement(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $this->creditHeld($actor, 25);
+        DB::table('audit_events')->where('event', 'treasury.held_cash_credited')->delete();
+        $this->rejects('held_cash_credit_audit', fn () =>
+            DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow((int) $account['id'], 1, '2026-11-25')));
+        $this->rejects('held_cash_credit_audit', fn () =>
+            $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage()));
+    }
+
 }
