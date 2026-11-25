@@ -1,0 +1,119 @@
+name: V4 integrated backend G02
+on:
+  pull_request:
+    types: [opened]
+    branches: ['integration/accounting-candidate-v2']
+    paths: ['.github/workflows/round26-v4-integrated-regression.yml']
+permissions:
+  contents: read
+jobs:
+  targeted:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'integration/accounting-candidate-v4'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - { case: v4-sqlite, engine: sqlite, sha: dd920a1dde29737cd42923c3be94c05364690231 }
+          - { case: v4-mysql, engine: mysql, sha: dd920a1dde29737cd42923c3be94c05364690231 }
+    env:
+      EXACT_SHA: ${{ matrix.sha }}
+      QA_CASE: ${{ matrix.case }}
+      DB_CONNECTION: ${{ matrix.engine }}
+      APP_ENV: testing
+      APP_KEY: base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, pdo_mysql, mysqli, dom, curl, fileinfo, gd, intl, zip, bcmath, pcntl, posix
+          ini-values: serialize_precision=-1
+          coverage: none
+          tools: composer:2.9.8
+      - name: Verify frozen source and locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          test -z "$(git status --porcelain)"
+          test ! -e .env && test ! -e .env.testing
+          printf '%s\n' \
+            'eddd4997b74fdb1d9ca8177cbb320a2c9c97c7ecbf9d809bdbd9a0584503fc0c  composer.lock' \
+            'e080253726c42bc8c4fbfe728b9b09419e42650d9dd3e4987ddd2d2b1608a40a  package-lock.json' \
+            '1fe487ad38dcb6d977b4fa11aad22d3aa8edd6c8e467b2652634d6b1a5fb314d  mobile app/pubspec.lock' | sha256sum --check
+          git rev-parse HEAD
+          php -v
+          composer --version
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist --no-scripts
+          composer check-platform-reqs
+          php artisan package:discover --ansi
+          php vendor/bin/phpunit --version
+          git diff --exit-code
+      - name: Run one approved case group with synthetic database
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/round26-evidence"
+          mkdir -p "$evidence"
+          name="water-r11-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "$DB_CONNECTION" = mysql ]; then
+            socketdir="$(mktemp -d "$RUNNER_TEMP/r11-socket.XXXXXX")"
+            chmod 777 "$socketdir"
+            trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+            export MYSQL_ROOT_PASSWORD="$(openssl rand -hex 24)"
+            export MYSQL_PASSWORD="$(openssl rand -hex 24)"
+            echo "::add-mask::$MYSQL_ROOT_PASSWORD"
+            echo "::add-mask::$MYSQL_PASSWORD"
+            docker run -d --name "$name" --network none \
+              -v "$socketdir:/var/run/mysqld" \
+              -e MYSQL_ROOT_PASSWORD -e MYSQL_PASSWORD -e MYSQL_USER=water_qa -e MYSQL_DATABASE=water_test \
+              mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b \
+              --skip-networking --skip-log-bin --socket=/var/run/mysqld/mysqld.sock
+            export DB_SOCKET="$socketdir/mysqld.sock"
+            export DB_DATABASE=water_test DB_USERNAME=water_qa DB_PASSWORD="$MYSQL_PASSWORD"
+            unset MYSQL_ROOT_PASSWORD MYSQL_PASSWORD
+            ready=0
+            for i in $(seq 1 90); do
+              if docker exec "$name" sh -c 'test "$(cat /proc/1/comm)" = mysqld' 2>/dev/null &&
+                 php -r 'try { $p = new PDO("mysql:unix_socket=".getenv("DB_SOCKET").";dbname=water_test", getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $v=$p->query("SELECT VERSION(), DATABASE(), @@skip_networking, @@log_bin, @@foreign_key_checks, @@unique_checks")->fetch(PDO::FETCH_NUM); if (!preg_match("/^8\\.0\\.46(?:$|[-+])/", $v[0]) || $v[1] !== "water_test" || (int)$v[2] !== 1 || (int)$v[3] !== 0 || (int)$v[4] !== 1 || (int)$v[5] !== 1 || $p->query("SHOW TABLES")->fetch()) { exit(2); } echo "MySQL ", $v[0], " empty synthetic water_test socket-only FK/unique enabled", PHP_EOL; } catch (Throwable $e) { exit(1); }'; then
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+            test "$ready" -eq 1 || { echo 'QA_BLOCKED: isolated MySQL not ready'; exit 1; }
+          else
+            test "$DB_DATABASE" = ':memory:'
+            php -r 'echo "SQLite ", (new PDO("sqlite::memory:"))->query("SELECT sqlite_version()")->fetchColumn(), PHP_EOL;'
+          fi
+          for path in 'app/Filament/Resources/CashSessions/Tables/CashSessionsTable.php' 'app/Http/Controllers/Api/CashSessionController.php' 'app/Http/Controllers/Api/SubscriberController.php' 'app/Models/Invoice.php' 'app/Models/Subscriber.php' 'app/Services/AllocationSnapshotIntegrity.php' 'app/Services/BankReconciliationService.php' 'app/Services/CashHandoverService.php' 'app/Services/CashSessionService.php' 'app/Services/ClosedCashCorrectionService.php' 'app/Services/FinancialReconciliationService.php' 'app/Services/InvoiceService.php' 'app/Services/LateReceiptReviewService.php' 'app/Services/PaymentAllocationHistory.php' 'app/Services/PaymentAllocationReadService.php' 'app/Services/PaymentService.php' 'app/Services/TransactionService.php' 'app/Services/TreasuryCashCountService.php' 'app/Services/TreasuryRegisterService.php' 'app/Services/TreasuryTransferService.php' 'app/Support/AccountMoney.php' 'app/Support/CashCustodyAmounts.php' 'app/Support/CashMoney.php' 'app/Support/DecimalDomain.php' 'app/Support/MoneyBoundary.php' 'app/Support/ObservationBillingChain.php' 'app/Support/SignedMinor.php' 'app/Support/TreasuryMoney.php' 'tests/Feature/ExactAccountsI05Test.php' 'tests/Feature/ExactBankI04Test.php' 'tests/Feature/ExactCashCustodyI02Test.php' 'tests/Feature/ExactProjectionsI06Test.php' 'tests/Feature/ExactTreasuryI03Test.php' 'tests/Feature/V2StoredObservationBillingTest.php' 'tests/Unit/acc09_p2_domain_check.php' 'tests/Unit/acc09_p2_i01_check.php' 'tests/Unit/g07_observation_chain_check.php' 'app/Http/Controllers/Api/PaymentController.php' 'tests/Feature/FinancialReportsTest.php' 'tests/Feature/LiveCollectionAmountTest.php' 'tests/Feature/MobileConnectivityFixesTest.php' 'tests/Feature/NonCashClaimTest.php' 'tests/Feature/SubscriberListMetadataTest.php'; do
+            php -l "$path"
+          done
+          for path in app/Services/DocumentSequenceService.php app/Services/DataExportService.php app/Services/FinancialReportingService.php app/Http/Controllers/Api/AdminController.php app/Services/HistoricalInvoiceCorrectionService.php app/Filament/Widgets/StatsOverview.php database/migrations/2026_11_25_010014_create_document_sequences_table.php tests/Feature/DocumentIssuanceSequenceTest.php tests/Feature/ExactFinancialExportTest.php; do
+            php -l "$path"
+          done
+          if git grep -n -E 'generateBillNumber|generateReceiptNumber' -- app routes database tests; then exit 2; fi
+          args=(--testsuite Unit,Feature)
+          set +e
+          timeout 900s php vendor/bin/phpunit "${args[@]}" --fail-on-incomplete --log-junit "$evidence/junit.xml" 2>&1 | tee "$evidence/result.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          echo "ROUND26_CASE=$QA_CASE EXIT=$result"
+          if [ -f "$evidence/junit.xml" ]; then
+            php -r '$x=simplexml_load_file($argv[1]); foreach($x->testsuite as $s) { foreach(["tests","assertions","errors","failures","skipped"] as $k) echo $k,"=",$s[$k]," "; echo PHP_EOL; } foreach($x->xpath("//testcase[skipped]") as $t) echo "SKIPPED ",$t["class"],"::",$t["name"]," ",trim((string)$t->skipped),PHP_EOL;' "$evidence/junit.xml"
+          fi
+          git diff --exit-code
+          exit "$result"
