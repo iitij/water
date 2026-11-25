@@ -22,6 +22,7 @@ final class FinancialLedgerRegistryVerifier
         private TreasuryCustodyEvidence $custody,
         private TreasuryOpeningFundingEvidence $openingFunding,
         private TreasuryAdjustmentEvidence $adjustment,
+        private TreasuryCollectionEvidence $collection,
     ) {}
 
     public function verifyPeriod(string $scope, int $periodId): array
@@ -33,8 +34,9 @@ final class FinancialLedgerRegistryVerifier
         $unverified = 0;
         $treasuryVerified = 0;
         $openingVerified = 0;
-        // Treasury writers acquire the issuance lock before business rows.
-        // Obtain it before reading any source, even in a mixed registry.
+        // Scope-first isolated verification only. Legacy subscriber-first
+        // writers can invert this lock order; do not activate concurrently
+        // with unfenced writers before a reviewed lock protocol exists.
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
             throw new DomainException('ledger_registry_issuance_lock_missing');
         }
@@ -78,6 +80,8 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->openingFunding->funding((int) $id, $event->operation_effective_on);
                 } elseif (in_array($posting->kind, ['bank_fee', 'cash_count_adjustment'], true)) {
                     $actual = $this->adjustment->leg((int) $id);
+                } elseif (in_array($posting->kind, ['bank_collection', 'late_cash_receipt'], true)) {
+                    $actual = $this->collection->leg((int) $id);
                 } else {
                     $unverified++;
                     continue;
