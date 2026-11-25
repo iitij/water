@@ -2923,4 +2923,63 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
         $this->assertDatabaseCount('cash_handovers', 2);
     }
+
+    public function test_round138_funded_till_returns_registered_funding_and_net_receipts_once(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $accountId = (int) $account['id'];
+        $fund = app(GatedTreasuryOpeningFundingWriter::class)->fund($collector, $reviewer, $accountId, '5.00',
+            'QA-R138-FUND', self::EVIDENCE, '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $session = $fund['session'];
+        $receipts = app(GatedCashReceiptWriter::class);
+        $receipts->collect($collector, (int) $subscriber->id, '1.00', '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id);
+        $voided = $receipts->collect($collector, (int) $subscriber->id, '0.30', '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id)['payment'];
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $this->assertTrue(app(\App\Services\GatedReceiptVoidWriter::class)->request($collector, (int) $voided->id,
+            'Independent documented current receipt cancellation', $this->nowAt(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')['registry_created']);
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($session, '6.00'), true, $reviewer);
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $receive = fn () => $writer->receive($reviewer, (int) $session->id, $accountId, '6.00', 'QA-R138-RETURN',
+            '2026-11-25', self::EVIDENCE, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt());
+        $this->assertSame(9525, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
+        $before = $session->fresh()->getRawOriginal();
+        $entries = DB::table('transactions')->orderBy('id')->get()->toArray();
+        $this->assertTrue($receive()['registry_created']);
+        $this->assertFalse($receive()['registry_created']);
+        $this->assertSame($before, $session->fresh()->getRawOriginal());
+        $this->assertEquals($entries, DB::table('transactions')->orderBy('id')->get()->toArray());
+        $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(10125, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        $this->assertSame('complete', app(\App\Services\CashHandoverService::class)->summary($session)['status']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'leg' => 'treasury', 'amount_minor' => 600]);
+        $this->assertDatabaseCount('cash_handovers', 1);
+        $verified = $this->gate(fn (array $context) => app(FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $context['period_id']));
+        $this->assertSame(3, $verified['registered_ledger_legs_verified']);
+        $this->assertSame(3, $verified['registered_treasury_legs_verified']);
+        $this->assertFalse($verified['source_coverage_verified']);
+    }
+
+    public function test_round138_unregistered_funding_cannot_be_adopted_as_handover(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $accountId = (int) $account['id'];
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->openFunded($collector, $reviewer, $accountId, '5.00', 'QA-R138-LEGACY-FUND', self::EVIDENCE);
+        $session = $sessions->decide($sessions->close($session, '5.00'), true, $reviewer);
+        $uuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $this->rejects('gated_handover_prerequisite_unregistered', fn () => app(\App\Services\GatedCashHandoverWriter::class)
+            ->receive($reviewer, (int) $session->id, $accountId, '5.00', 'QA-R138-LEGACY-RETURN',
+                '2026-11-25', self::EVIDENCE, $uuid, $this->nowAt()));
+        $this->assertDatabaseCount('cash_handovers', 0);
+        $this->assertDatabaseCount('cash_session_fundings', 1);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $this->assertSame(9525, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
+    }
 }
