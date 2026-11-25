@@ -103,7 +103,7 @@ final class TreasuryRegisterService
         }, 3);
     }
 
-    public function post(User $actor, int $accountId, string $kind, int $sourceId, ?GatedCashHandoverWriter $gatedHandover = null): array
+    public function post(User $actor, int $accountId, string $kind, int $sourceId, GatedCashHandoverWriter|GatedRefundWriter|null $gatedHandover = null): array
     {
         $this->authorize($actor);
         if (! in_array($kind, ['cash_handover', 'payment_refund'], true)) {
@@ -122,12 +122,14 @@ final class TreasuryRegisterService
                 $registered = $postingId !== null && DB::table('financial_posting_events')
                     ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
                     ->where('source_id', (string) $postingId)->exists();
-                if (! ($gatedHandover !== null && $gatedHandover->allowsPosting($source, $accountId, (int) $actor->id))
+                if (! ($gatedHandover instanceof GatedCashHandoverWriter && $gatedHandover->allowsPosting($source, $accountId, (int) $actor->id))
                     && ($gatedHandover !== null || $registered || config('financial_candidate.cash_handovers') === true)) {
                     throw new \DomainException('gated_handover_writer_required');
                 }
-            } elseif ($gatedHandover !== null) {
-                throw new \DomainException('gated_handover_writer_required');
+            } elseif (! ($gatedHandover instanceof GatedRefundWriter && $gatedHandover->allowsPosting($source, $accountId, (int) $actor->id))
+                && ($gatedHandover !== null || config('financial_candidate.refunds') === true
+                    || GatedRefundWriter::hasRegisteredLeg($source))) {
+                throw new \DomainException('gated_refund_writer_required');
             }
             $amount = $this->sourceMinor($source);
             if ($handover) {
