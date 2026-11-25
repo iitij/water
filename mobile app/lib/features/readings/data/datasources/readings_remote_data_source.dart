@@ -57,6 +57,7 @@ class ReadingsRemoteDataSource {
   Future<Map<String, dynamic>> createReading(
     ReadingSubmission submission, {
     required String clientActionId,
+    Map<String, dynamic>? sessionExtra,
   }) async {
     final payload = submission.toJson(localId: clientActionId)
       ..['local_id'] = clientActionId;
@@ -78,7 +79,7 @@ class ReadingsRemoteDataSource {
     final response = await _dio.post<dynamic>(
       ApiEndpoints.readings,
       data: body,
-      options: Options(headers: {'Idempotency-Key': clientActionId}),
+      options: Options(headers: {'Idempotency-Key': clientActionId}, extra: sessionExtra),
     );
     return _asMap(response.data);
   }
