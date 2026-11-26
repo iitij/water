@@ -8211,6 +8211,72 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -30]);
     }
 
+    public function test_source_local_cutoff_reversals_and_transfer_match_aden_month_at_midnight(): void
+    {
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic cutoff subscriber',
+            'square_id' => Square::create(['name' => 'Synthetic cutoff square'])->id, 'status' => 'active']);
+        $destination = Subscriber::create(['name' => 'Synthetic cutoff destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic cutoff tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-LOCAL-CUTOFF-METER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $receipts = app(GatedCashReceiptWriter::class);
+        $receipt = $receipts->collect($actor, (int) $subscriber->id, '0.30',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt())['payment'];
+        $transferReceipt = $receipts->collect($actor, (int) $subscriber->id, '0.20',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt())['payment'];
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $nov)->update(['state' => 'CLOSED']);
+        $dec = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $last = new DateTimeImmutable('2026-11-30T20:59:59Z');
+        $this->travelTo(\Carbon\Carbon::instance($last));
+        $cancelUuid = '99999999-9999-4999-8999-999999999999';
+        $this->rejects('financial_period_not_open', fn () => $writer->cancel($reviewer, (int) $invoice->id,
+            'Independent cutoff invoice reversal', $cancelUuid, $last));
+        $this->assertNull($invoice->fresh()->voided_at);
+        $midnight = new DateTimeImmutable('2026-11-30T21:00:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($midnight));
+        $cancel = fn () => $writer->cancel($reviewer, (int) $invoice->id,
+            'Independent cutoff invoice reversal', $cancelUuid, $midnight);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $voidUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $void = fn () => app(\App\Services\GatedReceiptVoidWriter::class)->request($actor, (int) $receipt->id,
+            'Independent cutoff receipt reversal', $midnight, $voidUuid);
+        $this->assertTrue($void()['registry_created']);
+        $this->assertFalse($void()['registry_created']);
+        $transferUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $transfer = fn () => $writer->transfer($reviewer, (int) $transferReceipt->id, (int) $destination->id,
+            'Independent cutoff receipt transfer', self::EVIDENCE, $transferUuid, $midnight);
+        $this->assertTrue($transfer()['registry_created']);
+        $this->assertFalse($transfer()['registry_created']);
+        foreach ([$cancelUuid, $voidUuid, $transferUuid] as $uuid) {
+            $this->assertDatabaseHas('financial_posting_operations', [
+                'operation_uuid' => $uuid, 'period_id' => $dec, 'effective_on' => '2026-12-01']);
+        }
+        $this->assertSame('2026-11-30', $invoice->fresh()->voided_at->toDateString());
+        $this->assertSame('2026-12-01', $invoice->fresh()->voided_at->copy()->setTimezone('Asia/Aden')->toDateString());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($destination));
+        foreach ([$nov => 3, $dec => 4] as $periodId => $count) {
+            $report = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($periodId));
+            $this->assertSame([], $report['issues']);
+            $this->assertTrue($report['scanned_sources_match']);
+            $this->assertSame($count, $report['matched_legs']);
+            $this->assertFalse($report['closure_authorized']);
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_source_void_fence_allows_later_invoice_reversal_without_rewriting_original(): void
     {
         [, , , , , $subscriber] = $this->held();
