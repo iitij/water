@@ -46,6 +46,7 @@ final class FinancialCloseCoordinator
             $this->need($gate && $gate->scope_key === $scope && $gate->mode === 'ACTIVE'
                 && $gate->currency === 'YER' && $gate->timezone === 'Asia/Aden'
                 && (string) $gate->calendar_version === '1', 'close_scope_inactive');
+            $this->need(app(FinancialCloseJournalProtection::class)->active(), 'close_journal_protection_missing');
             $epoch = $this->counter($gate->fence_epoch);
             $base = $this->policy->open($scope, $month, $gate->timezone);
             $period = DB::table('financial_periods')->where('scope_key', $scope)
