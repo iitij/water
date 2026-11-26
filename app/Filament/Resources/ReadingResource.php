@@ -279,7 +279,24 @@ class ReadingResource extends Resource
                         ->extraAttributes([
                             'x-show' => "getSelectedRecordsCount() && !document.querySelector('tr.reading-invoiced input[type=checkbox]:checked')",
                         ])
-                        ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                        ->visible(fn () => auth()->user()?->can('create', \App\Models\Invoice::class))
+                        ->form([\App\Filament\Actions\ProspectiveInvoiceAction::identity()])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Invoice::class);
+                            if (app(\App\Services\ProspectiveInvoiceEntry::class)->enabled() || isset($data['operation_uuid'])) {
+                                $result = app(\App\Services\ProspectiveReadingBatchInvoices::class)->issue(
+                                    auth()->user(), $records->modelKeys(), null, $data['operation_uuid'] ?? null);
+                                if ($result['invoices_issued'] > 0) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('تمت معالجة '.$result['invoices_issued'].' فاتورة دون تكرار القيود')
+                                        ->success()->send();
+                                }
+                                if ($result['errors'] !== []) {
+                                    $errors = array_map(fn ($error) => 'العداد '.$error['meter_id'].': '.$error['message'], $result['errors']);
+                                    throw \Illuminate\Validation\ValidationException::withMessages(['data' => implode("\n", array_slice($errors, 0, 5))]);
+                                }
+                                return;
+                            }
                             if ($records->contains('is_invoiced', true)) {
                                 \Filament\Notifications\Notification::make()
                                     ->title('لا يمكن إصدار الفواتير')
