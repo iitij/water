@@ -1236,6 +1236,101 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_active_cash_loss_records_real_deficit_and_recovery_without_releasing_more(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic actual loss tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ACTIVE-CASH-LOSS']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $id = (int) $account['id'];
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $release->propose($actor, $id, (int) $credit->id, 10, $proposal, 'QA-LOSS-ACTIVE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true]);
+        $release->recordActiveRelease($reviewer, $id, $proposal, '88888888-8888-4888-8888-888888888888',
+            self::EVIDENCE, $this->nowAt());
+        $date = '2026-11-25';
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($reviewer, [
+            'code' => 'QA-LOSS-DEST', 'name' => 'Synthetic loss destination', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-LOSS-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '99999999-9999-4999-8999-999999999999', $this->nowAt())['account'];
+        $to = (int) $destination['id'];
+        $transfer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $dispatch = $transfer->dispatch($actor, ['from_account_id' => $id, 'to_account_id' => $to, 'amount' => '100.10',
+            'reference' => 'QA-LOSS-DISPATCH', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE],
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+        $this->assertTrue($dispatch['registry_created']);
+        $this->assertTrue($transfer->receive($reviewer, (int) $dispatch['transfer']['id'], [
+            'amount' => '100.10', 'reference' => 'QA-LOSS-RECEIVE', 'received_on' => $date, 'evidence' => self::EVIDENCE],
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt())['registry_created']);
+        $counts = app(TreasuryCashCountService::class);
+        $writer = app(GatedCashCountAdjustmentWriter::class);
+        $observe = function (string $amount, string $ref) use ($counts, $actor, $reviewer, $id): int {
+            $observation = $counts->record($actor, $id, $amount, $ref, self::EVIDENCE);
+            $countId = (int) $observation['count']['id'];
+            $counts->review($reviewer, $countId, true, 'Independent review of actual cash loss');
+            return $countId;
+        };
+        $first = $observe('0.10', 'QA-ACTIVE-LOSS-COUNT-1');
+        $postFirst = fn () => $writer->adjust($reviewer, $first, 'QA-ACTIVE-LOSS-1', 'confirmed_cash_loss',
+            self::REASON, self::EVIDENCE, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', $this->nowAt());
+        $result = $postFirst();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(-5, (int) $result['posting']['amount_minor']);
+        $liquidity = $result['current_active_release_liquidity'];
+        foreach (['recorded_balance_minor' => 10, 'conservative_protected_minor' => 25,
+            'active_released_minor' => 10, 'protected_minor' => 15, 'margin_minor' => -5, 'shortfall_minor' => 5] as $key => $value) {
+            $this->assertSame($value, $liquidity[$key], $key);
+        }
+        $this->assertTrue($liquidity['additional_outflow_blocked']);
+        $this->assertFalse($liquidity['closure_authorized']);
+        $this->assertFalse($postFirst()['registry_created']);
+        $second = $observe('0.09', 'QA-ACTIVE-LOSS-COUNT-2');
+        $postSecond = fn () => $writer->adjust($reviewer, $second, 'QA-ACTIVE-LOSS-2', 'confirmed_cash_loss',
+            self::REASON, self::EVIDENCE, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', $this->nowAt());
+        $result = $postSecond();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(-1, (int) $result['posting']['amount_minor']);
+        $this->assertSame(6, $result['current_active_release_liquidity']['shortfall_minor']);
+        $this->assertSame(6, $postFirst()['current_active_release_liquidity']['shortfall_minor']);
+        $this->assertFalse($postSecond()['registry_created']);
+        $reserve = app(\App\Services\HeldCashReservation::class);
+        $this->rejects('held_cash_reserved', fn () => $this->gate(fn () => $reserve->assertOrdinaryOutflow($id, 1, $date)));
+        $this->assertSame(15, $this->gate(fn () => $reserve->protectedForAccount($id)));
+        $this->assertDatabaseCount('treasury_cash_adjustments', 3);
+        $this->assertDatabaseCount('held_cash_active_releases', 1);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $this->assertSame(10, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertNotSame('cancelled', $invoice->fresh()->status);
+        $back = $transfer->dispatch($reviewer, ['from_account_id' => $to, 'to_account_id' => $id, 'amount' => '0.07',
+            'reference' => 'QA-ACTIVE-LOSS-RECOVERY', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE],
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $this->nowAt());
+        $this->assertSame(6, $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($id))['shortfall_minor']);
+        $this->assertTrue($transfer->receive($actor, (int) $back['transfer']['id'], [
+            'amount' => '0.07', 'reference' => 'QA-ACTIVE-LOSS-RECOVERY-RECEIPT', 'received_on' => $date, 'evidence' => self::EVIDENCE],
+            'ffffffff-ffff-4fff-8fff-ffffffffffff', $this->nowAt())['registry_created']);
+        $recovered = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($id));
+        $this->assertSame(16, $recovered['recorded_balance_minor']);
+        $this->assertSame(15, $recovered['protected_minor']);
+        $this->assertSame(1, $recovered['margin_minor']);
+        $this->assertSame(0, $recovered['shortfall_minor']);
+        $this->assertFalse($recovered['additional_outflow_blocked']);
+        $this->gate(fn () => $reserve->assertOrdinaryOutflow($id, 1, $date));
+        $this->rejects('held_cash_reserved', fn () => $this->gate(fn () => $reserve->assertOrdinaryOutflow($id, 2, $date)));
+        $this->assertDatabaseCount('treasury_cash_adjustments', 3);
+        $this->assertDatabaseCount('held_cash_active_releases', 1);
+        $this->assertSame(10, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
     public function test_release_active_reserve_restores_with_liquidity_and_exact_replay(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

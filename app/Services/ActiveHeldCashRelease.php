@@ -62,6 +62,28 @@ final class ActiveHeldCashRelease
         return SignedMinor::sum($state);
     }
 
+    /** Reconstruct current liquidity, not a historical replay response or a spending approval. */
+    public function currentLiquidity(int $accountId): array
+    {
+        $proof = app(HeldCashReleaseReadiness::class)->lockedPreview($accountId);
+        $released = SignedMinor::sum(app(HeldCashReleaseProposalService::class)->verifiedActiveState($proof));
+        $protected = SignedMinor::subtract($proof['protected_minor'], $released);
+        $margin = SignedMinor::add($proof['margin_minor'], $released);
+        if ($protected < 0) throw new DomainException('active_held_release_evidence');
+        return [
+            'effective_on' => $proof['effective_on'],
+            'recorded_balance_minor' => $proof['recorded_balance_minor'],
+            'pending_refunds_minor' => $proof['pending_refunds_minor'],
+            'conservative_protected_minor' => $proof['protected_minor'],
+            'active_released_minor' => $released,
+            'protected_minor' => $protected,
+            'margin_minor' => $margin,
+            'shortfall_minor' => max(0, SignedMinor::negate($margin)),
+            'additional_outflow_blocked' => $margin <= 0,
+            'closure_authorized' => false,
+        ];
+    }
+
     public function afterAllocation(Subscriber $subscriber, int $revisionId, bool $created): void
     {
         if (! $created) return;

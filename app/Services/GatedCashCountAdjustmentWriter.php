@@ -142,6 +142,14 @@ final class GatedCashCountAdjustmentWriter
                     $result['held_liability_id'] = app(TreasuryHeldCashLiabilityService::class)
                         ->recognize((int) $adjustment['id'], $uuid, $created);
                 }
+                // A confirmed physical loss is factual, not an optional outflow.
+                // Keep the source-backed posting even when liquidity is negative;
+                // report the exact active reserve and deficit after registration.
+                // Replay returns current liquidity, not the original snapshot.
+                $active = app(ActiveHeldCashRelease::class);
+                if ($active->hasAccount((int) $account->id)) {
+                    $result['current_active_release_liquidity'] = $active->currentLiquidity((int) $account->id);
+                }
                 return $result;
             });
     }
