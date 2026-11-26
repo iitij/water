@@ -8639,7 +8639,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $write();
                 $this->fail('Forged retirement unexpectedly accepted.');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('fenced', $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial source mutation is fenced')
+                    || str_contains($error->getMessage(), 'Financial reading evidence is fenced')
+                    || str_contains($error->getMessage(), 'Registered financial document is immutable'), $error->getMessage());
             }
         };
         foreach (['invoices', 'payments', 'readings'] as $table) {
@@ -8659,6 +8661,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             }
         }
         $this->assertEquals($events, $registry());
+        DB::transaction(function () use ($before): void {
+            foreach ($before[2] as $row) {
+                $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $row->id);
+                $this->assertDatabaseHas('financial_posting_events', [
+                    'source_type' => 'ledger_transaction', 'source_id' => (string) $row->id,
+                    'source_hash' => $leg['source_hash'], 'amount_minor' => $leg['amount_minor'],
+                ]);
+            }
+        });
         $this->assertEquals($lines, DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->get()->toArray());
         $this->assertSame($balance, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertDatabaseHas('financial_periods', ['id' => $periodId, 'state' => 'CLOSED']);
