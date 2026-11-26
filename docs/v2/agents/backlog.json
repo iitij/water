@@ -1767,6 +1767,17 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/40",
  "evidence": "مراجعة مستقلة كشفت بقايا محلية ومشكلات دفعات وتزامن/DDL واختبار صور فعلي؛ انظر #40 والتقرير. لا تؤشَّر كمكتملة قبل نجاح جميع اختبارات القبول."
+},
+{
+ "id": "WATER-MARIADB-USAGE-PREFLIGHT",
+ "sprint": "release",
+ "agent": "A6+A10",
+ "task": "التعرف على بيانات توثيق الحساب عند فحص صلاحية USAGE في MariaDB",
+ "files": "app/Services/RuntimeDatabasePrivileges.php; tests/Unit/RuntimeDatabasePrivilegesTest.php",
+ "status": "partial",
+ "verification_status": "local_unit_passed",
+ "owner_acceptance": "not_tested",
+ "evidence": "RuntimeDatabasePrivilegesTest: 4 tests, 61 assertions. Global USAGE with a synthetic native-password verifier passes with scoped DML. Unknown qualifiers, delegation and database-wide EXECUTE remain rejected."
 }
 ]
 }

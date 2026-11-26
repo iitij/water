@@ -34,6 +34,30 @@ final class RuntimeDatabasePrivilegesTest extends TestCase
         }
     }
 
+    public function test_mariadb_native_password_metadata_only_qualifies_a_global_usage_grant(): void
+    {
+        $service = new RuntimeDatabasePrivileges();
+        $suffix = " IDENTIFIED BY PASSWORD '*".str_repeat('A', 40)."'";
+        $usage = self::USAGE.$suffix;
+        $dml = "GRANT SELECT, INSERT, UPDATE, DELETE ON `water\\_test`.* TO 'runtime'@'localhost'";
+        $routine = "GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'runtime'@'localhost'";
+        self::assertSame(['accepted' => true, 'issues' => []], $service->evaluate('water_test', [$usage, $dml, $routine]));
+        self::assertFalse($service->evaluate('water_test', [$usage])['accepted']);
+
+        foreach ([
+            $usage.' WITH GRANT OPTION',
+            $usage.' REQUIRE SSL',
+            $dml.$suffix,
+            $routine.$suffix,
+            "GRANT EXECUTE ON `water\\_test`.* TO 'runtime'@'localhost'",
+            str_replace('GRANT USAGE', 'GRANT SELECT', $usage),
+        ] as $unexpected) {
+            $result = $service->evaluate('water_test', [$usage, $dml, $unexpected]);
+            self::assertFalse($result['accepted']);
+            self::assertStringNotContainsString(str_repeat('A', 40), json_encode($result));
+        }
+    }
+
     public function test_rejects_elevated_unknown_global_and_wildcard_grants(): void
     {
         $service = new RuntimeDatabasePrivileges();

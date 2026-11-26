@@ -30,6 +30,10 @@ final class RuntimeDatabasePrivileges
         }
         $escapedSchema = str_replace('_', '\\_', $database);
         foreach ($grants as $grant) {
+            // MariaDB can append its native password verifier to the global USAGE row.
+            if (is_string($grant) && str_starts_with($grant, 'GRANT USAGE ON *.* TO ')) {
+                $grant = preg_replace('/ IDENTIFIED BY PASSWORD \x27\*[0-9A-F]{40}\x27\z/', '', $grant);
+            }
             if (is_string($grant) && preg_match('/\AGRANT EXECUTE ON PROCEDURE \x60'.preg_quote($database, '/').'\x60\.\x60financial_read_trigger_metadata\x60 TO (?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)@(?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)\z/', trim($grant))) {
                 continue;
             }
