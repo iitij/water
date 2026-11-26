@@ -38,10 +38,38 @@ class Transaction extends Model
         if (! $allowed) throw new \DomainException('gated_invoice_ledger_writer_required');
     }
 
+    public static function assertReceiptPostingService(Payment $payment, mixed $service): void
+    {
+        if ($service === null && ! Payment::receiptFenceEnabled() && ! $payment->hasRegisteredReceipt()) return;
+        if (! ($service instanceof \App\Services\PaymentService && $service->allowsReceiptPosting($payment))) {
+            throw new \DomainException('gated_receipt_ledger_writer_required');
+        }
+    }
+
     public function save(array $options = [])
     {
         $writer = $options['financial_invoice_writer'] ?? null;
-        unset($options['financial_invoice_writer']);
+        $receiptService = $options['financial_receipt_service'] ?? null;
+        unset($options['financial_invoice_writer'], $options['financial_receipt_service']);
+        $receiptRelated = $this->type === 'payment' || ($this->exists && $this->getOriginal('type') === 'payment');
+        if ($receiptRelated || $receiptService !== null) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+                $payment = Payment::withTrashed()->find($this->exists ? $this->getOriginal('reference_id') : $this->reference_id);
+                if ($writer !== null || ($this->exists && (Payment::receiptFenceEnabled()
+                    || $payment?->hasRegisteredReceipt() || $receiptService !== null))) {
+                    throw new \DomainException('gated_receipt_ledger_writer_required');
+                }
+                if (! $this->exists && $payment && $this->reference_type === Payment::class && $this->type === 'payment') {
+                    self::assertReceiptPostingService($payment, $receiptService);
+                } elseif (Payment::receiptFenceEnabled() || $receiptService !== null) {
+                    throw new \DomainException('gated_receipt_ledger_writer_required');
+                }
+                return parent::save($options);
+            });
+        }
         $invoiceRelated = $this->reference_type === Invoice::class
             || in_array($this->type, ['invoice', 'invoice_reversal'], true)
             || ($this->exists && ($this->getOriginal('reference_type') === Invoice::class
