@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify mixed readiness candidate 47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2 exact CI; then claim-specific evidence, atomic mixed settlement, refreshed aggregate evidence, all-writer protection, closure, Flutter and production.",
+  "next": "Verify document evidence candidate d6c6a00e1ec7942bcac985d4f6100889f4e199a1 exact CI; then substantive source verification and mixed settlement, remaining entrypoints, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2840,12 +2840,38 @@
     ]
   },
   "release_refund_incident_mixed_readiness": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "366ac1bab049bb891b8472888a6026748668ffca",
     "branch": "release/prospective-refund-incident-mixed-readiness",
     "source": "47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2",
     "scope": "Internal read-only mixed and zero-posting group review; separate claimed total from posting-required total; validate exact current proposals, independent reviewer, common accepted current count, aggregate shortage equal only to posting-required subtotal; zero projected financial delta for other classifications. Explicitly not authorization, not evidence of individual nonposting facts and not closure. Existing operative all-posting path remains restricted. Three new cases and one affected batch posting regression per engine.",
-    "limits": "CI unverified. Cash-count equality alone cannot establish individual non-disbursement or returned cash. Need independently verifiable claim-specific evidence, then atomic mixed execution, aggregate revision handling, remaining entrypoint/direct-write protection, closure, Flutter and production.",
-    "next": "Verify exact CI; design claim-specific evidence with verifiable source identity and independent review, avoid treating classification or aggregate arithmetic as proof; only then authorize mixed group execution."
+    "limits": "Exact targeted CI logs verified on both engines. Cash-count equality alone cannot establish individual non-disbursement or returned cash. Need independently verifiable claim-specific evidence, then atomic mixed execution, aggregate revision handling, remaining entrypoint/direct-write protection, closure, Flutter and production.",
+    "next": "Verify exact CI; design claim-specific evidence with verifiable source identity and independent review, avoid treating classification or aggregate arithmetic as proof; only then authorize mixed group execution.",
+    "run": 45749223628,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139672705128,
+        "tests": 4,
+        "assertions": 86,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139672704757,
+        "tests": 4,
+        "assertions": 86,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_document_evidence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2",
+    "branch": "release/prospective-refund-incident-document-evidence",
+    "source": "d6c6a00e1ec7942bcac985d4f6100889f4e199a1",
+    "scope": "Internal document digest registration and independent byte-comparison review, immutable audit metadata bound to request, decision, current proposal hash, account, payment, amount, refund reference and classification. Global digest/reference non-reuse in service, independent actors, same-byte replay, reject changed bytes and stale proposal, no original bytes stored or closure authority. Two new tests and one affected mixed-readiness regression per engine.",
+    "limits": "CI unverified. Original document retained in controlled external custody; digest match proves byte identity only, not authenticity or factual disbursement. No public upload or authorization. Need trusted claim-specific source and verification policy before mixed execution; earlier single/all-posting paths require a separate authenticity policy review. Aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; establish independently verifiable document provenance and explicit substantive review before integrating mixed settlement; test fail-closed evidence and remaining entrypoints."
   }
 }
