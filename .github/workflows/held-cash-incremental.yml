@@ -1,7 +1,7 @@
-name: Prospective active cash loss and recovery
+name: Prospective completed cash refund
 on:
   push:
-    branches: ['release/prospective-active-release-cash-loss']
+    branches: ['release/prospective-completed-cash-refund']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify active release factual loss and recovery
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_cash_loss_|test_round133_additional_proven_cash_loss_is_recorded_without_unlocking_reserve|test_round125_actual_loss_keeps_full_held_reserve_and_blocks_outflow' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify completed cash refund and ordinary refund boundaries
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_completed_cash_refund_|test_round136_cash_refund_records_both_legs_and_keeps_reserve|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify active release factual loss and recovery
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_cash_loss_|test_round133_additional_proven_cash_loss_is_recorded_without_unlocking_reserve|test_round125_actual_loss_keeps_full_held_reserve_and_blocks_outflow' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify completed cash refund and ordinary refund boundaries
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_completed_cash_refund_|test_round136_cash_refund_records_both_legs_and_keeps_reserve|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php

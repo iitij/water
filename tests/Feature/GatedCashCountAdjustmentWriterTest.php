@@ -1236,6 +1236,88 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $witness = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic completed refund tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-COMPLETED-REFUND']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $id = (int) $account['id'];
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $release->propose($actor, $id, (int) $credit->id, 10, $proposal, 'QA-COMPLETED-RELEASE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true]);
+        $release->recordActiveRelease($reviewer, $id, $proposal, '88888888-8888-4888-8888-888888888888',
+            self::EVIDENCE, $this->nowAt());
+        $date = '2026-11-25';
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($reviewer, [
+            'code' => 'QA-REFUND-DEST', 'name' => 'Synthetic completed refund destination', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-COMPLETED-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '99999999-9999-4999-8999-999999999999', $this->nowAt())['account'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($actor, [
+            'from_account_id' => $id, 'to_account_id' => (int) $destination['id'], 'amount' => '100.10',
+            'reference' => 'QA-COMPLETED-DISPATCH', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE],
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+        $other = Subscriber::create(['name' => 'Synthetic refund recipient', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $other->id, '1.00',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedRefundWriter::class);
+        $uuid = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+        $reason = 'Independently documented excess credit refund';
+        $confirmation = 'Independent signed confirmation of cash already received';
+        $ordinary = fn () => $writer->record($reviewer, (int) $receipt->id, $id, '0.06', 'QA-COMPLETED-REFUND',
+            'treasury_cash', $date, $reason, self::EVIDENCE, $uuid, $this->nowAt());
+        $complete = fn ($verifier, $proof = null) => $writer->recordCompletedCashRefund($reviewer, $verifier,
+            (int) $receipt->id, $id, '0.06', 'QA-COMPLETED-REFUND', $date, $reason, self::EVIDENCE,
+            $proof ?? $confirmation, $uuid, $this->nowAt());
+        $this->rejects('held_cash_reserved', $ordinary);
+        $this->rejects('completed_cash_refund_disabled', fn () => $complete($witness));
+        config(['financial_candidate.completed_cash_refund' => true]);
+        $this->rejects('completed_cash_refund_independence', fn () => $complete($reviewer));
+        $this->rejects('completed_cash_refund_independence', fn () => $complete($actor));
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $result = $complete($witness);
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(-6, (int) $result['posting']['amount_minor']);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-6, -6], $events->map(fn ($row) => (int) $row->amount_minor)->all());
+        $liquidity = $result['current_active_release_liquidity'];
+        foreach (['recorded_balance_minor' => 9, 'pending_refunds_minor' => 0, 'active_released_minor' => 10,
+            'protected_minor' => 15, 'margin_minor' => -6, 'shortfall_minor' => 6] as $key => $value) {
+            $this->assertSame($value, $liquidity[$key], $key);
+        }
+        $this->assertTrue($liquidity['additional_outflow_blocked']);
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(94, $ledger->accountBalanceMinor($other));
+        $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($other)['matches']);
+        $this->assertTrue(app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber)['matches']);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'audit_events', 'payment_allocation_revisions',
+            'payment_allocations', 'financial_posting_operations', 'financial_posting_events', 'held_cash_active_releases'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.completed_cash_refund' => false]);
+        $this->assertFalse($complete($witness)['registry_created']);
+        $this->rejects('completed_cash_refund_replay_conflict', fn () => $complete($witness, 'Changed independent cash confirmation evidence'));
+        $this->rejects('completed_cash_refund_replay_conflict', $ordinary);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->rejects('held_cash_reserved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($id, 1, $date)));
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund')->count());
+    }
+
     public function test_release_active_cash_loss_records_real_deficit_and_recovery_without_releasing_more(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

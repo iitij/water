@@ -185,7 +185,14 @@ final class TreasuryRegisterService
                 || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists(),
                 409, 'مرجع الإثبات مستخدم مسبقاً في الخزينة.');
             if ($amount < 0) {
-                app(HeldCashReservation::class)->assertOrdinaryOutflow($accountId, SignedMinor::negate($amount), $date, $handover ? null : $sourceId);
+                $reserve = app(HeldCashReservation::class);
+                if ($source instanceof PaymentRefund && $gatedHandover instanceof GatedRefundWriter
+                    && $gatedHandover->allowsCompletedCashPosting($source, $accountId, (int) $actor->id)) {
+                    $reserve->assertCompletedCashRefund($accountId, SignedMinor::negate($amount), $date,
+                        $source, $actor, $gatedHandover);
+                } else {
+                    $reserve->assertOrdinaryOutflow($accountId, SignedMinor::negate($amount), $date, $handover ? null : $sourceId);
+                }
             }
             $id = DB::table('treasury_postings')->insertGetId($record + [
                 'posted_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),

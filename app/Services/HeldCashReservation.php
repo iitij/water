@@ -36,6 +36,28 @@ final class HeldCashReservation
             throw new DomainException('held_cash_reserved');
         }
     }
+    /** No ordinary spending bypass: callable only inside the independent
+     * completed-refund writer's exact mutation identity. In this narrow slice
+     * there must be no other unposted cash refund or negative physical cash.
+     */
+    public function assertCompletedCashRefund(int $accountId, int $minor, string $date,
+        \App\Models\PaymentRefund $refund, \App\Models\User $actor, GatedRefundWriter $writer): void
+    {
+        FinancialWriteGate::currentContext();
+        if ($minor <= 0 || ! $writer->allowsCompletedCashPosting($refund, $accountId, (int) $actor->id)
+            || $minor !== \App\Support\AccountMoney::stored($refund)
+            || $refund->disbursed_on->toDateString() !== $date
+            || ! app(ActiveHeldCashRelease::class)->hasAccount($accountId)) {
+            throw new DomainException('completed_cash_refund_identity');
+        }
+        $this->protectedForAccount($accountId); // verify active reserve evidence
+        $pending = $this->unpostedCashRefundMinor((int) $refund->id, $minor);
+        $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
+        if ($pending !== 0 || $balance < $minor) {
+            throw new DomainException('completed_cash_refund_unresolved_custody');
+        }
+    }
+
     /**
      * Evidence of an already executed cash refund may not yet identify its
      * treasury account. Conservatively count the full channel-wide amount

@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 final class GatedRefundWriter
 {
     private ?array $mutationIdentity = null;
+    private ?int $completedCashReviewer = null;
 
     public function __construct(
         private FinancialWriteGate $gate,
@@ -39,9 +40,32 @@ final class GatedRefundWriter
         string $reference, string $method, string $date, string $reason, string $evidence,
         string $uuid, DateTimeImmutable $now): array
     {
+        return $this->execute($actor, $paymentId, $accountId, $amount, $reference, $method, $date,
+            $reason, $evidence, $uuid, $now, null, null);
+    }
+
+    /** Internal candidate: record a supported, already completed cash refund.
+     * No payment instruction or permission to disburse. Independent confirmation
+     * is mandatory; the ordinary refund path never receives this capability.
+     */
+    public function recordCompletedCashRefund(User $actor, User $reviewer, int $paymentId, int $accountId,
+        string $amount, string $reference, string $date, string $reason, string $evidence,
+        string $confirmation, string $uuid, DateTimeImmutable $now): array
+    {
+        $confirmation = trim($confirmation);
+        $this->need(mb_strlen($confirmation) >= 20 && mb_strlen($confirmation) <= 2000,
+            'completed_cash_refund_confirmation');
+        return $this->execute($actor, $paymentId, $accountId, $amount, $reference, 'treasury_cash', $date,
+            $reason, $evidence, $uuid, $now, $reviewer, $confirmation);
+    }
+
+    private function execute(User $actor, int $paymentId, int $accountId, string $amount,
+        string $reference, string $method, string $date, string $reason, string $evidence,
+        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation): array
+    {
         $reference = mb_strtoupper(trim($reference));
         return $this->gate->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now): array {
+            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation): array {
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
@@ -69,6 +93,24 @@ final class GatedRefundWriter
                 $operation = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
                 $replay = $existing !== null;
                 $this->need($replay === ($operation !== null), 'gated_refund_operation_conflict');
+                if ($reviewer !== null) {
+                    $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
+                    $this->treasury->authorize($reviewer);
+                    $this->need((int) $reviewer->id !== (int) $actor->id
+                        && (int) $reviewer->id !== (int) $payment->user_id,
+                        'completed_cash_refund_independence');
+                    if ($payment->cash_session_id !== null) {
+                        $session = \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id);
+                        $this->need((int) $reviewer->id !== (int) $session->user_id,
+                            'completed_cash_refund_independence');
+                    }
+                    $this->need(app(ActiveHeldCashRelease::class)->hasAccount($accountId),
+                        'completed_cash_refund_active_account_required');
+                    if (! $replay) {
+                        $this->need(config('financial_candidate.completed_cash_refund') === true,
+                            'completed_cash_refund_disabled');
+                    }
+                }
                 // Earlier refunds on the same receipt must have both proved legs.
                 // This deliberately refuses adoption or repair of legacy sources.
                 foreach (PaymentRefund::query()->where('payment_id', $paymentId)->orderBy('id')->lockForUpdate()->get() as $prior) {
@@ -84,16 +126,19 @@ final class GatedRefundWriter
                     $posted = $this->posting((int) $existing->id);
                     $this->need((int) $posted->treasury_account_id === $accountId && (int) $posted->posted_by === (int) $actor->id,
                         'gated_refund_replay_conflict');
+                    $this->verifyCompletedEvidence($existing, (int) $posted->id, $accountId, $uuid, $reviewer, $confirmation);
                 }
                 $balance = app(TransactionService::class);
                 $before = $balance->accountBalanceMinor($subscriber);
                 $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_refund_mutation_scope');
                 $this->mutationIdentity = [$paymentId, $reference, $accountId, (int) $actor->id];
+                $this->completedCashReviewer = $reviewer === null ? null : (int) $reviewer->id;
                 try {
                     $refund = $this->refunds->record($payment, $actor, $amount, $reference, $method, $date, $reason, $evidence, $this);
                     $posting = $this->treasury->post($actor, $accountId, 'payment_refund', (int) $refund->id, $this);
                 } finally {
                     $this->mutationIdentity = null;
+                    $this->completedCashReviewer = null;
                 }
                 $entry = $this->entry(PaymentRefund::class, (int) $refund->id, 'payment_refund');
                 $minor = AccountMoney::stored($refund);
@@ -105,7 +150,19 @@ final class GatedRefundWriter
                     'gated_refund_effect_mismatch');
                 $created = $this->registry->record($context, $uuid, $legs, $now);
                 $this->need($created === ! $replay, 'gated_refund_operation_conflict');
-                return ['refund' => $refund, 'posting' => $posting, 'transaction_id' => (int) $entry->id, 'registry_created' => $created];
+                $result = ['refund' => $refund, 'posting' => $posting, 'transaction_id' => (int) $entry->id, 'registry_created' => $created];
+                if ($reviewer !== null) {
+                    if ($created) {
+                        app(AuditLogger::class)->recordRequired('financial.completed_cash_refund', [
+                            'entity_type' => PaymentRefund::class, 'entity_id' => $refund->id,
+                            'actor_user_id' => $reviewer->id,
+                            'after' => $this->completedProof($refund, (int) $posting['id'], $accountId, $uuid, $confirmation),
+                            'source' => 'internal']);
+                    }
+                    $this->verifyCompletedEvidence($refund, (int) $posting['id'], $accountId, $uuid, $reviewer, $confirmation);
+                    $result['current_active_release_liquidity'] = app(ActiveHeldCashRelease::class)->currentLiquidity($accountId);
+                }
+                return $result;
             });
     }
 
@@ -121,6 +178,40 @@ final class GatedRefundWriter
         return DB::transactionLevel() > 0 && $this->mutationIdentity === [
             (int) $refund->payment_id, $refund->disbursement_reference, $accountId, $actorId,
         ] && (int) $refund->recorded_by === $actorId;
+    }
+
+    public function allowsCompletedCashPosting(PaymentRefund $refund, int $accountId, int $actorId): bool
+    {
+        return $this->completedCashReviewer !== null && $this->completedCashReviewer !== $actorId
+            && $refund->method === 'treasury_cash' && $this->allowsPosting($refund, $accountId, $actorId);
+    }
+
+    private function completedProof(PaymentRefund $refund, int $postingId, int $accountId, string $uuid, string $confirmation): array
+    {
+        return ['refund_id' => (int) $refund->id, 'payment_id' => (int) $refund->payment_id,
+            'recorded_by' => (int) $refund->recorded_by, 'account_id' => $accountId,
+            'posting_id' => $postingId, 'operation_uuid' => $uuid,
+            'amount_minor' => AccountMoney::stored($refund), 'reference' => $refund->disbursement_reference,
+            'effective_on' => $refund->disbursed_on->toDateString(), 'confirmation' => $confirmation];
+    }
+
+    private function verifyCompletedEvidence(PaymentRefund $refund, int $postingId, int $accountId, string $uuid,
+        ?User $reviewer, ?string $confirmation): void
+    {
+        $rows = \App\Models\AuditEvent::query()->where('event', 'financial.completed_cash_refund')
+            ->where('entity_type', PaymentRefund::class)->where('entity_id', (string) $refund->id)->lockForUpdate()->get();
+        if ($reviewer === null) {
+            $this->need($rows->isEmpty(), 'completed_cash_refund_replay_conflict');
+            return;
+        }
+        $this->need($rows->count() === 1 && (int) $rows->first()->actor_user_id === (int) $reviewer->id,
+            'completed_cash_refund_replay_conflict');
+        $expected = $this->completedProof($refund, $postingId, $accountId, $uuid, $confirmation);
+        $actual = $rows->first()->after;
+        $this->need(is_array($actual) && count($actual) === count($expected), 'completed_cash_refund_replay_conflict');
+        foreach ($expected as $key => $value) {
+            $this->need(($actual[$key] ?? null) === $value, 'completed_cash_refund_replay_conflict');
+        }
     }
 
     /** Both legs must remain protected even when the candidate switch is off. */
