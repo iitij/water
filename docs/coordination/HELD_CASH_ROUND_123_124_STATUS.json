@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify held credit model fence 4810546d2706341a49c41d98183fe74d6427ff46 exact targeted CI; then quiet deletion and raw write protection. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify correction database protection b13f22d4bdbde215641d586dcfd23b333d8e56fb exact targeted CI; then raw payment/invoice and insert paths, preserving legal meter retirement and allocation updates. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1972,12 +1972,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_held_credit_model_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "f28a4c561d69b89e782e5a07bef623b4ed4ca546",
     "branch": "release/prospective-held-credit-model-fence",
     "source": "4810546d2706341a49c41d98183fe74d6427ff46",
     "scope": "Always require active private held-credit issuance identity for Eloquent document creation and matching ledger posting at model/service layers. Reject quiet mutation and idle service spoofing. Preserve gate, independent approval, capacity, registry, allocation, replay and reserve behavior. Four targeted cases per engine.",
-    "limits": "CI pending. Existing DB triggers protect held source UPDATE/DELETE and SQLite replace; raw INSERT, other ledger writes and quiet deletions not comprehensively fenced. No historical repair, main merge or production activation.",
-    "next": "Verify exact targeted CI, then protect remaining quiet deletes and raw writes with meter retirement exceptions. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks."
+    "limits": "Exact targeted CI passed. SQLite has six additional assertions because held source REPLACE guards are tested separately on SQLite. Existing DB triggers protect held source UPDATE/DELETE and SQLite replace; raw INSERT and other document writes remain open. No production activation.",
+    "next": "Protect raw and quiet correction document updates, deletes and replacement.",
+    "run": 45734080991,
+    "jobs": [
+      {
+        "id": 139622962173,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 160,
+        "exit": 0
+      },
+      {
+        "id": 139622962642,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 154,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_correction_db_protection": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "4810546d2706341a49c41d98183fe74d6427ff46",
+    "branch": "release/prospective-correction-db-protection",
+    "source": "b13f22d4bdbde215641d586dcfd23b333d8e56fb",
+    "scope": "Append-only refund and account transfer source documents at DB level; UPDATE and DELETE triggers both engines, SQLite INSERT OR REPLACE guard on primary and natural unique keys, MySQL restrictive parent FK rules checked. New migration verifies trigger definitions and fails closed. Focused raw and quiet deletion/replace cases plus affected refund and transfer regressions.",
+    "limits": "CI pending. Does not restrict new raw INSERT, invoice/payment raw mutations or every SQL path. Existing ledger protection and meter retirement untouched. New migration requires trigger privileges; no historical repair, main merge or production activation.",
+    "next": "Verify exact CI. Inventory raw payment/invoice mutations, delete/cascade and insertion proof; design compatible protection with allocation projections, void workflow and meter retirement. Continue reserve discharge, liquidity, Flutter and release checks."
   }
 }
