@@ -7995,6 +7995,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
         $before = $snapshot();
         $result = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(0, $result['refund_batch_coverage']['groups']);
         $this->assertSame(2, $result['refund_incidents']['count']);
         $this->assertSame(10, $result['refund_incidents']['claimed_minor']);
         $this->assertSame(0, $result['refund_incidents']['unposted_cash_refund_minor']);
@@ -8006,6 +8007,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
         $after = $snapshot();
         $resolved = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(1, $resolved['refund_batch_coverage']['groups']);
+        $this->assertSame(2, $resolved['refund_batch_coverage']['members']);
+        $this->assertTrue($resolved['refund_batch_coverage']['batch_audits_verified']);
         $this->assertSame(0, $resolved['refund_incidents']['count']);
         $this->assertSame(0, $resolved['refund_incidents']['claimed_minor']);
         $this->assertNotContains('unresolved_refund_incidents', $resolved['blockers']);
