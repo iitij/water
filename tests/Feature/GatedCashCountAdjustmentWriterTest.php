@@ -1454,6 +1454,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ->assertJsonPath('completion_verified', true)->assertJsonPath('incident_unresolved', false);
     }
 
+    public function test_release_refund_revision_new_count_requires_exact_revision_approval(): void
+    {
+        $f = $this->resolutionControl();
+        $old = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
+        $endpoint = $f['root'].$f['uuid'].'/resolution-proposal';
+        $approval = $f['root'].$f['uuid'].'/resolution-approve';
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-REVISION-COUNT', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $proposer = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $input = ['count_id' => (int) $new['id'], 'classification' => 'no_disbursement',
+            'evidence' => self::EVIDENCE, 'supersedes_id' => (int) $old->id];
+        $this->postJson($endpoint, array_replace($input, ['count_id' => (int) $f['count']['id']]))->assertConflict();
+        $this->postJson($endpoint, $input)->assertOk()->assertJsonPath('created', true);
+        $revision = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->sole();
+        $this->postJson($endpoint, $input)->assertOk()->assertJsonPath('created', false)->assertJsonPath('proposal_id', $revision->id);
+        $this->postJson($endpoint, array_replace($input, ['evidence' => self::EVIDENCE.' changed']))->assertConflict();
+        $this->assertEquals($old->getRawOriginal(), $old->fresh()->getRawOriginal());
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->getJson($f['root'].$f['uuid'])->assertOk()->assertJsonPath('current_proposal_id', $revision->id)
+            ->assertJsonPath('incident_unresolved', true);
+        $data = ['confirmation' => 'Independent investigation confirms no cash left the treasury'];
+        $this->postJson($approval, $data)->assertConflict();
+        $this->postJson($approval, $data + ['proposal_id' => $old->id])->assertConflict();
+        $this->postJson($approval, $data + ['proposal_id' => $revision->id])->assertOk()->assertJsonPath('incident_unresolved', false);
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $this->postJson($endpoint, $input)->assertConflict();
+        foreach ([fn () => DB::table('audit_events')->where('id', $revision->id)->update(['after' => '{}']),
+            fn () => DB::table('audit_events')->where('id', $revision->id)->delete()] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Revision evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        }
+    }
+
+    public function test_release_refund_revision_posting_requires_current_proposal(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $old = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-REVISION-POST-COUNT', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        \Laravel\Sanctum\Sanctum::actingAs($this->actor());
+        $this->postJson($f['root'].$f['uuid'].'/resolution-proposal', ['count_id' => (int) $new['id'],
+            'classification' => 'posting_required', 'evidence' => self::EVIDENCE, 'supersedes_id' => $old->id])->assertOk();
+        $revision = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->sole();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $endpoint = $f['root'].$f['uuid'].'/resolution-post';
+        $data = ['confirmation' => 'Independent proof confirms the original cash refund was disbursed'];
+        $this->postJson($endpoint, $data)->assertConflict();
+        $this->postJson($endpoint, $data + ['proposal_id' => $old->id])->assertConflict();
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->postJson($endpoint, $data + ['proposal_id' => $revision->id])->assertOk()->assertJsonPath('registry_created', true);
+        $this->postJson($endpoint, $data + ['proposal_id' => $revision->id])->assertOk()->assertJsonPath('registry_created', false);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->count());
+    }
+
     public function test_release_refund_concurrency_identical_retries_commit_once(): void
     {
         $this->assertRefundResolutionRace(false);

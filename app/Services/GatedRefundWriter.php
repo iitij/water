@@ -60,23 +60,23 @@ final class GatedRefundWriter
     }
 
     public function recordResolvedCashRefund(User $actor, User $reviewer, array $intent,
-        string $confirmation, DateTimeImmutable $now): array
+        string $confirmation, DateTimeImmutable $now, ?int $expectedProposalId = null): array
     {
         $confirmation = trim($confirmation);
         $this->need(mb_strlen($confirmation) >= 20 && mb_strlen($confirmation) <= 2000,
             'completed_cash_refund_confirmation');
         return $this->execute($actor, $intent['payment_id'], $intent['account_id'], $intent['amount'],
             $intent['reference'], 'treasury_cash', $intent['date'], $intent['reason'], $intent['evidence'],
-            $intent['operation_uuid'], $now, $reviewer, $confirmation, true);
+            $intent['operation_uuid'], $now, $reviewer, $confirmation, true, $expectedProposalId);
     }
 
     private function execute(User $actor, int $paymentId, int $accountId, string $amount,
         string $reference, string $method, string $date, string $reason, string $evidence,
-        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation, bool $resolution = false): array
+        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation, bool $resolution = false, ?int $expectedProposalId = null): array
     {
         $reference = mb_strtoupper(trim($reference));
         return $this->gate->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution): array {
+            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution, $expectedProposalId): array {
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
@@ -131,7 +131,7 @@ final class GatedRefundWriter
                         $paymentId, $accountId, $amount, $reference, $date, $reason, $evidence, $uuid, (int) $actor->id);
                     if ($resolution) {
                         $resolutionPlan = app(CompletedCashRefundRequest::class)->verifyPostingResolutionLocked(
-                            $intent, $reviewer, $confirmation, $replay);
+                            $intent, $reviewer, $confirmation, $replay, $expectedProposalId);
                     } else {
                         app(CompletedCashRefundRequest::class)->verifyLocked($intent);
                     }

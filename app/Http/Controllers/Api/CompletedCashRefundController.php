@@ -67,6 +67,7 @@ final class CompletedCashRefundController extends ApiController
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $data = $request->validate([
             'count_id' => ['required', 'integer', 'min:1'],
+            'supersedes_id' => ['sometimes', 'integer', 'min:1'],
             'classification' => ['required', 'in:no_disbursement,cash_returned,posting_required'],
             'evidence' => ['required', 'string', 'min:20', 'max:2000'],
             'actor_id' => ['prohibited'], 'reviewer_id' => ['prohibited'], 'requested_by' => ['prohibited'],
@@ -74,7 +75,8 @@ final class CompletedCashRefundController extends ApiController
         ]);
         try {
             return response()->json($service->proposeResolution($request->user(), strtolower($uuid),
-                (int) $data['count_id'], $data['classification'], $data['evidence'], now()->toDateTimeImmutable()));
+                (int) $data['count_id'], $data['classification'], $data['evidence'], now()->toDateTimeImmutable(),
+                isset($data['supersedes_id']) ? (int) $data['supersedes_id'] : null));
         } catch (DomainException $error) {
             throw new ConflictHttpException($error->getMessage(), $error);
         }
@@ -85,13 +87,14 @@ final class CompletedCashRefundController extends ApiController
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $data = $request->validate([
             'confirmation' => ['required', 'string', 'min:20', 'max:2000'],
+            'proposal_id' => ['sometimes', 'integer', 'min:1'],
             'actor_id' => ['prohibited'], 'reviewer_id' => ['prohibited'], 'requested_by' => ['prohibited'],
             'amount' => ['prohibited'], 'account_id' => ['prohibited'], 'reference' => ['prohibited'],
             'classification' => ['prohibited'], 'count_id' => ['prohibited'], 'evidence' => ['prohibited'],
         ]);
         try {
             return response()->json($service->approveResolution($request->user(), strtolower($uuid),
-                $data['confirmation'], now()->toDateTimeImmutable()));
+                $data['confirmation'], now()->toDateTimeImmutable(), isset($data['proposal_id']) ? (int) $data['proposal_id'] : null));
         } catch (DomainException $error) {
             throw new ConflictHttpException($error->getMessage(), $error);
         }
@@ -102,6 +105,7 @@ final class CompletedCashRefundController extends ApiController
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $data = $request->validate([
             'confirmation' => ['required', 'string', 'min:20', 'max:2000'],
+            'proposal_id' => ['sometimes', 'integer', 'min:1'],
             'actor_id' => ['prohibited'], 'reviewer_id' => ['prohibited'], 'requested_by' => ['prohibited'],
             'amount' => ['prohibited'], 'account_id' => ['prohibited'], 'reference' => ['prohibited'],
             'classification' => ['prohibited'], 'count_id' => ['prohibited'], 'evidence' => ['prohibited'],
@@ -109,7 +113,7 @@ final class CompletedCashRefundController extends ApiController
         ]);
         try {
             return response()->json($service->postResolution($request->user(), strtolower($uuid),
-                $data['confirmation'], now()->toDateTimeImmutable()));
+                $data['confirmation'], now()->toDateTimeImmutable(), isset($data['proposal_id']) ? (int) $data['proposal_id'] : null));
         } catch (DomainException $error) {
             throw new ConflictHttpException($error->getMessage(), $error);
         }
