@@ -13,10 +13,10 @@ use DomainException;
 final class HeldCashReleasePolicy
 {
     public function evaluate(int $balance, int $pendingRefunds, int $outstanding,
-        array $credits): array
+        array $credits, int $handoverReserve = 0): array
     {
         SignedMinor::requireInt($balance);
-        $this->need($pendingRefunds >= 0 && $outstanding >= 0, 'held_release_amount');
+        $this->need($pendingRefunds >= 0 && $outstanding >= 0 && $handoverReserve >= 0, 'held_release_amount');
         $total = $applied = $released = 0;
         $seen = [];
         foreach ($credits as $credit) {
@@ -32,13 +32,13 @@ final class HeldCashReleasePolicy
             $applied = SignedMinor::add($applied, $allocated);
             $released = SignedMinor::add($released, $release);
         }
-        $protected = SignedMinor::subtract(SignedMinor::add($outstanding, $total), $released);
+        $protected = SignedMinor::subtract(SignedMinor::add(SignedMinor::add($outstanding, $total), $handoverReserve), $released);
         $margin = SignedMinor::subtract(SignedMinor::subtract($balance, $pendingRefunds), $protected);
         // A discretionary release must never conceal a pre-existing shortfall.
         $candidate = $margin < 0 ? 0 : SignedMinor::subtract($applied, $released);
         return [
             'recorded_balance_minor' => $balance, 'pending_refunds_minor' => $pendingRefunds,
-            'outstanding_minor' => $outstanding, 'credited_minor' => $total,
+            'outstanding_minor' => $outstanding, 'handover_reserved_minor' => $handoverReserve, 'credited_minor' => $total,
             'applied_minor' => $applied, 'unapplied_minor' => SignedMinor::subtract($total, $applied),
             'released_minor' => $released, 'protected_minor' => $protected,
             'margin_minor' => $margin, 'shortfall_minor' => max(0, SignedMinor::negate($margin)),
@@ -56,9 +56,9 @@ final class HeldCashReleasePolicy
      * event is evidence and requires recording, not suppression.
      */
     public function reinstate(int $balance, int $pendingRefunds, int $outstanding,
-        array $before, array $after): array
+        array $before, array $after, int $handoverReserve = 0): array
     {
-        $prior = $this->evaluate($balance, $pendingRefunds, $outstanding, $before);
+        $prior = $this->evaluate($balance, $pendingRefunds, $outstanding, $before, $handoverReserve);
         $newById = [];
         foreach ($after as $credit) {
             $id = $credit['credit_id'];
@@ -81,7 +81,7 @@ final class HeldCashReleasePolicy
         }
         // This transition is for changes to existing allocations only.
         $this->need($newById === [], 'held_release_credit_identity');
-        $result = $this->evaluate($balance, $pendingRefunds, $outstanding, $next);
+        $result = $this->evaluate($balance, $pendingRefunds, $outstanding, $next, $handoverReserve);
         return $result + [
             'restored_reserve_minor' => $restored,
             'before_margin_minor' => $prior['margin_minor'],

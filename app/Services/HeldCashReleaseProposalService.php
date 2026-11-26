@@ -240,8 +240,25 @@ final class HeldCashReleaseProposalService
             foreach ($proof['credits'] as $credit) {
                 $due = SignedMinor::add($due, max(0, SignedMinor::subtract($state[$credit['credit_id']] ?? 0, $credit['applied_minor'])));
             }
-            return ['shadow_released_minor' => SignedMinor::sum($state), 'reinstatement_due_minor' => $due,
-                'actual_protected_minor' => $proof['protected_minor'], 'spending_release_authorized' => false];
+            // Never treat a shadow approval as permission to spend. Show the
+            // potential liquidity separately from the current conservative reserve.
+            $released = SignedMinor::sum($state);
+            $this->need($due === 0, 'held_release_journal_reinstatement_due');
+            $credits = array_map(fn (array $credit): array => array_replace($credit,
+                ['released_minor' => $state[$credit['credit_id']] ?? 0]), $proof['credits']);
+            $projected = app(\App\Support\HeldCashReleasePolicy::class)->evaluate(
+                $proof['recorded_balance_minor'], $proof['pending_refunds_minor'],
+                $proof['outstanding_minor'], $credits, $proof['handover_reserved_minor']);
+            $this->need($projected['released_minor'] === $released
+                && SignedMinor::add($projected['protected_minor'], $released) === $proof['protected_minor'],
+                'held_release_protection_mismatch');
+            return ['shadow_released_minor' => $released, 'reinstatement_due_minor' => $due,
+                'actual_protected_minor' => $proof['protected_minor'], 'actual_margin_minor' => $proof['margin_minor'],
+                'actual_shortfall_minor' => $proof['shortfall_minor'],
+                'handover_reserved_minor' => $proof['handover_reserved_minor'],
+                'shadow_protected_minor' => $projected['protected_minor'], 'shadow_margin_minor' => $projected['margin_minor'],
+                'shadow_shortfall_minor' => $projected['shortfall_minor'],
+                'spending_release_authorized' => false, 'closure_authorized' => false];
         });
     }
 

@@ -41,13 +41,14 @@ final class HeldCashReleaseReadiness
                 $proof = app(HeldCashCreditAllocationEvidence::class)->inspectAccount($accountId);
                 $reserve = app(HeldCashReservation::class);
                 $outstanding = $reserve->outstandingForAccount($accountId);
+                $handoverReserve = app(HandoverSurplusReservation::class)->forAccount($accountId);
                 $pending = $reserve->unpostedCashRefundMinor();
                 $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
                 // Active production policy remains R=0. Do not accept a release
                 // amount from a caller or infer that an allocation grants one.
                 $credits = array_map(static fn (array $credit): array =>
                     $credit + ['released_minor' => 0], $proof['credits']);
-                $result = app(HeldCashReleasePolicy::class)->evaluate($balance, $pending, $outstanding, $credits);
+                $result = app(HeldCashReleasePolicy::class)->evaluate($balance, $pending, $outstanding, $credits, $handoverReserve);
                 if ($result['protected_minor'] !== $reserve->protectedForAccount($accountId)
                     || $result['credited_minor'] !== $proof['credited_minor']) {
                     throw new DomainException('held_release_protection_mismatch');

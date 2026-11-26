@@ -1236,6 +1236,69 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_mixed_reserve_keeps_handover_cash_protected_and_reports_shadow_liquidity(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $other = Subscriber::create(['name' => 'Synthetic separate collection owner',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic mixed reserve tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-MIXED-RESERVE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoiceWriter = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $invoiceWriter->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $other->id, '10.00',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $accountId,
+            '15.00', 'QA-MIXED-RESERVE-HANDOVER', '2026-11-25', self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $preview = app(\App\Services\HeldCashReleaseReadiness::class);
+        $proof = $preview->preview($accountId, $this->nowAt());
+        foreach (['recorded_balance_minor' => 11525, 'outstanding_minor' => 5, 'credited_minor' => 20,
+            'applied_minor' => 10, 'unapplied_minor' => 10, 'handover_reserved_minor' => 500,
+            'protected_minor' => 525, 'margin_minor' => 11000, 'candidate_additional_release_minor' => 10,
+            'candidate_protected_minor' => 515, 'candidate_margin_minor' => 11010] as $key => $value) {
+            $this->assertSame($value, $proof[$key], $key);
+        }
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $proposal = '99999999-9999-4999-8999-999999999999';
+        $service->propose($this->actor(), $accountId, (int) $credit->id, 10, $proposal,
+            'QA-MIXED-RESERVE-RELEASE', self::EVIDENCE, $this->nowAt());
+        $postings = DB::table('treasury_postings')->orderBy('id')->get()->toArray();
+        $service->recordRelease($this->actor(), $accountId, $proposal,
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', self::EVIDENCE, $this->nowAt());
+        $shadow = $service->inspectJournal($accountId, $this->nowAt());
+        foreach (['actual_protected_minor' => 525, 'actual_margin_minor' => 11000, 'handover_reserved_minor' => 500,
+            'shadow_released_minor' => 10, 'shadow_protected_minor' => 515, 'shadow_margin_minor' => 11010,
+            'actual_shortfall_minor' => 0, 'shadow_shortfall_minor' => 0] as $key => $value) {
+            $this->assertSame($value, $shadow[$key], $key);
+        }
+        $this->assertFalse($shadow['spending_release_authorized']);
+        $this->assertFalse($shadow['closure_authorized']);
+        $this->rejects('held_cash_reserved', fn () => DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($accountId, 11001, '2026-11-25')));
+        $invoiceWriter->cancel($actor, (int) $invoice->id, 'Independent documented cancellation',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt());
+        $restored = $service->inspectJournal($accountId, $this->nowAt());
+        $this->assertSame(0, $restored['shadow_released_minor']);
+        $this->assertSame(525, $restored['shadow_protected_minor']);
+        $this->assertSame(11000, $restored['shadow_margin_minor']);
+        $this->assertSame(500, $restored['handover_reserved_minor']);
+        $this->assertSame(0, $preview->preview($accountId, $this->nowAt())['candidate_additional_release_minor']);
+        $this->assertEquals($postings, DB::table('treasury_postings')->orderBy('id')->get()->toArray());
+    }
+
     public function test_release_preview_distinguishes_applied_credit_from_authorized_cash(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

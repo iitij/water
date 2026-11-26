@@ -1,11 +1,44 @@
-name: Prospective runtime guard metadata routine
+name: Prospective mixed reserve liquidity
 on:
   push:
-    branches: ['release/prospective-runtime-guard-visibility']
+    branches: ['release/prospective-mixed-reserve-liquidity']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  sqlite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Verify mixed reserve and shadow liquidity
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_mixed_reserve_|test_release_preview_distinguishes_applied_credit_from_authorized_cash|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending|test_release_policy_restores_per_credit_and_never_nets_unrelated_allocations' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -64,45 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify changed runtime grant policy
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
-      - name: Verify live guard metadata with actual restricted runtime
-        env:
-          QA_CONTAINER: ${{ job.services.mysql.id }}
-        run: |
-          set -euo pipefail
-          php artisan migrate:fresh --force
-          php artisan ledger:protect --install
-          php artisan financial:database-preflight --guards
-          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
-          CREATE USER 'water_runtime_qa'@'%' IDENTIFIED BY 'disposable_runtime_password';
-          GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_runtime_qa'@'%';
-          GRANT SELECT ON water_test.payment_refunds TO 'water_runtime_qa'@'%';
-          GRANT SELECT ON water_test.payment_account_transfers TO 'water_runtime_qa'@'%';
-          GRANT SELECT ON water_test.transactions TO 'water_runtime_qa'@'%';
-          GRANT SELECT ON water_test.subscribers TO 'water_runtime_qa'@'%';
-          GRANT SELECT ON water_test.meters TO 'water_runtime_qa'@'%';
-          SQL
-          export DB_USERNAME=water_runtime_qa DB_PASSWORD=disposable_runtime_password FINANCIAL_TRIGGER_METADATA_ROUTINE=true
-          php artisan financial:database-preflight --runtime
-          php artisan financial:database-preflight --guards
-          if FINANCIAL_TRIGGER_METADATA_ROUTINE=false php artisan financial:database-preflight --guards; then
-            echo 'Restricted account unexpectedly sees direct trigger metadata'
-            exit 1
-          fi
-          docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'CALL financial_read_trigger_metadata()' > /tmp/water-qa-metadata.txt
-          grep -q reg_receipt_request_update /tmp/water-qa-metadata.txt
-          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'DROP PROCEDURE financial_read_trigger_metadata'; then
-            echo 'Restricted account unexpectedly allowed routine removal'
-            exit 1
-          fi
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test -e 'DROP TRIGGER reg_receipt_request_update'
-          if php artisan financial:database-preflight --guards; then
-            echo 'Missing financial trigger unexpectedly accepted'
-            exit 1
-          fi
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test -e 'DROP PROCEDURE financial_read_trigger_metadata'
-          if php artisan financial:database-preflight --guards; then
-            echo 'Missing live metadata routine unexpectedly accepted'
-            exit 1
-          fi
+      - name: Verify mixed reserve and shadow liquidity
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_mixed_reserve_|test_release_preview_distinguishes_applied_credit_from_authorized_cash|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending|test_release_policy_restores_per_credit_and_never_nets_unrelated_allocations' tests/Feature/GatedCashCountAdjustmentWriterTest.php
