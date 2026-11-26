@@ -8021,6 +8021,54 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($protection->active());
     }
 
+    public function test_source_replacement_fence_and_treasury_opening_evidence(): void
+    {
+        [, , $account] = $this->fixture();
+        $table = DB::table('treasury_accounts');
+        $id = $account['id'];
+        $old = (array) DB::table('treasury_accounts')->where('id', $id)->sole();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $reject = function (string $message, callable $write): void {
+            try {
+                $write();
+                $this->fail('Fenced opening evidence mutation unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+        };
+        foreach (['opening_minor' => 9000, 'channel' => 'bank', 'opening_evidence' => 'Altered opening evidence',
+            'opened_by' => $this->actor()->id, 'created_at' => '2026-12-02 08:30:00'] as $field => $value) {
+            $reject('Treasury opening evidence is fenced', fn () => DB::table('treasury_accounts')->where('id', $id)->update([$field => $value]));
+        }
+        $this->assertEquals($old, (array) DB::table('treasury_accounts')->where('id', $id)->sole());
+        $open = array_replace(array_diff_key($old, ['id' => true]), [
+            'code' => 'QA-LATER-ACCOUNT', 'opening_reference' => 'QA-LATER-OPEN', 'opening_on' => '2026-12-02',
+        ]);
+        $openId = DB::table('treasury_accounts')->insertGetId($open);
+        $this->assertSame(1, DB::table('treasury_accounts')->where('id', $openId)->update(['opening_minor' => 123]));
+        if (DB::getDriverName() === 'sqlite') {
+            $before = $table->orderBy('id')->get()->toArray();
+            $replace = function (array $row): void {
+                $columns = implode(', ', array_keys($row));
+                $params = implode(', ', array_fill(0, count($row), '?'));
+                DB::statement("INSERT OR REPLACE INTO treasury_accounts ({$columns}) VALUES ({$params})", array_values($row));
+            };
+            $this->assertSame(0, (int) DB::selectOne('PRAGMA recursive_triggers')->recursive_triggers);
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['id' => $id])));
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['code' => $old['code']])));
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['opening_reference' => $old['opening_reference']])));
+            $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET code = ? WHERE id = ?', [$old['code'], $openId]));
+            $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET opening_reference = ? WHERE id = ?', [$old['opening_reference'], $openId]));
+            $this->assertEquals($before, DB::table('treasury_accounts')->orderBy('id')->get()->toArray());
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
