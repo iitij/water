@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify proposal revision f8fd1d998f75d6bedd195a22acb1acf3d0276019 exact CI; then multi-incident settlement, all-writer protection, closure, Flutter and production.",
+  "next": "Verify batch readiness 6011a6373560f882c71062d5b215e8d32515e50f exact CI; then atomic group settlement, all-writer protection, accounting closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2711,12 +2711,38 @@
     ]
   },
   "release_refund_incident_proposal_revision": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "c11523852b8fd30e15811ace2579b8455429fe51",
     "branch": "release/prospective-refund-incident-proposal-revision",
     "source": "f8fd1d998f75d6bedd195a22acb1acf3d0276019",
     "scope": "Append-only protected proposal revision chain, prior audit ID and hash, newer independently reviewed current count and exact variance/source-backed recorded liquidity. Explicit expected proposal ID for approval/posting of revised evidence; no substitution after verified settlement. Two new tests plus two affected approval/posting regressions on SQLite and MySQL.",
-    "limits": "CI unverified. Posting-required path still limited to same-day claims; multi-incident settlement, broader concurrency, direct-write and all entrypoint coverage, accounting closure, Flutter and production remain open.",
-    "next": "Verify exact revision CI; then design multi-incident settlement without using one shortage to discharge multiple claims."
+    "limits": "Exact targeted CI logs verified on both engines. Posting-required path still limited to same-day claims; multi-incident settlement, broader concurrency, direct-write and all entrypoint coverage, accounting closure, Flutter and production remain open.",
+    "next": "Verify exact revision CI; then design multi-incident settlement without using one shortage to discharge multiple claims.",
+    "run": 45747523763,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139667090839,
+        "tests": 4,
+        "assertions": 110,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139667091203,
+        "tests": 4,
+        "assertions": 110,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_batch_readiness": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "f8fd1d998f75d6bedd195a22acb1acf3d0276019",
+    "branch": "release/prospective-refund-incident-batch-readiness",
+    "source": "6011a6373560f882c71062d5b215e8d32515e50f",
+    "scope": "Internal non-operative same-account same-day batch evidence review; all unresolved claims must be closed, classified posting_required, bound to unique current proposal IDs and common accepted observation after all decisions. Exact total shortage allocated once by distinct request/reference. Independent reviewer, latest source-backed balance and unused count required. No posting, approval or cash release. Three new cases plus two affected single-resolution regression cases per engine.",
+    "limits": "CI unverified. Only all-posting-required batch readiness, not mixed classification, batch revision, atomic group writer or proof of individual refund eligibility. No production activation, data modification or main merge. All-writer coverage, closure, Flutter and deployment remain open.",
+    "next": "Verify exact CI; then design atomic batch execution under a single financial gate, with per-receipt cumulative eligibility and group-level durable approval, followed by rollback and race tests. Handle mixed/no-posting batches and refreshed aggregate evidence separately."
   }
 }
