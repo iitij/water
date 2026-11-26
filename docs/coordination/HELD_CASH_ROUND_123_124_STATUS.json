@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify rollback candidate caa04bf4f997ced128871a7a144834effa2f9d50 exact CI; then concurrent settlement and replay, remaining entrypoints, accounting closure, Flutter and production.",
+  "next": "Verify concurrency candidate c11523852b8fd30e15811ace2579b8455429fe51 exact CI; then resolve remaining cash incident lifecycle and all-writer protection, accounting closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2666,12 +2666,38 @@
     ]
   },
   "release_refund_incident_atomic_rollback": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe",
     "branch": "release/prospective-refund-incident-atomic-rollback",
     "source": "caa04bf4f997ced128871a7a144834effa2f9d50",
     "scope": "Test-only forced late required approval-audit insert failure conditional on exact two registered -6 minor legs and completed refund audit; assert precise injected diagnostic, rollback snapshots of 15 tables, zero transaction depth, unchanged subscriber and treasury balances, preserved cash incident fence, exact retry and replay. One new test per engine, no product changes or repeat of accepted positive suite.",
-    "limits": "CI not yet verified; concurrency, direct-write coverage, multi-incident resolution, stale proposal replacement, closure, Flutter and production remain open.",
-    "next": "Verify exact rollback CI then concurrent submission/approval/replay under independent database connections."
+    "limits": "Exact targeted CI logs verified on both engines; concurrency, direct-write coverage, multi-incident resolution, stale proposal replacement, closure, Flutter and production remain open.",
+    "next": "Verify exact rollback CI then concurrent submission/approval/replay under independent database connections.",
+    "run": 45746989500,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139665327408,
+        "tests": 1,
+        "assertions": 26,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139665327759,
+        "tests": 1,
+        "assertions": 26,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_concurrency": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "caa04bf4f997ced128871a7a144834effa2f9d50",
+    "branch": "release/prospective-refund-incident-concurrency",
+    "source": "c11523852b8fd30e15811ace2579b8455429fe51",
+    "scope": "Test-only MySQL two independent forked workers and third coordinator connection. Coordinator holds scope row; both workers must be observed issuing locking SELECT in processlist before release. Identical retry race must return one creation and one replay; competing reviewer race must return one creation and one exact conflict. Verify both balances, one refund, one registry operation, exact two legs, one immutable approval, original closed decision and resolved cash fence. Two fresh cases; no repeat of accepted suites.",
+    "limits": "CI unverified. MySQL only; SQLite in-memory cannot exercise independent shared sessions. No product changes. Full concurrency coverage, multi-incident resolution, stale proposal replacement, direct writes, entrypoint coverage, accounting closure, Flutter and production remain open.",
+    "next": "Verify exact MySQL race evidence; then address competing incidents/stale proposal replacement and protect remaining outflow entrypoints."
   }
 }
