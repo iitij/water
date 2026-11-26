@@ -8208,6 +8208,50 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -30]);
     }
 
+    public function test_source_void_fence_allows_later_invoice_reversal_without_rewriting_original(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic later invoice reversal tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-LATER-INVOICE-VOID']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $issue = '66666666-6666-4666-8666-666666666666';
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id, $issue, $this->nowAt())['invoice'];
+        $original = DB::table('transactions')->where('reference_type', \App\Models\Invoice::class)
+            ->where('reference_id', $invoice->id)->where('type', 'invoice')->sole();
+        $operation = DB::table('financial_posting_operations')->where('operation_uuid', $issue)->sole();
+        $event = DB::table('financial_posting_events')->where('operation_uuid', $issue)->sole();
+        $fixed = ['id', 'subscriber_id', 'meter_id', 'bill_number', 'bill_date', 'billing_period_start',
+            'billing_period_end', 'consumption_fee', 'previous_balance', 'credit_applied', 'total_amount'];
+        $before = (array) DB::table('invoices')->where('id', $invoice->id)->first($fixed);
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $uuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id, 'Independent documented subsequent invoice reversal', $uuid, $later);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame('2026-12-02', $invoice->fresh()->voided_at->toDateString());
+        $this->assertEquals($before, (array) DB::table('invoices')->where('id', $invoice->id)->first($fixed));
+        $this->assertEquals($original, DB::table('transactions')->where('id', $original->id)->sole());
+        $this->assertEquals($operation, DB::table('financial_posting_operations')->where('operation_uuid', $issue)->sole());
+        $this->assertEquals($event, DB::table('financial_posting_events')->where('operation_uuid', $issue)->sole());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => $uuid, 'effective_on' => '2026-12-02']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -(int) $event->amount_minor]);
+        $this->assertSame(1, DB::table('transactions')->where('reference_type', \App\Models\Invoice::class)
+            ->where('reference_id', $invoice->id)->where('type', 'invoice_reversal')->count());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_periods', ['id' => $periodId, 'state' => 'CLOSED']);
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
