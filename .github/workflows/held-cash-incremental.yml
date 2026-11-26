@@ -1,4 +1,4 @@
-name: Verified payout authorization carry and orphan batch rejection
+name: Permanent financial posting registry fence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-payout-carry'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-registry-fence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,10 +39,10 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify payout authorization cutoff and affected evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_(held_period_|close_evidence_rejects_orphan_batch_)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registry immutability and directly affected tests
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialPostingRegistryTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-payout-carry'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-registry-fence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify payout authorization cutoff and affected evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_(held_period_|close_evidence_rejects_orphan_batch_)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registry immutability and directly affected tests
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialPostingRegistryTest.php
