@@ -30,6 +30,9 @@ final class RuntimeDatabasePrivileges
         }
         $escapedSchema = str_replace('_', '\\_', $database);
         foreach ($grants as $grant) {
+            if (is_string($grant) && preg_match('/\AGRANT EXECUTE ON PROCEDURE \x60'.preg_quote($database, '/').'\x60\.\x60financial_read_trigger_metadata\x60 TO (?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)@(?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)\z/', trim($grant))) {
+                continue;
+            }
             if (! is_string($grant) || ! preg_match('/\AGRANT ([A-Z ,]+) ON (\S+) TO (?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)@(?:\x60[^\x60]+\x60|\x27[^\x27]+\x27)\z/', trim($grant), $parts)) {
                 $issues[] = 'runtime_grant_unrecognized_or_delegated';
                 continue;

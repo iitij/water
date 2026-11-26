@@ -40,7 +40,7 @@ final class HeldCashReleaseDocumentProtection
         return DB::getDriverName() === 'sqlite'
             ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
             : FinancialTriggerMetadata::query()
-                ->where('TRIGGER_NAME', $name)->exists();
+                ->where('TRIGGER_NAME', $name)->isNotEmpty();
     }
 
     public function active(): bool

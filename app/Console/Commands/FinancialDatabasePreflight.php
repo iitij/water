@@ -22,7 +22,7 @@ final class FinancialDatabasePreflight extends Command
 {
     protected $signature = 'financial:database-preflight
         {--runtime : Verify grants of the actual runtime write connection}
-        {--guards : Verify database protection directly or through the configured read-only metadata view}';
+        {--guards : Verify database protection directly or through the configured read-only metadata routine}';
     protected $description = 'Read-only prospective financial database deployment checks';
 
     public function handle(RuntimeDatabasePrivileges $privileges): int
@@ -40,8 +40,8 @@ final class FinancialDatabasePreflight extends Command
                 return self::SUCCESS;
             }
             $checks = [
-                'live_metadata_view' => fn () => ! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)
-                    || config('database.financial_trigger_metadata_view') === true
+                'live_metadata_routine' => fn () => ! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)
+                    || config('database.financial_trigger_metadata_routine') === true
                     || app(FinancialTriggerMetadata::class)->deploymentVerified(),
                 'ledger' => fn () => app(LedgerProtection::class)->active(),
                 'allocations' => fn () => app(AllocationHistoryProtection::class)->active(),

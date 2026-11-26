@@ -22,6 +22,18 @@ final class RuntimeDatabasePrivilegesTest extends TestCase
         }
     }
 
+    public function test_only_named_read_only_metadata_routine_execute_is_allowed(): void
+    {
+        $service = new RuntimeDatabasePrivileges();
+        $safe = "GRANT SELECT ON \x60water_test\x60.\x60payments\x60 TO 'runtime'@'localhost'";
+        $routine = "GRANT EXECUTE ON PROCEDURE \x60water_test\x60.\x60financial_read_trigger_metadata\x60 TO 'runtime'@'localhost'";
+        self::assertTrue($service->evaluate('water_test', [self::USAGE, $safe, $routine])['accepted']);
+        foreach ([str_replace('financial_read_trigger_metadata', 'other_proc', $routine), $routine.' WITH GRANT OPTION',
+            str_replace('water_test', 'other', $routine)] as $bad) {
+            self::assertFalse($service->evaluate('water_test', [self::USAGE, $safe, $bad])['accepted']);
+        }
+    }
+
     public function test_rejects_elevated_unknown_global_and_wildcard_grants(): void
     {
         $service = new RuntimeDatabasePrivileges();

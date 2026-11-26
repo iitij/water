@@ -15,6 +15,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new \LogicException('Financial metadata view requires independently reviewed recovery.');
+        throw new \LogicException('Financial metadata routine requires independently reviewed recovery.');
     }
 };
