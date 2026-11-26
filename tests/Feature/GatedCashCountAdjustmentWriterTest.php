@@ -1300,6 +1300,87 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
     }
 
+    public function test_release_refund_batch_atomic_posts_all_claims_once(): void
+    {
+        $f = $this->batchResolutionControl();
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $payment = Payment::findOrFail(AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole()->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $before = $ledger->accountBalanceMinor($subscriber);
+        $confirmation = 'Independent proof confirms both original cash refunds were disbursed';
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $post = fn () => $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'], $confirmation, $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(10, $result['batch']['total_claimed_minor']);
+        $this->assertSame(0, $result['current_active_release_liquidity']['unresolved_refund_incident_count']);
+        $this->assertSame($before - 10, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($f['counted'], $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($f['id'], '2026-11-25')));
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+        foreach ([$f['uuid'] => -6, $f['second'] => -4] as $uuid => $minor) {
+            $legs = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+            $this->assertSame([$minor, $minor], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+            $this->getJson($f['root'].$uuid)->assertOk()->assertJsonPath('incident_unresolved', false)
+                ->assertJsonPath('completion_verified', true);
+            $this->postJson($f['root'].$uuid.'/resolution-post', [
+                'confirmation' => $confirmation, 'proposal_id' => $f['proposalIds'][$uuid],
+            ])->assertConflict();
+        }
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->count());
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $after = $snapshot();
+        $this->assertFalse($post()['registry_created']);
+        $this->rejects('completed_refund_batch_conflict', fn () =>
+            $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'], self::EVIDENCE, $this->nowAt()));
+        $this->assertEquals($after, $snapshot());
+    }
+
+    public function test_release_refund_batch_atomic_rolls_back_when_final_group_audit_fails(): void
+    {
+        $f = $this->batchResolutionControl();
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions', 'treasury_postings',
+            'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $post = fn () => $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'],
+            'Independent proof confirms both original cash refunds were disbursed', $this->nowAt());
+        $condition = "NEW.event = 'financial.completed_cash_refund_batch_approved'
+            AND (SELECT COUNT(*) FROM financial_posting_events WHERE operation_uuid IN ('{$f['uuid']}', '{$f['second']}')) = 4";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_batch_final_audit'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_batch_final_audit'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_batch_final_audit BEFORE INSERT ON audit_events {$body}");
+        \Illuminate\Support\Facades\Log::spy();
+        try {
+            try {
+                $post();
+                $this->fail('Batch committed despite final audit failure.');
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
+            }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with(
+                'audit.record_failed', \Mockery::on(static fn ($context) =>
+                    ($context['event'] ?? null) === 'financial.completed_cash_refund_batch_approved'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_batch_final_audit')))->once();
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+                $service->unresolvedForAccount($f['id'])));
+            $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+                app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_batch_final_audit');
+        }
+        $this->assertTrue($post()['registry_created']);
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+        $this->assertFalse($post()['registry_created']);
+    }
+
     public function test_release_refund_batch_readiness_exact_total_without_posting(): void
     {
         $f = $this->batchResolutionControl();

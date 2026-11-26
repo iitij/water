@@ -24,6 +24,7 @@ final class GatedRefundWriter
 {
     private ?array $mutationIdentity = null;
     private ?int $completedCashReviewer = null;
+    private ?array $batchCompletion = null;
 
     public function __construct(
         private FinancialWriteGate $gate,
@@ -70,13 +71,57 @@ final class GatedRefundWriter
             $intent['operation_uuid'], $now, $reviewer, $confirmation, true, $expectedProposalId);
     }
 
+    public function recordBatchResolvedCashRefund(User $reviewer, int $accountId, array $proposalIds,
+        string $confirmation, DateTimeImmutable $now): array
+    {
+        CompletedCashRefundRequest::authenticated($reviewer);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $confirmation = trim($confirmation);
+        $this->need(mb_strlen($confirmation) >= 20 && mb_strlen($confirmation) <= 2000, 'completed_cash_refund_confirmation');
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return $this->gate->withinOpenPeriod('water', $date, $now,
+            function () use ($reviewer, $accountId, $proposalIds, $confirmation, $now, $date): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
+                $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
+                $this->treasury->authorize($reviewer);
+                CompletedCashRefundRequest::authenticated($reviewer);
+                $service = app(CompletedCashRefundRequest::class);
+                $replay = $service->batchReplayLocked($reviewer, $accountId, $proposalIds, $confirmation);
+                if ($replay !== null) return $replay;
+                $plan = $service->batchPostingPlanLocked($reviewer, $accountId, $proposalIds, $date);
+                $this->need($this->batchCompletion === null, 'completed_refund_batch_conflict');
+                $this->batchCompletion = [$plan, (int) $reviewer->id, $confirmation];
+                try {
+                    foreach ($plan['items'] as $item) {
+                        $request = \App\Models\AuditEvent::query()->where('event', CompletedCashRefundRequest::EVENT)
+                            ->where('entity_id', $item['operation_uuid'])->lockForUpdate()->sole();
+                        $p = $request->after;
+                        $result = $this->execute(User::findOrFail($request->actor_user_id), $p['payment_id'], $accountId, $p['amount'],
+                            $p['reference'], 'treasury_cash', $date, $p['reason'], $p['evidence'], $p['operation_uuid'],
+                            $now, $reviewer, $confirmation, true, $item['proposal_id'], true);
+                        $this->need($result['registry_created'] === true, 'completed_refund_batch_conflict');
+                    }
+                    $proof = $service->completeBatchPostingLocked($this, $reviewer, $plan, $confirmation);
+                    return ['registry_created' => true, 'batch' => $proof,
+                        'current_active_release_liquidity' => app(ActiveHeldCashRelease::class)->currentLiquidity($accountId)];
+                } finally {
+                    $this->batchCompletion = null;
+                }
+            });
+    }
+
+    public function allowsBatchCompletion(array $plan, int $reviewerId, string $confirmation): bool
+    {
+        return DB::transactionLevel() > 0 && $this->batchCompletion === [$plan, $reviewerId, $confirmation];
+    }
+
     private function execute(User $actor, int $paymentId, int $accountId, string $amount,
         string $reference, string $method, string $date, string $reason, string $evidence,
-        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation, bool $resolution = false, ?int $expectedProposalId = null): array
+        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation, bool $resolution = false, ?int $expectedProposalId = null, bool $batch = false): array
     {
         $reference = mb_strtoupper(trim($reference));
-        return $this->gate->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution, $expectedProposalId): array {
+        $write = function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution, $expectedProposalId, $batch): array {
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
@@ -129,7 +174,15 @@ final class GatedRefundWriter
                     }
                     $intent = CompletedCashRefundRequest::intent(
                         $paymentId, $accountId, $amount, $reference, $date, $reason, $evidence, $uuid, (int) $actor->id);
-                    if ($resolution) {
+                    if ($batch) {
+                        $this->need($this->batchCompletion !== null && ! $replay && $resolution,
+                            'completed_refund_batch_writer_required');
+                        $member = collect($this->batchCompletion[0]['items'])->firstWhere('operation_uuid', $uuid);
+                        $this->need(is_array($member) && $member['proposal_id'] === $expectedProposalId
+                            && $member['payment_id'] === $paymentId && $member['reference'] === $reference
+                            && $member['claimed_minor'] === \App\Support\FinancialAmount::parse($amount)->minor,
+                            'completed_refund_batch_conflict');
+                    } elseif ($resolution) {
                         $resolutionPlan = app(CompletedCashRefundRequest::class)->verifyPostingResolutionLocked(
                             $intent, $reviewer, $confirmation, $replay, $expectedProposalId);
                     } else {
@@ -187,14 +240,16 @@ final class GatedRefundWriter
                             'source' => 'internal']);
                     }
                     $this->verifyCompletedEvidence($refund, (int) $posting['id'], $accountId, $uuid, $reviewer, $confirmation);
-                    if ($resolution && $created) {
+                    if ($resolution && $created && ! $batch) {
                         $this->need(is_array($resolutionPlan), 'completed_refund_resolution_conflict');
                         app(CompletedCashRefundRequest::class)->completePostingResolutionLocked($intent, $reviewer, $resolutionPlan);
                     }
-                    $result['current_active_release_liquidity'] = app(ActiveHeldCashRelease::class)->currentLiquidity($accountId);
+                    if (! $batch) $result['current_active_release_liquidity'] = app(ActiveHeldCashRelease::class)->currentLiquidity($accountId);
                 }
                 return $result;
-            });
+            };
+        if ($batch) return $write(FinancialWriteGate::currentContext());
+        return $this->gate->withinOpenPeriod('water', $date, $now, $write);
     }
 
     public function allowsRecord(int $paymentId, string $reference, int $actorId): bool
