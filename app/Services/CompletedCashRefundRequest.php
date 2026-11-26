@@ -197,7 +197,7 @@ final class CompletedCashRefundRequest
 
     /** Private only: aggregate variance may be supplied solely by the complete group writer. */
     private function proposeResolutionLocked(User $actor, string $uuid, int $countId, string $classification,
-        string $evidence, string $date, ?int $supersedesId, ?int $aggregateVariance = null): array
+        string $evidence, string $date, ?int $supersedesId, ?int $aggregateVariance = null, ?string $groupRevisionHash = null): array
     {
         FinancialWriteGate::currentContext();
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -270,6 +270,13 @@ final class CompletedCashRefundRequest
             'recorded_minor' => $recorded, 'variance_minor' => $variance, 'ledger_hash' => $count->ledger_hash,
             'classification' => $classification, 'evidence' => $evidence, 'proposed_on' => $date,
             'incident_unresolved' => true];
+        if ($supersedesId !== null && $aggregateVariance === null
+            && $this->unresolvedForAccount($p['account_id'])['count'] > 1) {
+            throw new DomainException('completed_refund_group_revision_required');
+        }
+        if (($aggregateVariance === null) !== ($groupRevisionHash === null)) {
+            throw new DomainException('completed_refund_group_revision_selection');
+        }
         $chain = $this->proposalChain($row, $decision);
         $old = $chain === [] ? null : end($chain);
         if ($this->verifiedResolution($row, $decision) !== null) {
@@ -286,6 +293,7 @@ final class CompletedCashRefundRequest
             }
             $proof['supersedes_id'] = (int) $previous->id;
             $proof['supersedes_hash'] = $this->proposalHash($previous->after);
+            if ($groupRevisionHash !== null) $proof['group_revision_hash'] = $groupRevisionHash;
             if ((int) $old->id === $supersedesId) {
                 if ($countId <= $old->after['count_id'] || (int) $o->id <= (int) $old->id) {
                     throw new DomainException('completed_refund_resolution_stale_count');
@@ -416,15 +424,23 @@ final class CompletedCashRefundRequest
                             $classification === 'posting_required', false, -$posting, true);
                     }
                 }
+                $binding = ['version' => 1, 'account_id' => $accountId, 'count_id' => $countId,
+                    'actor_id' => (int) $actor->id, 'date' => $date, 'evidence' => $evidence,
+                    'total_claimed_minor' => $total, 'posting_required_minor' => $posting, 'predecessors' => []];
+                foreach ($members as $uuid => [$request, $closed, $classification, $previous]) {
+                    $binding['predecessors'][$uuid] = ['id' => (int) $previous->id,
+                        'hash' => $this->proposalHash($previous->after), 'classification' => $classification];
+                }
+                $groupHash = $this->proposalHash($binding);
                 $ids = [];
                 foreach ($members as $uuid => [$request, $closed, $classification, $previous]) {
                     $result = $this->proposeResolutionLocked($actor, $uuid, $countId, $classification,
-                        $evidence, $date, $predecessors[$uuid], -$posting);
+                        $evidence, $date, $predecessors[$uuid], -$posting, $groupHash);
                     if ($result['created'] === $replay) throw new DomainException($fail);
                     $ids[$uuid] = $result['proposal_id'];
                 }
                 return ['created' => ! $replay, 'proposal_ids' => $ids, 'count_id' => $countId,
-                    'total_claimed_minor' => $total, 'posting_required_minor' => $posting,
+                    'total_claimed_minor' => $total, 'posting_required_minor' => $posting, 'group_revision_hash' => $groupHash,
                     'incident_unresolved' => true, 'financial_posting_created' => false,
                     'spending_authorized' => false, 'closure_authorized' => false];
             });
