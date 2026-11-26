@@ -1277,16 +1277,45 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $confirmation = 'Independent signed confirmation of cash already received';
         $ordinary = fn () => $writer->record($reviewer, (int) $receipt->id, $id, '0.06', 'QA-COMPLETED-REFUND',
             'treasury_cash', $date, $reason, self::EVIDENCE, $uuid, $this->nowAt());
-        $complete = fn ($verifier, $proof = null) => $writer->recordCompletedCashRefund($reviewer, $verifier,
-            (int) $receipt->id, $id, '0.06', 'QA-COMPLETED-REFUND', $date, $reason, self::EVIDENCE,
-            $proof ?? $confirmation, $uuid, $this->nowAt());
+        $complete = function ($verifier, $proof = null) use ($writer, $reviewer, $receipt, $id, $date, $reason, $confirmation, $uuid) {
+            \Laravel\Sanctum\Sanctum::actingAs($verifier);
+            return $writer->recordCompletedCashRefund($reviewer, $verifier,
+                (int) $receipt->id, $id, '0.06', 'QA-COMPLETED-REFUND', $date, $reason, self::EVIDENCE,
+                $proof ?? $confirmation, $uuid, $this->nowAt());
+        };
         $this->rejects('held_cash_reserved', $ordinary);
         $this->rejects('completed_cash_refund_disabled', fn () => $complete($witness));
         config(['financial_candidate.completed_cash_refund' => true]);
+        $this->rejects('completed_cash_refund_request_required', fn () => $complete($witness));
+        $submitUrl = '/api/payments/'.$receipt->id.'/completed-cash-refund-requests';
+        $approveUrl = '/api/completed-cash-refund-requests/'.$uuid.'/approve';
+        $data = ['account_id' => $id, 'amount' => '0.06', 'reference' => 'QA-COMPLETED-REFUND',
+            'date' => $date, 'reason' => $reason, 'evidence' => self::EVIDENCE,
+            'operation_uuid' => $uuid, 'disbursement_confirmed' => true];
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($submitUrl, $data + ['reviewer_id' => $witness->id])->assertUnprocessable();
+        $this->postJson($submitUrl, $data)->assertOk()->assertJsonPath('created', true);
+        $this->postJson($submitUrl, $data)->assertOk()->assertJsonPath('created', false);
+        $this->postJson($submitUrl, array_replace($data, ['amount' => '0.07']))->assertConflict();
+        $this->postJson($approveUrl, ['confirmation' => $confirmation])->assertConflict();
+        $this->rejects('completed_cash_refund_request_conflict', $ordinary);
+        try {
+            $writer->recordCompletedCashRefund($reviewer, $witness, (int) $receipt->id, $id, '0.06',
+                'QA-COMPLETED-REFUND', $date, $reason, self::EVIDENCE, $confirmation, $uuid, $this->nowAt());
+            $this->fail('Unauthenticated reviewer identity was accepted.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
         $this->rejects('completed_cash_refund_independence', fn () => $complete($reviewer));
         $this->rejects('completed_cash_refund_independence', fn () => $complete($actor));
         $this->assertDatabaseCount('payment_refunds', 0);
-        $result = $complete($witness);
+        \Laravel\Sanctum\Sanctum::actingAs($witness);
+        $this->postJson($approveUrl, ['confirmation' => $confirmation, 'amount' => '0.07'])->assertUnprocessable();
+        $this->postJson($approveUrl, ['confirmation' => $confirmation, 'reviewer_id' => $actor->id])->assertUnprocessable();
+        $this->rejects('completed_cash_refund_request_conflict', fn () => $writer->recordCompletedCashRefund(
+            $reviewer, $witness, (int) $receipt->id, $id, '0.07', 'QA-COMPLETED-REFUND', $date,
+            $reason, self::EVIDENCE, $confirmation, $uuid, $this->nowAt()));
+        $result = $this->postJson($approveUrl, ['confirmation' => $confirmation])->assertOk()->json();
         $this->assertTrue($result['registry_created']);
         $this->assertSame(-6, (int) $result['posting']['amount_minor']);
         $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
@@ -1327,7 +1356,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
             }
         };
-        foreach ([$audit, $activation] as $protectedAudit) {
+        $requestAudit = DB::table('audit_events')->where('event', 'financial.completed_cash_refund_requested')->sole();
+        foreach ([$audit, $activation, $requestAudit] as $protectedAudit) {
             $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['actor_user_id' => $actor->id]));
             $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['event' => 'test.unrelated']));
             $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['after' => '{}']));
@@ -1374,6 +1404,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
         $this->assertEquals($audit, DB::table('audit_events')->where('id', $audit->id)->sole());
         $this->assertEquals($activation, DB::table('audit_events')->where('id', $activation->id)->sole());
+        $this->assertEquals($requestAudit, DB::table('audit_events')->where('id', $requestAudit->id)->sole());
         $this->assertTrue(app(\App\Services\FinancialApprovalAuditProtection::class)->active());
         DB::unprepared('DROP TRIGGER fin_approval_audit_update');
         try {

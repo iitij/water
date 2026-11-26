@@ -71,6 +71,7 @@ final class GatedRefundWriter
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
+                abort_if($actor->isDisabled(), 403);
                 $candidate = Payment::query()->findOrFail($paymentId);
                 $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
                 $payment = Payment::query()->lockForUpdate()->findOrFail($paymentId);
@@ -97,6 +98,8 @@ final class GatedRefundWriter
                     $this->need(app(FinancialApprovalAuditProtection::class)->active(), 'financial_approval_audit_protection_missing');
                     $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
                     $this->treasury->authorize($reviewer);
+                    CompletedCashRefundRequest::authenticated($reviewer);
+                    abort_unless(app()->environment(['testing', 'staging']), 503);
                     $this->need((int) $reviewer->id !== (int) $actor->id
                         && (int) $reviewer->id !== (int) $payment->user_id,
                         'completed_cash_refund_independence');
@@ -111,6 +114,10 @@ final class GatedRefundWriter
                         $this->need(config('financial_candidate.completed_cash_refund') === true,
                             'completed_cash_refund_disabled');
                     }
+                    app(CompletedCashRefundRequest::class)->verifyLocked(CompletedCashRefundRequest::intent(
+                        $paymentId, $accountId, $amount, $reference, $date, $reason, $evidence, $uuid, (int) $actor->id));
+                } elseif (! $replay) {
+                    app(CompletedCashRefundRequest::class)->assertUnreserved($uuid, $reference);
                 }
                 // Earlier refunds on the same receipt must have both proved legs.
                 // This deliberately refuses adoption or repair of legacy sources.
