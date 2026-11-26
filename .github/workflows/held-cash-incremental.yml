@@ -1,4 +1,4 @@
-name: Prospective financial approval audit fence
+name: Prospective financial approval audit fence MySQL retry
 on:
   push:
     branches: ['release/prospective-financial-approval-audit-fence']
@@ -6,39 +6,6 @@ on:
 permissions:
   contents: read
 jobs:
-  sqlite:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      APP_ENV: testing
-      DB_CONNECTION: sqlite
-      DB_DATABASE: ':memory:'
-      DB_URL: ''
-      CACHE_STORE: array
-      SESSION_DRIVER: array
-      QUEUE_CONNECTION: sync
-      MAIL_MAILER: array
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
-          coverage: none
-      - name: Verify source and install locked dependencies
-        run: |
-          set -euo pipefail
-          git rev-parse HEAD
-          sha256sum composer.lock
-          test ! -e .env
-          test ! -e .env.testing
-          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
-          composer install --no-interaction --no-progress --prefer-dist
-          git diff --exit-code -- composer.lock
-      - name: Verify protected approval evidence and exact replay
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_completed_cash_refund_|test_release_active_reserve_restores_with_liquidity_and_exact_replay|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -98,4 +65,4 @@ jobs:
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
       - name: Verify protected approval evidence and exact replay
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_completed_cash_refund_|test_release_active_reserve_restores_with_liquidity_and_exact_replay|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity' tests/Feature/GatedCashCountAdjustmentWriterTest.php

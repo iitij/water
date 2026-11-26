@@ -1336,8 +1336,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             unset($duplicate['id']);
             $assertBlocked(fn () => DB::table('audit_events')->insert($duplicate));
         }
-        $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->delete());
-        $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->update(['id' => 999999]));
+        if (DB::getDriverName() === 'mysql') {
+            // The older, broader identity guards execute first on MySQL.
+            // Prove that the new guards independently reject these mutations
+            // on this disposable test DB, then restore both original guards.
+            DB::unprepared('DROP TRIGGER protect_user_identity_delete');
+            try {
+                $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->delete());
+            } finally {
+                (require database_path('migrations/2026_11_25_010000_protect_user_identity.php'))->up();
+            }
+            DB::unprepared('DROP TRIGGER protect_user_identity_update');
+            try {
+                $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->update(['id' => 999999]));
+            } finally {
+                (require database_path('migrations/2026_11_25_010100_harden_user_identity_guards.php'))->up();
+            }
+            $this->assertSame(2, DB::table('information_schema.TRIGGERS')
+                ->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                ->whereIn('TRIGGER_NAME', ['protect_user_identity_delete', 'protect_user_identity_update'])->count());
+        } else {
+            $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->delete());
+            $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->update(['id' => 999999]));
+        }
         if (DB::getDriverName() === 'sqlite') {
             $replacement = (array) $audit;
             $replacement['event'] = 'test.unrelated';
