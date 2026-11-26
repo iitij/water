@@ -67,6 +67,7 @@ final class FinancialCloseEvidenceDiagnostic
             $heldPeriod = $this->heldPeriod->inspect($periodId);
             $settlement = $this->settlements->inspect($actor, $periodId, $through);
             $incident = $this->refundIncidents();
+            $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
             $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
             $continuity = null;
             if ($period->state === 'CLOSED' || $period->state === 'FROZEN') {
@@ -92,7 +93,7 @@ final class FinancialCloseEvidenceDiagnostic
             sort($blockers, SORT_STRING);
             return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
                 'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
-                'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident,
+                'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
                 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
                 'blockers' => $blockers, 'source_coverage_verified' => false,
                 'period_end_balances_verified' => false, 'closure_authorized' => false];
