@@ -1,7 +1,7 @@
-name: Prospective reading batch invoices
+name: Prospective reading automatic invoice API
 on:
   push:
-    branches: ['release/prospective-reading-batch-invoices']
+    branches: ['release/prospective-reading-auto-invoice-api']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Verify reading batch partial success and cross-entrypoint replay
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_reading_batch_invoice_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_reading_auto_invoice_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
       - name: Verify reading batch partial success and cross-entrypoint replay
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_reading_batch_invoice_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_reading_auto_invoice_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
 
