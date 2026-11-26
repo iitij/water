@@ -75,7 +75,7 @@ final class CashHandoverService
             || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000
             || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
             || ! checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))
-            || $date > now()->toDateString()) {
+            || $date > now('Asia/Aden')->toDateString()) {
             throw ValidationException::withMessages(['handover' => 'بيانات التسليم أو المبلغ أو التاريخ غير صالحة.']);
         }
         return DB::transaction(function () use ($session, $receiver, $requested, $reference, $date, $evidence, $gatedWriter): CashHandover {
@@ -107,7 +107,7 @@ final class CashHandoverService
                 || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
                 || DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
                 || DB::table('payment_refunds')->where('disbursement_reference', $reference)->exists(), 409, 'مرجع التسليم مستخدم في مستند مالي آخر.');
-            if (! $this->eligible($session) || $date < $session->closed_at->toDateString()) {
+            if (! $this->eligible($session) || $date < $session->closed_at->copy()->setTimezone('Asia/Aden')->toDateString()) {
                 throw ValidationException::withMessages(['handover' => 'يلزم صندوق نقدي معتمد وتاريخ تسليم لا يسبق الإغلاق.']);
             }
             $before = $this->receivedMinor($session, true);
