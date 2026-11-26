@@ -3128,6 +3128,83 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_registered_document_db_fence_preserves_identity_and_meter_retirement(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $issuer = $this->actor();
+        $other = Subscriber::create(['name' => 'Synthetic other account', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic document guard tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-DOC-GUARD']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $session = app(CashSessionService::class)->open($issuer);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id, (int) $invoice->id, (int) $meter->id)['payment'];
+        $this->assertTrue(app(\App\Services\RegisteredDocumentProtection::class)->active());
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $tables = ['invoices', 'payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_events', 'financial_posting_operations', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $attempts = [
+            fn () => DB::table('invoices')->where('id', $invoice->id)->update(['total_amount' => '9.00']),
+            fn () => DB::table('invoices')->where('id', $invoice->id)->update(['bill_number' => 'QA-FORGED']),
+            fn () => DB::table('invoices')->where('id', $invoice->id)->update(['subscriber_id' => $other->id]),
+            fn () => DB::table('payments')->where('id', $receipt->id)->update(['amount' => '9.00']),
+            fn () => DB::table('payments')->where('id', $receipt->id)->update(['invoice_id' => null]),
+            fn () => DB::table('payments')->where('id', $receipt->id)->update(['cash_session_id' => null]),
+            fn () => DB::table('payments')->where('id', $receipt->id)->update(['sync_uuid' => null]),
+            fn () => DB::table('payments')->where('id', $receipt->id)->update(['meter_id' => null, 'retired_meter_id' => $meter->id, 'retired_meter_code' => 'FAKE']),
+            fn () => $invoice->fresh()->deleteQuietly(),
+            fn () => $receipt->fresh()->deleteQuietly(),
+            fn () => DB::table('invoices')->where('id', $invoice->id)->delete(),
+            fn () => DB::table('payments')->where('id', $receipt->id)->delete(),
+            fn () => DB::table('cash_sessions')->where('id', $session->id)->delete(),
+            fn () => DB::table('meters')->where('id', $meter->id)->delete(),
+        ];
+        foreach ([['invoices', $invoice, ['bill_number']], ['payments', $receipt, ['receipt_number', 'sync_uuid']]] as [$table, $doc, $keys]) {
+            $row = (array) DB::table($table)->where('id', $doc->id)->first();
+            // Isolate each collision key, including the primary key.
+            foreach (array_merge(['id'], $keys) as $key) {
+                $copy = $row;
+                if ($key !== 'id') unset($copy['id']);
+                foreach ($keys as $natural) {
+                    if ($key !== $natural) $copy[$natural] = $natural === 'sync_uuid' ? null : 'QA-OTHER-NUMBER';
+                }
+                $columns = implode(', ', array_keys($copy));
+                $params = implode(', ', array_fill(0, count($copy), '?'));
+                $verb = DB::getDriverName() === 'sqlite' ? 'INSERT OR REPLACE' : 'REPLACE';
+                $attempts[] = fn () => DB::statement("{$verb} INTO {$table} ({$columns}) VALUES ({$params})", array_values($copy));
+            }
+        }
+        foreach ($attempts as $attempt) {
+            try {
+                DB::transaction($attempt);
+                $this->fail('Unsafe registered document mutation succeeded.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Registered financial document is immutable', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        }
+        $receipt->fresh()->update(['notes' => 'Nonfinancial note']);
+        $this->assertSame('Nonfinancial note', $receipt->fresh()->notes);
+        $replacement = app(\App\Services\SingleMeterService::class)->replace($meter,
+            ['unique_code' => 'QA-DOC-GUARD-NEW', 'initial_reading' => '0.00'], '2026-11-25', 'Synthetic physical replacement', $actor->id)['current_meter'];
+        $this->assertNotSame($meter->id, $replacement->id);
+        foreach ([$invoice, $receipt] as $doc) {
+            $this->assertNull($doc->fresh()->meter_id);
+            $this->assertSame((int) $meter->id, (int) $doc->fresh()->retired_meter_id);
+            $this->assertSame($meter->unique_code, $doc->fresh()->retired_meter_code);
+        }
+        $this->assertSame('0.10', $invoice->fresh()->amount_paid);
+        $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_correction_db_protection_blocks_raw_and_quiet_mutations(): void
     {
         [, , $account, , , $subscriber] = $this->held();

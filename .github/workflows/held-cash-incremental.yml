@@ -1,7 +1,7 @@
-name: Prospective correction database protection
+name: Prospective registered document database fence
 on:
   push:
-    branches: ['release/prospective-correction-db-protection']
+    branches: ['release/prospective-invoice-receipt-db-fence']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify correction document database protection
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_correction_db_protection_|test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay|test_round136_cash_refund_records_both_legs_and_keeps_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registered invoice and receipt database fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_registered_document_db_fence_|test_round135_invoice_issue_cancel_register_exact_legs_and_rollback|test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,6 +96,6 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify correction document database protection
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_correction_db_protection_|test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay|test_round136_cash_refund_records_both_legs_and_keeps_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registered invoice and receipt database fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_registered_document_db_fence_|test_round135_invoice_issue_cancel_register_exact_legs_and_rollback|test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once' tests/Feature/GatedCashCountAdjustmentWriterTest.php
 
