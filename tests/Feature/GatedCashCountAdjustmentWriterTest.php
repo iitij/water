@@ -2659,6 +2659,101 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_reading_auto_invoice_api_recovers_only_original_intent(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic automatic invoice tariff', 'unit_price' => '0.10',
+            'start_date' => '2026-11-01', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-AUTO-RECOVER',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        config(['financial_candidate.invoices' => true]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $data = ['meter_id' => $meter->id, 'reading_date' => '2026-11-24', 'current_reading' => '1.00',
+            'sync_uuid' => '66666666-6666-4666-8666-666666666666', 'notes' => 'Original automatic invoice intent'];
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $response = $this->postJson('/api/readings', $data)->assertCreated()
+            ->assertJsonPath('invoice_issued', false)->assertJsonPath('invoice_error', 'financial_period_not_open');
+        $readingId = (int) $response->json('reading.id');
+        $audit = AuditEvent::where('event', 'financial.reading_auto_invoice_intent')->where('entity_id', (string) $readingId)->sole();
+        $uuid = $audit->after['operation_uuid'];
+        $this->assertTrue($audit->after['eligible']);
+        $this->assertSame([$readingId], array_column($audit->after['pending'], 0));
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $this->postJson('/api/readings', array_replace($data, ['notes' => 'Changed original intent']))
+            ->assertOk()->assertJsonPath('invoice_issued', false)->assertJsonPath('invoice_error', 'gated_auto_invoice_intent_conflict');
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', false)
+            ->assertJsonPath('invoice_error', 'gated_auto_invoice_pending_changed_or_disabled');
+        config(['financial_candidate.invoices' => false]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', false)
+            ->assertJsonPath('invoice_error', 'gated_invoice_entry_disabled');
+        $this->assertDatabaseCount('invoices', 0);
+        config(['financial_candidate.invoices' => true]);
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('duplicate', true)->assertJsonPath('invoice_issued', true);
+        $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
+        $this->assertSame('0.10', $invoice->total_amount);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
+        $this->assertSame(-10, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', true);
+        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $this->postJson('/api/invoices/'.$invoice->id.'/cancel', ['reason' => 'Independent cancellation of auto invoice',
+            'operation_uuid' => $cancelUuid])->assertOk();
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', false);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_reading_auto_invoice_api_refuses_new_permission_or_changed_pending_set(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reader = User::factory()->create(['role' => 'reader']);
+        $reader->assignRole(Role::findOrCreate('reader', 'web'));
+        \App\Models\Tariff::create(['name' => 'Synthetic automatic invoice tariff', 'unit_price' => '0.10',
+            'start_date' => '2026-11-01', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-AUTO-INTENT',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        config(['financial_candidate.invoices' => true]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        \Laravel\Sanctum\Sanctum::actingAs($reader);
+        $data = ['meter_id' => $meter->id, 'reading_date' => '2026-11-22', 'current_reading' => '1.00',
+            'sync_uuid' => '66666666-6666-4666-8666-666666666666'];
+        $this->postJson('/api/readings', $data)->assertCreated()->assertJsonPath('invoice_issued', false)
+            ->assertJsonPath('invoice_error', 'gated_auto_invoice_not_authorized_at_creation');
+        $reader->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('Create:Invoice', 'web'));
+        \Laravel\Sanctum\Sanctum::actingAs($reader->fresh());
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', false)
+            ->assertJsonPath('invoice_error', 'gated_auto_invoice_not_authorized_at_creation');
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $next = array_replace($data, ['reading_date' => '2026-11-23', 'current_reading' => '2.00',
+            'sync_uuid' => '88888888-8888-4888-8888-888888888888']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson('/api/readings', $next)->assertCreated()->assertJsonPath('invoice_issued', false);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        $later = array_replace($next, ['reading_date' => '2026-11-24', 'current_reading' => '3.00',
+            'sync_uuid' => '99999999-9999-4999-8999-999999999999']);
+        $this->postJson('/api/readings', $later)->assertCreated()->assertJsonPath('invoice_issued', false);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        $this->postJson('/api/readings', $next)->assertOk()->assertJsonPath('invoice_issued', false)
+            ->assertJsonPath('invoice_error', 'gated_auto_invoice_pending_changed_or_disabled');
+        $this->postJson('/api/readings', $later)->assertOk()->assertJsonPath('invoice_issued', false);
+        $this->assertDatabaseCount('readings', 3);
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
     public function test_release_reading_batch_invoice_api_preserves_partial_success_and_replay(): void
     {
         [, , $account, , , $first] = $this->held();
