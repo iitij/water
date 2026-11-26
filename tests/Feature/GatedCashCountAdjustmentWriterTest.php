@@ -7863,6 +7863,55 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_held_period_rollforward_preserves_prior_cutoff_and_owner_carry(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $firstId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialHeldLiabilityPeriodDiagnostic::class);
+        $inspect = fn (int $id) => DB::transaction(fn () => $diagnostic->inspect($id));
+        $first = $inspect($firstId);
+        $row = $first['rows'][0];
+        $this->assertSame($lot, $row['liability_id']);
+        $this->assertSame((int) $account['id'], $row['account_id']);
+        $this->assertSame(25, $row['recognized_minor']);
+        $this->assertSame(25, $row['assigned_minor']);
+        $this->assertSame(20, $row['credited_minor']);
+        $this->assertSame(0, $row['paid_minor']);
+        $this->assertSame(0, $row['recorded_opening_identified_minor']);
+        $this->assertSame(0, $row['recorded_closing_unidentified_minor']);
+        $this->assertSame(5, $row['recorded_closing_identified_minor']);
+        $this->assertSame([['assignment_uuid' => self::NEXT, 'subscriber_id' => (int) $subscriber->id,
+            'recorded_opening_minor' => 0, 'recorded_closing_minor' => 5]], $row['owners']);
+        $nextId = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit($this->actor(), self::NEXT, 5,
+            'QA-NEXT-MONTH-CREDIT', self::EVIDENCE, '88888888-8888-4888-8888-888888888888', '2026-12-02', $later);
+        $tables = ['treasury_held_cash_liabilities', 'treasury_held_cash_assignments', 'treasury_held_cash_credits',
+            'transactions', 'treasury_postings', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->assertSame($first, $inspect($firstId));
+        $second = $inspect((int) $nextId);
+        $this->assertSame(5, $second['totals']['recorded_opening_identified_minor']);
+        $this->assertSame(0, $second['totals']['recognized_minor']);
+        $this->assertSame(0, $second['totals']['assigned_minor']);
+        $this->assertSame(5, $second['totals']['credited_minor']);
+        $this->assertSame(0, $second['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $second['rows'][0]['owners'][0]['recorded_opening_minor']);
+        $this->assertSame(0, $second['rows'][0]['owners'][0]['recorded_closing_minor']);
+        $this->assertTrue($second['registered_held_subledger_rollforward_verified']);
+        $this->assertFalse($second['independent_opening_verified']);
+        $this->assertFalse($second['all_liabilities_verified']);
+        $this->assertFalse($second['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+    }
+
     public function test_period_movements_preserve_owner_gross_effects_and_do_not_invent_balances(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
