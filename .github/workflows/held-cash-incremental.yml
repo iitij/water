@@ -107,3 +107,6 @@ jobs:
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_(insert_fence_|mutation_fence_|replacement_fence_|parent_fence_|void_fence_|treasury_fence_|held_fence_|allocation_fence_|graph_fence_|detail_fence_|reading_fence_|retirement_fence_)|test_release_proposal_and_withdrawal_are_immutable|test_round137_void_immediate_and_approval' tests/Feature/GatedCashCountAdjustmentWriterTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseCoordinatorTest.php
+      - name: Verify independent MySQL connections competing with actual freeze coordinator
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_race_' tests/Feature/FinancialConcurrencyTest.php
