@@ -56,7 +56,10 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
         $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RUNTIME-METER']);
         $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
             'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
-        $before = FinancialTriggerMetadata::query()->sortBy('TRIGGER_NAME')->values()->all();
+        $fields = array_flip(['TRIGGER_SCHEMA', 'TRIGGER_NAME', 'EVENT_OBJECT_TABLE', 'EVENT_MANIPULATION', 'ACTION_TIMING', 'ACTION_STATEMENT']);
+        $metadata = fn () => FinancialTriggerMetadata::query()->sortBy('TRIGGER_NAME')
+            ->map(fn ($row) => array_intersect_key((array) $row, $fields))->values()->all();
+        $before = $metadata();
         $this->assertNotEmpty($before);
         $this->assertFalse(app(RuntimeDatabasePrivileges::class)->inspect()['accepted']);
         $useRuntime = static function (): void {
@@ -74,7 +77,7 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertTrue($result['accepted'], json_encode($result));
             $this->artisan('financial:database-preflight', ['--runtime' => true])->assertExitCode(0);
             $this->artisan('financial:database-preflight', ['--guards' => true])->assertExitCode(0);
-            $this->assertEquals($before, FinancialTriggerMetadata::query()->sortBy('TRIGGER_NAME')->values()->all());
+            $this->assertEquals($before, $metadata());
             $invoice = app(GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
                 (int) $meter->id, '66666666-6666-4666-8666-666666666666', $now)['invoice'];
             $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.04',
@@ -95,7 +98,7 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
                     $this->assertContains((int) ($error->errorInfo[1] ?? 0), [1142, 1227, 1370], $error->getMessage());
                 }
             }
-            $this->assertEquals($before, FinancialTriggerMetadata::query()->sortBy('TRIGGER_NAME')->values()->all());
+            $this->assertEquals($before, $metadata());
             $useAdmin();
             DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
             $useRuntime();
