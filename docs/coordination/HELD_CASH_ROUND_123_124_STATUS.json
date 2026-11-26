@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify posting readiness 4629d072710d37be14d269e6f9403fbd644343f4 exact CI; then actual atomic source-linked posting-required settlement, affected writers, concurrency, Flutter and production.",
+  "next": "Verify atomic refund incident posting 120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe exact CI; then failure injection and concurrent replay/approval, complete entrypoint protection, accounting closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2614,12 +2614,38 @@
     ]
   },
   "release_refund_incident_posting_readiness": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "78a5ecc289dbe9070ffb4dff8287ab3e027996d3",
     "branch": "release/prospective-refund-incident-posting-readiness",
     "source": "4629d072710d37be14d269e6f9403fbd644343f4",
     "scope": "Internal read-only posting resolution evidence review: same-day closed request, proposal posting_required, exact accepted cash count shortage equals claim, latest unchanged observation, source-backed recorded balance, independent actor, no competing or unposted refund, no reused count. Expected subscriber and treasury delta each negative claimed minor. No authorization, mutation, approval or release. Three new cases and one justified changed shared-source positive regression per engine.",
-    "limits": "CI unverified. Does not verify complete refund writer eligibility or authorize posting. Actual atomic posting integration, duplicate prevention in correction flow, multiple incidents, stale proposal replacement, direct-write coverage, concurrency, closure and production remain open.",
-    "next": "Verify exact readiness CI then integrate with GatedRefundWriter in a single scope-first atomic transaction; verify exact two legs and immutable settlement evidence without nested gate or premature release."
+    "limits": "Exact targeted CI logs verified on both engines. Does not verify complete refund writer eligibility or authorize posting. Actual atomic posting integration, duplicate prevention in correction flow, multiple incidents, stale proposal replacement, direct-write coverage, concurrency, closure and production remain open.",
+    "next": "Verify exact readiness CI then integrate with GatedRefundWriter in a single scope-first atomic transaction; verify exact two legs and immutable settlement evidence without nested gate or premature release.",
+    "run": 45746190632,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139662716148,
+        "tests": 4,
+        "assertions": 99,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139662715886,
+        "tests": 4,
+        "assertions": 99,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_atomic_posting": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "4629d072710d37be14d269e6f9403fbd644343f4",
+    "branch": "release/prospective-refund-incident-atomic-posting",
+    "source": "120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe",
+    "scope": "Same-day exact shortage resolution through existing GatedRefundWriter, scope-first single transaction. Recheck fresh evidence and independent reviewer before mutation; preserve closed decision, request identity, original UUID and reference; verify exact subscriber and treasury legs, registry and completed cash audit; require recorded cash after posting equals reviewed count; record immutable resolution approval before liquidity inspection; historical proof verified on replay/read/outflow. New staging/test API; no permission to disburse. Two new cases plus two affected regression cases per engine.",
+    "limits": "CI unverified. Dedicated failure injection and concurrency tests still required. Multi-incident resolution, stale proposal replacement, direct-write coverage, all writer paths, closure, Flutter, deployment remain open. No production activation.",
+    "next": "Verify exact CI, repair any observed issue, then prove rollback after posting before resolution audit and concurrent replay/approval without duplication."
   }
 }
