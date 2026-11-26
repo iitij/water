@@ -1316,6 +1316,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('held_cash_reserved', fn () => $this->gate(fn () =>
             app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($id, 1, $date)));
         $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund')->count());
+        // Attack only the newly protected approval records on the disposable DB.
+        $audit = DB::table('audit_events')->where('event', 'financial.completed_cash_refund')->sole();
+        $activation = DB::table('audit_events')->where('event', 'treasury.held_release_activated')->sole();
+        $assertBlocked = function (callable $attempt): void {
+            try {
+                $attempt();
+                $this->fail('Protected financial approval mutation unexpectedly succeeded.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        };
+        foreach ([$audit, $activation] as $protectedAudit) {
+            $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['actor_user_id' => $actor->id]));
+            $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['event' => 'test.unrelated']));
+            $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->update(['after' => '{}']));
+            $assertBlocked(fn () => DB::table('audit_events')->where('id', $protectedAudit->id)->delete());
+            $duplicate = (array) $protectedAudit;
+            unset($duplicate['id']);
+            $assertBlocked(fn () => DB::table('audit_events')->insert($duplicate));
+        }
+        $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->delete());
+        $assertBlocked(fn () => DB::table('users')->where('id', $witness->id)->update(['id' => 999999]));
+        if (DB::getDriverName() === 'sqlite') {
+            $replacement = (array) $audit;
+            $replacement['event'] = 'test.unrelated';
+            $cols = array_keys($replacement);
+            $assertBlocked(fn () => DB::statement('INSERT OR REPLACE INTO audit_events ('
+                .implode(', ', array_map(fn ($key) => chr(96).$key.chr(96), $cols)).') VALUES ('
+                .implode(', ', array_fill(0, count($cols), '?')).')', array_values($replacement)));
+            $user = (array) DB::table('users')->where('id', $witness->id)->sole();
+            $cols = array_keys($user);
+            $assertBlocked(fn () => DB::statement('INSERT OR REPLACE INTO users ('
+                .implode(', ', array_map(fn ($key) => chr(96).$key.chr(96), $cols)).') VALUES ('
+                .implode(', ', array_fill(0, count($cols), '?')).')', array_values($user)));
+        }
+        $this->assertEquals($audit, DB::table('audit_events')->where('id', $audit->id)->sole());
+        $this->assertEquals($activation, DB::table('audit_events')->where('id', $activation->id)->sole());
+        $this->assertTrue(app(\App\Services\FinancialApprovalAuditProtection::class)->active());
+        DB::unprepared('DROP TRIGGER fin_approval_audit_update');
+        try {
+            $this->rejects('financial_approval_audit_protection_missing', fn () => $complete($witness));
+            $this->rejects('financial_approval_audit_protection_missing', fn () => $release->inspectJournal($id, $this->nowAt()));
+        } finally {
+            app(\App\Services\FinancialApprovalAuditProtection::class)->install();
+        }
+        $this->assertFalse($complete($witness)['registry_created']);
+        // Nonfinancial audit events retain their existing behavior.
+        $unrelated = AuditEvent::create(['event' => 'test.unrelated', 'source' => 'internal', 'actor_user_id' => $actor->id]);
+        $this->assertSame(1, DB::table('audit_events')->where('id', $unrelated->id)->delete());
+
     }
 
     public function test_release_active_cash_loss_records_real_deficit_and_recovery_without_releasing_more(): void

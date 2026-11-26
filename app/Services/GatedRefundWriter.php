@@ -94,6 +94,7 @@ final class GatedRefundWriter
                 $replay = $existing !== null;
                 $this->need($replay === ($operation !== null), 'gated_refund_operation_conflict');
                 if ($reviewer !== null) {
+                    $this->need(app(FinancialApprovalAuditProtection::class)->active(), 'financial_approval_audit_protection_missing');
                     $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
                     $this->treasury->authorize($reviewer);
                     $this->need((int) $reviewer->id !== (int) $actor->id

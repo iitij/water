@@ -287,6 +287,7 @@ final class HeldCashReleaseProposalService
     {
         FinancialWriteGate::currentContext();
         $this->need(app(ActiveHeldCashRelease::class)->protectionActive(), 'active_held_release_protection_missing');
+        $this->need(app(FinancialApprovalAuditProtection::class)->active(), 'financial_approval_audit_protection_missing');
         $this->verifyLocked($proof);
         $state = $this->journalState($proof);
         $markers = DB::table('held_cash_active_releases')->orderBy('journal_id')->lockForUpdate()->get();
