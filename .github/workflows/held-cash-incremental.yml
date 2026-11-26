@@ -1,7 +1,7 @@
-name: Prospective refund atomic aggregate renewal
+name: Prospective refund renewed evidence and group races
 on:
   push:
-    branches: ['release/prospective-refund-aggregate-renewal']
+    branches: ['release/prospective-refund-renewal-races']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify atomic group renewal and affected single revision
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_(group_renewal_|revision_posting_requires_current_proposal)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify renewed signed settlement end to end
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_group_renewal_is_atomic_and_requires_new_signed_evidence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify atomic group renewal and affected single revision
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_(group_renewal_|revision_posting_requires_current_proposal)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify renewed signed settlement end to end
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_group_renewal_is_atomic_and_requires_new_signed_evidence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify independent MySQL group renewal contention
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_renewal_race_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
