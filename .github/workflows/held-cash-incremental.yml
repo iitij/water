@@ -1,4 +1,4 @@
-name: Financial writer-first close races
+name: Financial close upgrade proof
 on:
   pull_request:
     branches: ['main']
@@ -6,8 +6,43 @@ on:
 permissions:
   contents: read
 jobs:
+  sqlite:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-upgrade-proof'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sodium, mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Verify populated schema upgrade
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseUpgradeTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-writer-first-races'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-upgrade-proof'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -66,6 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify new writer-first races on independent MySQL connections
-        run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_race_(committed_receipt|completed_replacement|rolled_back_receipt)' tests/Feature/FinancialConcurrencyTest.php
+      - name: Verify populated schema upgrade
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseUpgradeTest.php
