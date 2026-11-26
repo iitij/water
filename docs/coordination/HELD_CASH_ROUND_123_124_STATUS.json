@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify targeted diagnostic retry df418a1d9dd96cff9cc818779529f7cf531c2c8f. Preserve successful lifecycle cases. Then independently reviewed incident resolution, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify resolution proposal 111dd97fcc87f96b3d5e69b44f217833cb1ac187 exact CI; then independently reviewed resolution approval and source-linked settlement, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2484,11 +2484,38 @@
     ]
   },
   "release_refund_incident_liquidity_retry": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "edbbe9a487c6a3f9e450603c5aada651ec04320d",
     "branch": "release/prospective-refund-incident-liquidity",
     "source": "df418a1d9dd96cff9cc818779529f7cf531c2c8f",
     "scope": "Separate exact transaction context and missing approval audit protection diagnostic; unchanged fail-closed condition. CI filter retries only affected completed refund test on both engines.",
-    "next": "Verify exact retry, then independently reviewed incident resolution."
+    "next": "Verify exact retry, then independently reviewed incident resolution.",
+    "run": 45743885415,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139655159597,
+        "tests": 1,
+        "assertions": 84,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139655159238,
+        "tests": 1,
+        "assertions": 83,
+        "exit": 0
+      }
+    ],
+    "limits": "Exact job logs verified. Prior lifecycle cases remain accepted at edbbe9a. No production activation."
+  },
+  "release_refund_incident_resolution_proposal": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "df418a1d9dd96cff9cc818779529f7cf531c2c8f",
+    "branch": "release/prospective-refund-incident-resolution-proposal",
+    "source": "111dd97fcc87f96b3d5e69b44f217833cb1ac187",
+    "scope": "Non-operative authenticated independent proposal on rejected/withdrawn request with accepted independently reviewed account cash count observed after closure, linked audit evidence and exact amounts; immutable proposal evidence, new preflight and staging/test endpoint. Classifications no_disbursement, cash_returned, posting_required are proposals only. Targeted new test for authorization, count evidence, replay/conflict, immutability, unchanged financial rows and persistent cash fence.",
+    "limits": "CI unverified. No approval or lifting of cash fence, no certified physical balance, no posting or production activation. Future approval needs source-backed fresh count, conflict/multiple claim coverage and explicit resolution proof; posting-required case remains unresolved until matching registered source legs.",
+    "next": "Verify exact CI, then implement independent resolution approval and source-linked settlement."
   }
 }
