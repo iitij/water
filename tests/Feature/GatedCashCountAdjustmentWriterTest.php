@@ -8471,6 +8471,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
 
+    public function test_source_detail_fence_preserves_closed_invoice_items_and_pricing(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic detail fence tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-DETAIL-FENCE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $tables = ['invoice_items', 'invoice_tariff_lines'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->where('invoice_id', $invoice->id)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        foreach ($before as $rows) $this->assertNotEmpty($rows);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'FROZEN']);
+        $reject = function (callable $write): void {
+            try {
+                $write();
+                $this->fail('Closed invoice detail write unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial invoice detail is fenced', $error->getMessage());
+            }
+        };
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            if ($state === 'CLOSED') DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+            foreach ($tables as $i => $table) {
+                $row = (array) $before[$i][0];
+                $id = $row['id'];
+                $reject(fn () => DB::table($table)->where('id', $id)->update(['amount' => '99.00']));
+                $reject(fn () => DB::table($table)->where('id', $id)->delete());
+                unset($row['id']);
+                $reject(fn () => DB::table($table)->insert($row));
+            }
+            $this->assertEquals($before, $snapshot());
+        }
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $other = Subscriber::create(['name' => 'Synthetic later invoice owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $otherMeter = \App\Models\Meter::create(['subscriber_id' => $other->id, 'unique_code' => 'QA-DETAIL-FENCE-LATER']);
+        $this->createMeasuredReading(['meter_id' => $otherMeter->id, 'reading_date' => '2026-12-01',
+            'period_start' => '2026-11-30', 'period_end' => '2026-12-01', 'previous_reading' => 0, 'current_reading' => 2]);
+        $newInvoice = $writer->issue($actor, (int) $other->id, (int) $otherMeter->id,
+            '77777777-7777-4777-8777-777777777777', $later)['invoice'];
+        foreach ($tables as $i => $table) {
+            $new = (array) DB::table($table)->where('invoice_id', $newInvoice->id)->first();
+            $this->assertNotEmpty($new);
+            $reject(fn () => DB::table($table)->where('id', $new['id'])->update(['invoice_id' => $invoice->id]));
+            if (DB::getDriverName() === 'sqlite') {
+                $new['id'] = $before[$i][0]->id;
+                $columns = implode(', ', array_keys($new));
+                $params = implode(', ', array_fill(0, count($new), '?'));
+                $reject(fn () => DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$params})", array_values($new)));
+                $reject(fn () => DB::statement("UPDATE OR REPLACE {$table} SET id = ? WHERE invoice_id = ?", [$new['id'], $newInvoice->id]));
+            }
+        }
+        $this->assertEquals($before, $snapshot());
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
