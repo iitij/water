@@ -20,6 +20,22 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
+    private ?Payment $issuingReceipt = null;
+
+    public function allowsReceiptCreation(Payment $payment): bool
+    {
+        return DB::transactionLevel() > 0 && $this->issuingReceipt === $payment && ! $payment->exists;
+    }
+
+    public function allowsReceiptPosting(Payment $payment): bool
+    {
+        return DB::transactionLevel() > 0 && $this->issuingReceipt !== null
+            && $this->issuingReceipt->exists && $this->issuingReceipt->getKey() === $payment->getKey()
+            && (int) $this->issuingReceipt->subscriber_id === (int) $payment->subscriber_id
+            && $this->issuingReceipt->amount === $payment->amount
+            && $this->issuingReceipt->sync_uuid === $payment->sync_uuid;
+    }
+
     /**
      * إعادة توزيع كل السندات الصالحة (غير الملغاة) على الفواتير.
      * السند الملغى يبقى في قاعدة البيانات للأثر، لكنه لا يخصم شيئاً.
@@ -670,7 +686,7 @@ class PaymentService
 
             // 1. إنشاء سجل الدفع
             $issuedAt = now();
-            $payment = Payment::create([
+            $payment = new Payment([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meterId,
                 'invoice_id' => $invoiceId,
@@ -686,19 +702,23 @@ class PaymentService
                 'sync_uuid' => $syncUuid,
             ]);
 
-            // 2. توزيع الدفعة على الفواتير المستحقة
-            $this->distributePayment($payment);
-
-            // 3. تسجيل العملية في دفتر الأستاذ (الـ Ledger) مع تمرير العداد
-            $transactionService = new TransactionService();
-            $transactionService->recordTransaction(
-                subscriber: $subscriber,
-                type: 'payment',
-                amount: $amount, // كامل المبلغ المدفوع
-                description: 'سند قبض رقم ' . $payment->receipt_number,
-                reference: $payment,
-                meter: $meter
-            );
+            if ($this->issuingReceipt !== null) {
+                throw new \DomainException('gated_receipt_model_mutation_scope');
+            }
+            $this->issuingReceipt = $payment;
+            try {
+                if (! $payment->save(['financial_receipt_service' => $this])) {
+                    throw new \RuntimeException('Receipt was not persisted.');
+                }
+                $this->distributePayment($payment);
+                (new TransactionService())->recordTransaction(
+                    subscriber: $subscriber, type: 'payment', amount: $amount,
+                    description: 'سند قبض رقم ' . $payment->receipt_number,
+                    reference: $payment, meter: $meter, receiptService: $this
+                );
+            } finally {
+                $this->issuingReceipt = null;
+            }
 
             // Dispatch WhatsApp Notification (if enabled)
             // Removed: WhatsApp is now click-to-chat
