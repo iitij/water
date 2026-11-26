@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify mixed reserve liquidity c8760d643426569e83f84a1f704c3f44ca93aab0 exact CI; then actual prospective discharge, optional reversal liquidity, Flutter and integrated release checks.",
+  "next": "Verify active held release candidate b4abfd3192101101e1b1beccf419e2c383f60ab0 exact CI. Then sufficient-liquidity restoration, completed-event deficit workflow, outflow/allocator coverage, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2203,12 +2203,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_mixed_reserve_liquidity": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "e45fed2ac356bfadbb22dd5a5369aa3af4fe3856",
     "branch": "release/prospective-mixed-reserve-liquidity",
     "source": "c8760d643426569e83f84a1f704c3f44ca93aab0",
     "scope": "Fix confirmed mixed-reserve preview mismatch: handover surplus separately included in full protection and candidate policy, never released by credit allocation. Report actual and verified shadow protected amounts, margins and deficits separately; retain conservative outflow guard and automatic reinstatement. New gated mixed-source case plus three changed-path regressions per engine.",
-    "limits": "CI pending. Shadow release is not spending authority, nor actual accounting discharge. Handover allocation does not automatically release its reserve. No historical changes, main merge or production activation.",
-    "next": "Verify exact CI; resolve any confirmed failures. Design actual discharge with independent approval, full liquidity evidence, safe treatment of later optional reversals and genuine completed events. Then Flutter, integrated release and production preflight."
+    "limits": "Targeted both engines passed. Conservative reserve remained active; shadow release not authority.",
+    "next": "Test explicit prospective active release marker and optional cancellation liquidity fence.",
+    "run": 45738177797,
+    "jobs": [
+      {
+        "id": 139636396472,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 85,
+        "exit": 0
+      },
+      {
+        "id": 139636396129,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 85,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_active_held_candidate": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c8760d643426569e83f84a1f704c3f44ca93aab0",
+    "branch": "release/prospective-active-held-release",
+    "source": "b4abfd3192101101e1b1beccf419e2c383f60ab0",
+    "scope": "New opt-in recordActiveRelease (default disabled), immutable separately audited active marker, no adoption of prior shadow history, one anchor per credit. Actual reserve subtracts verified active release; gate-only reads/mutations, persistent marker unaffected by switch disable; independent conservative baseline, automatic reinstatement evidence, reject optional allocation changes restoring reserve beyond liquidity. Exact tests: release 10 minor, spend 10010 minor, reject 10011, then reject invoice cancellation atomically; retain two shadow regressions. Preflight checks marker trigger definitions.",
+    "limits": "CI pending, not production-ready. Actual external completed events require separate non-suppressing deficit workflow; held owner payout remains conservative. Only one active release per credit; no UI/API enabled, strict duplicate rejection remains; direct DML principal trusted. Need successful restoration test and coverage of all actual outflow/allocating paths, replay and concurrent execution before production. Verify final candidate only; intermediate 7839a4c not accepted. No historical correction, main merge or production changes.",
+    "next": "Verify final candidate CI; fix confirmed failures, prove successful restoration with sufficient liquidity, distinguish actual external deficit events and test all affected writers. Then Flutter and integrated production checks."
   }
 }
