@@ -1560,6 +1560,79 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    private function assertGroupRenewalRace(bool $differentReviewer, bool $zeroPosting = false): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            $this->markTestSkipped('Independent shared-database connections require the MySQL QA runner.');
+        }
+        $f = $zeroPosting ? $this->batchResolutionControl(0, '1.00', ['no_disbursement', 'cash_returned'])
+            : $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-RACE-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $countId = (int) $new['id'];
+        // The worker proposing the renewal cannot be the later settlement reviewer.
+        $settlementReviewer = $this->actor();
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions',
+            'treasury_postings', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $results = $this->refundResolutionRace($f, $differentReviewer, false, null, $countId);
+        $success = array_values(array_filter($results, fn ($r) => $r['ok']));
+        $this->assertCount($differentReviewer ? 1 : 2, $success, json_encode($results));
+        $this->assertCount(1, array_filter($success, fn ($r) => $r['created']), json_encode($results));
+        if ($differentReviewer) {
+            $rejected = collect($results)->firstWhere('ok', false);
+            $this->assertSame(DomainException::class, $rejected['error'], json_encode($results));
+            $this->assertSame('completed_refund_group_revision_selection', $rejected['message']);
+        }
+        $winner = collect($success)->firstWhere('created', true);
+        foreach ($success as $item) {
+            $this->assertSame($winner['proposal_ids'], $item['proposal_ids']);
+            $this->assertSame($winner['group_hash'], $item['group_hash']);
+        }
+        $revisions = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->orderBy('id')->get();
+        $this->assertCount(2, $revisions);
+        foreach ($revisions as $row) {
+            $p = $row->after;
+            $uuid = $p['operation_uuid'];
+            $this->assertSame($winner['actor'], (int) $row->actor_user_id);
+            $this->assertSame($winner['proposal_ids'][$uuid], (int) $row->id);
+            $this->assertSame($f['proposalIds'][$uuid], $p['supersedes_id']);
+            $this->assertSame($winner['group_hash'], $p['group_revision_hash']);
+            $this->assertSame($countId, $p['count_id']);
+            $this->assertSame($zeroPosting ? 0 : -6, $p['variance_minor']);
+        }
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        \Laravel\Sanctum\Sanctum::actingAs($settlementReviewer);
+        $plan = $service->mixedResolutionReadiness($settlementReviewer, $f['id'], $winner['proposal_ids'], $this->nowAt());
+        $this->assertSame($countId, $plan['count_id']);
+        $this->assertSame($zeroPosting ? 0 : 6, $plan['posting_required_minor']);
+        $this->assertFalse($plan['closure_authorized']);
+        $this->assertFalse($plan['spending_authorized']);
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+    }
+
+    public function test_release_refund_renewal_race_identical_requests_create_one_group(): void
+    {
+        $this->assertGroupRenewalRace(false);
+    }
+
+    public function test_release_refund_renewal_race_competing_proposers_create_one_group(): void
+    {
+        $this->assertGroupRenewalRace(true);
+    }
+
+    public function test_release_refund_renewal_race_zero_posting_creates_one_group(): void
+    {
+        $this->assertGroupRenewalRace(true, true);
+    }
+
     public function test_release_refund_group_renewal_is_atomic_and_requires_new_signed_evidence(): void
     {
         ['f' => $f, 'ids' => $oldIds, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
@@ -1673,6 +1746,33 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(4, AuditEvent::query()->where('event', 'financial.completed_cash_refund_source_attested')->count());
         $this->assertSame(0, DB::table('payment_refunds')->count());
         $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole();
+        $subscriber = Subscriber::findOrFail(Payment::findOrFail($request->after['payment_id'])->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $creditBefore = $ledger->accountBalanceMinor($subscriber);
+        $confirmation = 'Independent verified renewed evidence supports the complete mixed cash settlement';
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $ids, $freshIds, $confirmation, $this->nowAt());
+        $settled = $post();
+        $this->assertTrue($settled['registry_created']);
+        $this->assertSame(6, $settled['batch']['posting_required_minor']);
+        $this->assertSame($creditBefore - 6, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($f['counted'], $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25')));
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $legs = DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+        $this->assertSame([-6, -6], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        $this->assertSame(0, DB::table('financial_posting_operations')->where('operation_uuid', $f['second'])->count());
+        $approval = AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->sole();
+        $binding = json_decode($approval->after['source_binding_json'], true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame($freshIds, array_column($binding['sources'], 'attestation_id', 'operation_uuid'));
+        $this->assertSame($ids, array_column($binding['sources'], 'proposal_id', 'operation_uuid'));
+        $afterSettlement = $snapshot();
+        config(['financial_candidate.refund_source_public_keys' => [], 'financial_candidate.refund_source_archived_public_keys' => []]);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertEquals($afterSettlement, $snapshot());
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
     }
 
     public function test_release_refund_group_renewal_full_posting_uses_aggregate_variance(): void
@@ -2365,7 +2465,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     }
 
     /** MySQL only: independent sessions, observed contention on the same scope lock. */
-    private function refundResolutionRace(array $f, bool $differentReviewer, bool $batch = false, ?array $attestationIds = null): array
+    private function refundResolutionRace(array $f, bool $differentReviewer, bool $batch = false, ?array $attestationIds = null, ?int $renewCountId = null): array
     {
         $this->assertSame('mysql', DB::getDriverName());
         $this->assertSame('water_test', DB::getDatabaseName());
@@ -2397,7 +2497,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                         $wait("$dir/start");
                         touch("$dir/enter-$i");
                         $service = app(\App\Services\CompletedCashRefundRequest::class);
-                        if ($attestationIds !== null) {
+                        if ($renewCountId !== null) {
+                            $result = $service->renewResolutionGroup(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
+                                $renewCountId, self::EVIDENCE, $this->nowAt());
+                        } elseif ($attestationIds !== null) {
                             $result = $service->postMixedResolution(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
                                 $attestationIds, 'Independent verified evidence supports the complete mixed cash settlement', $this->nowAt());
                         } elseif ($batch) {
@@ -2407,7 +2510,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                             $result = $service->postResolution(User::findOrFail($actorId), $f['uuid'],
                                 'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
                         }
-                        $outcome = ['ok' => true, 'created' => $result['registry_created'], 'actor' => $actorId];
+                        $outcome = ['ok' => true, 'created' => $renewCountId !== null ? $result['created'] : $result['registry_created'], 'actor' => $actorId];
+                        if ($renewCountId !== null) $outcome += ['proposal_ids' => $result['proposal_ids'], 'group_hash' => $result['group_revision_hash']];
                     } catch (\Throwable $error) {
                         $outcome = ['ok' => false, 'error' => get_class($error), 'message' => $error->getMessage(), 'actor' => $actorId];
                     }
