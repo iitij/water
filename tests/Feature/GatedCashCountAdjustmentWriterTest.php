@@ -7995,13 +7995,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $reviewer = $this->actor();
         $receipt = app(PaymentService::class)->collectPayment($subscriber, '10.00');
         $entry = DB::table('transactions')->where('reference_type', Payment::class)->where('reference_id', $receipt->id)->sole();
+        // Create the deliberately legacy synthetic refund before registering its receipt.
+        // Once registered, the ordinary refund path must reject; do not weaken that guard.
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
+            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
+        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         app(FinancialWriteGate::class)->withinOpenPeriod('water', '2026-11-24', $this->nowAt(), function (array $context) use ($entry): void {
             $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $entry->id);
             $this->assertTrue(app(FinancialPostingRegistry::class)->record($context, '66666666-6666-4666-8666-666666666666', [$leg], $this->nowAt()));
         });
-        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
-            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
-        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         $refundEntry = DB::table('transactions')->where('reference_type', \App\Models\PaymentRefund::class)->where('reference_id', $refund->id)->sole();
         $this->gate(function (array $context) use ($refundEntry, $posting): void {
             $registry = app(FinancialPostingRegistry::class);
