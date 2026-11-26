@@ -1334,6 +1334,99 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         return compact('f', 'ids', 'keys', 'service');
     }
 
+    public function test_release_refund_mixed_controls_final_audit_failure_rolls_back_posting_and_keeps_both_incidents_open(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions', 'treasury_accounts',
+            'treasury_postings', 'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'treasury_cash_counts', 'treasury_cash_count_reviews'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole();
+        $subscriber = Subscriber::findOrFail(Payment::findOrFail($request->after['payment_id'])->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $beforeCredit = $ledger->accountBalanceMinor($subscriber);
+        $cash = fn () => $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($f['id'], '2026-11-25'));
+        $beforeCash = $cash();
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $f['proposalIds'], $ids,
+            'Independent verified evidence supports the complete mixed cash settlement', $this->nowAt());
+        // Only fail when BOTH exact legs exist, the completed-refund audit
+        // exists, and the nonposting member still has no registered operation.
+        $condition = "NEW.event = 'financial.completed_cash_refund_batch_approved'
+            AND (SELECT COUNT(*) FROM financial_posting_events WHERE operation_uuid = '{$f['uuid']}' AND amount_minor = -6) = 2
+            AND (SELECT COUNT(*) FROM audit_events WHERE event = 'financial.completed_cash_refund') = 1
+            AND NOT EXISTS (SELECT 1 FROM financial_posting_operations WHERE operation_uuid = '{$f['second']}')";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_mixed_final_audit'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_mixed_final_audit'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_mixed_final_audit BEFORE INSERT ON audit_events {$body}");
+        \Illuminate\Support\Facades\Log::spy();
+        try {
+            try {
+                $post();
+                $this->fail('Mixed settlement committed despite final audit failure.');
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
+            }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with(
+                'audit.record_failed', \Mockery::on(static fn ($context) =>
+                    ($context['event'] ?? null) === 'financial.completed_cash_refund_batch_approved'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_mixed_final_audit')))->once();
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame(0, DB::transactionLevel());
+            $this->assertSame($beforeCredit, $ledger->accountBalanceMinor($subscriber->fresh()));
+            $this->assertSame($beforeCash, $cash());
+            $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+            $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+                app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_mixed_final_audit');
+        }
+        $this->assertTrue($post()['registry_created']);
+        $this->assertSame($beforeCredit - 6, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($beforeCash - 6, $cash());
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $this->assertSame(0, DB::table('financial_posting_operations')->where('operation_uuid', $f['second'])->count());
+        $this->assertFalse($post()['registry_created']);
+    }
+
+    public function test_release_refund_mixed_controls_revoked_nonposting_source_blocks_entire_settlement(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->mixedSourceReadiness($f['approver'], $f['id'], $f['proposalIds'], $ids, $this->nowAt());
+        $this->assertTrue($plan['all_source_signatures_revalidated']);
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions', 'treasury_accounts',
+            'treasury_postings', 'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'treasury_cash_counts', 'treasury_cash_count_reviews'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        $post = fn (array $selection) => $service->postMixedResolution($f['approver'], $f['id'], $f['proposalIds'], $selection,
+            'Independent verified evidence supports the complete mixed cash settlement', $this->nowAt());
+        $raw = base64_decode($keys['qa-source-1'], true);
+        config(['financial_candidate.refund_source_public_keys' => ['qa-source-0' => $keys['qa-source-0']],
+            'financial_candidate.refund_source_archived_public_keys' => ['qa-source-1' => [hash('sha256', $raw) => $keys['qa-source-1']]]]);
+        $this->rejects('completed_refund_source_untrusted', fn () => $post($ids));
+        $this->assertEquals($before, $snapshot());
+        config(['financial_candidate.refund_source_public_keys' => $keys]);
+        $this->rejects('completed_refund_mixed_source_selection', fn () => $post([$f['uuid'] => $ids[$f['uuid']]]));
+        $this->rejects('completed_refund_mixed_source_selection', fn () => $post(array_fill_keys(array_keys($ids), $ids[$f['uuid']])));
+        $this->rejects('completed_refund_source_evidence', fn () => $post(array_combine(array_keys($ids), array_reverse(array_values($ids)))));
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+        $this->assertTrue($post($ids)['registry_created']);
+        $this->assertFalse($post($ids)['registry_created']);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $this->assertSame(0, DB::table('financial_posting_operations')->where('operation_uuid', $f['second'])->count());
+    }
+
     public function test_release_refund_mixed_atomic_posts_only_required_member_and_preserves_historical_proof(): void
     {
         ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
