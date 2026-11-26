@@ -1310,6 +1310,160 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
     }
 
+    /** MySQL only: independent sessions, observed contention on the same scope lock. */
+    private function refundResolutionRace(array $f, bool $differentReviewer): array
+    {
+        $this->assertSame('mysql', DB::getDriverName());
+        $this->assertSame('water_test', DB::getDatabaseName());
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertTrue(function_exists('pcntl_fork') && function_exists('posix_kill'));
+        $actors = [(int) $f['approver']->id, (int) ($differentReviewer ? $this->actor()->id : $f['approver']->id)];
+        $dir = sys_get_temp_dir().'/water-refund-race-'.\Illuminate\Support\Str::uuid();
+        mkdir($dir, 0700);
+        $wait = static function (string $path): void {
+            $deadline = microtime(true) + 20;
+            while (! is_file($path)) {
+                if (microtime(true) > $deadline) throw new \RuntimeException('Refund race barrier timed out: '.$path);
+                usleep(1000);
+            }
+        };
+        DB::disconnect();
+        $pids = [];
+        try {
+            foreach ($actors as $i => $actorId) {
+                $pid = pcntl_fork();
+                if ($pid === -1) throw new \RuntimeException('Refund race fork failed');
+                if ($pid === 0) {
+                    DB::purge();
+                    try {
+                        $connection = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+                        DB::statement('SET SESSION innodb_lock_wait_timeout = 15');
+                        \Laravel\Sanctum\Sanctum::actingAs(User::findOrFail($actorId));
+                        file_put_contents("$dir/ready-$i", (string) $connection);
+                        $wait("$dir/start");
+                        touch("$dir/enter-$i");
+                        $result = app(\App\Services\CompletedCashRefundRequest::class)->postResolution(
+                            User::findOrFail($actorId), $f['uuid'],
+                            'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
+                        $outcome = ['ok' => true, 'created' => $result['registry_created'], 'actor' => $actorId];
+                    } catch (\Throwable $error) {
+                        $outcome = ['ok' => false, 'error' => get_class($error), 'message' => $error->getMessage(), 'actor' => $actorId];
+                    }
+                    file_put_contents("$dir/result-$i", json_encode($outcome, JSON_THROW_ON_ERROR));
+                    DB::disconnect();
+                    exit(0);
+                }
+                $pids[] = $pid;
+            }
+            $wait("$dir/ready-0");
+            $wait("$dir/ready-1");
+            $connections = [(int) file_get_contents("$dir/ready-0"), (int) file_get_contents("$dir/ready-1")];
+            DB::purge();
+            $parentId = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+            $this->assertCount(3, array_unique([...$connections, $parentId]));
+            // Hold the exact scope row until BOTH independent workers reach
+            // the actual blocked locking SELECT. No sleep-only race proof.
+            DB::beginTransaction();
+            try {
+                DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                touch("$dir/start");
+                $wait("$dir/enter-0");
+                $wait("$dir/enter-1");
+                $deadline = microtime(true) + 10;
+                do {
+                    $blocked = collect(DB::select('SHOW FULL PROCESSLIST'))->filter(
+                        static fn ($row) => in_array((int) $row->Id, $connections, true)
+                            && str_contains(strtolower((string) $row->Info), 'financial_scopes')
+                            && str_contains(strtolower((string) $row->Info), 'for update')
+                    )->count();
+                    if ($blocked === 2) break;
+                    usleep(10000);
+                } while (microtime(true) < $deadline);
+                $this->assertSame(2, $blocked, 'Both workers must contend on the real financial scope row');
+                $this->assertFileDoesNotExist("$dir/result-0");
+                $this->assertFileDoesNotExist("$dir/result-1");
+            } finally {
+                DB::rollBack();
+            }
+            $deadline = microtime(true) + 45;
+            while ($pids !== []) {
+                foreach ($pids as $key => $pid) {
+                    $joined = pcntl_waitpid($pid, $status, WNOHANG);
+                    if ($joined === $pid) {
+                        unset($pids[$key]);
+                        $this->assertTrue(pcntl_wifexited($status));
+                        $this->assertSame(0, pcntl_wexitstatus($status));
+                    } elseif ($joined === -1) {
+                        unset($pids[$key]);
+                        throw new \RuntimeException('Refund race worker join failed');
+                    }
+                }
+                if ($pids !== [] && microtime(true) > $deadline) throw new \RuntimeException('Refund race worker timeout');
+                usleep(1000);
+            }
+            DB::purge();
+            return [
+                json_decode(file_get_contents("$dir/result-0"), true, 512, JSON_THROW_ON_ERROR),
+                json_decode(file_get_contents("$dir/result-1"), true, 512, JSON_THROW_ON_ERROR),
+            ];
+        } finally {
+            foreach ($pids as $pid) {
+                posix_kill($pid, SIGTERM);
+                pcntl_waitpid($pid, $status);
+            }
+            foreach (glob("$dir/*") as $file) unlink($file);
+            rmdir($dir);
+        }
+    }
+
+    private function assertRefundResolutionRace(bool $differentReviewer): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')->sole();
+        $payment = Payment::findOrFail($request->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $beforeBalance = $ledger->accountBalanceMinor($subscriber);
+        $cash = fn () => $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25'));
+        $beforeCash = $cash();
+        $results = $this->refundResolutionRace($f, $differentReviewer);
+        $success = array_values(array_filter($results, fn ($r) => $r['ok']));
+        $this->assertCount($differentReviewer ? 1 : 2, $success, json_encode($results));
+        $this->assertCount(1, array_filter($success, fn ($r) => $r['created']), json_encode($results));
+        if ($differentReviewer) {
+            $rejected = collect($results)->firstWhere('ok', false);
+            $this->assertSame(DomainException::class, $rejected['error'], json_encode($results));
+            $this->assertSame('completed_refund_resolution_conflict', $rejected['message']);
+        }
+        $winner = collect($success)->firstWhere('created', true);
+        $this->assertSame($beforeBalance - 6, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($beforeCash - 6, $cash());
+        $this->assertSame(1, DB::table('payment_refunds')->where('disbursement_reference', $f['data']['reference'])->count());
+        $this->assertSame(1, DB::table('financial_posting_operations')->where('operation_uuid', $f['uuid'])->count());
+        $legs = DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+        $this->assertSame([-6, -6], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        $approval = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->sole();
+        $this->assertSame($winner['actor'], (int) $approval->actor_user_id);
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund')->count());
+        $liquidity = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($f['id']));
+        $this->assertSame(0, $liquidity['unresolved_refund_incident_count']);
+        \Laravel\Sanctum\Sanctum::actingAs(User::findOrFail($winner['actor']));
+        $this->getJson($f['root'].$f['uuid'])->assertOk()->assertJsonPath('status', 'rejected')
+            ->assertJsonPath('completion_verified', true)->assertJsonPath('incident_unresolved', false);
+    }
+
+    public function test_release_refund_concurrency_identical_retries_commit_once(): void
+    {
+        $this->assertRefundResolutionRace(false);
+    }
+
+    public function test_release_refund_concurrency_competing_reviewers_commit_once(): void
+    {
+        $this->assertRefundResolutionRace(true);
+    }
+
     public function test_release_refund_atomic_resolution_rollback_after_both_legs_before_approval(): void
     {
         $f = $this->resolutionControl('posting_required', -6);
