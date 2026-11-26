@@ -1310,6 +1310,53 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
     }
 
+    public function test_release_refund_atomic_resolution_posts_exact_two_legs_once(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $endpoint = $f['root'].$f['uuid'].'/resolution-post';
+        $input = ['confirmation' => 'Independent proof confirms the original cash refund was disbursed'];
+        $payment = Payment::query()->findOrFail(AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')->sole()->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $before = $ledger->accountBalanceMinor($subscriber);
+        $cash = $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($f['id'], '2026-11-25'));
+        \Laravel\Sanctum\Sanctum::actingAs($f['requester']);
+        $this->postJson($endpoint, $input)->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->postJson($endpoint, $input + ['amount' => '0.05'])->assertUnprocessable();
+        $this->postJson($f['root'].$f['uuid'].'/approve', $input)->assertConflict();
+        $this->postJson($endpoint, $input)->assertOk()->assertJsonPath('registry_created', true)
+            ->assertJsonPath('current_active_release_liquidity.unresolved_refund_incident_count', 0);
+        $this->assertSame($before - 6, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($cash - 6, $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($f['id'], '2026-11-25')));
+        $this->assertSame(1, DB::table('payment_refunds')->where('disbursement_reference', $f['data']['reference'])->count());
+        $legs = DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->get();
+        $this->assertCount(2, $legs);
+        $this->assertSame([-6, -6], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        $this->assertEqualsCanonicalizing(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+        $this->getJson($f['root'].$f['uuid'])->assertOk()->assertJsonPath('status', 'rejected')
+            ->assertJsonPath('incident_unresolved', false)->assertJsonPath('completion_verified', true)
+            ->assertJsonPath('resolution.financial_posting_created', true);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $after = $snapshot();
+        $this->postJson($endpoint, $input)->assertOk()->assertJsonPath('registry_created', false);
+        $this->postJson($endpoint, ['confirmation' => self::EVIDENCE])->assertConflict();
+        $this->assertEquals($after, $snapshot());
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+    }
+
+    public function test_release_refund_atomic_resolution_refuses_wrong_shortage(): void
+    {
+        $f = $this->resolutionControl('posting_required', -5);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->postJson($f['root'].$f['uuid'].'/resolution-post', [
+            'confirmation' => 'Independent proof confirms the original cash refund was disbursed',
+        ])->assertConflict();
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_evidence');
+    }
+
     public function test_release_refund_posting_readiness_exact_shortage_does_not_post(): void
     {
         $f = $this->resolutionControl('posting_required', -6);

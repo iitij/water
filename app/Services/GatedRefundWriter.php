@@ -59,13 +59,24 @@ final class GatedRefundWriter
             $reason, $evidence, $uuid, $now, $reviewer, $confirmation);
     }
 
+    public function recordResolvedCashRefund(User $actor, User $reviewer, array $intent,
+        string $confirmation, DateTimeImmutable $now): array
+    {
+        $confirmation = trim($confirmation);
+        $this->need(mb_strlen($confirmation) >= 20 && mb_strlen($confirmation) <= 2000,
+            'completed_cash_refund_confirmation');
+        return $this->execute($actor, $intent['payment_id'], $intent['account_id'], $intent['amount'],
+            $intent['reference'], 'treasury_cash', $intent['date'], $intent['reason'], $intent['evidence'],
+            $intent['operation_uuid'], $now, $reviewer, $confirmation, true);
+    }
+
     private function execute(User $actor, int $paymentId, int $accountId, string $amount,
         string $reference, string $method, string $date, string $reason, string $evidence,
-        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation): array
+        string $uuid, DateTimeImmutable $now, ?User $reviewer, ?string $confirmation, bool $resolution = false): array
     {
         $reference = mb_strtoupper(trim($reference));
         return $this->gate->withinOpenPeriod('water', $date, $now,
-            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation): array {
+            function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution): array {
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
@@ -94,6 +105,8 @@ final class GatedRefundWriter
                 $operation = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
                 $replay = $existing !== null;
                 $this->need($replay === ($operation !== null), 'gated_refund_operation_conflict');
+                $resolutionPlan = null;
+                $intent = null;
                 if ($reviewer !== null) {
                     $this->need(app(FinancialApprovalAuditProtection::class)->active(), 'financial_approval_audit_protection_missing');
                     $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
@@ -114,8 +127,14 @@ final class GatedRefundWriter
                         $this->need(config('financial_candidate.completed_cash_refund') === true,
                             'completed_cash_refund_disabled');
                     }
-                    app(CompletedCashRefundRequest::class)->verifyLocked(CompletedCashRefundRequest::intent(
-                        $paymentId, $accountId, $amount, $reference, $date, $reason, $evidence, $uuid, (int) $actor->id));
+                    $intent = CompletedCashRefundRequest::intent(
+                        $paymentId, $accountId, $amount, $reference, $date, $reason, $evidence, $uuid, (int) $actor->id);
+                    if ($resolution) {
+                        $resolutionPlan = app(CompletedCashRefundRequest::class)->verifyPostingResolutionLocked(
+                            $intent, $reviewer, $confirmation, $replay);
+                    } else {
+                        app(CompletedCashRefundRequest::class)->verifyLocked($intent);
+                    }
                 } elseif (! $replay) {
                     app(CompletedCashRefundRequest::class)->assertUnreserved($uuid, $reference);
                 }
@@ -168,6 +187,10 @@ final class GatedRefundWriter
                             'source' => 'internal']);
                     }
                     $this->verifyCompletedEvidence($refund, (int) $posting['id'], $accountId, $uuid, $reviewer, $confirmation);
+                    if ($resolution && $created) {
+                        $this->need(is_array($resolutionPlan), 'completed_refund_resolution_conflict');
+                        app(CompletedCashRefundRequest::class)->completePostingResolutionLocked($intent, $reviewer, $resolutionPlan);
+                    }
                     $result['current_active_release_liquidity'] = app(ActiveHeldCashRelease::class)->currentLiquidity($accountId);
                 }
                 return $result;
