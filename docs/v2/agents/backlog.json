@@ -1767,6 +1767,18 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/40",
  "evidence": "مراجعة مستقلة كشفت بقايا محلية ومشكلات دفعات وتزامن/DDL واختبار صور فعلي؛ انظر #40 والتقرير. لا تؤشَّر كمكتملة قبل نجاح جميع اختبارات القبول."
+},
+{
+ "id": "WATER-G1B-BANK-PERIOD-EVIDENCE",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة أرصدة كشوف البنك لنهاية الفترة مع الحركات المسجلة",
+ "files": "app/Services/FinancialSettlementCoverageDiagnostic.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اعتماد بيانات كشوف متصلة ومطابقة للحركات المسجلة في الفترة المنتهية. الفحص مخصص لأدلة البنك ضمن التشخيص الداخلي. راجع نتائج SQLite وMySQL 8 على SHA مرشح الفرع."
 }
 ]
 }
