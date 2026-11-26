@@ -26,6 +26,7 @@ final class FinancialCloseEvidenceDiagnostic
         private FinancialOpeningContinuityDiagnostic $continuity,
         private CompletedCashRefundRequest $refunds,
         private HeldCashReservation $reservation,
+        private FinancialPeriodMovementDiagnostic $movements,
     ) {}
 
     public function inspect(User $actor, int $periodId, DateTimeImmutable $now): array
@@ -61,6 +62,7 @@ final class FinancialCloseEvidenceDiagnostic
                 ? (new DateTimeImmutable($period->next_on, new DateTimeZone('Asia/Aden')))->modify('-1 day')->format('Y-m-d')
                 : $today;
             $source = $this->sources->inspect($periodId);
+            $movement = $this->movements->inspect($periodId);
             $settlement = $this->settlements->inspect($actor, $periodId, $through);
             $incident = $this->refundIncidents();
             $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -76,6 +78,7 @@ final class FinancialCloseEvidenceDiagnostic
                 'trusted_close_proof_not_bound'];
             if (! $ended) $blockers[] = 'period_not_ended';
             if (! $source['scanned_sources_match']) $blockers[] = 'document_registry_mismatch';
+            if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
             if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
             if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
             if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
@@ -87,7 +90,7 @@ final class FinancialCloseEvidenceDiagnostic
             sort($blockers, SORT_STRING);
             return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
                 'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
-                'source' => $source, 'settlement' => $settlement, 'refund_incidents' => $incident,
+                'source' => $source, 'movements' => $movement, 'settlement' => $settlement, 'refund_incidents' => $incident,
                 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
                 'blockers' => $blockers, 'source_coverage_verified' => false,
                 'period_end_balances_verified' => false, 'closure_authorized' => false];
