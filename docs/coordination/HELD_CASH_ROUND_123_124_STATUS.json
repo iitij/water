@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact liquidity disclosure CI edbbe9a487c6a3f9e450603c5aada651ec04320d; then independent incident resolution, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify targeted diagnostic retry df418a1d9dd96cff9cc818779529f7cf531c2c8f. Preserve successful lifecycle cases. Then independently reviewed incident resolution, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2456,12 +2456,39 @@
     ]
   },
   "release_refund_incident_liquidity": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_CASE_PASS_GUARD_DIAGNOSTIC_FAILURE",
     "base": "a568f587c75e8963d5fe717a5cbafad021a3fb11",
     "branch": "release/prospective-refund-incident-liquidity",
     "source": "edbbe9a487c6a3f9e450603c5aada651ec04320d",
     "scope": "Account-specific count and exact claimed minor total of unresolved factual refund requests, distinct from recorded cash and liability balances. Preserve existing source-leg proof before excluding posted requests. Zero candidate additional release and available ordinary outflow while unresolved; disclose in active liquidity and shadow journal. Extend affected lifecycle and completed refund tests, including no double counting and existing factual shortfall.",
-    "limits": "CI unverified. No independently reviewed correction workflow, global writer coverage, user-facing UI, closure proof or production activation. Claimed amount is not a certified physical cash shortage.",
-    "next": "Verify exact CI, then independently reviewed incident resolution and account isolation/affected writers/concurrency."
+    "limits": "Both engines passed lifecycle case and failed completed refund case at line 1521: missing approval trigger correctly blocks but diagnostic was completed_cash_refund_incident_unresolved instead of financial_approval_audit_protection_missing. Preserve successful lifecycle case; retry only affected case. No production activation.",
+    "next": "Verify exact CI, then independently reviewed incident resolution and account isolation/affected writers/concurrency.",
+    "run": 45743717227,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139654615811,
+        "tests": 2,
+        "assertions": 157,
+        "failures": 1,
+        "exit": 1
+      },
+      {
+        "engine": "mysql",
+        "id": 139654615537,
+        "tests": 2,
+        "assertions": 156,
+        "failures": 1,
+        "exit": 1
+      }
+    ]
+  },
+  "release_refund_incident_liquidity_retry": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "edbbe9a487c6a3f9e450603c5aada651ec04320d",
+    "branch": "release/prospective-refund-incident-liquidity",
+    "source": "df418a1d9dd96cff9cc818779529f7cf531c2c8f",
+    "scope": "Separate exact transaction context and missing approval audit protection diagnostic; unchanged fail-closed condition. CI filter retries only affected completed refund test on both engines.",
+    "next": "Verify exact retry, then independently reviewed incident resolution."
   }
 }
