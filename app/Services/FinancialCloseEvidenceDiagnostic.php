@@ -27,6 +27,7 @@ final class FinancialCloseEvidenceDiagnostic
         private CompletedCashRefundRequest $refunds,
         private HeldCashReservation $reservation,
         private FinancialPeriodMovementDiagnostic $movements,
+        private FinancialHeldLiabilityPeriodDiagnostic $heldPeriod,
     ) {}
 
     public function inspect(User $actor, int $periodId, DateTimeImmutable $now): array
@@ -63,6 +64,7 @@ final class FinancialCloseEvidenceDiagnostic
                 : $today;
             $source = $this->sources->inspect($periodId);
             $movement = $this->movements->inspect($periodId);
+            $heldPeriod = $this->heldPeriod->inspect($periodId);
             $settlement = $this->settlements->inspect($actor, $periodId, $through);
             $incident = $this->refundIncidents();
             $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -90,7 +92,7 @@ final class FinancialCloseEvidenceDiagnostic
             sort($blockers, SORT_STRING);
             return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
                 'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
-                'source' => $source, 'movements' => $movement, 'settlement' => $settlement, 'refund_incidents' => $incident,
+                'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident,
                 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
                 'blockers' => $blockers, 'source_coverage_verified' => false,
                 'period_end_balances_verified' => false, 'closure_authorized' => false];
