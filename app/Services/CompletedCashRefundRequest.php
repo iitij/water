@@ -259,9 +259,17 @@ final class CompletedCashRefundRequest
                 if ($existing->count() > 1) throw new DomainException('completed_refund_resolution_conflict');
                 if ($existing->isNotEmpty()) {
                     $old = $existing->first();
+                    $actual = $old->after;
                     if ((int) $old->actor_user_id !== (int) $actor->id || $old->entity_type !== 'completed_cash_refund_request'
-                        || $old->source !== 'internal' || ! is_array($old->after) || $old->after !== $proof) {
+                        || $old->source !== 'internal' || ! is_array($actual) || count($actual) !== count($proof)) {
                         throw new DomainException('completed_refund_resolution_conflict');
+                    }
+                    // MySQL JSON storage may reorder object keys. Keep strict
+                    // field identity and type checks independent of key order.
+                    foreach ($proof as $key => $value) {
+                        if (! array_key_exists($key, $actual) || $actual[$key] !== $value) {
+                            throw new DomainException('completed_refund_resolution_conflict');
+                        }
                     }
                     return ['created' => false, 'resolution_proposal' => $proof, 'incident_unresolved' => true];
                 }

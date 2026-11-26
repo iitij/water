@@ -1296,6 +1296,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ->assertJsonPath('incident_unresolved', true)->assertJsonPath('resolution_proposal.count_id', (int) $count['id']);
         $this->postJson($endpoint, $input)->assertOk()->assertJsonPath('created', false);
         $this->postJson($endpoint, array_replace($input, ['classification' => 'cash_returned']))->assertConflict();
+        $this->postJson($endpoint, array_replace($input, ['evidence' => self::EVIDENCE.' changed']))->assertConflict();
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->count());
         $this->assertEquals($before, $snapshot());
         $audit = DB::table('audit_events')->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
         foreach ([fn () => DB::table('audit_events')->where('id', $audit->id)->update(['after' => '{}']),
