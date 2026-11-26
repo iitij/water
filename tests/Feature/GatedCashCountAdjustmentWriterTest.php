@@ -9252,6 +9252,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_approved_custody_period_partial_receipts_bridge_local_months_and_reject_unregistered_cash(): void
+    {
+        [$issuer, $reviewer, $account] = $this->fixture();
+        $accountId = (int) $account['id'];
+        $session = app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $issuer, $accountId,
+            '10.25', 'QA-CUSTODY-PERIOD-FUND', self::EVIDENCE, self::OTHER, $this->nowAt())['session'];
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($session, '10.25'), true, $reviewer);
+        $writer = app(\App\Services\GatedCashHandoverWriter::class);
+        $writer->receive($reviewer, $session->id, $accountId, '2.00', 'QA-CUSTODY-PART-1',
+            '2026-11-25', self::EVIDENCE, self::ADJUST, $this->nowAt());
+        $december = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $midnight = new DateTimeImmutable('2026-11-30T21:00:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($midnight));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $november = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn (int $id) => app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $id, now()->toDateTimeImmutable());
+        $nov = $inspect($november)['approved_counted_custody_period'];
+        $this->assertSame([], $nov['issues']);
+        $this->assertSame(['opening_minor' => 0, 'approved_minor' => 1025,
+            'handed_over_minor' => 200, 'closing_minor' => 825], $nov['totals']);
+        $this->assertSame((string) $session->id, $nov['rows'][0]['session_id']);
+        $this->assertSame(self::ADJUST, $nov['rows'][0]['receipts'][0]['operation_uuid']);
+        $writer->receive($reviewer, $session->id, $accountId, '3.25', 'QA-CUSTODY-PART-2',
+            '2026-12-01', self::EVIDENCE, self::NEXT, $midnight);
+        $this->assertSame($nov, $inspect($november)['approved_counted_custody_period']);
+        $this->assertNull($inspect($december)['approved_counted_custody_period']);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $dec = $inspect($december);
+        $this->assertSame([], $dec['approved_counted_custody_period']['issues']);
+        $this->assertSame(['opening_minor' => 825, 'approved_minor' => 0,
+            'handed_over_minor' => 325, 'closing_minor' => 500], $dec['approved_counted_custody_period']['totals']);
+        $this->assertFalse($dec['closure_authorized']);
+
+        app(\App\Services\CashHandoverService::class)->record($session, $reviewer, '1.00',
+            'QA-CUSTODY-UNREGISTERED', '2026-12-02', self::EVIDENCE);
+        $unmatched = $inspect($december);
+        $this->assertContains('approved_custody_period_unmatched', $unmatched['blockers']);
+        $report = $unmatched['approved_counted_custody_period'];
+        $this->assertFalse($report['matched']);
+        $this->assertSame('gated_handover_prior_unregistered', $report['issues'][0]['code']);
+        $this->assertNull($report['totals']);
+        $this->assertSame([], $report['rows']);
+        $this->assertSame($nov, $inspect($november)['approved_counted_custody_period']);
+    }
+
     public function test_custody_period_funding_and_handover_use_aden_date_after_utc_cutoff(): void
     {
         $issuer = $this->actor();

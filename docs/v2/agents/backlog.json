@@ -1815,6 +1815,18 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/iitij/water/issues/57",
  "evidence": "تظل الطوابع الزمنية محفوظة بصيغة UTC. تُحسب تواريخ بدء العهدة والتمويل والاستلام وترحيل العكس حسب يوم عدن. راجع تشغيل SQLite وMySQL 8 على SHA المرشح."
+},
+{
+ "id": "WATER-G1B-APPROVED-CUSTODY-PERIOD",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "إثبات الرصيد المتبقي من النقد المعدود المعتمد وتسليماته عبر حدود الفترة",
+ "files": "app/Services/GatedCashHandoverWriter.php; app/Services/FinancialCloseEvidenceDiagnostic.php; app/Services/FinancialApprovedCustodyPeriodDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "رصد مستقل لكل جلسة عند تاريخ الاعتماد ومطابقة تسليماتها الجزئية قبل القطع مع سجل الترحيل."
 }
 ]
 }

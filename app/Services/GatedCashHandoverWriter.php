@@ -134,11 +134,9 @@ final class GatedCashHandoverWriter
                     'gated_handover_surplus_requires_full_count');
             }
             foreach (CashHandover::query()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get() as $prior) {
-                $posted = DB::table('treasury_postings')->where('cash_handover_id', $prior->id)->lockForUpdate()->first();
-                $this->need($posted !== null, 'gated_handover_prior_unregistered');
-                $priorOp = $this->registered($this->custody->leg((int) $posted->id), $prior->received_on->toDateString());
+                $receipt = $this->verifiedReceipt($prior);
                 if ($existing !== null && (int) $prior->id === (int) $existing->id) {
-                    $this->need($priorOp->operation_uuid === $uuid && (int) $posted->posted_by === (int) $actor->id,
+                    $this->need($receipt['operation_uuid'] === $uuid && $receipt['posted_by'] === (int) $actor->id,
                         'gated_handover_operation_conflict');
                 }
             }
@@ -187,6 +185,20 @@ final class GatedCashHandoverWriter
         return DB::transactionLevel() > 0 && $this->mutationIdentity === [
             (int) $handover->cash_session_id, $handover->reference, $accountId, $actorId,
         ] && (int) $handover->received_by === $actorId;
+    }
+
+    /** Re-derive a handover from its treasury posting and verified operation inside the caller's gate. */
+    public function verifiedReceipt(CashHandover $handover): array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $posted = DB::table('treasury_postings')->where('cash_handover_id', $handover->id)->lockForUpdate()->first();
+        $this->need($posted !== null, 'gated_handover_prior_unregistered');
+        $leg = $this->custody->leg((int) $posted->id);
+        $operation = $this->registered($leg, $handover->received_on->toDateString());
+
+        return ['handover_id' => (string) $handover->id, 'posting_id' => (string) $posted->id,
+            'posted_by' => (int) $posted->posted_by, 'operation_uuid' => $operation->operation_uuid,
+            'received_on' => $posted->effective_on, 'amount_minor' => $leg['amount_minor']];
     }
 
     private function registered(array $leg, string $date): object

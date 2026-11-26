@@ -1,4 +1,4 @@
-name: Financial custody local-day evidence
+name: Financial approved custody period evidence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-custody-local-day'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-approved-custody'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,11 +39,11 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify local custody cutoff and affected close evidence
+      - name: Verify approved custody across period boundaries
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_custody_period_funding_and_handover_|test_round138_|test_round141_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_approved_custody_period_|test_custody_period_funding_and_handover_|test_round137_handover_|test_release_shortage_handover_|test_release_surplus_handover_|test_round141_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-custody-local-day'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-approved-custody'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify local custody cutoff and affected close evidence
+      - name: Verify approved custody across period boundaries
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_custody_period_funding_and_handover_|test_round138_|test_round141_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_approved_custody_period_|test_custody_period_funding_and_handover_|test_round137_handover_|test_release_shortage_handover_|test_release_surplus_handover_|test_round141_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
