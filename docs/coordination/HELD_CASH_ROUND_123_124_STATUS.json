@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify active release reinstatement 63a1fae982d974595f886f2002f86cf408d1632b exact CI. Continue completed-event deficit workflow, refund in-flight identity, affected writers, Flutter and production checks.",
+  "next": "Verify active cash loss and recovery f38a3af812fa94ec1084d7eaaaea111a1a7c7dc5 exact CI; continue completed refund evidence, affected writers and production readiness.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2257,12 +2257,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_active_reinstatement": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "b4abfd3192101101e1b1beccf419e2c383f60ab0",
     "branch": "release/prospective-active-release-reinstatement",
     "source": "63a1fae982d974595f886f2002f86cf408d1632b",
     "scope": "Exact approval replay (actor, proposal, account, UUID and evidence), including disabled new-release switch and after restoration; forbid shadow promotion; detect orphan activation audit before reserve reads; preserve canonical response. New sufficient-liquidity case transfers 10000 minor, restores 10 minor at zero remaining margin, verifies one reversal/reinstatement and unchanged treasury postings, replay and denied further outflow. Two changed-path regressions per engine.",
-    "limits": "CI pending. No actual completed-event deficit handling, full outflow/allocator coverage, concurrent test, multi-anchor or UI/API yet. No production changes. Intermediate candidate 12e31cb not accepted.",
-    "next": "Verify exact final CI; handle external factual cash loss/refund without suppressing evidence, review in-flight refund exclusion and completed-event deficit policy; validate all outflows and allocators, Flutter and production."
+    "limits": "Sufficient-liquidity restoration, replay and insufficient-liquidity rollback passed. Candidate only; no production changes.",
+    "next": "Verify actual cash loss after active release, exact deficit and actual receipt recovery.",
+    "run": 45739090703,
+    "jobs": [
+      {
+        "id": 139639388472,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 80,
+        "exit": 0
+      },
+      {
+        "id": 139639388236,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 80,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_active_cash_loss": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "63a1fae982d974595f886f2002f86cf408d1632b",
+    "branch": "release/prospective-active-release-cash-loss",
+    "source": "f38a3af812fa94ec1084d7eaaaea111a1a7c7dc5",
+    "scope": "Derive current active reserve liquidity after a source-backed gated cash count adjustment, distinguishing actual and conservative reserve. Test two independently reviewed physical losses with deficit 5 then 6 minor, exact replay, denied outflow, unchanged subscriber balance, no premature recovery in transit, verified incoming 7 minor restores margin 1. Two relevant factual-loss regressions per engine.",
+    "limits": "CI pending. Existing treasury register overview remains conservative, new current active liquidity report limited to gated service. Factual cash loss path only; completed refunds and in-flight refund identity, all writer coverage, concurrency, multiple anchors, UI/API, Flutter and production remain. Source evidence failures still reject posting; count/review remain evidence. No historical corrections or production changes.",
+    "next": "Verify exact CI, then address in-flight refund identity and completed-event deficit workflow; review all outgoing and allocating writers."
   }
 }
