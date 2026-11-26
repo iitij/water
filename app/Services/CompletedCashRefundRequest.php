@@ -405,6 +405,7 @@ final class CompletedCashRefundRequest
                     $members[$uuid] = [$request, $closed, $classification, $previous];
                 }
                 if ($total !== $unresolved['claimed_minor']) throw new DomainException($fail);
+                $this->verifyGroupRevisionMembership($accountId, $priorCount, $predecessors, ! $replay);
                 // Validate the new count and make sure it cannot be used twice.
                 $this->assertCountUnusedByBatch($countId);
                 foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
@@ -439,6 +440,7 @@ final class CompletedCashRefundRequest
                     if ($result['created'] === $replay) throw new DomainException($fail);
                     $ids[$uuid] = $result['proposal_id'];
                 }
+                $this->verifyGroupRevisionMembership($accountId, $countId, $ids, true);
                 return ['created' => ! $replay, 'proposal_ids' => $ids, 'count_id' => $countId,
                     'total_claimed_minor' => $total, 'posting_required_minor' => $posting, 'group_revision_hash' => $groupHash,
                     'incident_unresolved' => true, 'financial_posting_created' => false,
@@ -655,6 +657,7 @@ final class CompletedCashRefundRequest
         if ($shared === null || $allocated !== $total) {
             throw new DomainException('completed_refund_batch_incomplete');
         }
+        $this->verifyGroupRevisionMembership($accountId, $shared['count_id'], $proposalIds, true);
         foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
             if (($approval->after['count_id'] ?? null) === $shared['count_id']) {
                 throw new DomainException('completed_refund_resolution_count_reused');
@@ -878,6 +881,7 @@ final class CompletedCashRefundRequest
         if ($shared === null || $allocated !== $total) {
             throw new DomainException('completed_refund_batch_incomplete');
         }
+        $this->verifyGroupRevisionMembership($accountId, $shared['count_id'], $proposalIds, true);
         foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
             if (($approval->after['count_id'] ?? null) === $shared['count_id']) {
                 throw new DomainException('completed_refund_resolution_count_reused');
@@ -1060,6 +1064,7 @@ final class CompletedCashRefundRequest
             || count(array_unique(array_values($ids))) !== count($ids)) {
             throw new DomainException($fail);
         }
+        $this->verifyGroupRevisionMembership($p['account_id'], $countId, $ids, true);
         $total = 0;
         foreach ($ids as $uuid => $proposalId) {
             $member = $this->find($uuid, true);
@@ -1151,6 +1156,7 @@ final class CompletedCashRefundRequest
             || ! is_array($binding) || ! is_array($binding['sources'] ?? null) || count($binding['sources']) !== count($ids)) {
             throw new DomainException($fail);
         }
+        $this->verifyGroupRevisionMembership($p['account_id'], $countId, $ids, true);
         $reviewer = User::query()->lockForUpdate()->findOrFail($group->actor_user_id);
         $total = $postingTotal = 0;
         $evidence = [];
@@ -1757,6 +1763,10 @@ final class CompletedCashRefundRequest
             || ($q['operation_uuid'] ?? null) !== $uuid || ($q['account_id'] ?? null) !== $p['account_id']
             || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
             || ($q['reference'] ?? null) !== $p['reference']) throw new DomainException('completed_refund_document_conflict');
+        $groupIds = $this->verifyGroupRevisionMembership($p['account_id'], $q['count_id'], null, ! $historical);
+        if ($groupIds !== [] && ($groupIds[$uuid] ?? null) !== (int) $proposal->id) {
+            throw new DomainException('completed_refund_group_revision_evidence');
+        }
         $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
         $count = DB::table('treasury_cash_counts')->where('id', $q['count_id'])->lockForUpdate()->first();
         $review = DB::table('treasury_cash_count_reviews')->where('id', $q['review_id'])->lockForUpdate()->first();
@@ -1829,6 +1839,111 @@ final class CompletedCashRefundRequest
         return $chain;
     }
 
+    /**
+     * Reconstruct a renewal's complete immutable membership from the count-keyed
+     * revision rows and exact predecessor chains. Never trust matching hashes
+     * alone. Initial proposals and an ordinary single-claim revision retain
+     * their original format. Historical reconstruction does not require a fresh
+     * count, current keys, or the absence of a later valid revision.
+     */
+    private function verifyGroupRevisionMembership(int $accountId, int $countId, ?array $selection = null,
+        bool $requireCurrent = false): array
+    {
+        $fail = 'completed_refund_group_revision_evidence';
+        if (DB::transactionLevel() <= 0 || $accountId <= 0 || $countId <= 0) throw new DomainException($fail);
+        $rows = AuditEvent::query()->where('event', self::RESOLUTION_REVISED)
+            ->where('entity_id', 'like', '%:'.$countId)->orderBy('id')->lockForUpdate()->get();
+        if ($rows->isEmpty()) return [];
+        $grouped = $rows->filter(fn (AuditEvent $row) => is_array($row->after)
+            && array_key_exists('group_revision_hash', $row->after));
+        if ($grouped->isEmpty() && $rows->count() === 1) {
+            $row = $rows->first();
+            $q = $row->after;
+            if (! is_array($q) || ($q['account_id'] ?? null) !== $accountId
+                || ($q['count_id'] ?? null) !== $countId || ! is_string($q['operation_uuid'] ?? null)
+                || $row->entity_id !== $q['operation_uuid'].':'.$countId
+                || ($selection !== null && $selection !== [$q['operation_uuid'] => (int) $row->id])) {
+                throw new DomainException($fail);
+            }
+            return [];
+        }
+        if ($rows->count() < 2 || $rows->count() > 50 || $grouped->count() !== $rows->count()) {
+            throw new DomainException($fail);
+        }
+        $binding = null;
+        $priorCount = null;
+        $hash = null;
+        $predecessors = $ids = [];
+        $total = $posting = 0;
+        foreach ($rows as $row) {
+            $q = $row->after;
+            if (! is_array($q) || ! is_string($q['operation_uuid'] ?? null)
+                || ! preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $q['operation_uuid'])
+                || ($q['account_id'] ?? null) !== $accountId || ($q['count_id'] ?? null) !== $countId
+                || ! is_string($q['group_revision_hash'] ?? null)
+                || ! preg_match('/\A[0-9a-f]{64}\z/', $q['group_revision_hash'])
+                || ! is_string($q['proposed_on'] ?? null) || ! is_string($q['evidence'] ?? null)
+                || mb_strlen(trim($q['evidence'])) < 20 || mb_strlen($q['evidence']) > 2000
+                || ! in_array($q['classification'] ?? null, ['posting_required', 'cash_returned', 'no_disbursement'], true)
+                || $row->entity_type !== 'completed_cash_refund_request' || $row->source !== 'internal'
+                || (int) $row->actor_user_id <= 0) throw new DomainException($fail);
+            $uuid = $q['operation_uuid'];
+            if (isset($ids[$uuid]) || $row->entity_id !== $uuid.':'.$countId) throw new DomainException($fail);
+            $request = $this->find($uuid, true);
+            if ($request === null) throw new DomainException($fail);
+            $p = $request->after;
+            if (($p['account_id'] ?? null) !== $accountId || ($p['date'] ?? null) !== $q['proposed_on']
+                || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
+                || ($q['reference'] ?? null) !== $p['reference'] || ($q['incident_unresolved'] ?? null) !== true) {
+                throw new DomainException($fail);
+            }
+            $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
+                $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $request->actor_user_id));
+            $closed = $this->decision($request);
+            if ($closed === null) throw new DomainException($fail);
+            $chain = $this->proposalChain($request, $closed);
+            $previous = null;
+            foreach ($chain as $i => $entry) {
+                if ((int) $entry->id === (int) $row->id && $i > 0) {
+                    $previous = $chain[$i - 1];
+                    break;
+                }
+            }
+            if ($previous === null || ($requireCurrent && (int) end($chain)->id !== (int) $row->id)
+                || ($previous->after['classification'] ?? null) !== $q['classification']
+                || ! is_int($previous->after['count_id'] ?? null)
+                || ($priorCount !== null && $priorCount !== $previous->after['count_id'])) {
+                throw new DomainException($fail);
+            }
+            $priorCount = $previous->after['count_id'];
+            $header = ['version' => 1, 'account_id' => $accountId, 'count_id' => $countId,
+                'actor_id' => (int) $row->actor_user_id, 'date' => $q['proposed_on'], 'evidence' => $q['evidence']];
+            if (($binding !== null && $binding !== $header) || ($hash !== null && $hash !== $q['group_revision_hash'])) {
+                throw new DomainException($fail);
+            }
+            $binding = $header;
+            $hash = $q['group_revision_hash'];
+            $predecessors[$uuid] = ['id' => (int) $previous->id,
+                'hash' => $this->proposalHash($previous->after), 'classification' => $q['classification']];
+            $ids[$uuid] = (int) $row->id;
+            $minor = FinancialAmount::parse($p['amount'])->minor;
+            $total = \App\Support\SignedMinor::add($total, $minor);
+            if ($q['classification'] === 'posting_required') $posting = \App\Support\SignedMinor::add($posting, $minor);
+        }
+        ksort($predecessors);
+        ksort($ids);
+        if ($selection !== null) {
+            ksort($selection);
+            if ($selection !== $ids) throw new DomainException($fail);
+        }
+        $binding += ['total_claimed_minor' => $total, 'posting_required_minor' => $posting, 'predecessors' => $predecessors];
+        if (! hash_equals($hash, $this->proposalHash($binding))) throw new DomainException($fail);
+        foreach ($rows as $row) {
+            if (($row->after['variance_minor'] ?? null) !== -$posting) throw new DomainException($fail);
+        }
+        return $ids;
+    }
+
     private function assertExpectedProposal(AuditEvent $proposal, ?int $expected): void
     {
         if (($proposal->event === self::RESOLUTION_REVISED && $expected === null)
@@ -1850,6 +1965,9 @@ final class CompletedCashRefundRequest
         $q = $proposal->after;
         if ($batchVariance !== null && ($mixedReadiness ? ($batchVariance > 0) : (! $postingRequired || $batchVariance >= 0))) {
             throw new DomainException($fail);
+        }
+        if ($batchVariance === null && is_int($q['count_id'] ?? null)) {
+            $this->verifyGroupRevisionMembership($p['account_id'], $q['count_id'], [$request->entity_id => (int) $proposal->id], true);
         }
         $expectedVariance = $batchVariance ?? ($postingRequired ? -FinancialAmount::parse($p['amount'])->minor : 0);
         if (! is_array($q) || $proposal->entity_type !== 'completed_cash_refund_request' || $proposal->source !== 'internal'
