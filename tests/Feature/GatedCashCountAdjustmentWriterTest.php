@@ -9277,6 +9277,43 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_round142_settlement_audit_window_uses_exact_local_month_boundary(): void
+    {
+        $actor = $this->actor();
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        // Synthetic orphan audit evidence tests the scan itself, not an
+        // authorized settlement. Both events have the same UTC calendar day.
+        $ids = [];
+        foreach (['2026-11-30 20:59:59', '2026-11-30 21:00:00', '2026-12-01 21:00:00'] as $i => $utc) {
+            $ids[] = DB::table('audit_events')->insertGetId([
+                'actor_user_id' => $actor->id, 'event' => 'financial.counted_cash_allocated',
+                'entity_type' => 'late_receipt_review', 'entity_id' => (string) (999901 + $i),
+                'source' => 'internal', 'occurred_at' => $utc,
+            ]);
+        }
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T00:00:00+03:00'));
+        $snapshot = fn () => DB::table('audit_events')->orderBy('id')->get()->toArray();
+        $before = $snapshot();
+        $inspect = fn (int $period, string $through) => DB::transaction(fn () =>
+            app(\App\Services\FinancialSettlementCoverageDiagnostic::class)->inspect($actor, $period, $through));
+        foreach ([[$nov, '2026-11-30', [$ids[0]]], [$dec, '2026-12-01', [$ids[1]]],
+            [$dec, '2026-12-02', [$ids[1], $ids[2]]]] as [$period, $through, $expected]) {
+            $report = $inspect($period, $through);
+            $this->assertSame(array_map(fn ($id) => ['code' => 'counted_cash_orphan_audit',
+                'source' => 'audit_events', 'id' => (string) $id], $expected), $report['issues']);
+            $this->assertFalse($report['scanned_settlements_match']);
+            $this->assertFalse($report['closure_authorized']);
+            $this->assertSame($report, $inspect($period, $through));
+        }
+        $this->assertEquals($before, $snapshot());
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_round142_continuous_bank_statement_and_counted_cash_proof_are_read_only(): void
     {
         [, , , , , $subscriber] = $this->held();
