@@ -9355,6 +9355,39 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertNull($unverified['cash_receipts']);
     }
 
+    public function test_approved_custody_period_rejects_conflicting_approval_basis(): void
+    {
+        [$issuer, $reviewer, $account] = $this->fixture();
+        $session = app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $issuer, (int) $account['id'],
+            '4.25', 'QA-CUSTODY-AUDIT-BASIS', self::EVIDENCE, self::OTHER, $this->nowAt())['session'];
+        $closed = app(CashSessionService::class)->close($session, '4.25');
+
+        // Persist a conflicting approval audit using the normal append-only
+        // logger; do not disable protection or modify existing audit rows.
+        $logger = new class extends \App\Services\AuditLogger {
+            public function recordRequired(string $event, array $context = []): \App\Models\AuditEvent
+            {
+                if ($event === 'cash_session.approved') {
+                    $context['after']['settlement_basis'] = 'legacy_recorded';
+                }
+                return parent::recordRequired($event, $context);
+            }
+        };
+        (new CashSessionService($logger))->decide($closed, true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T21:00:00Z'));
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $report = $result['approved_counted_custody_period'];
+        $this->assertFalse($report['matched']);
+        $this->assertSame([['session_id' => (string) $session->id, 'code' => 'approved_custody_approval_unverified']], $report['issues']);
+        $this->assertNull($report['totals']);
+        $this->assertSame([], $report['rows']);
+        $this->assertContains('approved_custody_period_unmatched', $result['blockers']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
     public function test_approved_custody_period_detects_an_orphan_physical_approval(): void
     {
         $actor = $this->actor();
