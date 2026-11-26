@@ -3,16 +3,17 @@
     "stage": "G1B",
     "issue_url": "https://github.com/iitij/water/issues/57",
     "production_status": "BLOCKED",
-    "update_date": "2026-11-26",
+    "update_date": "2026-11-27",
     "main_sha": "0681c12f47d6b542c35d6d487a2bb810762bfb16",
     "resume_at": {
-      "pr": 180,
-      "branch": "release/permanent-close-custody-local-day",
-      "sha": "94f1a264e337fcad627977b82e20a4693f22fd7c",
-      "verification": "Targeted SQLite and MySQL 8 verified, draft and unmerged"
+      "pr": 181,
+      "branch": "release/permanent-close-approved-custody",
+      "sha": "f29a2961d6f6f004a52a1c65235477edc9fbaad6",
+      "verification": "Targeted SQLite and MySQL 8 completed successfully on the exact head: 9 tests and 124 assertions per engine. Draft, unmerged.",
+      "actions_run": "https://github.com/iitij/water/actions/runs/45896349483"
     },
     "reference": "docs/coordination/PERMANENT_CLOSE_LOCKED_BALANCES_20261126.md",
-    "next": "Derive the collector custody rollforward at period boundaries; establish documented opening and carry deadlines, complete writer coverage, and verify independent close approval.",
+    "next": "Reconcile recorded funding, cash receipts and ordinary reversals for tills listed outside approved counts at opening or closing. Verify the independent opening source, carry deadlines, writer coverage, and independent close approval. Before merge run integration acceptance on the cumulative head and inspect overlap with main.",
     "owner_scope": "Backup and recovery work deferred from the active implementation per owner instruction on 2026-11-26."
   },
   "owner_scope_decision_2026_11_25": {
