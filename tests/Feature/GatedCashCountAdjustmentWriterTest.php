@@ -8422,6 +8422,53 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
 
+    public function test_source_graph_fence_protects_square_cascade_and_parent_replacement(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $invoice = DB::table('invoices')->orderBy('id')->first();
+        $subscriber = DB::table('subscribers')->where('id', $invoice->subscriber_id)->sole();
+        $squareId = $subscriber->square_id;
+        DB::table('squares')->where('id', $squareId)->update(['code' => 'QA-GRAPH-CLOSED']);
+        $square = (array) DB::table('squares')->where('id', $squareId)->sole();
+        $other = Square::create(['name' => 'Synthetic unrelated square', 'code' => 'QA-GRAPH-OPEN']);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $tables = ['squares', 'subscribers', 'meters', 'invoices', 'payments', 'transactions', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        $reject = function (callable $write, string $message): void {
+            try {
+                $write();
+                $this->fail('Fenced parent graph operation unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+        };
+        $reject(fn () => DB::table('squares')->where('id', $squareId)->delete(), 'Financial source parent graph is fenced');
+        if (DB::getDriverName() === 'sqlite') {
+            $replace = function (string $table, array $row): void {
+                $columns = implode(', ', array_keys($row));
+                $params = implode(', ', array_fill(0, count($row), '?'));
+                DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$params})", array_values($row));
+            };
+            $message = 'Financial source parent replacement is fenced';
+            $this->assertSame(0, (int) DB::selectOne('PRAGMA recursive_triggers')->recursive_triggers);
+            $reject(fn () => $replace('squares', $square), $message);
+            $reject(fn () => $replace('squares', array_replace($square, ['id' => $other->id])), $message);
+            $reject(fn () => DB::statement('UPDATE OR REPLACE squares SET code = ? WHERE id = ?', [$square['code'], $other->id]), $message);
+            $reject(fn () => $replace('subscribers', (array) $subscriber), $message);
+            $meter = (array) DB::table('meters')->where('id', $invoice->meter_id)->sole();
+            $reject(fn () => $replace('meters', $meter), $message);
+            $reject(fn () => $replace('meters', array_replace($meter, ['id' => $meter['id'] + 1000, 'unique_code' => 'QA-GRAPH-NEW-METER'])), $message);
+        }
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(1, DB::table('squares')->where('id', $other->id)->delete());
+        $this->assertDatabaseHas('squares', ['id' => $squareId]);
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
