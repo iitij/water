@@ -192,7 +192,164 @@ final class CompletedCashRefundRequest
         }
         $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
-            function () use ($actor, $uuid, $countId, $classification, $evidence, $date, $supersedesId): array {
+            fn () => $this->proposeResolutionLocked($actor, $uuid, $countId, $classification, $evidence, $date, $supersedesId));
+    }
+
+    /** Private only: aggregate variance may be supplied solely by the complete group writer. */
+    private function proposeResolutionLocked(User $actor, string $uuid, int $countId, string $classification,
+        string $evidence, string $date, ?int $supersedesId, ?int $aggregateVariance = null): array
+    {
+        FinancialWriteGate::currentContext();
+        if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+            throw new DomainException('gated_refund_issuance_lock');
+        }
+        $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+        self::authenticated($actor);
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $this->guard();
+        $row = $this->find($uuid, true);
+        abort_unless($row !== null, 404);
+        $p = $row->after;
+        $this->assertIntent($row, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
+            $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $row->actor_user_id));
+        $decision = $this->decision($row);
+        if ($decision === null || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
+            throw new DomainException('completed_refund_resolution_closed_request_required');
+        }
+        $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
+        $excluded = [(int) $row->actor_user_id, (int) $payment->user_id];
+        if ($payment->cash_session_id !== null) {
+            $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
+        }
+        if (in_array((int) $actor->id, $excluded, true)) {
+            throw new DomainException('completed_refund_resolution_independence');
+        }
+        $account = DB::table('treasury_accounts')->where('id', $p['account_id'])->lockForUpdate()->first();
+        $count = DB::table('treasury_cash_counts')->where('id', $countId)->lockForUpdate()->first();
+        $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $countId)->lockForUpdate()->first();
+        if ($account === null || $account->channel !== 'cash' || $count === null || $review === null
+            || (int) $count->treasury_account_id !== $p['account_id'] || ! (bool) $review->accepted
+            || (int) $count->counted_by === (int) $review->reviewed_by
+            || in_array((int) $count->counted_by, $excluded, true)
+            || in_array((int) $review->reviewed_by, $excluded, true)) {
+            throw new DomainException('completed_refund_resolution_count_evidence');
+        }
+        $observation = AuditEvent::query()->where('event', 'treasury.cash_count_recorded')
+            ->where('entity_type', 'treasury_cash_count')->where('entity_id', (string) $countId)->lockForUpdate()->get();
+        $reviewAudit = AuditEvent::query()->where('event', 'treasury.cash_count_reviewed')
+            ->where('entity_type', 'treasury_cash_count_review')->where('entity_id', (string) $review->id)->lockForUpdate()->get();
+        if ($observation->count() !== 1 || $reviewAudit->count() !== 1) {
+            throw new DomainException('completed_refund_resolution_count_evidence');
+        }
+        $o = $observation->first();
+        $r = $reviewAudit->first();
+        $counted = \App\Support\TreasuryMoney::document($count->counted_minor);
+        $recorded = \App\Support\TreasuryMoney::signed($count->recorded_minor);
+        $variance = \App\Support\TreasuryMoney::variance($counted, $recorded);
+        if ((int) $o->id <= (int) $decision->id || (int) $r->id <= (int) $o->id
+            || (int) $o->actor_user_id !== (int) $count->counted_by
+            || (int) $r->actor_user_id !== (int) $review->reviewed_by
+            || ($o->after['ledger_hash'] ?? null) !== $count->ledger_hash
+            || ($o->after['counted_minor'] ?? null) !== $counted
+            || ($o->after['recorded_minor'] ?? null) !== $recorded
+            || ($o->after['variance_minor'] ?? null) !== $variance
+            || $variance !== \App\Support\TreasuryMoney::signed($count->variance_minor)
+            || ($o->after['reference'] ?? null) !== $count->reference
+            || ($o->after['evidence'] ?? null) !== $count->evidence
+            || (int) ($r->after['treasury_cash_count_id'] ?? 0) !== $countId
+            || ($r->after['accepted'] ?? null) !== true
+            || ($r->after['evidence'] ?? null) !== $review->evidence
+            || ($r->after['financial_adjustment_created'] ?? null) !== false) {
+            throw new DomainException('completed_refund_resolution_count_evidence');
+        }
+        $proof = ['request_id' => (int) $row->id, 'decision_id' => (int) $decision->id,
+            'operation_uuid' => $uuid, 'account_id' => $p['account_id'], 'payment_id' => $p['payment_id'],
+            'claimed_amount' => $p['amount'], 'reference' => $p['reference'],
+            'count_id' => $countId, 'review_id' => (int) $review->id, 'count_audit_id' => (int) $o->id,
+            'review_audit_id' => (int) $r->id, 'counted_minor' => $counted,
+            'recorded_minor' => $recorded, 'variance_minor' => $variance, 'ledger_hash' => $count->ledger_hash,
+            'classification' => $classification, 'evidence' => $evidence, 'proposed_on' => $date,
+            'incident_unresolved' => true];
+        $chain = $this->proposalChain($row, $decision);
+        $old = $chain === [] ? null : end($chain);
+        if ($this->verifiedResolution($row, $decision) !== null) {
+            throw new DomainException('completed_refund_resolution_conflict');
+        }
+        if ($supersedesId !== null) {
+            if ($old === null) throw new DomainException('completed_refund_resolution_conflict');
+            // Idempotent revision retry binds the original predecessor.
+            $previous = $old;
+            if (($old->after['supersedes_id'] ?? null) === $supersedesId) {
+                $previous = $chain[count($chain) - 2];
+            } elseif ((int) $old->id !== $supersedesId) {
+                throw new DomainException('completed_refund_resolution_conflict');
+            }
+            $proof['supersedes_id'] = (int) $previous->id;
+            $proof['supersedes_hash'] = $this->proposalHash($previous->after);
+            if ((int) $old->id === $supersedesId) {
+                if ($countId <= $old->after['count_id'] || (int) $o->id <= (int) $old->id) {
+                    throw new DomainException('completed_refund_resolution_stale_count');
+                }
+                // A later accepted, unchanged observation supersedes the
+                // previous evidence; neither record can authorize spending.
+                $expected = $aggregateVariance ?? ($classification === 'posting_required' ? -FinancialAmount::parse($p['amount'])->minor : 0);
+                app(TreasuryCashCountService::class)->assertFreshObservationVariance($p['account_id'], $countId, $date, $expected);
+                if ($variance !== $expected || app(HeldCashRecordedLiquidityEvidence::class)->balance($p['account_id'], $date) !== $recorded) {
+                    throw new DomainException('completed_refund_resolution_stale_count');
+                }
+                $revision = app(AuditLogger::class)->recordRequired(self::RESOLUTION_REVISED, [
+                    'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid.':'.$countId,
+                    'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
+                $this->proposalChain($row, $decision);
+                return ['created' => true, 'proposal_id' => (int) $revision->id,
+                    'resolution_proposal' => $proof, 'incident_unresolved' => true];
+            }
+        }
+        if ($old !== null) {
+            $actual = $old->after;
+            if ((int) $old->actor_user_id !== (int) $actor->id || $old->entity_type !== 'completed_cash_refund_request'
+                || $old->source !== 'internal' || ! is_array($actual) || count($actual) !== count($proof)) {
+                throw new DomainException('completed_refund_resolution_conflict');
+            }
+            // MySQL JSON storage may reorder object keys. Keep strict
+            // field identity and type checks independent of key order.
+            foreach ($proof as $key => $value) {
+                if (! array_key_exists($key, $actual) || $actual[$key] !== $value) {
+                    throw new DomainException('completed_refund_resolution_conflict');
+                }
+            }
+            return ['created' => false, 'proposal_id' => (int) $old->id, 'resolution_proposal' => $proof, 'incident_unresolved' => true];
+        }
+        $created = app(AuditLogger::class)->recordRequired(self::RESOLUTION_PROPOSED, [
+            'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid,
+            'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
+        return ['created' => true, 'proposal_id' => (int) $created->id, 'resolution_proposal' => $proof, 'incident_unresolved' => true];
+    }
+
+    /**
+     * Renew a complete unresolved group on one new accepted count. Classifications
+     * are deliberately unchanged; a different factual conclusion needs a separate
+     * reviewed workflow. No financial posting or release is performed here.
+     */
+    public function renewResolutionGroup(User $actor, int $accountId, array $predecessors, int $countId,
+        string $evidence, DateTimeImmutable $now): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $evidence = trim($evidence);
+        $fail = 'completed_refund_group_revision_selection';
+        if ($accountId <= 0 || $countId <= 0 || count($predecessors) < 2 || count($predecessors) > 50
+            || mb_strlen($evidence) < 20 || mb_strlen($evidence) > 2000) throw new DomainException($fail);
+        foreach ($predecessors as $uuid => $id) {
+            if (! is_string($uuid) || ! preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid)
+                || ! is_int($id) || $id <= 0) throw new DomainException($fail);
+        }
+        if (count(array_unique(array_values($predecessors))) !== count($predecessors)) throw new DomainException($fail);
+        ksort($predecessors);
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+            function () use ($actor, $accountId, $predecessors, $countId, $evidence, $date, $fail): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new DomainException('gated_refund_issuance_lock');
                 }
@@ -200,123 +357,76 @@ final class CompletedCashRefundRequest
                 self::authenticated($actor);
                 app(TreasuryRegisterService::class)->authorize($actor);
                 $this->guard();
-                $row = $this->find($uuid, true);
-                abort_unless($row !== null, 404);
-                $p = $row->after;
-                $this->assertIntent($row, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
-                    $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $row->actor_user_id));
-                $decision = $this->decision($row);
-                if ($decision === null || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
-                    throw new DomainException('completed_refund_resolution_closed_request_required');
+                $unresolved = $this->unresolvedForAccount($accountId);
+                if ($unresolved['count'] !== count($predecessors)
+                    || app(HeldCashReservation::class)->unpostedCashRefundMinor() !== 0) throw new DomainException($fail);
+                $total = $posting = 0;
+                $priorCount = null;
+                $replay = null;
+                $members = [];
+                foreach ($predecessors as $uuid => $id) {
+                    $request = $this->find($uuid, true);
+                    if ($request === null || ($request->after['account_id'] ?? null) !== $accountId
+                        || ($request->after['date'] ?? null) !== $date) throw new DomainException($fail);
+                    $closed = $this->decision($request);
+                    if ($closed === null || $this->verifiedResolution($request, $closed) !== null
+                        || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()
+                        || PaymentRefund::query()->where('disbursement_reference', $request->after['reference'])->lockForUpdate()->first()) {
+                        throw new DomainException($fail);
+                    }
+                    $chain = $this->proposalChain($request, $closed);
+                    if ($chain === []) throw new DomainException($fail);
+                    $current = end($chain);
+                    $retry = (int) $current->id !== $id;
+                    $previous = $retry && count($chain) > 1 ? $chain[count($chain) - 2] : $current;
+                    if ((int) $previous->id !== $id || ($retry && (($current->after['count_id'] ?? null) !== $countId
+                        || ($current->after['supersedes_id'] ?? null) !== $id
+                        || (int) $current->actor_user_id !== (int) $actor->id
+                        || ($current->after['classification'] ?? null) !== ($previous->after['classification'] ?? null)))
+                        || ($replay !== null && $replay !== $retry)) throw new DomainException($fail);
+                    $replay = $retry;
+                    $q = $previous->after;
+                    $classification = $q['classification'] ?? null;
+                    if (! in_array($classification, ['posting_required', 'cash_returned', 'no_disbursement'], true)
+                        || ! is_int($q['count_id'] ?? null) || $q['count_id'] >= $countId
+                        || ($priorCount !== null && $priorCount !== $q['count_id'])) throw new DomainException($fail);
+                    $priorCount = $q['count_id'];
+                    $minor = FinancialAmount::parse($request->after['amount'])->minor;
+                    $total = \App\Support\SignedMinor::add($total, $minor);
+                    if ($classification === 'posting_required') $posting = \App\Support\SignedMinor::add($posting, $minor);
+                    $members[$uuid] = [$request, $closed, $classification, $previous];
                 }
-                $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
-                $excluded = [(int) $row->actor_user_id, (int) $payment->user_id];
-                if ($payment->cash_session_id !== null) {
-                    $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
+                if ($total !== $unresolved['claimed_minor']) throw new DomainException($fail);
+                // Validate the new count and make sure it cannot be used twice.
+                $this->assertCountUnusedByBatch($countId);
+                foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
+                    if (($approval->after['count_id'] ?? null) === $countId) throw new DomainException($fail);
                 }
-                if (in_array((int) $actor->id, $excluded, true)) {
+                app(TreasuryCashCountService::class)->assertFreshObservationVariance($accountId, $countId, $date, -$posting);
+                $newCount = DB::table('treasury_cash_counts')->where('id', $countId)->lockForUpdate()->first();
+                $newReview = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $countId)->lockForUpdate()->first();
+                if (! $newCount || ! $newReview || in_array((int) $actor->id,
+                    [(int) $newCount->counted_by, (int) $newReview->reviewed_by], true)) {
                     throw new DomainException('completed_refund_resolution_independence');
                 }
-                $account = DB::table('treasury_accounts')->where('id', $p['account_id'])->lockForUpdate()->first();
-                $count = DB::table('treasury_cash_counts')->where('id', $countId)->lockForUpdate()->first();
-                $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $countId)->lockForUpdate()->first();
-                if ($account === null || $account->channel !== 'cash' || $count === null || $review === null
-                    || (int) $count->treasury_account_id !== $p['account_id'] || ! (bool) $review->accepted
-                    || (int) $count->counted_by === (int) $review->reviewed_by
-                    || in_array((int) $count->counted_by, $excluded, true)
-                    || in_array((int) $review->reviewed_by, $excluded, true)) {
-                    throw new DomainException('completed_refund_resolution_count_evidence');
-                }
-                $observation = AuditEvent::query()->where('event', 'treasury.cash_count_recorded')
-                    ->where('entity_type', 'treasury_cash_count')->where('entity_id', (string) $countId)->lockForUpdate()->get();
-                $reviewAudit = AuditEvent::query()->where('event', 'treasury.cash_count_reviewed')
-                    ->where('entity_type', 'treasury_cash_count_review')->where('entity_id', (string) $review->id)->lockForUpdate()->get();
-                if ($observation->count() !== 1 || $reviewAudit->count() !== 1) {
-                    throw new DomainException('completed_refund_resolution_count_evidence');
-                }
-                $o = $observation->first();
-                $r = $reviewAudit->first();
-                $counted = \App\Support\TreasuryMoney::document($count->counted_minor);
-                $recorded = \App\Support\TreasuryMoney::signed($count->recorded_minor);
-                $variance = \App\Support\TreasuryMoney::variance($counted, $recorded);
-                if ((int) $o->id <= (int) $decision->id || (int) $r->id <= (int) $o->id
-                    || (int) $o->actor_user_id !== (int) $count->counted_by
-                    || (int) $r->actor_user_id !== (int) $review->reviewed_by
-                    || ($o->after['ledger_hash'] ?? null) !== $count->ledger_hash
-                    || ($o->after['counted_minor'] ?? null) !== $counted
-                    || ($o->after['recorded_minor'] ?? null) !== $recorded
-                    || ($o->after['variance_minor'] ?? null) !== $variance
-                    || $variance !== \App\Support\TreasuryMoney::signed($count->variance_minor)
-                    || ($o->after['reference'] ?? null) !== $count->reference
-                    || ($o->after['evidence'] ?? null) !== $count->evidence
-                    || (int) ($r->after['treasury_cash_count_id'] ?? 0) !== $countId
-                    || ($r->after['accepted'] ?? null) !== true
-                    || ($r->after['evidence'] ?? null) !== $review->evidence
-                    || ($r->after['financial_adjustment_created'] ?? null) !== false) {
-                    throw new DomainException('completed_refund_resolution_count_evidence');
-                }
-                $proof = ['request_id' => (int) $row->id, 'decision_id' => (int) $decision->id,
-                    'operation_uuid' => $uuid, 'account_id' => $p['account_id'], 'payment_id' => $p['payment_id'],
-                    'claimed_amount' => $p['amount'], 'reference' => $p['reference'],
-                    'count_id' => $countId, 'review_id' => (int) $review->id, 'count_audit_id' => (int) $o->id,
-                    'review_audit_id' => (int) $r->id, 'counted_minor' => $counted,
-                    'recorded_minor' => $recorded, 'variance_minor' => $variance, 'ledger_hash' => $count->ledger_hash,
-                    'classification' => $classification, 'evidence' => $evidence, 'proposed_on' => $date,
-                    'incident_unresolved' => true];
-                $chain = $this->proposalChain($row, $decision);
-                $old = $chain === [] ? null : end($chain);
-                if ($this->verifiedResolution($row, $decision) !== null) {
-                    throw new DomainException('completed_refund_resolution_conflict');
-                }
-                if ($supersedesId !== null) {
-                    if ($old === null) throw new DomainException('completed_refund_resolution_conflict');
-                    // Idempotent revision retry binds the original predecessor.
-                    $previous = $old;
-                    if (($old->after['supersedes_id'] ?? null) === $supersedesId) {
-                        $previous = $chain[count($chain) - 2];
-                    } elseif ((int) $old->id !== $supersedesId) {
-                        throw new DomainException('completed_refund_resolution_conflict');
-                    }
-                    $proof['supersedes_id'] = (int) $previous->id;
-                    $proof['supersedes_hash'] = $this->proposalHash($previous->after);
-                    if ((int) $old->id === $supersedesId) {
-                        if ($countId <= $old->after['count_id'] || (int) $o->id <= (int) $old->id) {
-                            throw new DomainException('completed_refund_resolution_stale_count');
-                        }
-                        // A later accepted, unchanged observation supersedes the
-                        // previous evidence; neither record can authorize spending.
-                        $expected = $classification === 'posting_required' ? -FinancialAmount::parse($p['amount'])->minor : 0;
-                        app(TreasuryCashCountService::class)->assertFreshObservationVariance($p['account_id'], $countId, $date, $expected);
-                        if ($variance !== $expected || app(HeldCashRecordedLiquidityEvidence::class)->balance($p['account_id'], $date) !== $recorded) {
-                            throw new DomainException('completed_refund_resolution_stale_count');
-                        }
-                        $revision = app(AuditLogger::class)->recordRequired(self::RESOLUTION_REVISED, [
-                            'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid.':'.$countId,
-                            'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
-                        $this->proposalChain($row, $decision);
-                        return ['created' => true, 'proposal_id' => (int) $revision->id,
-                            'resolution_proposal' => $proof, 'incident_unresolved' => true];
+                if (! $replay) {
+                    foreach ($members as [$request, $closed, $classification, $previous]) {
+                        // Validate prior evidence without requiring that the old count is still fresh.
+                        $this->resolutionSources($request, $closed, (int) $actor->id,
+                            $classification === 'posting_required', false, -$posting, true);
                     }
                 }
-                if ($old !== null) {
-                    $actual = $old->after;
-                    if ((int) $old->actor_user_id !== (int) $actor->id || $old->entity_type !== 'completed_cash_refund_request'
-                        || $old->source !== 'internal' || ! is_array($actual) || count($actual) !== count($proof)) {
-                        throw new DomainException('completed_refund_resolution_conflict');
-                    }
-                    // MySQL JSON storage may reorder object keys. Keep strict
-                    // field identity and type checks independent of key order.
-                    foreach ($proof as $key => $value) {
-                        if (! array_key_exists($key, $actual) || $actual[$key] !== $value) {
-                            throw new DomainException('completed_refund_resolution_conflict');
-                        }
-                    }
-                    return ['created' => false, 'proposal_id' => (int) $old->id, 'resolution_proposal' => $proof, 'incident_unresolved' => true];
+                $ids = [];
+                foreach ($members as $uuid => [$request, $closed, $classification, $previous]) {
+                    $result = $this->proposeResolutionLocked($actor, $uuid, $countId, $classification,
+                        $evidence, $date, $predecessors[$uuid], -$posting);
+                    if ($result['created'] === $replay) throw new DomainException($fail);
+                    $ids[$uuid] = $result['proposal_id'];
                 }
-                $created = app(AuditLogger::class)->recordRequired(self::RESOLUTION_PROPOSED, [
-                    'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid,
-                    'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
-                return ['created' => true, 'proposal_id' => (int) $created->id, 'resolution_proposal' => $proof, 'incident_unresolved' => true];
+                return ['created' => ! $replay, 'proposal_ids' => $ids, 'count_id' => $countId,
+                    'total_claimed_minor' => $total, 'posting_required_minor' => $posting,
+                    'incident_unresolved' => true, 'financial_posting_created' => false,
+                    'spending_authorized' => false, 'closure_authorized' => false];
             });
     }
 
