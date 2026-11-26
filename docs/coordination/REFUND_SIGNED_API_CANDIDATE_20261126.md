@@ -13,3 +13,5 @@ Two new end-to-end feature tests on each engine (4 intended case/engine combinat
 Limitations: UI/Flutter integration, source key provisioning, original document custody/retention and request logging/body-size hardening need independent review. Existing same-day and newer count constraints preserved. Earlier unverified group race and membership corruption tests remain pending. No historical remediation, real data changes, main merge or production activation.
 
 Next: obtain exact CI results; fix confirmed failures; run outstanding changed-path tests on a dedicated traceable PR; review remaining writer fences and permanent closure, then Flutter/production.
+
+Exact PR CI observed in progress: run 45875654169, SQLite job 140101939644, MySQL job 140101939964. No outcome claimed yet.
