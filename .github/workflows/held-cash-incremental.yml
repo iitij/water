@@ -65,4 +65,4 @@ jobs:
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
       - name: Verify independent MySQL batch settlement contention and exact replay
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_batch_concurrency_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_batch_concurrency_|test_release_refund_batch_controls_immutable_group_and_exact_replay' tests/Feature/GatedCashCountAdjustmentWriterTest.php

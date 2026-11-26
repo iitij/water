@@ -1359,19 +1359,27 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $original = $group->getRawOriginal();
         $duplicate = (array) DB::table('audit_events')->where('id', $group->id)->sole();
         unset($duplicate['id']);
+        $this->assertTrue(app(\App\Services\CompletedCashRefundBatchApprovalProtection::class)->active());
         foreach ([
-            fn () => DB::table('audit_events')->where('id', $group->id)->update(['after' => '{}']),
-            fn () => DB::table('audit_events')->where('id', $group->id)->delete(),
-            fn () => DB::table('audit_events')->insert($duplicate),
-            fn () => DB::table('users')->where('id', $f['approver']->id)->delete(),
-        ] as $attempt) {
+            'audit_update' => fn () => DB::table('audit_events')->where('id', $group->id)->update(['after' => '{}']),
+            'audit_delete' => fn () => DB::table('audit_events')->where('id', $group->id)->delete(),
+            'audit_duplicate' => fn () => DB::table('audit_events')->insert($duplicate),
+            'actor_delete' => fn () => DB::table('users')->where('id', $f['approver']->id)->delete(),
+        ] as $kind => $attempt) {
             try {
                 $attempt();
-                $this->fail('Protected batch evidence was mutable.');
+                $this->fail('Protected batch evidence was mutable: '.$kind);
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+                // MySQL can execute the preexisting user identity trigger
+                // before the group-specific actor trigger. Both fail closed.
+                if ($kind === 'actor_delete' && str_contains($error->getMessage(), 'User identity cannot be deleted')) {
+                    $this->assertStringContainsString('User identity cannot be deleted', $error->getMessage());
+                } else {
+                    $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+                }
             }
         }
+        $this->assertDatabaseHas('users', ['id' => $f['approver']->id]);
         $this->assertEquals($original, $group->fresh()->getRawOriginal());
         $other = $this->actor();
         \Laravel\Sanctum\Sanctum::actingAs($other);
