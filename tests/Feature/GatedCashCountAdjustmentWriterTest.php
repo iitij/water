@@ -9180,6 +9180,78 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_close_evidence_transit_rolls_forward_exact_registered_transfers_across_months(): void
+    {
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($receiver);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-10', 'start_on' => '2026-10-01',
+            'next_on' => '2026-11-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $open = fn (string $code, string $uuid) => (int) app(GatedTreasuryOpeningFundingWriter::class)->open($sender, [
+            'code' => $code, 'name' => 'Synthetic bank account', 'channel' => 'bank',
+            'opening_on' => '2026-10-20', 'opening_amount' => '100.00',
+            'opening_reference' => $code.'-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], $uuid, $this->nowAt())['account']['id'];
+        $from = $open('QA-TRANSIT-ORIGIN', self::UUID);
+        $to = $open('QA-TRANSIT-DESTINATION', self::OTHER);
+        $writer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $dispatch = fn (string $day, string $minor, string $reference) => [
+            'from_account_id' => $from, 'to_account_id' => $to, 'dispatched_on' => $day,
+            'amount' => $minor, 'reference' => $reference, 'evidence' => self::EVIDENCE,
+        ];
+        $received = fn (string $day, string $minor, string $reference) => [
+            'received_on' => $day, 'amount' => $minor, 'reference' => $reference, 'evidence' => self::EVIDENCE,
+        ];
+        $prior = $writer->dispatch($sender, $dispatch('2026-10-30', '10.00', 'QA-TRANSIT-PRIOR'),
+            self::ADJUST, $this->nowAt())['transfer'];
+        $current = $writer->dispatch($sender, $dispatch('2026-11-25', '5.25', 'QA-TRANSIT-CURRENT'),
+            self::NEXT, $this->nowAt())['transfer'];
+        $receivePrior = '55555555-5555-4555-8555-555555555555';
+        $writer->receive($receiver, (int) $prior['id'], $received('2026-11-25', '10.00', 'QA-TRANSIT-RECEIVE-PRIOR'),
+            $receivePrior, $this->nowAt());
+
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $inspect = fn () => $diagnostic->inspect($receiver, $periodId, now()->toDateTimeImmutable());
+        $this->assertNull($inspect()['transit_period']);
+        $now = new DateTimeImmutable('2026-12-01T08:00:00+03:00');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $report = $inspect();
+        $evidence = $report['transit_period'];
+        $this->assertTrue($evidence['matched']);
+        $this->assertSame(['opening_minor' => 1000, 'dispatched_minor' => 525, 'received_minor' => 1000,
+            'closing_minor' => 525], $evidence['totals']);
+        $this->assertSame([(string) $prior['id'], (string) $current['id']], array_column($evidence['rows'], 'transfer_id'));
+        $this->assertSame($receivePrior, $evidence['rows'][0]['receipt_evidence']['operation_uuid']);
+        $this->assertSame(-525, $evidence['rows'][1]['dispatch_evidence']['amount_minor']);
+        $this->assertNull($evidence['rows'][1]['received_on']);
+        $this->assertFalse($report['closure_authorized']);
+
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $writer->receive($receiver, (int) $current['id'], $received('2026-12-01', '5.25', 'QA-TRANSIT-RECEIVE-NEXT'),
+            '66666666-6666-4666-8666-666666666666', $now);
+        $this->assertSame($evidence, $inspect()['transit_period']);
+
+        $legacy = app(TreasuryTransferService::class)->dispatch($sender,
+            $dispatch('2026-10-31', '0.50', 'QA-TRANSIT-MISSING-REGISTRY'));
+        $tables = ['treasury_transfers', 'treasury_transfer_receipts', 'treasury_postings',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $incomplete = $inspect();
+        $this->assertTrue($incomplete['movements']['recorded_movements_verified']);
+        $this->assertSame(['matched' => false, 'issues' => [
+            ['transfer_id' => (string) $legacy['id'], 'code' => 'transit_posting_unregistered_or_conflicting'],
+        ], 'totals' => null, 'rows' => []], $incomplete['transit_period']);
+        $this->assertContains('transit_period_unmatched', $incomplete['blockers']);
+        $this->assertEquals($before, $snapshot());
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();

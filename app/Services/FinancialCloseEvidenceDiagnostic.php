@@ -29,6 +29,7 @@ final class FinancialCloseEvidenceDiagnostic
         private FinancialPeriodMovementDiagnostic $movements,
         private FinancialHeldLiabilityPeriodDiagnostic $heldPeriod,
         private TreasuryCashCountService $cashCounts,
+        private FinancialTransitPeriodDiagnostic $transit,
     ) {}
 
     public function inspect(User $actor, int $periodId, DateTimeImmutable $now): array
@@ -81,6 +82,9 @@ final class FinancialCloseEvidenceDiagnostic
         $settlement = $this->settlements->inspect($actor, $periodId, $through);
         $bankBalances = $ended ? $this->bankPeriodBalances($settlement, $movement) : null;
         $cashObservations = $ended ? $this->cashPeriodObservations($period->next_on, $movement['recorded_movements_verified']) : null;
+        $transit = $ended ? ($movement['recorded_movements_verified']
+            ? $this->transit->inspect($period->start_on, $period->next_on)
+            : ['matched' => false, 'issues' => [['code' => 'transit_period_movements_unverified']], 'totals' => null, 'rows' => []]) : null;
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -100,6 +104,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
         if ($bankBalances !== null && ! $bankBalances['matched']) $blockers[] = 'bank_period_balances_unmatched';
         if ($cashObservations !== null && ! $cashObservations['matched']) $blockers[] = 'cash_period_observations_unmatched';
+        if ($transit !== null && ! $transit['matched']) $blockers[] = 'transit_period_unmatched';
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';
@@ -115,6 +120,7 @@ final class FinancialCloseEvidenceDiagnostic
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'bank_period_balances' => $bankBalances, 'cash_period_observations' => $cashObservations,
+            'transit_period' => $transit,
             'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];

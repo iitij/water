@@ -1,4 +1,4 @@
-name: Financial period cash observation evidence
+name: Financial period transfer evidence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-cash-period-observation'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-transit-period-evidence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,11 +39,11 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify period cash observations and affected close evidence
+      - name: Verify transit and affected close evidence
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-cash-period-observation'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-transit-period-evidence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify period cash observations and affected close evidence
+      - name: Verify transit and affected close evidence
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
