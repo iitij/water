@@ -9252,6 +9252,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_approved_custody_period_detects_an_orphan_physical_approval(): void
+    {
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        app(\App\Services\AuditLogger::class)->recordRequired('cash_session.approved', [
+            'entity_type' => \App\Models\CashSession::class, 'entity_id' => 9091, 'actor_user_id' => $actor->id,
+            'after' => ['settlement_basis' => 'physical_cash'],
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00Z'));
+        $id = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $report = app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($actor, $id, now()->toDateTimeImmutable())['approved_counted_custody_period'];
+        $this->assertSame([['session_id' => '9091', 'code' => 'approved_custody_session_missing']], $report['issues']);
+        $this->assertNull($report['totals']);
+    }
+
     public function test_approved_custody_period_partial_receipts_bridge_local_months_and_reject_unregistered_cash(): void
     {
         [$issuer, $reviewer, $account] = $this->fixture();

@@ -29,15 +29,24 @@ final class FinancialApprovedCustodyPeriodDiagnostic
 
         $endUtc = (new DateTimeImmutable($nextOn, new DateTimeZone('Asia/Aden')))
             ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
-        $sessions = CashSession::query()->where(function ($query) use ($endUtc, $nextOn) {
+        // An approval can still be present in the audit after a session row changes.
+        $physicalAudits = AuditEvent::query()->where('event', 'cash_session.approved')
+            ->where('entity_type', CashSession::class)->where('occurred_at', '<', $endUtc)
+            ->where('after->settlement_basis', 'physical_cash');
+        $sessions = CashSession::query()->where(function ($query) use ($endUtc, $nextOn, $physicalAudits) {
             $query->where(function ($q) use ($endUtc) {
                 $q->where('state', CashSession::STATE_APPROVED)->where('settlement_basis', 'physical_cash')
                     ->where(fn ($q) => $q->where('approved_at', '<', $endUtc)->orWhereNull('approved_at'));
-            })->orWhereIn('id', CashHandover::query()->select('cash_session_id')->where('received_on', '<', $nextOn));
+            })->orWhereIn('id', (clone $physicalAudits)->select('entity_id'))->orWhereIn('id', CashHandover::query()->select('cash_session_id')->where('received_on', '<', $nextOn));
         })->orderBy('id')->lockForUpdate()->get();
 
         $rows = [];
         $issues = [];
+        $missingIds = $physicalAudits->whereNotExists(fn ($q) => $q->selectRaw('1')->from('cash_sessions')
+            ->whereColumn('cash_sessions.id', 'audit_events.entity_id'))->orderBy('id')->lockForUpdate()->pluck('entity_id');
+        foreach ($missingIds as $missing) {
+            $issues[] = ['session_id' => $missing, 'code' => 'approved_custody_session_missing'];
+        }
         $totals = ['opening_minor' => 0, 'approved_minor' => 0, 'handed_over_minor' => 0, 'closing_minor' => 0];
         foreach ($sessions as $session) {
             try {
@@ -66,29 +75,37 @@ final class FinancialApprovedCustodyPeriodDiagnostic
         $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, nullable: true);
         $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, nullable: true);
         $variance = Cash::stored($session->getRawOriginal('variance_amount'), $driver, signed: true, nullable: true);
+        $utc = new DateTimeZone('UTC');
+        $closed = $session->getRawOriginal('closed_at');
+        $approvedAt = $session->getRawOriginal('approved_at');
         if (! $session->isApproved() || $session->settlement_basis !== 'physical_cash'
-            || $session->closed_at === null || $session->approved_at === null || $session->closed_at > $session->approved_at
+            || $closed === null || $approvedAt === null || $closed > $approvedAt
             || (int) $session->approved_by <= 0 || (int) $session->approved_by === (int) $session->user_id
             || ! Cash::consistent($counted, $expected, $variance)) {
             throw new DomainException('approved_custody_count_unverified');
         }
 
+        $approvedInstant = new DateTimeImmutable($approvedAt, $utc);
+        $closedInstant = new DateTimeImmutable($closed, $utc);
         $audits = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
             ->where('entity_id', (string) $session->id)->orderBy('id')->lockForUpdate()->get();
         $audit = $audits->first();
         if ($audits->count() !== 1 || (int) $audit->actor_user_id !== (int) $session->approved_by
             || ($audit->after['id'] ?? null) !== (int) $session->id || ($audit->after['state'] ?? null) !== 'approved'
-            || ($audit->after['approved_at'] ?? null) !== $session->approved_at->toIso8601String()
-            || ($audit->after['closed_at'] ?? null) !== $session->closed_at->toIso8601String()
+            || ! $this->sameInstant($audit->after['approved_at'] ?? null, $approvedInstant)
+            || ! $this->sameInstant($audit->after['closed_at'] ?? null, $closedInstant)
             || ($audit->after['counted_amount'] ?? null) !== SignedMinor::decimal($counted)
             || ($audit->after['expected_amount'] ?? null) !== SignedMinor::decimal($expected)
             || ($audit->after['variance_amount'] ?? null) !== SignedMinor::decimal($variance)) {
             throw new DomainException('approved_custody_approval_unverified');
         }
 
-        $approvedOn = $session->approved_at->copy()->setTimezone('Asia/Aden')->toDateString();
+        $approvedOn = $approvedInstant->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        if ($approvedOn >= $nextOn) {
+            throw new DomainException('approved_custody_source_outside_period');
+        }
         $opening = $approvedOn < $startOn ? $counted : 0;
-        $approved = $approvedOn >= $startOn && $approvedOn < $nextOn ? $counted : 0;
+        $approved = $approvedOn >= $startOn ? $counted : 0;
         $handedOver = 0;
         $receipts = [];
         $handovers = CashHandover::query()->where('cash_session_id', $session->id)->where('received_on', '<', $nextOn)
@@ -114,5 +131,13 @@ final class FinancialApprovedCustodyPeriodDiagnostic
             'approval_audit_id' => (string) $audit->id, 'approved_on' => $approvedOn, 'receipts' => $receipts,
             'opening_minor' => $opening, 'approved_minor' => $approved,
             'handed_over_minor' => $handedOver, 'closing_minor' => $closing];
+    }
+
+    private function sameInstant(mixed $snapshot, DateTimeImmutable $instant): bool
+    {
+        if (! is_string($snapshot)) return false;
+        $parsed = DateTimeImmutable::createFromFormat(DATE_ATOM, $snapshot);
+        return $parsed !== false && $parsed->format(DATE_ATOM) === $snapshot
+            && $parsed->getTimestamp() === $instant->getTimestamp();
     }
 }
