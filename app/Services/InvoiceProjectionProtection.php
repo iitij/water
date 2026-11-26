@@ -70,7 +70,7 @@ final class InvoiceProjectionProtection
                 throw new \LogicException('Unexpected invoice projection trigger definition.');
             }
         } else {
-            $row = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+            $row = FinancialTriggerMetadata::query()
                 ->where('TRIGGER_NAME', self::NAME)->first();
             if ($row === null) return false;
             if ($row->EVENT_OBJECT_TABLE !== 'invoices' || $row->EVENT_MANIPULATION !== 'UPDATE'

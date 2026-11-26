@@ -19,6 +19,9 @@ return [
 
     'default' => env('DB_CONNECTION', 'sqlite'),
 
+    // Enable only for the restricted runtime account after deployment verification.
+    'financial_trigger_metadata_view' => env('FINANCIAL_TRIGGER_METADATA_VIEW', false),
+
     /*
     |--------------------------------------------------------------------------
     | Database Connections

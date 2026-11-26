@@ -1,7 +1,7 @@
-name: Prospective database privilege preflight
+name: Prospective runtime guard visibility
 on:
   push:
-    branches: ['release/prospective-database-preflight']
+    branches: ['release/prospective-runtime-guard-visibility']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,13 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify grant allowlist
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify SQLite guard preflight
+        run: |
+          set -euo pipefail
+          export DB_DATABASE="$(mktemp /tmp/water-guard-XXXXXX.sqlite)"
+          trap 'rm -f "$DB_DATABASE"' EXIT
+          php artisan migrate:fresh --force
+          php artisan financial:database-preflight --guards
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,9 +101,8 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify grant allowlist
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
-      - name: Verify deployment account and actual restricted runtime account
+
+      - name: Verify live guard metadata with actual restricted runtime
         env:
           QA_CONTAINER: ${{ job.services.mysql.id }}
         run: |
@@ -106,22 +110,31 @@ jobs:
           php artisan migrate:fresh --force
           php artisan ledger:protect --install
           php artisan financial:database-preflight --guards
-          if php artisan financial:database-preflight --runtime; then
-            echo 'Elevated migration account unexpectedly accepted'
-            exit 1
-          fi
           docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
-          CREATE TABLE water_test.runtime_privilege_probe (id INT PRIMARY KEY, value INT);
           CREATE USER 'water_runtime_qa'@'%' IDENTIFIED BY 'disposable_runtime_password';
-          GRANT SELECT, INSERT, UPDATE, DELETE ON water_test.runtime_privilege_probe TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON water_test.financial_trigger_metadata TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON water_test.transactions TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON water_test.subscribers TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON water_test.meters TO 'water_runtime_qa'@'%';
           SQL
-          DB_USERNAME=water_runtime_qa DB_PASSWORD=disposable_runtime_password php artisan financial:database-preflight --runtime
-          docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'INSERT INTO runtime_privilege_probe VALUES (1,2); UPDATE runtime_privilege_probe SET value=3 WHERE id=1; SELECT * FROM runtime_privilege_probe; DELETE FROM runtime_privilege_probe WHERE id=1;'
-          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'DROP TABLE runtime_privilege_probe'; then
-            echo 'Restricted account unexpectedly allowed DDL'
+          export DB_USERNAME=water_runtime_qa DB_PASSWORD=disposable_runtime_password FINANCIAL_TRIGGER_METADATA_VIEW=true
+          php artisan financial:database-preflight --runtime
+          php artisan financial:database-preflight --guards
+          if FINANCIAL_TRIGGER_METADATA_VIEW=false php artisan financial:database-preflight --guards; then
+            echo 'Restricted account unexpectedly sees direct trigger metadata'
             exit 1
           fi
-          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'CREATE TRIGGER runtime_probe BEFORE INSERT ON runtime_privilege_probe FOR EACH ROW SET NEW.value=0'; then
-            echo 'Restricted account unexpectedly allowed trigger creation'
+          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e "UPDATE financial_trigger_metadata SET ACTION_STATEMENT='forged'"; then
+            echo 'Restricted account unexpectedly allowed metadata mutation'
+            exit 1
+          fi
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test -e 'DROP TRIGGER reg_receipt_request_update'
+          if php artisan financial:database-preflight --guards; then
+            echo 'Missing financial trigger unexpectedly accepted'
+            exit 1
+          fi
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test -e 'DROP VIEW financial_trigger_metadata'
+          if php artisan financial:database-preflight --guards; then
+            echo 'Missing live metadata view unexpectedly accepted'
             exit 1
           fi

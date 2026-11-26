@@ -49,7 +49,7 @@ final class FinancialCorrectionDocumentProtection
                 throw new \LogicException('Unexpected correction document trigger: '.$name);
             }
         } else {
-            $row = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+            $row = FinancialTriggerMetadata::query()
                 ->where('TRIGGER_NAME', $name)->first();
             if ($row === null) return false;
             if ($row->EVENT_OBJECT_TABLE !== $table || $row->EVENT_MANIPULATION !== $event

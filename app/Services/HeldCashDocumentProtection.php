@@ -64,6 +64,6 @@ final class HeldCashDocumentProtection
     {
         return DB::getDriverName() === 'sqlite'
             ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
-            : DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')->where('TRIGGER_NAME', $name)->exists();
+            : FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->exists();
     }
 }

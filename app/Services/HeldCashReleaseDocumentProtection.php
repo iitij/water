@@ -39,7 +39,7 @@ final class HeldCashReleaseDocumentProtection
     {
         return DB::getDriverName() === 'sqlite'
             ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
-            : DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+            : FinancialTriggerMetadata::query()
                 ->where('TRIGGER_NAME', $name)->exists();
     }
 
@@ -56,7 +56,7 @@ final class HeldCashReleaseDocumentProtection
                     ->where('tbl_name', $table)->first();
                 if ($trigger === null || $normalize($trigger->sql) !== $normalize("CREATE TRIGGER {$name} {$definition}")) return false;
             } else {
-                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                $trigger = FinancialTriggerMetadata::query()
                     ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
                     ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
                 if ($trigger === null || ! str_starts_with($body, 'FOR EACH ROW ')
@@ -84,7 +84,7 @@ final class HeldCashReleaseDocumentProtection
                 $expected = "CREATE TRIGGER {$name} BEFORE {$event} ON {$table} {$body}";
                 if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
             } else {
-                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                $trigger = FinancialTriggerMetadata::query()
                     ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
                     ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
                 if ($trigger === null || $normalize($trigger->ACTION_STATEMENT) !== $normalize($body)) return false;
@@ -119,7 +119,7 @@ final class HeldCashReleaseDocumentProtection
                 $expected = "CREATE TRIGGER {$name} BEFORE {$event} ON {$table} {$body}";
                 if ($trigger === null || $normalize($trigger->sql) !== $normalize($expected)) return false;
             } else {
-                $trigger = DB::table('information_schema.TRIGGERS')->whereRaw('TRIGGER_SCHEMA = DATABASE()')
+                $trigger = FinancialTriggerMetadata::query()
                     ->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
                     ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
                 if ($trigger === null || $normalize($trigger->ACTION_STATEMENT) !== $normalize($body)) return false;
