@@ -42,6 +42,9 @@ final class FinancialSourceCoverageDiagnostic
         $issue = static function (string $code, string $table, string $id) use (&$issues): void {
             $issues[$code.'|'.$table.'|'.$id] = ['code' => $code, 'source' => $table, 'id' => $id];
         };
+        if ($registry['other_registered_legs_unverified'] !== 0) {
+            $issue('registered_source_legs_unverified', 'financial_posting_events', (string) $periodId);
+        }
         $expect = static function (string $type, string $id, string $leg, string $date, ?string $group = null) use (&$expected, $issue): void {
             $key = $type.'|'.$id.'|'.$leg;
             $group ??= 'single:'.$key;
@@ -284,7 +287,7 @@ final class FinancialSourceCoverageDiagnostic
         ksort($issues, SORT_STRING);
         return ['period_id' => $periodId, 'start_on' => $start, 'next_on' => $end,
             'documents_checked' => $documents, 'expected_legs' => count($expected), 'matched_legs' => $matched,
-            'registry_events' => $registry['events'], 'issues' => array_values($issues),
+            'registry_events' => $registry['events'], 'unverified_registry_legs' => $registry['other_registered_legs_unverified'], 'issues' => array_values($issues),
             'scanned_sources_match' => $issues === [],
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
