@@ -3381,6 +3381,68 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_void_request_db_fence_requires_exact_audit_evidence(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented receipt cancellation';
+        \App\Models\Setting::set('void_approval_threshold', '0.30');
+        $this->assertTrue(app(\App\Services\ReceiptVoidRequestProtection::class)->active());
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (callable $action, string $message = 'Registered receipt request requires audit evidence') use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            try {
+                DB::transaction($action);
+                $this->fail('Unproved request or audit mutation accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        $update = fn (array $fields) => DB::table('payments')->where('id', $receipt->id)->update($fields);
+        $requestFields = ['void_requested_at' => now(), 'void_requested_by' => $issuer->id, 'void_request_reason' => $reason];
+        $unchanged(fn () => $update($requestFields));
+        $request = fn () => $writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt());
+        $first = $request()['request_id'];
+        $unchanged(fn () => $update(['void_request_reason' => 'Forged request reason']));
+        $unchanged(fn () => $update(['void_requested_by' => $reviewer->id]));
+        $unchanged(fn () => $update(['void_requested_at' => null, 'void_requested_by' => null, 'void_request_reason' => null]));
+        $unchanged(fn () => $update(['void_decided_by' => $reviewer->id, 'void_decided_at' => now()]));
+        $unchanged(fn () => DB::table('audit_events')->where('id', $first)->update(['actor_user_id' => $reviewer->id]), 'Receipt request audit is immutable');
+        $unchanged(fn () => DB::table('audit_events')->where('id', $first)->delete(), 'Receipt request audit is immutable');
+        $row = (array) DB::table('audit_events')->find($first);
+        $columns = implode(', ', array_map(fn ($key) => chr(96).$key.chr(96), array_keys($row)));
+        $params = implode(', ', array_fill(0, count($row), '?'));
+        $verb = DB::getDriverName() === 'sqlite' ? 'INSERT OR REPLACE' : 'REPLACE';
+        $unchanged(fn () => DB::statement("{$verb} INTO audit_events ({$columns}) VALUES ({$params})", array_values($row)), 'Receipt request audit is immutable');
+        $reject = fn () => $writer->decide($reviewer, (int) $receipt->id, false, 'Independent rejection', $this->nowAt(), requestId: $first);
+        $this->assertFalse($reject()['registry_created']);
+        $this->assertFalse($reject()['registry_created']);
+        $this->assertFalse($receipt->fresh()->hasPendingVoidRequest());
+        $unchanged(fn () => $update($requestFields + ['void_decided_at' => null, 'void_decided_by' => null, 'void_decision_notes' => null]));
+        $unchanged(fn () => $update(['void_decision_notes' => 'Forged rejection']));
+        $second = $request()['request_id'];
+        $this->assertNotSame($first, $second);
+        $this->rejects('gated_void_replay_conflict', $reject);
+        $approve = fn () => $writer->decide($reviewer, (int) $receipt->id, true, null, $this->nowAt(),
+            '88888888-8888-4888-8888-888888888888', $second);
+        $this->assertTrue($approve()['registry_created']);
+        $this->assertFalse($approve()['registry_created']);
+        $unchanged(fn () => $update(['void_decided_by' => $issuer->id]));
+        $unchanged(fn () => $update(['void_decision_notes' => 'Forged approval']));
+        $unchanged(fn () => $update(['void_requested_at' => null]));
+        $this->assertTrue($receipt->fresh()->isVoided());
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_receipt_void_db_fence_requires_reversal_and_preserves_transfer(): void
     {
         [, , $account, , , $subscriber] = $this->held();
@@ -4472,11 +4534,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertArrayHasKey('payment', $error->errors());
         }
         $this->assertFalse($legacy->fresh()->hasPendingVoidRequest());
-        DB::table('payments')->where('id', $legacy->id)->update([
-            'void_requested_at' => now(),
-            'void_requested_by' => $issuer->id,
-            'void_request_reason' => $reason,
-        ]);
+        // Preserve pre-fence corruption injection in this disposable database only.
+        DB::unprepared('DROP TRIGGER reg_receipt_request_update');
+        try {
+            DB::table('payments')->where('id', $legacy->id)->update([
+                'void_requested_at' => now(),
+                'void_requested_by' => $issuer->id,
+                'void_request_reason' => $reason,
+            ]);
+        } finally {
+            app(\App\Services\ReceiptVoidRequestProtection::class)->install();
+        }
         $this->rejects('gated_void_request_unverified', fn () => $writer->decide($reviewer, (int) $legacy->id, true,
             'Independent decision', $this->nowAt(), '99999999-9999-4999-8999-999999999999'));
         $this->assertTrue($legacy->fresh()->hasPendingVoidRequest());

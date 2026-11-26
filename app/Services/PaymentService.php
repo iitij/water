@@ -411,13 +411,14 @@ class PaymentService
                 'void_decision_notes' => null,
                 'void_decided_by' => null,
                 'void_decided_at' => null,
-            ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
+            ]);
 
             app(AuditLogger::class)->recordRequired('payment.void_requested', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'after' => [
                     'receipt_number' => $payment->receipt_number,
+                    'requested_at' => $payment->getAttributes()['void_requested_at'],
                     'amount' => (float) $payment->amount,
                     'reason' => $reason,
                     'threshold' => (float) ($thresholdMinor / 100),
@@ -426,6 +427,7 @@ class PaymentService
                 'actor_user_id' => $userId,
                 'source' => $source,
             ]);
+            $payment->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
             return ['payment' => $payment->fresh(), 'pending' => true];
         }, 3);
@@ -481,19 +483,21 @@ class PaymentService
                     'void_decision_notes' => $notes,
                     'void_decided_by' => $actor->id,
                     'void_decided_at' => now(),
-                ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
+                ]);
 
                 app(AuditLogger::class)->recordRequired('payment.void_approved', [
                     'entity_type' => Payment::class,
                     'entity_id' => $payment->id,
                     'after' => [
                         'receipt_number' => $payment->receipt_number,
+                        'decided_at' => $payment->getAttributes()['void_decided_at'],
                         'reason' => $reason,
                         'notes' => $notes,
                     ],
                     'actor_user_id' => $actor->id,
                     'source' => $source,
                 ]);
+                $payment->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
                 return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
             }
@@ -505,18 +509,20 @@ class PaymentService
                 'void_decision_notes' => $notes,
                 'void_decided_by' => $actor->id,
                 'void_decided_at' => now(),
-            ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
+            ]);
 
             app(AuditLogger::class)->recordRequired('payment.void_rejected', [
                 'entity_type' => Payment::class,
                 'entity_id' => $payment->id,
                 'after' => [
                     'receipt_number' => $payment->receipt_number,
+                    'decided_at' => $payment->getAttributes()['void_decided_at'],
                     'notes' => $notes,
                 ],
                 'actor_user_id' => $actor->id,
                 'source' => $source,
             ]);
+            $payment->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
             return $payment->fresh(['subscriber', 'meter', 'invoice', 'user']);
         }, 3);
