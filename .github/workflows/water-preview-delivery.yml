@@ -77,39 +77,20 @@ jobs:
           retention-days: 14
   android-install:
     needs: android
-    runs-on: ubuntu-24.04
-    timeout-minutes: 18
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: Water-Android-preview
-          path: delivery
-      - name: Verify fresh APK installation and launch on Android 35
-        shell: bash
-        run: |
-          set -euo pipefail
-          (cd delivery && sha256sum --check SHA256SUMS.txt)
-          sdk="$ANDROID_HOME"
-          manager="$sdk/cmdline-tools/latest/bin"
-          "$manager/sdkmanager" --install "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
-          if [[ ! -w /dev/kvm ]]; then sudo setfacl -m "u:$(whoami):rw" /dev/kvm; fi
-          echo no | "$manager/avdmanager" create avd -n water-preview -k "system-images;android-35;google_apis;x86_64"
-          "$sdk/emulator/emulator" @water-preview -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          emulator_pid=$!
-          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
-          timeout 240 adb wait-for-device
-          timeout 300 bash -c 'until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do sleep 3; done'
-          adb shell input keyevent 82
-          adb install delivery/Water-Android-preview.apk
-          app=com.waterproject.app.water_project
-          activity="$(adb shell cmd package resolve-activity --brief "$app" | tr -d '\r' | tail -1)"
-          [[ "$activity" == "$app/"* ]]
-          adb shell am start -W -n "$activity" | tee "$RUNNER_TEMP/app-launch.txt"
-          grep -q 'Status: ok' "$RUNNER_TEMP/app-launch.txt"
-          sleep 10
-          adb shell pidof "$app"
-          adb shell uiautomator dump /sdcard/water-window.xml
-          adb shell cat /sdcard/water-window.xml | grep -F "package=\"$app\"" > /dev/null
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: ${{ format('{0}', github.run_id) }}
+  delivered-android-install:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: '45904749353'
   windows:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
     runs-on: windows-2022
