@@ -275,7 +275,9 @@ class ReadingResource extends Resource
                             \Filament\Notifications\Notification::make()
                                 ->title('تم إصدار الفاتورة من الطلب الأصلي')->success()->send();
                         } catch (\DomainException|\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
-                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                            // Confirmation-only action has no input schema for field errors.
+                            \Filament\Notifications\Notification::make()
+                                ->title('تعذر استئناف إصدار الفاتورة')->body($error->getMessage())->danger()->send();
                         }
                     }),
                 \Filament\Actions\EditAction::make()
