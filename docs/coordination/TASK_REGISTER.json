@@ -1,6 +1,7 @@
 {
   "permanent_close_current": {
     "stage": "G1B",
+    "active_work": {"owner":"Water local project session","base":"d8caf55dc1b2e77bb0466def1a31241775711a4d","pr":182,"scope":"Independent opening and carry eligibility, close writer and approval evidence. Coordinate with this claim before editing the same files.","status":"in_progress"},
     "issue_url": "https://github.com/iitij/water/issues/57",
     "production_status": "BLOCKED",
     "update_date": "2026-11-27",
