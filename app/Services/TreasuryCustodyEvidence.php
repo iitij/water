@@ -56,7 +56,7 @@ final class TreasuryCustodyEvidence
             $summary = app(CashHandoverService::class)->summary($session);
             $this->need(in_array($summary['status'], ['partial', 'complete'], true)
                 && $actor > 0 && $actor !== (int) $session->user_id
-                && $date >= $session->closed_at->toDateString(), 'custody_evidence_session');
+                && $date >= $session->closed_at->copy()->setTimezone('Asia/Aden')->toDateString(), 'custody_evidence_session');
             $channel = 'cash';
             $parent = ['session_id' => (string) $session->id, 'collector_id' => (string) $session->user_id,
                 'counted_minor' => (string) Cash::positiveStored($session->getRawOriginal('counted_amount'),

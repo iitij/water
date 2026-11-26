@@ -1,0 +1,242 @@
+name: Water preview delivery
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+env:
+  WATER_API_URL: https://alweshah.online/api/
+jobs:
+  android:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Prefer Google's Maven Central mirror for all Gradle builds
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat >> "$HOME/.gradle/gradle.properties" <<'PROPS'
+          org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.workers.max=2
+          kotlin.compiler.execution.strategy=in-process
+          PROPS
+          cat > "$HOME/.gradle/init.d/water-central.gradle" <<'GRADLE'
+          def mirrorUrl = 'https://maven-central.storage-download.googleapis.com/maven2/'
+          def preferMirror = { repos -> repos.maven { setUrl(mirrorUrl) } }
+          beforeSettings { settings ->
+              preferMirror(settings.pluginManagement.repositories)
+              settings.pluginManagement.repositories.google()
+              settings.pluginManagement.repositories.gradlePluginPortal()
+              preferMirror(settings.dependencyResolutionManagement.repositories)
+          }
+          beforeProject { project ->
+              preferMirror(project.buildscript.repositories)
+              project.repositories.whenObjectAdded { repo ->
+                  if (repo.name == 'MavenRepo') { repo.setUrl(mirrorUrl) }
+              }
+          }
+          GRADLE
+      - name: Build installable Android preview
+        run: |
+          set -euo pipefail
+          flutter config --jdk-dir "$JAVA_HOME"
+          cp ../android/gradlew android/gradlew
+          cp ../android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
+          chmod +x android/gradlew
+          flutter pub get --enforce-lockfile
+          flutter build apk --release --dart-define=API_BASE_URL="$WATER_API_URL"
+          git diff --exit-code -- pubspec.lock
+          mkdir -p delivery
+          cp build/app/outputs/flutter-apk/app-release.apk delivery/Water-Android-preview.apk
+          cd delivery
+          signer=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$signer" verify --verbose --print-certs Water-Android-preview.apk
+          sha256sum Water-Android-preview.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-Android-preview
+          path: mobile app/delivery/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  android-install:
+    needs: android
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: ${{ format('{0}', github.run_id) }}
+  delivered-android-install:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: '45904749353'
+  windows:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Build Windows x64
+        run: |
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter build windows --release --dart-define="API_BASE_URL=$env:WATER_API_URL"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows installer
+        run: |
+          $tool = Join-Path $env:RUNNER_TEMP 'inno-6.7.4.exe'
+          $dir = Join-Path $env:RUNNER_TEMP 'water-inno'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $tool
+          $signature = Get-AuthenticodeSignature -FilePath $tool
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') { throw 'Invalid Inno Setup publisher signature' }
+          $install = Start-Process -FilePath $tool -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/TYPE=full', ("/DIR=`"$dir`"") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Inno installation exited $($install.ExitCode)" }
+          ./windows/installer/build-installer.ps1 -SkipBuild -IsccPath (Join-Path $dir 'ISCC.exe')
+          if (!(Test-Path build/installer/setup.exe)) { throw 'Missing installer' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-Windows-x64-preview
+          path: |
+            mobile app/build/installer/setup.exe
+            mobile app/build/installer/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Verify unattended installation and app startup
+        run: |
+          ./test/windows_installer/smoke-installer.ps1
+          $output = Join-Path $env:RUNNER_TEMP 'water-install-check'
+          $setup = Start-Process -FilePath 'build/installer/setup.exe' -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ("/DIR=`"$output`"") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer exited $($setup.ExitCode)" }
+          $app = Start-Process -FilePath (Join-Path $output 'water_project.exe') -WorkingDirectory $output -PassThru
+          if ($app.WaitForExit(10000)) { throw "App exited early: $($app.ExitCode)" }
+          Stop-Process -Id $app.Id
+  web-package:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath,ctype,curl,dom,fileinfo,gd,intl,mbstring,pdo_mysql,pdo_sqlite,zip
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Package Laravel and compiled assets
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          set -euo pipefail
+          composer install --no-dev --no-scripts --prefer-dist --optimize-autoloader --no-interaction
+          composer check-platform-reqs --no-dev
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test -s public/build/manifest.json
+          bundle="$RUNNER_TEMP/water-web"
+          mkdir -p "$bundle"/{database,storage/app/private,storage/app/public,storage/framework/{cache/data,sessions,testing,views},storage/logs,bootstrap/cache}
+          cp -a app config lang resources routes vendor public bootstrap/app.php artisan composer.json composer.lock "$bundle/"
+          mv "$bundle/app.php" "$bundle/bootstrap/app.php"
+          cp bootstrap/providers.php "$bundle/bootstrap/"
+          cp -a database/{migrations,seeders,factories} "$bundle/database/"
+          rm -f "$bundle/public/test_upload.php" "$bundle/public/test.pdf"
+          test ! -e "$bundle/.env"
+          git rev-parse HEAD > "$bundle/REVISION"
+          (
+            cd "$bundle"
+            php artisan package:discover --ansi
+            php artisan filament:assets --no-interaction
+            assets=public/panel-assets
+            cmp vendor/filament/forms/dist/components/text-input/password-reveal.js "$assets/js/filament/forms/components/text-input/password-reveal.js"
+            cmp vendor/filament/support/dist/index.js "$assets/js/filament/support/support.js"
+            cmp vendor/filament/filament/dist/theme.css "$assets/css/filament/filament/app.css"
+            php artisan --version
+          )
+          mkdir -p delivery
+          tar -C "$bundle" -czf delivery/Water-web.tar.gz .
+          (cd delivery && sha256sum Water-web.tar.gz > SHA256SUMS.txt)
+      - name: Test login in the packaged archive
+        env:
+          APP_ENV: testing
+          APP_DEBUG: 'false'
+          APP_URL: http://127.0.0.1:8799
+          SESSION_DRIVER: file
+          CACHE_STORE: array
+          DB_CONNECTION: sqlite
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/water-packaged-login"
+          mkdir "$app"
+          tar xzf delivery/Water-web.tar.gz -C "$app"
+          export APP_KEY="base64:$(openssl rand -base64 32)"
+          export DB_DATABASE="$RUNNER_TEMP/packaged-login.sqlite"
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium)"
+          touch "$DB_DATABASE"
+          (cd "$app" && php artisan migrate --force --no-interaction)
+          (cd "$app" && exec php artisan serve --host=127.0.0.1 --port=8799 --no-reload) > "$RUNNER_TEMP/login-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 12 --retry-connrefused --retry-delay 1 "$APP_URL/up" > /dev/null
+          node tests/scripts/packaged_login_assets.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-web-preview
+          path: delivery/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  hosted-site:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Verify hosted web login and authentication boundary
+        run: |
+          set -euo pipefail
+          base=https://alweshah.online
+          for path in /up /admin/login; do
+            status=$(curl -sS --retry 2 --connect-timeout 8 --max-time 20 -o "$RUNNER_TEMP/body" -w '%{http_code}' "$base$path")
+            echo "$path HTTP $status"
+            test "$status" = 200
+            if test "$path" = /admin/login; then grep -Eiq 'type=["\x27]password|autocomplete="current-password' "$RUNNER_TEMP/body"; fi
+          done
+          status=$(curl -sS --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$base/api/me")
+          echo "/api/me HTTP $status"
+          test "$status" = 401
