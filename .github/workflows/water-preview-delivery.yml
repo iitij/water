@@ -1,0 +1,154 @@
+name: Water preview delivery
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+env:
+  WATER_API_URL: https://alweshah.online/api/
+jobs:
+  android:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Build installable Android preview
+        run: |
+          set -euo pipefail
+          cp ../android/gradlew android/gradlew
+          cp ../android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
+          chmod +x android/gradlew
+          flutter pub get --enforce-lockfile
+          flutter build apk --release --no-pub --dart-define=API_BASE_URL="$WATER_API_URL"
+          mkdir -p delivery
+          cp build/app/outputs/flutter-apk/app-release.apk delivery/Water-Android-preview.apk
+          cd delivery
+          signer=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$signer" verify --verbose --print-certs Water-Android-preview.apk
+          sha256sum Water-Android-preview.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-Android-preview
+          path: mobile app/delivery/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  windows:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+      - name: Build Windows x64
+        run: |
+          flutter pub get --enforce-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter build windows --release --no-pub --dart-define="API_BASE_URL=$env:WATER_API_URL"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows installer
+        run: |
+          choco upgrade innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./windows/installer/build-installer.ps1 -SkipBuild
+          if (!(Test-Path build/installer/setup.exe)) { throw 'Missing installer' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-Windows-x64-preview
+          path: |
+            mobile app/build/installer/setup.exe
+            mobile app/build/installer/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  web-package:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath,ctype,curl,dom,fileinfo,gd,intl,mbstring,pdo_mysql,zip
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Package Laravel and compiled assets
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          set -euo pipefail
+          composer install --no-dev --no-scripts --prefer-dist --optimize-autoloader --no-interaction
+          composer check-platform-reqs --no-dev
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          test -s public/build/manifest.json
+          bundle="$RUNNER_TEMP/water-web"
+          mkdir -p "$bundle"/{database,storage/app/private,storage/app/public,storage/framework/{cache/data,sessions,testing,views},storage/logs,bootstrap/cache}
+          cp -a app config lang resources routes vendor public bootstrap/app.php artisan composer.json composer.lock "$bundle/"
+          mv "$bundle/app.php" "$bundle/bootstrap/app.php"
+          cp bootstrap/providers.php "$bundle/bootstrap/"
+          cp -a database/{migrations,seeders,factories} "$bundle/database/"
+          rm -f "$bundle/public/test_upload.php" "$bundle/public/test.pdf"
+          test ! -e "$bundle/.env"
+          git rev-parse HEAD > "$bundle/REVISION"
+          (cd "$bundle" && php artisan package:discover --ansi && php artisan --version)
+          mkdir -p delivery
+          tar -C "$bundle" -czf delivery/Water-web.tar.gz .
+          (cd delivery && sha256sum Water-web.tar.gz > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-web-preview
+          path: delivery/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  hosted-site:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/water-preview-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Verify hosted web login and authentication boundary
+        run: |
+          set -euo pipefail
+          base=https://alweshah.online
+          for path in /up /admin/login; do
+            status=$(curl -sS --retry 2 --connect-timeout 8 --max-time 20 -o "$RUNNER_TEMP/body" -w '%{http_code}' "$base$path")
+            echo "$path HTTP $status"
+            test "$status" = 200
+            if test "$path" = /admin/login; then grep -Eiq 'type=["\x27]password|autocomplete="current-password' "$RUNNER_TEMP/body"; fi
+          done
+          status=$(curl -sS --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$base/api/me")
+          echo "/api/me HTTP $status"
+          test "$status" = 401
