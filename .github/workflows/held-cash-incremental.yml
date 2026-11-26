@@ -1,7 +1,7 @@
-name: Prospective void request database fence
+name: Prospective database privilege preflight
 on:
   push:
-    branches: ['release/prospective-void-request-db-fence']
+    branches: ['release/prospective-database-preflight']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify receipt request and decision audit evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_request_db_fence_|test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once|test_round137_rejected_request_creates_no_financial_posting_and_legacy_pending_is_not_adopted|test_release_void_approval_is_bound_to_latest_request_and_exact_replay|test_release_void_service_fence_preserves_unregistered_legacy_receipt_behavior' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify grant allowlist
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,6 +96,32 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify receipt request and decision audit evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_void_request_db_fence_|test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once|test_round137_rejected_request_creates_no_financial_posting_and_legacy_pending_is_not_adopted|test_release_void_approval_is_bound_to_latest_request_and_exact_replay|test_release_void_service_fence_preserves_unregistered_legacy_receipt_behavior' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-
+      - name: Verify grant allowlist
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify deployment account and actual restricted runtime account
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          php artisan migrate:fresh --force
+          php artisan ledger:protect --install
+          php artisan financial:database-preflight --guards
+          if php artisan financial:database-preflight --runtime; then
+            echo 'Elevated migration account unexpectedly accepted'
+            exit 1
+          fi
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
+          CREATE TABLE water_test.runtime_privilege_probe (id INT PRIMARY KEY, value INT);
+          CREATE USER 'water_runtime_qa'@'%' IDENTIFIED BY 'disposable_runtime_password';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON water_test.runtime_privilege_probe TO 'water_runtime_qa'@'%';
+          SQL
+          DB_USERNAME=water_runtime_qa DB_PASSWORD=disposable_runtime_password php artisan financial:database-preflight --runtime
+          docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'INSERT INTO runtime_privilege_probe VALUES (1,2); UPDATE runtime_privilege_probe SET value=3 WHERE id=1; SELECT * FROM runtime_privilege_probe; DELETE FROM runtime_privilege_probe WHERE id=1;'
+          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'DROP TABLE runtime_privilege_probe'; then
+            echo 'Restricted account unexpectedly allowed DDL'
+            exit 1
+          fi
+          if docker exec "$QA_CONTAINER" mysql -uwater_runtime_qa -pdisposable_runtime_password water_test -e 'CREATE TRIGGER runtime_probe BEFORE INSERT ON runtime_privilege_probe FOR EACH ROW SET NEW.value=0'; then
+            echo 'Restricted account unexpectedly allowed trigger creation'
+            exit 1
+          fi
