@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify refund/transfer model fence f28a4c561d69b89e782e5a07bef623b4ed4ca546 exact targeted CI; then held credit, other ledger/document paths and raw write protection. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify held credit model fence 4810546d2706341a49c41d98183fe74d6427ff46 exact targeted CI; then quiet deletion and raw write protection. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1945,12 +1945,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_refund_transfer_model_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "9f96d6e3f142f525f5da332a5f11c2146d6d5b24",
     "branch": "release/prospective-refund-transfer-model-fence",
     "source": "f28a4c561d69b89e782e5a07bef623b4ed4ca546",
     "scope": "Protected receipt refund/transfer model creation, quiet mutations, and subscriber ledger posting require the matching active gated writer; no legacy service fallback for registered receipts even with flags off. Existing correction ledger updates rejected; issuance lock before subscriber/document locks. Focused bypass test plus changed-path transfer, cash refund and bank refund regressions.",
-    "limits": "CI pending. New unregistered legacy corrections with flags off retain previous creation paths; raw/builder writes, deletion and other ledger/document types remain open. No historical repair, main merge or production activation.",
-    "next": "Verify exact targeted CI; then secure held credit and other outstanding ledger types, quiet deletes and raw writes with legitimate service exceptions. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks."
+    "limits": "Exact targeted CI passed on both engines. Unregistered legacy corrections retain previous paths with flags off. Raw/builder writes, deletion and other ledger/document types remain open. No production activation.",
+    "next": "Protect held cash credit document and ledger posting paths.",
+    "run": 45733448300,
+    "jobs": [
+      {
+        "id": 139620878817,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 391,
+        "exit": 0
+      },
+      {
+        "id": 139620879169,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 391,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_held_credit_model_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "f28a4c561d69b89e782e5a07bef623b4ed4ca546",
+    "branch": "release/prospective-held-credit-model-fence",
+    "source": "4810546d2706341a49c41d98183fe74d6427ff46",
+    "scope": "Always require active private held-credit issuance identity for Eloquent document creation and matching ledger posting at model/service layers. Reject quiet mutation and idle service spoofing. Preserve gate, independent approval, capacity, registry, allocation, replay and reserve behavior. Four targeted cases per engine.",
+    "limits": "CI pending. Existing DB triggers protect held source UPDATE/DELETE and SQLite replace; raw INSERT, other ledger writes and quiet deletions not comprehensively fenced. No historical repair, main merge or production activation.",
+    "next": "Verify exact targeted CI, then protect remaining quiet deletes and raw writes with meter retirement exceptions. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks."
   }
 }
