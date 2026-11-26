@@ -66,6 +66,12 @@ final class TreasuryCashCountService
     /** Fresh reviewed equal observation, under the shared issuance fence. */
     public function assertFreshEqualObservation(int $accountId, int $countId, string $date): void
     {
+        $this->assertFreshObservationVariance($accountId, $countId, $date, 0);
+    }
+
+    /** Exact accepted observation against the current ledger snapshot. */
+    public function assertFreshObservationVariance(int $accountId, int $countId, string $date, int $variance): void
+    {
         if (DB::transactionLevel() <= 0) throw new \DomainException('held_cash_reservation_context');
         $this->lock();
         $account = $this->account($accountId);
@@ -77,7 +83,7 @@ final class TreasuryCashCountService
         }
         $report = $this->report($latest, $account);
         if ($report['status'] !== 'accepted_observation' || ! $report['ledger_snapshot_matches']
-            || $report['variance_status'] !== 'equal' || $report['adjustment'] !== null) {
+            || Money::signed($latest->variance_minor) !== $variance || $report['adjustment'] !== null) {
             throw new \DomainException('completed_refund_resolution_stale_count');
         }
     }

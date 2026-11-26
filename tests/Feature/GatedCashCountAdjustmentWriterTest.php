@@ -1310,6 +1310,53 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
     }
 
+    public function test_release_refund_posting_readiness_exact_shortage_does_not_post(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($f['requester']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $this->rejects('completed_refund_resolution_independence', fn () => $service->postingResolutionReadiness(
+            $f['requester'], $f['uuid'], $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $proof = $service->postingResolutionReadiness($f['approver'], $f['uuid'], $this->nowAt());
+        $this->assertSame(6, $proof['claimed_minor']);
+        $this->assertSame(-6, $proof['expected_subscriber_delta_minor']);
+        $this->assertSame(-6, $proof['expected_treasury_delta_minor']);
+        $this->assertSame($proof['recorded_balance_minor'] - 6, $proof['observed_balance_minor']);
+        $this->assertTrue($proof['evidence_ready_for_writer_review']);
+        $this->assertFalse($proof['writer_eligibility_verified']);
+        $this->assertFalse($proof['financial_posting_created']);
+        $this->assertFalse($proof['spending_authorized']);
+        $this->assertFalse($proof['closure_authorized']);
+        $this->assertTrue($proof['incident_unresolved']);
+        $this->assertEquals($before, $snapshot());
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_evidence');
+    }
+
+    public function test_release_refund_posting_readiness_refuses_wrong_shortage(): void
+    {
+        $f = $this->resolutionControl('posting_required', -5);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_resolution_evidence', fn () =>
+            app(\App\Services\CompletedCashRefundRequest::class)->postingResolutionReadiness($f['approver'], $f['uuid'], $this->nowAt()));
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_evidence');
+    }
+
+    public function test_release_refund_posting_readiness_refuses_newer_observation(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-NEWER-POSTING-COUNT', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_resolution_stale_count', fn () =>
+            app(\App\Services\CompletedCashRefundRequest::class)->postingResolutionReadiness($f['approver'], $f['uuid'], $this->nowAt()));
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_evidence');
+    }
+
     public function test_release_refund_resolution_control_refuses_newer_cash_count(): void
     {
         $f = $this->resolutionControl();

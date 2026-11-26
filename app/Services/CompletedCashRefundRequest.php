@@ -343,8 +343,67 @@ final class CompletedCashRefundRequest
             });
     }
 
+    /** Internal planning only: the actual writer must revalidate under its own gate.
+     * No approval record, posting, spending permission or release is created. */
+    public function postingResolutionReadiness(User $actor, string $uuid, DateTimeImmutable $now): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+            function () use ($actor, $uuid, $date): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new DomainException('gated_refund_issuance_lock');
+                }
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                self::authenticated($actor);
+                app(TreasuryRegisterService::class)->authorize($actor);
+                $this->guard();
+                $request = $this->find($uuid, true);
+                abort_unless($request !== null, 404);
+                $closed = $this->decision($request);
+                if ($closed === null) throw new DomainException('completed_refund_resolution_closed_request_required');
+                $sources = $this->resolutionSources($request, $closed, (int) $actor->id, true);
+                $p = $sources['proposal']->after;
+                $intent = $request->after;
+                $minor = FinancialAmount::parse($intent['amount'])->minor;
+                if ($this->verifiedResolution($request, $closed) !== null
+                    || $this->unresolvedForAccount($p['account_id'])['count'] !== 1
+                    || app(HeldCashReservation::class)->unpostedCashRefundMinor() !== 0) {
+                    throw new DomainException('completed_refund_resolution_competing_incidents');
+                }
+                foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
+                    if (($approval->after['count_id'] ?? null) === $p['count_id']) {
+                        throw new DomainException('completed_refund_resolution_count_reused');
+                    }
+                }
+                // Initially accept only same-day claims, never backdate a correction.
+                if ($intent['date'] !== $date || $p['proposed_on'] !== $date) {
+                    throw new DomainException('completed_refund_resolution_stale_count');
+                }
+                app(TreasuryCashCountService::class)->assertFreshObservationVariance(
+                    $p['account_id'], $p['count_id'], $date, -$minor);
+                $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($p['account_id'], $date);
+                if ($balance !== $p['recorded_minor'] || $balance < $minor
+                    || \App\Support\SignedMinor::subtract($balance, $minor) !== $p['counted_minor']) {
+                    throw new DomainException('completed_refund_resolution_stale_count');
+                }
+                return [
+                    'operation_uuid' => $uuid, 'account_id' => $p['account_id'],
+                    'payment_id' => $p['payment_id'], 'count_id' => $p['count_id'],
+                    'claimed_minor' => $minor, 'recorded_balance_minor' => $balance,
+                    'observed_balance_minor' => $p['counted_minor'],
+                    'expected_subscriber_delta_minor' => -$minor, 'expected_treasury_delta_minor' => -$minor,
+                    'evidence_ready_for_writer_review' => true, 'writer_eligibility_verified' => false,
+                    'financial_posting_created' => false, 'spending_authorized' => false,
+                    'incident_unresolved' => true, 'closure_authorized' => false,
+                ];
+            });
+    }
+
     /** Fingerprint historical source rows; never compare today's balance to an old count on replay. */
-    private function resolutionSources(AuditEvent $request, AuditEvent $closed, int $approver): array
+    private function resolutionSources(AuditEvent $request, AuditEvent $closed, int $approver, bool $postingRequired = false): array
     {
         $fail = 'completed_refund_resolution_evidence';
         $p = $request->after;
@@ -355,15 +414,17 @@ final class CompletedCashRefundRequest
         if ($proposals->count() !== 1) throw new DomainException($fail);
         $proposal = $proposals->first();
         $q = $proposal->after;
+        $expectedVariance = $postingRequired ? -FinancialAmount::parse($p['amount'])->minor : 0;
         if (! is_array($q) || $proposal->entity_type !== 'completed_cash_refund_request' || $proposal->source !== 'internal'
             || (int) $proposal->id <= (int) $closed->id || (int) $proposal->actor_user_id <= 0
             || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id
             || ($q['operation_uuid'] ?? null) !== $request->entity_id || ($q['account_id'] ?? null) !== $p['account_id']
             || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
             || ($q['reference'] ?? null) !== $p['reference'] || ($q['incident_unresolved'] ?? null) !== true
-            || ! in_array($q['classification'] ?? null, ['no_disbursement', 'cash_returned'], true)
-            || ($q['variance_minor'] ?? null) !== 0 || ! is_int($q['counted_minor'] ?? null)
-            || $q['counted_minor'] !== ($q['recorded_minor'] ?? null)
+            || ! in_array($q['classification'] ?? null, $postingRequired ? ['posting_required'] : ['no_disbursement', 'cash_returned'], true)
+            || ($q['variance_minor'] ?? null) !== $expectedVariance || ! is_int($q['counted_minor'] ?? null)
+            || ! is_int($q['recorded_minor'] ?? null)
+            || $q['counted_minor'] !== \App\Support\SignedMinor::add($q['recorded_minor'], $expectedVariance)
             || ! is_int($q['count_id'] ?? null) || ! is_int($q['review_id'] ?? null)
             || ! is_string($q['evidence'] ?? null) || mb_strlen(trim($q['evidence'])) < 20
             || ! is_string($q['proposed_on'] ?? null)) {
@@ -384,7 +445,7 @@ final class CompletedCashRefundRequest
             || (int) $count->counted_by === (int) $review->reviewed_by
             || \App\Support\TreasuryMoney::document($count->counted_minor) !== $q['counted_minor']
             || \App\Support\TreasuryMoney::signed($count->recorded_minor) !== $q['recorded_minor']
-            || \App\Support\TreasuryMoney::signed($count->variance_minor) !== 0
+            || \App\Support\TreasuryMoney::signed($count->variance_minor) !== $expectedVariance
             || $count->ledger_hash !== $q['ledger_hash']
             || $o->event !== 'treasury.cash_count_recorded' || $o->entity_type !== 'treasury_cash_count'
             || (string) $o->entity_id !== (string) $count->id || (int) $o->actor_user_id !== (int) $count->counted_by
@@ -410,7 +471,7 @@ final class CompletedCashRefundRequest
         if (($observation['ledger_hash'] ?? null) !== $q['ledger_hash']
             || ($observation['counted_minor'] ?? null) !== $q['counted_minor']
             || ($observation['recorded_minor'] ?? null) !== $q['recorded_minor']
-            || ($observation['variance_minor'] ?? null) !== 0
+            || ($observation['variance_minor'] ?? null) !== $expectedVariance
             || ($observation['reference'] ?? null) !== $count->reference
             || ($observation['evidence'] ?? null) !== $count->evidence
             || (int) ($reviewAudit['treasury_cash_count_id'] ?? 0) !== (int) $count->id
