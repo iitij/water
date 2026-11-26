@@ -26,10 +26,20 @@ jobs:
           (cd delivery && sha256sum --check SHA256SUMS.txt)
           sdk="$ANDROID_HOME"
           export PATH="$sdk/platform-tools:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/water-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           manager="$sdk/cmdline-tools/latest/bin"
           "$manager/sdkmanager" --install "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
           if [[ ! -w /dev/kvm ]]; then sudo setfacl -m "u:$(whoami):rw" /dev/kvm; fi
-          echo no | "$manager/avdmanager" create avd -n water-preview -k "system-images;android-35;google_apis;x86_64"
+          avd="$ANDROID_AVD_HOME/water-preview.avd"
+          "$manager/avdmanager" create avd --force -n water-preview --device pixel_5 --path "$avd" -k "system-images;android-35;google_apis;x86_64" </dev/null
+          test -s "$avd/config.ini"
+          if [[ ! -s "$ANDROID_AVD_HOME/water-preview.ini" ]]; then
+            printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-35\n' "$avd" > "$ANDROID_AVD_HOME/water-preview.ini"
+          fi
+          "$sdk/emulator/emulator" -list-avds | grep -Fx water-preview
           "$sdk/emulator/emulator" @water-preview -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
