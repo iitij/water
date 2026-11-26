@@ -108,6 +108,9 @@ final class FinancialCloseEvidenceDiagnostic
         if ($cashObservations !== null && ! $cashObservations['matched']) $blockers[] = 'cash_period_observations_unmatched';
         if ($transit !== null && ! $transit['matched']) $blockers[] = 'transit_period_unmatched';
         if ($approvedCustody !== null && ! $approvedCustody['matched']) $blockers[] = 'approved_custody_period_unmatched';
+        if ($approvedCustody !== null && ($approvedCustody['unapproved_at_opening'] !== [] || $approvedCustody['unapproved_at_closing'] !== [])) {
+            $blockers[] = 'collector_custody_outside_approved_counts';
+        }
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';

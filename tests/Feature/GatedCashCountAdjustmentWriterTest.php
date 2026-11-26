@@ -9252,6 +9252,38 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_approved_custody_period_keeps_next_month_approval_out_of_prior_count(): void
+    {
+        [$issuer, $reviewer, $account] = $this->fixture();
+        $session = app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $issuer, (int) $account['id'],
+            '4.25', 'QA-CUSTODY-PENDING', self::EVIDENCE, self::OTHER, $this->nowAt())['session'];
+        $sessions = app(CashSessionService::class);
+        $closed = $sessions->close($session, '4.25');
+        $december = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T21:00:00Z'));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $inspect = fn (int $id) => app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $id, now()->toDateTimeImmutable());
+        $november = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $nov = $inspect($november);
+        $expected = [['session_id' => (string) $closed->id, 'collector_id' => (string) $closed->user_id,
+            'closed_at_cutoff' => true]];
+        $this->assertSame($expected, $nov['approved_counted_custody_period']['unapproved_at_closing']);
+        $this->assertContains('collector_custody_outside_approved_counts', $nov['blockers']);
+        $this->assertSame(0, $nov['approved_counted_custody_period']['totals']['closing_minor']);
+        $sessions->decide($closed, true, $reviewer);
+        $this->assertSame($nov['approved_counted_custody_period'], $inspect($november)['approved_counted_custody_period']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-31T21:00:00Z'));
+        $dec = $inspect($december)['approved_counted_custody_period'];
+        $this->assertSame($expected, $dec['unapproved_at_opening']);
+        $this->assertSame([], $dec['unapproved_at_closing']);
+        $this->assertSame(425, $dec['totals']['approved_minor']);
+        $this->assertSame(425, $dec['totals']['closing_minor']);
+    }
+
     public function test_approved_custody_period_detects_an_orphan_physical_approval(): void
     {
         $actor = $this->actor();

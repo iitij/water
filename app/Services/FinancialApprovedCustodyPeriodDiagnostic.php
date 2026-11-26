@@ -27,8 +27,10 @@ final class FinancialApprovedCustodyPeriodDiagnostic
             throw new DomainException('approved_custody_requires_locked_transaction');
         }
 
-        $endUtc = (new DateTimeImmutable($nextOn, new DateTimeZone('Asia/Aden')))
+        $utcBoundary = static fn (string $date) => (new DateTimeImmutable($date, new DateTimeZone('Asia/Aden')))
             ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        $startUtc = $utcBoundary($startOn);
+        $endUtc = $utcBoundary($nextOn);
         // An approval can still be present in the audit after a session row changes.
         $physicalAudits = AuditEvent::query()->where('event', 'cash_session.approved')
             ->where('entity_type', CashSession::class)->where('occurred_at', '<', $endUtc)
@@ -65,8 +67,29 @@ final class FinancialApprovedCustodyPeriodDiagnostic
         }
 
         return ['basis' => 'approved_physical_counts_less_registered_handovers',
+            'unapproved_at_opening' => $this->unapprovedAt($startUtc, $startOn),
+            'unapproved_at_closing' => $this->unapprovedAt($endUtc, $nextOn),
             'matched' => $issues === [], 'issues' => $issues, 'totals' => $issues === [] ? $totals : null,
             'rows' => $issues === [] ? $rows : []];
+    }
+
+    /** Reconstruct approval status at the cutoff even after a later decision. */
+    private function unapprovedAt(string $cutoffUtc, string $localDate): array
+    {
+        $sessions = DB::table('cash_sessions')
+            ->where(fn ($q) => $q->where('opened_at', '<', $cutoffUtc)
+                ->orWhere(fn ($q) => $q->whereNull('opened_at')->where('session_date', '<', $localDate)))
+            ->where(fn ($q) => $q->whereNull('approved_at')->orWhere('approved_at', '>=', $cutoffUtc)
+                ->orWhere('state', '!=', CashSession::STATE_APPROVED)
+                ->orWhereNull('settlement_basis')->orWhere('settlement_basis', '!=', 'physical_cash'))
+            ->orderBy('id')->lockForUpdate()->get(['id', 'user_id', 'opened_at', 'closed_at']);
+        $items = [];
+        foreach ($sessions as $session) {
+            $items[] = ['session_id' => (string) $session->id, 'collector_id' => (string) $session->user_id,
+                'closed_at_cutoff' => $session->closed_at !== null && $session->closed_at < $cutoffUtc];
+        }
+
+        return $items;
     }
 
     private function sessionRow(CashSession $session, string $startOn, string $nextOn): array
