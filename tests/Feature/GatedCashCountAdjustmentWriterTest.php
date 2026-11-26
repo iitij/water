@@ -7181,7 +7181,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $uuid = '88888888-8888-4888-8888-888888888888';
         $immediate = fn () => $writer->request($issuer, (int) $first->id, $reason, $this->nowAt(), $uuid);
         $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        // A temporary freeze may be lifted; CLOSED is irreversible.
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $immediate);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         $this->assertTrue($immediate()['registry_created']);
