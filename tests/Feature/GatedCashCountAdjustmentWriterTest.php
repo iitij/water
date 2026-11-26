@@ -1613,7 +1613,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     }
 
     /** MySQL only: independent sessions, observed contention on the same scope lock. */
-    private function refundResolutionRace(array $f, bool $differentReviewer): array
+    private function refundResolutionRace(array $f, bool $differentReviewer, bool $batch = false): array
     {
         $this->assertSame('mysql', DB::getDriverName());
         $this->assertSame('water_test', DB::getDatabaseName());
@@ -1644,9 +1644,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                         file_put_contents("$dir/ready-$i", (string) $connection);
                         $wait("$dir/start");
                         touch("$dir/enter-$i");
-                        $result = app(\App\Services\CompletedCashRefundRequest::class)->postResolution(
-                            User::findOrFail($actorId), $f['uuid'],
-                            'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
+                        $service = app(\App\Services\CompletedCashRefundRequest::class);
+                        $result = $batch
+                            ? $service->postBatchResolution(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
+                                'Independent proof confirms both original cash refunds were disbursed', $this->nowAt())
+                            : $service->postResolution(User::findOrFail($actorId), $f['uuid'],
+                                'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
                         $outcome = ['ok' => true, 'created' => $result['registry_created'], 'actor' => $actorId];
                     } catch (\Throwable $error) {
                         $outcome = ['ok' => false, 'error' => get_class($error), 'message' => $error->getMessage(), 'actor' => $actorId];
@@ -1818,6 +1821,66 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($endpoint, $data + ['proposal_id' => $revision->id])->assertOk()->assertJsonPath('registry_created', false);
         $this->assertSame(1, DB::table('payment_refunds')->count());
         $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->count());
+    }
+
+    private function assertRefundBatchRace(bool $differentReviewer): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            $this->markTestSkipped('Independent shared-database connections require the MySQL QA runner.');
+        }
+        $f = $this->batchResolutionControl();
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole();
+        $payment = Payment::findOrFail($request->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $beforeBalance = $ledger->accountBalanceMinor($subscriber);
+        $cash = fn () => $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25'));
+        $beforeCash = $cash();
+        $results = $this->refundResolutionRace($f, $differentReviewer, true);
+        $success = array_values(array_filter($results, fn ($r) => $r['ok']));
+        $this->assertCount($differentReviewer ? 1 : 2, $success, json_encode($results));
+        $this->assertCount(1, array_filter($success, fn ($r) => $r['created']), json_encode($results));
+        if ($differentReviewer) {
+            $rejected = collect($results)->firstWhere('ok', false);
+            $this->assertSame(DomainException::class, $rejected['error'], json_encode($results));
+            $this->assertSame('completed_refund_batch_conflict', $rejected['message']);
+        }
+        $winner = collect($success)->firstWhere('created', true);
+        $this->assertSame($beforeBalance - 10, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($beforeCash - 10, $cash());
+        $this->assertSame($f['counted'], $cash());
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+        $this->assertSame(2, DB::table('financial_posting_operations')
+            ->whereIn('operation_uuid', array_keys($f['proposalIds']))->count());
+        $this->assertSame(4, DB::table('financial_posting_events')
+            ->whereIn('operation_uuid', array_keys($f['proposalIds']))->count());
+        \Laravel\Sanctum\Sanctum::actingAs(User::findOrFail($winner['actor']));
+        foreach ([$f['uuid'] => -6, $f['second'] => -4] as $uuid => $minor) {
+            $legs = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+            $this->assertSame([$minor, $minor], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+            $this->getJson($f['root'].$uuid)->assertOk()->assertJsonPath('status', 'rejected')
+                ->assertJsonPath('completion_verified', true)->assertJsonPath('incident_unresolved', false);
+        }
+        $approval = AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->sole();
+        $this->assertSame($winner['actor'], (int) $approval->actor_user_id);
+        $this->assertSame(10, $approval->after['total_claimed_minor']);
+        $this->assertSame(2, AuditEvent::query()->where('event', 'financial.completed_cash_refund')->count());
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+        $liquidity = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($f['id']));
+        $this->assertSame(0, $liquidity['unresolved_refund_incident_count']);
+    }
+
+    public function test_release_refund_batch_concurrency_identical_retries_commit_once(): void
+    {
+        $this->assertRefundBatchRace(false);
+    }
+
+    public function test_release_refund_batch_concurrency_competing_reviewers_commit_once(): void
+    {
+        $this->assertRefundBatchRace(true);
     }
 
     public function test_release_refund_concurrency_identical_retries_commit_once(): void
