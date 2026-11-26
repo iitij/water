@@ -82,6 +82,9 @@ final class FinancialSourceInsertProtection
         $readingRetirement = $retirement." AND OLD.invoice_id IS NOT NULL AND OLD.is_invoiced = 1
             AND EXISTS (SELECT 1 FROM meters m JOIN invoices i ON i.id = OLD.invoice_id
                 WHERE m.id = OLD.meter_id AND m.subscriber_id = i.subscriber_id AND ({$meterCode}){$current})";
+        $localDate = static fn (string $timestamp): string => $sqlite
+            ? "date({$timestamp}, '+3 hours')"
+            : "DATE(DATE_ADD('1970-01-01 00:00:00', INTERVAL (UNIX_TIMESTAMP({$timestamp}) + 10800) SECOND))";
         $defs = [];
         foreach (self::DATES as $table => $column) {
             $date = "NEW.{$column}";
@@ -125,8 +128,8 @@ final class FinancialSourceInsertProtection
             if (in_array($table, ['invoices', 'payments'], true)) {
                 // A reversal is a separate financial event. Its own effective
                 // date, not the original document date, controls the fence.
-                $oldVoid = str_replace("NEW.{$column}", 'OLD.voided_at', $invalid);
-                $newVoid = str_replace("NEW.{$column}", 'NEW.voided_at', $invalid);
+                $oldVoid = str_replace("NEW.{$column}", $localDate('OLD.voided_at'), $invalid);
+                $newVoid = str_replace("NEW.{$column}", $localDate('NEW.voided_at'), $invalid);
                 $voidFields = ['voided_at', 'void_reason', 'voided_by'];
                 if ($table === 'payments') $voidFields[] = 'voided_via';
                 $voidChanges = [];
@@ -173,6 +176,9 @@ final class FinancialSourceInsertProtection
                 $keys = array_merge(['id'], self::UNIQUE_KEYS[$table]);
                 $conflicts = implode(' OR ', array_map(fn ($key) => "d.{$key} = NEW.{$key}", $keys));
                 $prior = str_replace("NEW.{$column}", "d.{$column}", $invalid);
+                if (in_array($table, ['invoices', 'payments'], true)) {
+                    $prior = "({$prior}) OR (d.voided_at IS NOT NULL AND (".str_replace("NEW.{$column}", $localDate('d.voided_at'), $invalid)."))";
+                }
                 foreach (['INSERT', 'UPDATE'] as $event) {
                     $exclude = $event === 'UPDATE' ? ' AND d.id <> OLD.id' : '';
                     $condition = "EXISTS (SELECT 1 FROM {$table} d WHERE ({$conflicts}){$exclude} AND ({$prior}))";
@@ -217,9 +223,6 @@ final class FinancialSourceInsertProtection
         // date, never the date of the original release journal.
         // MySQL TIMESTAMP is an instant; use epoch arithmetic to avoid
         // depending on the reader's session time zone or time-zone tables.
-        $localDate = static fn (string $timestamp): string => $sqlite
-            ? "date({$timestamp}, '+3 hours')"
-            : "DATE(DATE_ADD('1970-01-01 00:00:00', INTERVAL (UNIX_TIMESTAMP({$timestamp}) + 10800) SECOND))";
         $revisionDate = "(SELECT ".$localDate('r.created_at')." FROM payment_allocation_revisions r WHERE r.id = NEW.revision_id{$current})";
         foreach ([
             'payment_allocation_revisions' => $localDate('NEW.created_at'),
@@ -290,7 +293,7 @@ final class FinancialSourceInsertProtection
                 $link = $parent === 'squares'
                     ? "EXISTS (SELECT 1 FROM subscribers s WHERE s.id = d.subscriber_id AND s.square_id = OLD.id{$current})"
                     : '('.implode(' OR ', array_map(fn ($key) => "d.{$key} = OLD.id", $columns)).')';
-                $dates = ['d.'.self::DATES[$child], 'd.voided_at'];
+                $dates = ['d.'.self::DATES[$child], $localDate('d.voided_at')];
                 $dateChecks = [];
                 foreach ($dates as $date) {
                     $dateChecks[] = "EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
