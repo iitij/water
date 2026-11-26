@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue direct model invoice/transaction writer fences (inventory model and service hooks before changes), then prospective reserve discharge, liquidity, Flutter inventory and integrated release checks.",
+  "next": "Verify exact targeted CI and fix confirmed failures. Inventory remaining legitimate model and raw query writes before protecting all financial mutation paths; continue reserve discharge, liquidity, Flutter compatibility and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-reading-auto-invoice-api",
-      "commit": "c36c826c21b46f36c9f99f5172b595cb5bb72d9a",
-      "run": 45728788983,
-      "sqlite": "2 tests, 56 assertions",
-      "mysql": "2 tests, 56 assertions",
-      "scope": "API reading create and batch sync persist audit intent atomically with new reading under meter/subscriber locks. Original actor permission, automatic setting, notes, meter, stable reading-bound UUID and frozen exact pending observation set are bound; financial writer rechecks under gate before new posting. Retry resumes only existing durable intent after observation transaction ends, refuses changed input/settings/permission or pending set, no fallback when candidate disabled. Two targeted tests cover closed period recovery, no duplicate reading or invoice, cancellation replay, initial unauthorized actor and changed pending set."
+      "branch": "release/prospective-reading-auto-invoice-filament",
+      "commit": "7cf8c90c4a587abf694695cb5acb1a0c22638ca2",
+      "run": 45729615917,
+      "sqlite": "2 tests, 62 assertions",
+      "mysql": "2 tests, 62 assertions",
+      "scope": "ListReadings header create action now records reading and durable automatic invoice intent in same subscriber/meter-locked transaction, issues after commit with refreshed original actor. New explicit row recovery action only original authorized actor with unposted null-notes intent, reuses protected frozen reading proof and UUID, hides completed or cancelled operation. Two targeted tests exercise actual modal creation, closed-period preservation, disabled setting, other actor denial, original retry, invalid reading, automatic issue after success and unchanged cash."
     }
   },
   "round146": {
@@ -1778,12 +1778,42 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_reading_auto_invoice_filament": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "c36c826c21b46f36c9f99f5172b595cb5bb72d9a",
     "branch": "release/prospective-reading-auto-invoice-filament",
-    "source": "d90392337dd2963a034234b74ba137a0b74fd108",
+    "source": "7cf8c90c4a587abf694695cb5acb1a0c22638ca2",
     "scope": "ListReadings header create action now records reading and durable automatic invoice intent in same subscriber/meter-locked transaction, issues after commit with refreshed original actor. New explicit row recovery action only original authorized actor with unposted null-notes intent, reuses protected frozen reading proof and UUID, hides completed or cancelled operation. Two targeted tests exercise actual modal creation, closed-period preservation, disabled setting, other actor denial, original retry, invalid reading, automatic issue after success and unchanged cash.",
-    "limits": "CI pending. Standalone CreateReading page historically does not auto-issue; unchanged. Recovery row only null-notes intent; other API notes require original API retry. Broader direct model/ledger fences, reserve discharge, general liquidity, client UUID rollout, audit immutability and full release checks still open. No production activation, main merge or historical repair.",
-    "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue direct model invoice/transaction writer fences (inventory model and service hooks before changes), then prospective reserve discharge, liquidity, Flutter inventory and integrated release checks."
+    "limits": "Exact source and both raw logs verified, recovery notification tested with absence of financial writes. No production activation or standalone CreateReading auto-issue changes.",
+    "next": "Protect invoice document model and invoice ledger creation/reversal from direct calls.",
+    "initial_source": "d90392337dd2963a034234b74ba137a0b74fd108",
+    "initial_run": 45729352630,
+    "initial_failure": "Confirmation-only recovery action had no mounted schema; field-error assertion caused PropertyNotFoundException. Changed refusal to danger notification and asserted no invoice or registry writes.",
+    "run": 45729615917,
+    "jobs": [
+      {
+        "id": 139608062314,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 62,
+        "exit": 0
+      },
+      {
+        "id": 139608061979,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 62,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_invoice_model_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "7cf8c90c4a587abf694695cb5acb1a0c22638ca2",
+    "branch": "release/prospective-invoice-model-fence",
+    "source": "c50e29aba0627388a8a38562f5bf81e7d12bf25d",
+    "scope": "Invoice save override fences direct new document creation and cancellation/void fields (including quiet saves); TransactionService and Transaction model protect invoice postings and reversals and quiet changes of registered invoice ledger rows. Active invoice writer scope explicitly carried into creation and reversal under issuance lock. New targeted test checks direct and idle-scope creation, direct reversal service/model, quiet mutation and cancellation with switch on/off, exact genuine issue/reversal and unchanged cash.",
+    "limits": "CI pending. Scope only invoice-related Eloquent creation/cancellation/ledger writes; raw DB/query-builder updates, other quiet invoice field changes, allocation caches, direct payment/other ledger creation and database-level enforcement not yet comprehensively fenced. Do not claim complete write coverage. No historical repair, main merge or production activation.",
+    "next": "Verify exact targeted CI and fix confirmed failures. Inventory remaining legitimate model and raw query writes before protecting all financial mutation paths; continue reserve discharge, liquidity, Flutter compatibility and integrated release checks."
   }
 }
