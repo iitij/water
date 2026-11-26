@@ -6,14 +6,14 @@
     "update_date": "2026-11-27",
     "main_sha": "0681c12f47d6b542c35d6d487a2bb810762bfb16",
     "resume_at": {
-      "pr": 181,
-      "branch": "release/permanent-close-approved-custody",
-      "sha": "f29a2961d6f6f004a52a1c65235477edc9fbaad6",
-      "verification": "Targeted SQLite and MySQL 8 completed successfully on the exact head: 9 tests and 124 assertions per engine. Draft, unmerged.",
-      "actions_run": "https://github.com/iitij/water/actions/runs/45896349483"
+      "pr": 182,
+      "branch": "release/permanent-close-pending-funding",
+      "sha": "f04c7623b22e503293ca7e05b3ba55852e525917",
+      "verification": "Targeted SQLite and MySQL 8 passed on this head: 10 tests and 134 assertions per engine. Draft and unmerged.",
+      "actions_run": "https://github.com/iitij/water/actions/runs/45897210729"
     },
     "reference": "docs/coordination/PERMANENT_CLOSE_LOCKED_BALANCES_20261126.md",
-    "next": "Reconcile recorded funding, cash receipts and ordinary reversals for tills listed outside approved counts at opening or closing. Verify the independent opening source, carry deadlines, writer coverage, and independent close approval. Before merge run integration acceptance on the cumulative head and inspect overlap with main.",
+    "next": "Verify in-period cash receipts and ordinary cash reversals for pending tills at the cutoff, building on verified funding. Document the independent opening source and carry deadlines, finish writer coverage and verify independent close approval.",
     "owner_scope": "Backup and recovery work deferred from the active implementation per owner instruction on 2026-11-26."
   },
   "owner_scope_decision_2026_11_25": {
