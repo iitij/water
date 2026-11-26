@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify receipt mutation fence 9f96d6e3f142f525f5da332a5f11c2146d6d5b24 exact targeted CI; then remaining ledger/document and raw write protection. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify refund/transfer model fence f28a4c561d69b89e782e5a07bef623b4ed4ca546 exact targeted CI; then held credit, other ledger/document paths and raw write protection. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1918,12 +1918,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_receipt_mutation_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "bca8d2f49aa43eca25996abaa27649617b8923f5",
     "branch": "release/prospective-receipt-mutation-fence",
     "source": "9f96d6e3f142f525f5da332a5f11c2146d6d5b24",
     "scope": "Guard sensitive Payment Eloquent saves including saveQuietly; persisted receipt identity checked under issuance and row locks. Immutable financial fields rejected, void/request/decision fields restricted to active gated void writer. Flags-off registered receipt and gated-request audit protection; preserve nonfinancial notes, legacy unregistered behavior and separate meter retirement path. New focused test and changed-path void, legacy and meter replacement regressions.",
-    "limits": "CI pending. Query builder, raw writes, model deleteQuietly and other ledger/document types not comprehensively fenced. Unregistered legacy behavior preserved with flags off. No historical repair, main merge or production activation.",
-    "next": "Verify exact targeted CI, then close remaining ledger/document write paths and raw mutation gaps with legitimate service exceptions. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks."
+    "limits": "Exact targeted CI passed on both engines. Query builder, raw writes, model deleteQuietly and other ledger/document types remain open. Unregistered legacy behavior preserved with flags off. No production activation.",
+    "next": "Protect refund and subscriber transfer documents and ledger paths.",
+    "run": 45732809181,
+    "jobs": [
+      {
+        "id": 139618702899,
+        "engine": "sqlite",
+        "tests": 4,
+        "assertions": 256,
+        "exit": 0
+      },
+      {
+        "id": 139618703776,
+        "engine": "mysql",
+        "tests": 4,
+        "assertions": 256,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_refund_transfer_model_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "9f96d6e3f142f525f5da332a5f11c2146d6d5b24",
+    "branch": "release/prospective-refund-transfer-model-fence",
+    "source": "f28a4c561d69b89e782e5a07bef623b4ed4ca546",
+    "scope": "Protected receipt refund/transfer model creation, quiet mutations, and subscriber ledger posting require the matching active gated writer; no legacy service fallback for registered receipts even with flags off. Existing correction ledger updates rejected; issuance lock before subscriber/document locks. Focused bypass test plus changed-path transfer, cash refund and bank refund regressions.",
+    "limits": "CI pending. New unregistered legacy corrections with flags off retain previous creation paths; raw/builder writes, deletion and other ledger/document types remain open. No historical repair, main merge or production activation.",
+    "next": "Verify exact targeted CI; then secure held credit and other outstanding ledger types, quiet deletes and raw writes with legitimate service exceptions. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks."
   }
 }
