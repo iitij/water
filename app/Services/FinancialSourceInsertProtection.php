@@ -162,6 +162,35 @@ final class FinancialSourceInsertProtection
                 }
             }
         }
+        // These sources already have independent append-only and replacement
+        // guards. Add only the missing period-aware INSERT barrier. A later
+        // withdrawal or discharge uses its own date, never its parent's date.
+        $heldDates = [
+            'treasury_held_cash_assignments' => 'NEW.effective_on',
+            'treasury_held_cash_payout_authorizations' => 'NEW.effective_on',
+            'treasury_held_cash_payout_cancellations' => 'NEW.effective_on',
+            'treasury_held_cash_payouts' => 'NEW.effective_on',
+            'treasury_held_cash_credits' => 'NEW.effective_on',
+            'held_cash_release_proposals' => 'NEW.effective_on',
+            'held_cash_release_withdrawals' => 'NEW.effective_on',
+            'held_cash_release_journal' => 'NEW.effective_on',
+            'treasury_held_cash_liabilities' => "(SELECT o.effective_on FROM financial_posting_operations o WHERE o.operation_uuid = NEW.operation_uuid{$current})",
+            'held_cash_active_releases' => "(SELECT j.effective_on FROM held_cash_release_journal j WHERE j.id = NEW.journal_id{$current})",
+        ];
+        foreach ($heldDates as $table => $date) {
+            $condition = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water'
+                AND s.active_freeze_uuid IS NOT NULL{$current})
+                OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                    AND {$date} >= p.start_on AND {$date} < p.next_on
+                    AND (p.state <> 'OPEN'
+                        OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                        OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+            $condition = preg_replace('/\s+/', ' ', trim($condition));
+            $msg = 'Held cash source period is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_held_'.$table.'_insert'] = [$table, "BEFORE INSERT ON {$table} FOR EACH ROW {$body}", $body, 'INSERT'];
+        }
         // InnoDB CASCADE and SET NULL do not invoke child triggers.
         // Guard the parent before its referential actions can touch a dated
         // source. Keep unrelated parent deletion behavior unchanged.
