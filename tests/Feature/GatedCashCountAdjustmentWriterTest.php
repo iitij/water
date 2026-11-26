@@ -1570,7 +1570,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $proposal = $f['proposalIds'][$uuid];
         $tables = ['payment_refunds', 'transactions', 'treasury_postings',
             'financial_posting_operations', 'financial_posting_events', 'audit_events'];
-        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), $tables);
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
         $before = $snapshot();
         // Revoking the pending source must not permit replacing its immutable
         // document in place, even with a new unique reference and bytes.
