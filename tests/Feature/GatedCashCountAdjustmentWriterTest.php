@@ -8345,6 +8345,83 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertHeldSourceInsertFence(['held_cash_release_proposals', 'held_cash_release_journal', 'held_cash_active_releases']);
     }
 
+    public function test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic allocation fence tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ALLOC-FENCE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $release->propose($actor, (int) $account['id'], (int) $credit->id, 10, $proposal,
+            'QA-ALLOC-FENCE-RELEASE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true]);
+        $release->recordActiveRelease($reviewer, (int) $account['id'], $proposal,
+            '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $anchor = DB::table('held_cash_release_journal')->sole();
+        $revision = DB::table('payment_allocation_revisions')->where('id', $anchor->revision_id)->sole();
+        $rows = DB::table('payment_allocations')->where('revision_id', $revision->id)->orderBy('position')->get();
+        $this->assertNotEmpty($rows);
+        $this->assertSame(10, (int) $anchor->after_minor);
+        $priorPeriod = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $priorPeriod)->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $reject = function (callable $write): void {
+            try {
+                $write();
+                $this->fail('Closed allocation source insert unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Allocation source period is fenced', $error->getMessage());
+            }
+        };
+        $backdated = array_diff_key((array) $revision, ['id' => true]);
+        $backdated['revision'] = 999;
+        $reject(fn () => DB::table('payment_allocation_revisions')->insert($backdated));
+        $extra = array_diff_key((array) $rows->first(), ['id' => true]);
+        $extra['position'] = 999;
+        $reject(fn () => DB::table('payment_allocations')->insert($extra));
+        $reject(fn () => DB::table('held_cash_shadow_reinstatements')->insert([
+            'journal_id' => $anchor->id, 'revision_id' => $revision->id,
+            'allocation_hash' => $revision->allocation_hash, 'before_minor' => 10, 'applied_minor' => 0, 'after_minor' => 0,
+        ]));
+        // UTC 21:00 is midnight in the financial scope Asia/Aden.
+        $boundary = Subscriber::create(['name' => 'Synthetic cutoff control', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $empty = ['subscriber_id' => $boundary->id, 'revision' => 1,
+            'available_minor' => 0, 'allocated_minor' => 0, 'unallocated_minor' => 0,
+            'allocation_hash' => app(\App\Services\AllocationSnapshotIntegrity::class)->fingerprint((int) $boundary->id, 0, 0, 0, [])];
+        $reject(fn () => DB::table('payment_allocation_revisions')->insert($empty + ['created_at' => '2026-11-30 20:59:59']));
+        DB::table('payment_allocation_revisions')->insert($empty + ['created_at' => '2026-11-30 21:00:00']);
+        $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $uuid = '99999999-9999-4999-8999-999999999999';
+        $cancel = fn () => $writer->cancel($reviewer, (int) $invoice->id, 'Independent subsequent-period cancellation', $uuid, $later);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $event = DB::table('held_cash_shadow_reinstatements')->sole();
+        $this->assertSame(10, (int) $event->before_minor);
+        $this->assertSame(0, (int) $event->after_minor);
+        $this->assertGreaterThan((int) $revision->id, (int) $event->revision_id);
+        $this->assertEquals($revision, DB::table('payment_allocation_revisions')->where('id', $revision->id)->sole());
+        $this->assertEquals($rows->all(), DB::table('payment_allocations')->where('revision_id', $revision->id)->orderBy('position')->get()->all());
+        $this->assertEquals($anchor, DB::table('held_cash_release_journal')->where('id', $anchor->id)->sole());
+        $this->assertSame(25, $release->inspectJournal((int) $account['id'], $later)['actual_protected_minor']);
+        $this->assertDatabaseHas('financial_periods', ['id' => $priorPeriod, 'state' => 'CLOSED']);
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
