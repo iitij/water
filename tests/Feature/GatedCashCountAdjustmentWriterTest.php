@@ -7947,7 +7947,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $this->fail('Fenced financial source mutation unexpectedly accepted');
             } catch (\Illuminate\Database\QueryException $error) {
                 $this->assertTrue(str_contains($error->getMessage(), 'Financial source mutation is fenced')
-                    || str_contains($error->getMessage(), 'Financial source parent deletion is fenced'), $error->getMessage());
+                    || str_contains($error->getMessage(), 'Financial source parent deletion is fenced')
+                    || str_contains($error->getMessage(), 'Financial source parent graph is fenced'), $error->getMessage());
             }
         };
         // Test only, on the freshly migrated disposable database: other
@@ -7957,13 +7958,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $competing = [];
         if (DB::getDriverName() === 'sqlite') {
             foreach (DB::table('sqlite_master')->where('type', 'trigger')->whereIn('tbl_name', array_keys($tables))->get() as $trigger) {
-                if (str_starts_with($trigger->name, 'fin_source_') ||
+                if (str_starts_with($trigger->name, 'fin_source_') || str_starts_with($trigger->name, 'fin_graph_') ||
                     ! preg_match('/\bBEFORE\s+(UPDATE|DELETE)\b/i', $trigger->sql)) continue;
                 $competing[$trigger->name] = $trigger->sql;
             }
         } else {
             foreach (\App\Services\FinancialTriggerMetadata::query() as $trigger) {
-                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_') ||
+                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_') || str_starts_with($trigger->TRIGGER_NAME, 'fin_graph_') ||
                     ! isset($tables[$trigger->EVENT_OBJECT_TABLE]) || $trigger->ACTION_TIMING !== 'BEFORE' ||
                     ! in_array($trigger->EVENT_MANIPULATION, ['UPDATE', 'DELETE'], true)) continue;
                 $competing[$trigger->TRIGGER_NAME] = "CREATE TRIGGER {$trigger->TRIGGER_NAME} BEFORE {$trigger->EVENT_MANIPULATION} ON {$trigger->EVENT_OBJECT_TABLE} FOR EACH ROW {$trigger->ACTION_STATEMENT}";
@@ -8101,13 +8102,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $competing = [];
         if (DB::getDriverName() === 'sqlite') {
             foreach (DB::table('sqlite_master')->where('type', 'trigger')->whereIn('tbl_name', array_keys($parents))->get() as $trigger) {
-                if (str_starts_with($trigger->name, 'fin_source_parent_') ||
+                if (str_starts_with($trigger->name, 'fin_source_parent_') || str_starts_with($trigger->name, 'fin_graph_') ||
                     ! preg_match('/\bBEFORE\s+DELETE\b/i', $trigger->sql)) continue;
                 $competing[$trigger->name] = $trigger->sql;
             }
         } else {
             foreach (\App\Services\FinancialTriggerMetadata::query() as $trigger) {
-                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_parent_') ||
+                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_parent_') || str_starts_with($trigger->TRIGGER_NAME, 'fin_graph_') ||
                     ! isset($parents[$trigger->EVENT_OBJECT_TABLE]) || $trigger->ACTION_TIMING !== 'BEFORE' ||
                     $trigger->EVENT_MANIPULATION !== 'DELETE') continue;
                 $competing[$trigger->TRIGGER_NAME] = "CREATE TRIGGER {$trigger->TRIGGER_NAME} BEFORE DELETE ON {$trigger->EVENT_OBJECT_TABLE} FOR EACH ROW {$trigger->ACTION_STATEMENT}";
@@ -8126,7 +8127,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     DB::table($table)->where('id', $id)->delete();
                     $this->fail('Parent deletion unexpectedly accepted: '.$table);
                 } catch (\Illuminate\Database\QueryException $error) {
-                    $this->assertStringContainsString('Financial source parent deletion is fenced', $error->getMessage());
+                    $this->assertTrue(str_contains($error->getMessage(), 'Financial source parent deletion is fenced')
+                        || str_contains($error->getMessage(), 'Financial source parent graph is fenced'), $error->getMessage());
                 }
                 $this->assertDatabaseHas($table, ['id' => $id]);
             }
