@@ -301,6 +301,38 @@ final class FinancialSourceInsertProtection
                 }
             }
         }
+        // A closed invoice includes its displayed items and exact pricing
+        // evidence, not only the amount in the invoice header.
+        $invoiceFenced = static function (string $row) use ($current): string {
+            return "EXISTS (SELECT 1 FROM invoices i WHERE i.id = {$row}.invoice_id AND (
+                EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})
+                OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                    AND i.bill_date >= p.start_on AND i.bill_date < p.next_on
+                    AND (p.state <> 'OPEN'
+                        OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                        OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})){$current})";
+        };
+        foreach (['invoice_items', 'invoice_tariff_lines'] as $table) {
+            $new = $invoiceFenced('NEW');
+            $old = $invoiceFenced('OLD');
+            $conditions = ['INSERT' => $new, 'UPDATE' => "({$old}) OR ({$new})", 'DELETE' => $old];
+            if ($sqlite) {
+                $conflict = 'd.id = NEW.id';
+                if ($table === 'invoice_tariff_lines') {
+                    $conflict .= ' OR (d.invoice_id = NEW.invoice_id AND d.reading_id = NEW.reading_id)';
+                }
+                $victim = $invoiceFenced('d');
+                $conditions['INSERT'] .= " OR EXISTS (SELECT 1 FROM {$table} d WHERE ({$conflict}) AND ({$victim}))";
+                $conditions['UPDATE'] .= " OR EXISTS (SELECT 1 FROM {$table} d WHERE ({$conflict}) AND d.id <> OLD.id AND ({$victim}))";
+            }
+            foreach ($conditions as $event => $condition) {
+                $condition = preg_replace('/\s+/', ' ', trim($condition));
+                $msg = 'Financial invoice detail is fenced';
+                $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                    : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+                $defs['fin_detail_'.$table.'_'.strtolower($event)] = [$table, "BEFORE {$event} ON {$table} FOR EACH ROW {$body}", $body, $event];
+            }
+        }
         return $defs;
     }
 
