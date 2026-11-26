@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify active cash loss and recovery f38a3af812fa94ec1084d7eaaaea111a1a7c7dc5 exact CI; continue completed refund evidence, affected writers and production readiness.",
+  "next": "Verify completed cash refund b2c7b9bc2dffc178534448e91cb2de205c3e49cf exact CI; then confirm independent evidence boundary, review all outflows and allocators, concurrency, Flutter and production readiness.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2284,12 +2284,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_active_cash_loss": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "63a1fae982d974595f886f2002f86cf408d1632b",
     "branch": "release/prospective-active-release-cash-loss",
     "source": "f38a3af812fa94ec1084d7eaaaea111a1a7c7dc5",
     "scope": "Derive current active reserve liquidity after a source-backed gated cash count adjustment, distinguishing actual and conservative reserve. Test two independently reviewed physical losses with deficit 5 then 6 minor, exact replay, denied outflow, unchanged subscriber balance, no premature recovery in transit, verified incoming 7 minor restores margin 1. Two relevant factual-loss regressions per engine.",
-    "limits": "CI pending. Existing treasury register overview remains conservative, new current active liquidity report limited to gated service. Factual cash loss path only; completed refunds and in-flight refund identity, all writer coverage, concurrency, multiple anchors, UI/API, Flutter and production remain. Source evidence failures still reject posting; count/review remain evidence. No historical corrections or production changes.",
-    "next": "Verify exact CI, then address in-flight refund identity and completed-event deficit workflow; review all outgoing and allocating writers."
+    "limits": "Actual active reserve cash loss and recovery tested on both engines. Gated report only, no production changes.",
+    "next": "Verify independent completed cash refund path and its exact evidence, while preserving ordinary refusal.",
+    "run": 45739475581,
+    "jobs": [
+      {
+        "id": 139640666799,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 93,
+        "exit": 0
+      },
+      {
+        "id": 139640665955,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 93,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_completed_cash_refund": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "f38a3af812fa94ec1084d7eaaaea111a1a7c7dc5",
+    "branch": "release/prospective-completed-cash-refund",
+    "source": "b2c7b9bc2dffc178534448e91cb2de205c3e49cf",
+    "scope": "Opt-in internal completed cash refund path, independent authorized reviewer distinct from actor/original issuer/custodian, exact private mutation capability, same subscriber and treasury postings and registry, independent confirmation audit with exact replay. Ordinary refund retains liquidity refusal. Narrow completed path requires active release account, sufficient recorded physical cash for amount, no other pending refund, valid refundable excess, and verified reserve. Test 6 minor refund from 15 minor protected cash yields 9 balance, 6 reserve shortfall, pending zero, blocked further outflow and no duplicate legs; two changed-path regressions each engine.",
+    "limits": "CI pending. No route/UI activation. Separate workflow still needed for unsupported completed events, negative physical cash, other unposted refunds, allocation reductions and missing source evidence; confirmation audit protection and authenticated separate reviewer workflow need review before enabling. No historical correction, production data or main merge. Ordinary path unchanged.",
+    "next": "Verify exact CI and fix only proved failures. Review factual confirmation evidence and guard independent user authentication, cover same-subscriber and competing/refund conditions, all outgoing/allocating writers, concurrency, Flutter, integrated production readiness."
   }
 }
