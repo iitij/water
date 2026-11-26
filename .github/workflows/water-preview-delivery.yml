@@ -31,6 +31,11 @@ jobs:
       - name: Prefer Google's Maven Central mirror for all Gradle builds
         run: |
           mkdir -p "$HOME/.gradle/init.d"
+          cat >> "$HOME/.gradle/gradle.properties" <<'PROPS'
+          org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.workers.max=2
+          kotlin.compiler.execution.strategy=in-process
+          PROPS
           cat > "$HOME/.gradle/init.d/water-central.gradle" <<'GRADLE'
           def mirrorUrl = 'https://maven-central.storage-download.googleapis.com/maven2/'
           def preferMirror = { repos -> repos.maven { setUrl(mirrorUrl) } }
@@ -112,6 +117,7 @@ jobs:
           retention-days: 14
       - name: Verify unattended installation and app startup
         run: |
+          ./test/windows_installer/smoke-installer.ps1
           $output = Join-Path $env:RUNNER_TEMP 'water-install-check'
           $setup = Start-Process -FilePath 'build/installer/setup.exe' -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ("/DIR=`"$output`"") -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer exited $($setup.ExitCode)" }
