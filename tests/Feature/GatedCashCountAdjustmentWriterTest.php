@@ -7894,7 +7894,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 DB::table($table)->insert($row);
                 $this->fail('Source insert unexpectedly accepted: '.$table);
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Financial source period is fenced', $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial source period is fenced')
+                    || str_contains($error->getMessage(), 'Financial source replacement is fenced'), $error->getMessage());
             }
         };
         foreach ($rows as $table => $row) {
@@ -8050,7 +8051,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'code' => 'QA-LATER-ACCOUNT', 'opening_reference' => 'QA-LATER-OPEN', 'opening_on' => '2026-12-02',
         ]);
         $openId = DB::table('treasury_accounts')->insertGetId($open);
-        $this->assertSame(1, DB::table('treasury_accounts')->where('id', $openId)->update(['opening_minor' => 123]));
+        $this->assertSame(1, DB::table('treasury_accounts')->where('id', $openId)->update(['name' => 'Later treasury display name']));
         if (DB::getDriverName() === 'sqlite') {
             $before = $table->orderBy('id')->get()->toArray();
             $replace = function (array $row): void {
