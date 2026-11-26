@@ -74,7 +74,7 @@ final class FinancialWriteGateFoundationTest extends TestCase
         DB::table('financial_scopes')->update(['mode' => 'ACTIVE', 'active_freeze_uuid' => '27b7cb50-8b2e-4324-a763-3d9c0cc8a443']);
         $this->rejected('financial_scope_not_active', fn () => $this->runGate($never));
         DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
-        foreach (['FROZEN', 'CLOSED', 'CORRUPT'] as $state) {
+        foreach (['FROZEN', 'CORRUPT'] as $state) {
             DB::table('financial_periods')->update(['state' => $state]);
             $this->rejected('financial_period_not_open', fn () => $this->runGate($never));
         }
@@ -84,6 +84,16 @@ final class FinancialWriteGateFoundationTest extends TestCase
         $this->rejected('financial_period_not_open', fn () => $this->runGate($never, '2026-10-01'));
         $this->rejected('invalid_financial_destination', fn () => $this->runGate($never, '2026-11-26'));
         $this->rejected('invalid_financial_destination', fn () => $this->runGate($never, '2026-11-31'));
+
+        // Closed periods are terminal. Exercise this case after the mutable fixtures.
+        DB::table('financial_periods')->update(['state' => 'CLOSED']);
+        $this->rejected('financial_period_not_open', fn () => $this->runGate($never));
+        try {
+            DB::table('financial_periods')->update(['state' => 'OPEN']);
+            $this->fail('An already closed period was reopened by direct update.');
+        } catch (\Illuminate\Database\QueryException) {
+            $this->assertSame('CLOSED', DB::table('financial_periods')->value('state'));
+        }
     }
 
     public function test_gate_returns_verified_context_and_payment_rollback_is_atomic(): void
