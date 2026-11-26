@@ -1218,7 +1218,7 @@ final class CompletedCashRefundRequest
     /** Shared exact validation for recording and pending-use revalidation. */
     private function sourceProofLocked(AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
         array $excluded, int $attesterId, int $documentId, string $issuer, string $sourceReference,
-        string $signature, string $substantiveReview, string $date): array
+        string $signature, string $substantiveReview, string $date, ?string $historicalFingerprint = null): array
     {
         $fail = 'completed_refund_source_evidence';
         $document = AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->whereKey($documentId)->lockForUpdate()->first();
@@ -1260,11 +1260,25 @@ final class CompletedCashRefundRequest
         // Trust anchors are deployment configuration, never request data.
         $trusted = config('financial_candidate.refund_source_public_keys', []);
         $encodedKey = is_array($trusted) ? ($trusted[$issuer] ?? null) : null;
+        if ($historicalFingerprint !== null) {
+            // Historical keys are provisioned independently by deployment.
+            // They are never considered by the live verification path.
+            if (! preg_match('/\A[0-9a-f]{64}\z/', $historicalFingerprint)) {
+                throw new DomainException('completed_refund_source_evidence');
+            }
+            $current = is_string($encodedKey) ? base64_decode($encodedKey, true) : false;
+            if ($current === false || ! hash_equals($historicalFingerprint, hash('sha256', $current))) {
+                $archive = config('financial_candidate.refund_source_archived_public_keys', []);
+                $encodedKey = is_array($archive) && is_array($archive[$issuer] ?? null)
+                    ? ($archive[$issuer][$historicalFingerprint] ?? null) : null;
+            }
+        }
         if (! function_exists('sodium_crypto_sign_verify_detached') || ! is_string($encodedKey)) {
             throw new DomainException('completed_refund_source_untrusted');
         }
         $key = base64_decode($encodedKey, true);
-        if ($key === false || strlen($key) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES || base64_encode($key) !== $encodedKey) {
+        if ($key === false || strlen($key) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES || base64_encode($key) !== $encodedKey
+            || ($historicalFingerprint !== null && ! hash_equals($historicalFingerprint, hash('sha256', $key)))) {
             throw new DomainException('completed_refund_source_untrusted');
         }
         $sig = strlen($signature) === 88 ? base64_decode($signature, true) : false;
@@ -1300,10 +1314,41 @@ final class CompletedCashRefundRequest
             });
     }
 
-    private function revalidateSourceProofLocked(User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
-        array $excluded, string $date, int $attestationId): array
+    /**
+     * Historical inspection remains non-operative and can inspect a superseded
+     * proposal without opening its financial period. Never use the result to post.
+     */
+    public function inspectHistoricalResolutionSource(User $actor, string $uuid, int $proposalId, int $attestationId,
+        DateTimeImmutable $now): array
     {
-        FinancialWriteGate::currentContext();
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        if ($proposalId <= 0 || $attestationId <= 0 || DB::transactionLevel() !== 0) {
+            throw new DomainException('completed_refund_source_input');
+        }
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return DB::transaction(function () use ($actor, $uuid, $proposalId, $attestationId, $date): array {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new DomainException('gated_refund_issuance_lock');
+            }
+            $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+            self::authenticated($actor);
+            app(TreasuryRegisterService::class)->authorize($actor);
+            $this->guard();
+            return $this->documentContext($actor, $uuid, $proposalId, $date,
+                function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                    use ($attestationId): array {
+                    return $this->revalidateSourceProofLocked($actor, $request, $closed, $proposal, $excluded, $date, $attestationId, true);
+                }, true);
+        });
+    }
+
+    private function revalidateSourceProofLocked(User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
+        array $excluded, string $date, int $attestationId, bool $historical = false): array
+    {
+        if (! $historical) FinancialWriteGate::currentContext();
+        elseif (DB::transactionLevel() <= 0) throw new DomainException('completed_refund_source_evidence');
         $fail = 'completed_refund_source_evidence';
         $audit = AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->whereKey($attestationId)
             ->lockForUpdate()->first();
@@ -1316,6 +1361,7 @@ final class CompletedCashRefundRequest
             || ! preg_match('/\A[a-z0-9][a-z0-9_-]{2,63}\z/', $q['issuer'])
             || ! is_string($q['source_reference'] ?? null)
             || ! preg_match('/\A[A-Z0-9][A-Z0-9._\/-]{2,149}\z/', $q['source_reference'])
+            || ! is_string($q['public_key_sha256'] ?? null) || ! preg_match('/\A[0-9a-f]{64}\z/', $q['public_key_sha256'])
             || ! is_string($q['signature'] ?? null) || ! is_string($q['substantive_review'] ?? null)
             || mb_strlen(trim($q['substantive_review'])) < 20 || mb_strlen($q['substantive_review']) > 2000
             || ! is_string($q['attested_on'] ?? null) || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $q['attested_on'])
@@ -1327,7 +1373,7 @@ final class CompletedCashRefundRequest
         // never trust a caller-provided key or stored success flag.
         [$expected, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
             (int) $audit->actor_user_id, $q['document_id'], $q['issuer'], $q['source_reference'],
-            $q['signature'], $q['substantive_review'], $q['attested_on']);
+            $q['signature'], $q['substantive_review'], $q['attested_on'], $historical ? $q['public_key_sha256'] : null);
         if ($audit->entity_id !== $document->after['sha256'] || (int) $audit->id <= (int) $review->id
             || $this->proposalHash($q) !== $this->proposalHash($expected)) {
             throw new DomainException($fail);
@@ -1345,6 +1391,14 @@ final class CompletedCashRefundRequest
                 || ($p['issuer'] === $q['issuer'] && $p['source_reference'] === $q['source_reference'])) {
                 throw new DomainException('completed_refund_source_conflict');
             }
+        }
+        if ($historical) {
+            return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
+                'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
+                'public_key_sha256' => $q['public_key_sha256'], 'historical_signature_verified' => true,
+                'current_trust_revalidated' => false, 'historical_trust_at_approval_proven' => false,
+                'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
+                'spending_authorized' => false, 'closure_authorized' => false];
         }
         return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
             'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
@@ -1392,20 +1446,42 @@ final class CompletedCashRefundRequest
             || ! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
             throw new DomainException('completed_refund_document_input');
         }
+        return $this->documentContext($actor, $uuid, $proposalId, $date, $action);
+    }
+
+    private function documentContext(User $actor, string $uuid, int $proposalId, string $date, callable $action,
+        bool $historical = false): array
+    {
+        if (DB::transactionLevel() <= 0) throw new DomainException('completed_refund_document_input');
         $request = $this->find($uuid, true);
         abort_unless($request !== null, 404);
         $p = $request->after;
         $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
             $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $request->actor_user_id));
         $closed = $this->decision($request);
-        if ($closed === null || $this->verifiedResolution($request, $closed) !== null
-            || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
+        if ($closed === null || (! $historical && ($this->verifiedResolution($request, $closed) !== null
+            || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()))) {
             throw new DomainException('completed_refund_document_conflict');
         }
         $chain = $this->proposalChain($request, $closed);
         if ($chain === []) throw new DomainException('completed_refund_resolution_evidence');
-        $proposal = end($chain);
-        $this->assertExpectedProposal($proposal, $proposalId);
+        if ($historical) {
+            // Include only the chain prefix that existed for this proposal.
+            $prefix = [];
+            $proposal = null;
+            foreach ($chain as $item) {
+                $prefix[] = $item;
+                if ((int) $item->id === $proposalId) {
+                    $proposal = $item;
+                    break;
+                }
+            }
+            if ($proposal === null) throw new DomainException('completed_refund_resolution_proposal_changed');
+            $chain = $prefix;
+        } else {
+            $proposal = end($chain);
+            $this->assertExpectedProposal($proposal, $proposalId);
+        }
         $q = $proposal->after;
         if (! in_array($q['classification'] ?? null, ['posting_required', 'cash_returned', 'no_disbursement'], true)
             || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id

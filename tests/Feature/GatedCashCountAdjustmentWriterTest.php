@@ -1436,11 +1436,28 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($verified['spending_authorized']);
         $this->assertTrue($verified['incident_unresolved']);
         $this->assertSame($verified, $revalidate());
+        $historical = fn () => $service->inspectHistoricalResolutionSource($f['approver'], $uuid, $proposal, $attestationId, $this->nowAt());
+        $history = $historical();
+        $this->assertTrue($history['historical_signature_verified']);
+        $this->assertFalse($history['current_trust_revalidated']);
+        $this->assertFalse($history['historical_trust_at_approval_proven']);
+        $this->assertFalse($history['closure_authorized']);
+        $this->assertFalse($history['spending_authorized']);
+        $this->assertSame($verified['attestation_hash'], $history['attestation_hash']);
         config(['financial_candidate.refund_source_public_keys' => []]);
         $this->rejects('completed_refund_source_untrusted', $revalidate);
+        $this->rejects('completed_refund_source_untrusted', $historical);
+        $fingerprint = hash('sha256', $key);
+        config(['financial_candidate.refund_source_archived_public_keys' => [$issuer => [$fingerprint => base64_encode($key)]]]);
+        $this->assertSame($history, $historical());
+        $this->rejects('completed_refund_source_untrusted', $revalidate);
         $rotated = sodium_crypto_sign_publickey(sodium_crypto_sign_keypair());
+        config(['financial_candidate.refund_source_archived_public_keys' => [$issuer => [$fingerprint => base64_encode($rotated)]]]);
+        $this->rejects('completed_refund_source_untrusted', $historical);
+        config(['financial_candidate.refund_source_archived_public_keys' => [$issuer => [$fingerprint => base64_encode($key)]]]);
         config(['financial_candidate.refund_source_public_keys' => [$issuer => base64_encode($rotated)]]);
         $this->rejects('completed_refund_source_signature', $revalidate);
+        $this->assertSame($history, $historical());
         config(['financial_candidate.refund_source_public_keys' => [$issuer => base64_encode($key)]]);
         $this->assertSame($verified, $revalidate());
         $this->rejects('completed_refund_resolution_proposal_changed', fn () =>

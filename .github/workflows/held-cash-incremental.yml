@@ -1,7 +1,7 @@
-name: Prospective refund incident mixed source plan
+name: Prospective refund incident historical trust
 on:
   push:
-    branches: ['release/prospective-refund-incident-mixed-source-plan']
+    branches: ['release/prospective-refund-incident-historical-trust']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify complete mixed source selection under one financial gate
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_source_plan_|test_release_refund_source_attestation_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify archival signatures without granting current trust
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_source_attestation_|test_release_refund_mixed_source_plan_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify complete mixed source selection under one financial gate
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_source_plan_|test_release_refund_source_attestation_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify archival signatures without granting current trust
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_source_attestation_|test_release_refund_mixed_source_plan_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
