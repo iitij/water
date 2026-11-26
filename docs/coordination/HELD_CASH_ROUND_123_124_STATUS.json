@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify receipt void DB fence c71452890ade6abd2ba1a328b61636850d8b66df exact targeted CI; then pending request/decision metadata, insert and parent paths. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify void request DB fence 1ba73b91b1252cfe4a093c3590edd0b3208f081e exact targeted CI; then direct INSERT and remaining parent routes with least-privilege boundary. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2080,12 +2080,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_receipt_void_db_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "608a14ad699a8a6195c760c3564a7d2e6727050f",
     "branch": "release/prospective-receipt-void-db-fence",
     "source": "c71452890ade6abd2ba1a328b61636850d8b66df",
     "scope": "Registered receipt final void metadata requires matching active reversal, matching subscriber and meter provenance, valid immediate or independent approval transition, and no conflicting refund/transfer/other correction. Reorder gated void reversal before state update within same locked transaction; private explicit reversal authorization only during immediate void or approval, not request/rejection. Preserve unregistered legacy ordering. Five targeted cases per engine.",
-    "limits": "CI pending. Pending request and decision metadata not yet protected at DB level; raw INSERT could forge evidence; parent routes and integrated release checks remain open. No historical correction, main merge or production activation.",
-    "next": "Verify exact CI; then protect pending request/decision metadata with exact transactional evidence. Continue direct insert, reserve discharge, liquidity, Flutter and integrated release checks."
+    "limits": "Exact targeted CI passed. Pending request and decision metadata, forged raw INSERT and remaining parent routes still open. No production activation.",
+    "next": "Bind pending request and approval/rejection metadata to exact durable audit evidence.",
+    "run": 45736454300,
+    "jobs": [
+      {
+        "id": 139630763515,
+        "engine": "sqlite",
+        "tests": 5,
+        "assertions": 370,
+        "exit": 0
+      },
+      {
+        "id": 139630763848,
+        "engine": "mysql",
+        "tests": 5,
+        "assertions": 370,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_void_request_db_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c71452890ade6abd2ba1a328b61636850d8b66df",
+    "branch": "release/prospective-void-request-db-fence",
+    "source": "1ba73b91b1252cfe4a093c3590edd0b3208f081e",
+    "scope": "Registered receipt request and decision fields must match latest required audit event with actor, exact timestamp, reason/notes and prior gated request. Independent approval/rejection required. Protect the relevant audit events from UPDATE/DELETE/SQLite REPLACE. Move request/decision audit before projection save in the same transaction; retain existing gated request identity and replay. Preserve isolated synthetic pre-fence fault injection. Five targeted cases per engine.",
+    "limits": "CI pending. New raw INSERT can still forge audit evidence, and privileged SQL/DDL cannot be made unconditionally safe by application triggers. Parent paths and integrated release checks remain open. No historical correction, main merge or production activation.",
+    "next": "Verify exact CI, then inventory and close direct INSERT paths using least-privilege and transactionally verifiable evidence, without pretending a shared DB principal proves application identity. Continue reserve discharge, liquidity, Flutter and integrated release checks."
   }
 }
