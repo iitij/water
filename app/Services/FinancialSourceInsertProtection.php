@@ -86,6 +86,37 @@ final class FinancialSourceInsertProtection
                 $mutationName = 'fin_source_'.$table.'_'.strtolower($event);
                 $defs[$mutationName] = [$table, "BEFORE {$event} ON {$table} FOR EACH ROW {$mutationBody}", $mutationBody, $event];
             }
+            if (in_array($table, ['invoices', 'payments'], true)) {
+                // A reversal is a separate financial event. Its own effective
+                // date, not the original document date, controls the fence.
+                $oldVoid = str_replace("NEW.{$column}", 'OLD.voided_at', $invalid);
+                $newVoid = str_replace("NEW.{$column}", 'NEW.voided_at', $invalid);
+                $voidFields = ['voided_at', 'void_reason', 'voided_by'];
+                if ($table === 'payments') $voidFields[] = 'voided_via';
+                $voidChanges = [];
+                foreach ($voidFields as $field) {
+                    $voidChanges[] = $sqlite ? "OLD.{$field} IS NOT NEW.{$field}"
+                        : "NOT (BINARY OLD.{$field} <=> BINARY NEW.{$field})";
+                }
+                if ($table === 'invoices') {
+                    $voidChanges[] = "((OLD.status = 'cancelled') <> (NEW.status = 'cancelled'))";
+                }
+                $voidChanged = implode(' OR ', $voidChanges);
+                $conditions = [
+                    'INSERT' => "NEW.voided_at IS NOT NULL AND ({$newVoid})",
+                    'UPDATE' => "({$voidChanged}) AND (({$oldVoid}) OR ({$newVoid})
+                        OR (OLD.voided_at IS NULL AND NEW.voided_at IS NULL AND (({$oldInvalid}) OR ({$invalid}))))",
+                    'DELETE' => "OLD.voided_at IS NOT NULL AND ({$oldVoid})",
+                ];
+                foreach ($conditions as $event => $condition) {
+                    $condition = preg_replace('/\s+/', ' ', trim($condition));
+                    $msg = 'Financial source reversal date is fenced';
+                    $extra = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                        : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+                    $defs['fin_source_'.$table.'_void_'.strtolower($event)] = [$table,
+                        "BEFORE {$event} ON {$table} FOR EACH ROW {$extra}", $extra, $event];
+                }
+            }
             if ($table === 'treasury_accounts') {
                 $fixed = [];
                 foreach (['opening_minor', 'opened_by', 'created_at'] as $field) {
