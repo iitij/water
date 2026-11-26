@@ -8600,6 +8600,72 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
 
+    public function test_source_retirement_fence_preserves_closed_registry_and_single_meter(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic retirement tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-CLOSED-OLD-METER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.04',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt(), invoiceId: (int) $invoice->id, meterId: (int) $meter->id)['payment'];
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $tables = ['invoices', 'payments', 'transactions', 'readings'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->where('meter_id', $meter->id)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        foreach ($before as $rows) $this->assertNotEmpty($rows);
+        $registry = fn () => DB::table('financial_posting_events')->orderBy('id')->get()->toArray();
+        $events = $registry();
+        $lines = DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->get()->toArray();
+        $balance = app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber);
+        $service = app(\App\Services\SingleMeterService::class);
+        $replace = fn () => $service->replace($meter, ['unique_code' => 'QA-CLOSED-NEW-METER', 'initial_reading' => '0.00'],
+            now()->toDateString(), 'Independent physical meter replacement', $actor->id);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        try {
+            $replace();
+            $this->fail('Meter replacement bypassed the active financial freeze.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertArrayHasKey('meter_id', $error->errors());
+        }
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        $reject = function (callable $write): void {
+            try {
+                $write();
+                $this->fail('Forged retirement unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('fenced', $error->getMessage());
+            }
+        };
+        foreach (['invoices', 'payments', 'readings'] as $table) {
+            $id = DB::table($table)->where('meter_id', $meter->id)->value('id');
+            $reject(fn () => DB::table($table)->where('id', $id)->update([
+                'meter_id' => null, 'retired_meter_id' => $meter->id, 'retired_meter_code' => 'FORGED']));
+        }
+        $new = $replace()['current_meter'];
+        $this->assertNotSame($meter->id, $new->id);
+        $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
+        $this->assertSame(1, DB::table('meters')->where('subscriber_id', $subscriber->id)->count());
+        foreach ($tables as $i => $table) {
+            foreach ($before[$i] as $row) {
+                $expected = array_replace((array) $row, ['meter_id' => null,
+                    'retired_meter_id' => $meter->id, 'retired_meter_code' => $meter->unique_code]);
+                $this->assertEquals($expected, (array) DB::table($table)->where('id', $row->id)->sole());
+            }
+        }
+        $this->assertEquals($events, $registry());
+        $this->assertEquals($lines, DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->get()->toArray());
+        $this->assertSame($balance, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_periods', ['id' => $periodId, 'state' => 'CLOSED']);
+        $this->assertDatabaseHas('audit_events', ['event' => 'meter.replaced', 'entity_id' => (string) $new->id]);
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
