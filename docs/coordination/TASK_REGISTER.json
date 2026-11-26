@@ -12,7 +12,8 @@
       "verification": "Targeted SQLite and MySQL 8 verified, draft and unmerged"
     },
     "reference": "docs/coordination/PERMANENT_CLOSE_LOCKED_BALANCES_20261126.md",
-    "next": "Verify collector custody and documented carry deadlines, then establish independent opening evidence, writer cutover, and independent close approval. Verify backup and restoration of protected schemas before hosting acceptance."
+    "next": "Verify collector custody and documented carry deadlines, then establish independent opening evidence, writer cutover, and independent close approval.",
+    "owner_scope": "Backup and recovery work deferred from the active implementation per owner instruction on 2026-11-26."
   },
   "owner_scope_decision_2026_11_25": {
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
