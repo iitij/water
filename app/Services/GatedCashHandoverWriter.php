@@ -58,10 +58,11 @@ final class GatedCashHandoverWriter
             $expected = $read('expected_amount');
             $variance = $read('variance_amount', true);
             $openingMinor = $read('opening_amount');
+            $closedOn = $session->closed_at?->copy()->setTimezone('Asia/Aden')->toDateString();
             $this->need($session->isApproved() && $session->settlement_basis === 'physical_cash'
                 && $session->closed_at !== null && $session->approved_at !== null
                 && $session->closed_at <= $session->approved_at
-                && $date >= $session->closed_at->toDateString()
+                && $date >= $closedOn
                 && (int) $session->approved_by > 0 && (int) $session->approved_by !== (int) $session->user_id
                 && $openingMinor !== null && $openingMinor >= 0
                 && $counted !== null && $counted > 0 && $expected !== null && $variance !== null
@@ -84,39 +85,29 @@ final class GatedCashHandoverWriter
                 && ($approval->after['expected_amount'] ?? null) === SignedMinor::decimal($expected)
                 && ($approval->after['counted_amount'] ?? null) === SignedMinor::decimal($counted)
                 && ($approval->after['variance_amount'] ?? null) === SignedMinor::decimal($variance), 'gated_handover_approval');
-            $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
-            $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
-            if ($openingMinor > 0) {
-                $funding = $fundings->first();
-                $source = DB::table('treasury_accounts')->where('id', $funding->treasury_account_id)->lockForUpdate()->first();
-                $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->lockForUpdate()->first();
-                $this->need($source !== null && $posting !== null, 'gated_handover_funding_unverified');
-                $this->registered($this->opening->opening((int) $source->id, $source->opening_on), $source->opening_on);
-                $leg = $this->opening->funding((int) $posting->id, $funding->issued_on);
-                $this->need($leg['amount_minor'] === -$openingMinor, 'gated_handover_funding_unverified');
-                $this->registered($leg, $funding->issued_on);
-            }
+            $this->verifiedSessionFunding($session);
             $total = $openingMinor;
             $payments = Payment::withTrashed()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
             foreach ($payments as $payment) {
                 $this->need(! $payment->trashed() && ! $payment->hasPendingVoidRequest()
                     && $payment->payment_method === 'cash' && (int) $payment->user_id === (int) $session->user_id
                     && $payment->payment_date->toDateString() >= $session->session_date->toDateString()
-                    && $payment->payment_date->toDateString() <= $session->closed_at->toDateString(), 'gated_handover_session_scope');
+                    && $payment->payment_date->toDateString() <= $closedOn, 'gated_handover_session_scope');
                 $entry = Transaction::query()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                     ->where('type', 'payment')->lockForUpdate()->sole();
                 $leg = $this->ledger->leg((int) $entry->id);
                 $this->registered($leg, $payment->payment_date->toDateString());
                 $this->need($leg['amount_minor'] > 0, 'gated_handover_count_mismatch');
                 if ($payment->isVoided()) {
+                    $voidedOn = $payment->voided_at->copy()->setTimezone('Asia/Aden')->toDateString();
                     $this->need(in_array($payment->voided_via, ['gated', 'approval'], true)
-                        && $payment->voided_at >= $payment->payment_date->copy()->startOfDay()
+                        && $voidedOn >= $payment->payment_date->toDateString()
                         && $payment->voided_at <= $session->closed_at, 'gated_handover_void_unverified');
                     $reversal = Transaction::query()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                         ->where('type', 'payment_reversal')->lockForUpdate()->sole();
                     $reverseLeg = $this->ledger->leg((int) $reversal->id);
                     $this->need($reverseLeg['amount_minor'] === -$leg['amount_minor'], 'gated_handover_void_unverified');
-                    $this->registered($reverseLeg, $payment->voided_at->toDateString());
+                    $this->registered($reverseLeg, $voidedOn);
                     continue;
                 }
                 $total = SignedMinor::add($total, $leg['amount_minor']);
@@ -132,11 +123,9 @@ final class GatedCashHandoverWriter
                     'gated_handover_surplus_requires_full_count');
             }
             foreach (CashHandover::query()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get() as $prior) {
-                $posted = DB::table('treasury_postings')->where('cash_handover_id', $prior->id)->lockForUpdate()->first();
-                $this->need($posted !== null, 'gated_handover_prior_unregistered');
-                $priorOp = $this->registered($this->custody->leg((int) $posted->id), $prior->received_on->toDateString());
+                $receipt = $this->verifiedReceipt($prior);
                 if ($existing !== null && (int) $prior->id === (int) $existing->id) {
-                    $this->need($priorOp->operation_uuid === $uuid && (int) $posted->posted_by === (int) $actor->id,
+                    $this->need($receipt['operation_uuid'] === $uuid && $receipt['posted_by'] === (int) $actor->id,
                         'gated_handover_operation_conflict');
                 }
             }
@@ -185,6 +174,100 @@ final class GatedCashHandoverWriter
         return DB::transactionLevel() > 0 && $this->mutationIdentity === [
             (int) $handover->cash_session_id, $handover->reference, $accountId, $actorId,
         ] && (int) $handover->received_by === $actorId;
+    }
+
+    /** Re-derive a handover from its treasury posting and verified operation inside the caller's gate. */
+    public function verifiedReceipt(CashHandover $handover): array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $posted = DB::table('treasury_postings')->where('cash_handover_id', $handover->id)->lockForUpdate()->first();
+        $this->need($posted !== null, 'gated_handover_prior_unregistered');
+        $leg = $this->custody->leg((int) $posted->id);
+        $operation = $this->registered($leg, $handover->received_on->toDateString());
+
+        return ['handover_id' => (string) $handover->id, 'posting_id' => (string) $posted->id,
+            'posted_by' => (int) $posted->posted_by, 'operation_uuid' => $operation->operation_uuid,
+            'received_on' => $posted->effective_on, 'amount_minor' => $leg['amount_minor']];
+    }
+
+    /** Funding is a recorded outflow of the treasury, independent of the later session count. */
+    public function verifiedSessionFunding(CashSession $session): ?array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $openingMinor = Cash::stored($session->getRawOriginal('opening_amount'), $session->getConnection()->getDriverName());
+        $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $session->id)->orderBy('id')->lockForUpdate()->get();
+        $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
+        if ($openingMinor === 0) return null;
+
+        $funding = $fundings->first();
+        $source = DB::table('treasury_accounts')->where('id', $funding->treasury_account_id)->lockForUpdate()->first();
+        $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->lockForUpdate()->first();
+        $this->need($source !== null && $posting !== null, 'gated_handover_funding_unverified');
+        $this->registered($this->opening->opening((int) $source->id, $source->opening_on), $source->opening_on);
+        $leg = $this->opening->funding((int) $posting->id, $funding->issued_on);
+        $this->need($leg['amount_minor'] === -$openingMinor, 'gated_handover_funding_unverified');
+        $operation = $this->registered($leg, $funding->issued_on);
+        return ['account_id' => (string) $source->id, 'funding_id' => (string) $funding->id,
+            'posting_id' => (string) $posting->id, 'operation_uuid' => $operation->operation_uuid,
+            'issued_on' => $funding->issued_on, 'funded_minor' => $openingMinor];
+    }
+
+    /** Rebuild ordinary cash receipt legs effective before a local cutoff, under the close gate. */
+    public function pendingReceiptEvidence(CashSession $session, string $cutoffUtc, string $localDate): array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $payments = Payment::withTrashed()->where('cash_session_id', $session->id)->where('payment_method', 'cash')
+            ->where('payment_date', '<', $localDate)->orderBy('id')->lockForUpdate()->get();
+        $gross = 0;
+        $reversed = 0;
+        $rows = [];
+        foreach ($payments as $payment) {
+            $date = $payment->payment_date->toDateString();
+            $this->need(! $payment->trashed() && (int) $payment->user_id === (int) $session->user_id
+                && $session->session_date !== null && $date >= $session->session_date->toDateString()
+                && $payment->sync_uuid !== null, 'custody_receipt_identity_unverified');
+            $posted = $this->ordinaryReceiptLeg($payment, 'payment', $date);
+            $this->need($posted['operation_uuid'] === $payment->sync_uuid && $posted['minor'] > 0,
+                'custody_receipt_identity_unverified');
+            $gross = SignedMinor::add($gross, $posted['minor']);
+            $voidAt = $payment->getRawOriginal('voided_at');
+            $reverse = null;
+            if ($voidAt !== null && $voidAt < $cutoffUtc) {
+                $voidOn = (new DateTimeImmutable($voidAt, new \DateTimeZone('UTC')))
+                    ->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+                $this->need(in_array($payment->voided_via, ['gated', 'approval'], true) && $voidOn >= $date
+                    && ($session->getRawOriginal('closed_at') === null || $voidAt <= $session->getRawOriginal('closed_at')),
+                    'custody_void_source_unverified');
+                $reverse = $this->ordinaryReceiptLeg($payment, 'payment_reversal', $voidOn);
+                $this->need($reverse['minor'] === -$posted['minor'], 'custody_void_amount_unverified');
+                $reversed = SignedMinor::add($reversed, $posted['minor']);
+            }
+            $registeredReversals = DB::table('transactions as t')
+                ->join('financial_posting_events as e', 'e.source_id', '=', 't.id')
+                ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
+                ->where('t.reference_type', Payment::class)->where('t.reference_id', $payment->id)
+                ->where('t.type', 'payment_reversal')->where('e.scope_key', 'water')->where('o.scope_key', 'water')
+                ->where('e.source_type', 'ledger_transaction')->where('e.leg', 'subscriber')->where('o.effective_on', '<', $localDate)
+                ->orderBy('t.id')->lockForUpdate()->pluck('o.operation_uuid')->all();
+            $this->need($registeredReversals === ($reverse === null ? [] : [$reverse['operation_uuid']]),
+                'custody_void_membership_unverified');
+            $rows[] = ['payment_id' => (string) $payment->id, 'receipt' => $posted, 'reversal' => $reverse];
+        }
+        return ['gross_minor' => $gross, 'reversed_minor' => $reversed,
+            'net_minor' => SignedMinor::subtract($gross, $reversed), 'rows' => $rows];
+    }
+
+    private function ordinaryReceiptLeg(Payment $payment, string $type, string $date): array
+    {
+        $entries = Transaction::withTrashed()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            ->where('type', $type)->orderBy('id')->lockForUpdate()->get();
+        $this->need($entries->count() === 1, 'custody_receipt_leg_unverified');
+        $leg = $this->ledger->leg((int) $entries->first()->id);
+        $op = $this->registered($leg, $date);
+        $this->need(DB::table('financial_posting_events')->where('operation_uuid', $op->operation_uuid)->count() === 1,
+            'custody_receipt_operation_unverified');
+        return ['transaction_id' => $leg['source_id'], 'operation_uuid' => $op->operation_uuid,
+            'effective_on' => $date, 'minor' => $leg['amount_minor']];
     }
 
     private function registered(array $leg, string $date): object

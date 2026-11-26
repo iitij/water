@@ -1767,6 +1767,90 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/40",
  "evidence": "مراجعة مستقلة كشفت بقايا محلية ومشكلات دفعات وتزامن/DDL واختبار صور فعلي؛ انظر #40 والتقرير. لا تؤشَّر كمكتملة قبل نجاح جميع اختبارات القبول."
+},
+{
+ "id": "WATER-G1B-BANK-PERIOD-EVIDENCE",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة أرصدة كشوف البنك لنهاية الفترة مع الحركات المسجلة",
+ "files": "app/Services/FinancialSettlementCoverageDiagnostic.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اعتماد بيانات كشوف متصلة ومطابقة للحركات المسجلة في الفترة المنتهية. الفحص مخصص لأدلة البنك ضمن التشخيص الداخلي. راجع نتائج SQLite وMySQL 8 على SHA مرشح الفرع."
+},
+{
+ "id": "WATER-G1B-CASH-PERIOD-OBSERVATION",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "التحقق من جرد النقد المعتمد في آخر يوم من الفترة مع سجل الترحيل عند الحد الفاصل",
+ "files": "app/Services/TreasuryCashCountService.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "يطابق الجرد ذا الفرق الصفري الذي راجعه مستخدم مستقل مع سجل الترحيل حتى بداية الفترة التالية بتوقيت عدن. راجع نتائج المحركين على SHA المرشح."
+},
+{
+ "id": "WATER-G1B-TRANSIT-PERIOD-EVIDENCE",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة الأموال في الطريق حسب حدود الفترة وأدلة الإرسال والاستلام",
+ "files": "app/Services/FinancialTransitPeriodDiagnostic.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "يفصل إثبات إرسال التحويل واستلامه وحالته المالية عند حدود الفترة ويتحقق من ارتباط كل حركة بسجلها. راجع CI للفرع."
+},
+{
+ "id": "WATER-G1B-CUSTODY-LOCAL-DAY",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "توحيد اليوم المحاسبي لتمويل عهدة المحصل وتسليمها عند منتصف الليل بتوقيت عدن",
+ "files": "app/Services/CashHandoverService.php; app/Services/TreasuryCustodyEvidence.php; app/Services/TreasuryRegisterService.php; app/Services/CashSessionService.php; app/Services/GatedCashHandoverWriter.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "تظل الطوابع الزمنية محفوظة بصيغة UTC. تُحسب تواريخ بدء العهدة والتمويل والاستلام وترحيل العكس حسب يوم عدن. راجع تشغيل SQLite وMySQL 8 على SHA المرشح."
+},
+{
+ "id": "WATER-G1B-APPROVED-CUSTODY-PERIOD",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "إثبات الرصيد المتبقي من النقد المعدود المعتمد وتسليماته عبر حدود الفترة",
+ "files": "app/Services/GatedCashHandoverWriter.php; app/Services/FinancialCloseEvidenceDiagnostic.php; app/Services/FinancialApprovedCustodyPeriodDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "رصد مستقل لكل جلسة عند تاريخ الاعتماد ومطابقة تسليماتها الجزئية قبل القطع مع سجل الترحيل."
+},
+{
+ "id": "WATER-G1B-PENDING-CUSTODY-FUNDING",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "إثبات مصدر تمويل العهد غير المعتمدة عند تاريخ القطع",
+ "files": "app/Services/GatedCashHandoverWriter.php; app/Services/FinancialApprovedCustodyPeriodDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "see_exact_head_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اختبار تمويل صالح وتمويل غير مسجل عند نهاية الفترة."
+},
+{
+ "id": "WATER-G1B-PENDING-RECEIPTS",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة سندات القبض النقدي وعكسها عند حد الفترة للعهد غير المعتمدة",
+ "files": "app/Services/GatedCashHandoverWriter.php; app/Services/FinancialApprovedCustodyPeriodDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml; .github/workflows/hosting-build-readiness.yml",
+ "status": "partial",
+ "verification_status": "see_exact_head_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اختبار سندين وعكس خلال الفترة وعند بداية الشهر التالي، وفقدان مصدر التسجيل. تشغيل قبول المنسق والبناء على نفس الالتزام."
 }
 ]
 }

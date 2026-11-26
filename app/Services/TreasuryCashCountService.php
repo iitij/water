@@ -2,11 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\AuditEvent;
 use App\Models\User;
 use App\Support\CashCustodyAmounts as Cash;
 use App\Support\DecimalDomain;
 use App\Support\SignedMinor;
 use App\Support\TreasuryMoney as Money;
+use DateTimeImmutable;
+use DateTimeZone;
+use DomainException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -39,10 +43,13 @@ final class TreasuryCashCountService
         return $value;
     }
 
-    private function snapshot(object $account, ?int $beforePostingId = null): array
+    private function snapshot(object $account, ?int $beforePostingId = null, ?string $beforeEffectiveOn = null): array
     {
         $query = DB::table('treasury_postings')->where('treasury_account_id', $account->id);
         if ($beforePostingId !== null) $query->where('id', '<', $beforePostingId);
+        if ($beforeEffectiveOn !== null) {
+            $query->where('effective_on', '<', $beforeEffectiveOn)->lockForUpdate();
+        }
         $rows = $query->orderBy('id')->get();
         // Preserve existing hashes for rows preceding this migration.
         foreach ($rows as $row) {
@@ -61,6 +68,86 @@ final class TreasuryCashCountService
             'recorded_minor' => $balance,
             'ledger_hash' => hash('sha256', json_encode([(array) $account, $rows->toArray()], JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    /**
+     * Verify a reviewed zero-variance count from the final local day, against
+     * the ledger as of that period's cutoff. The close diagnostic holds the
+     * scope lock. The result attests to the count and its matching register.
+     */
+    public function periodEndObservation(int $accountId, string $nextOn): ?array
+    {
+        $aden = new DateTimeZone('Asia/Aden');
+        $utc = new DateTimeZone('UTC');
+        $cutoff = DateTimeImmutable::createFromFormat('!Y-m-d', $nextOn, $aden);
+        if (DB::transactionLevel() !== 1 || ! $cutoff || $cutoff->format('Y-m-d') !== $nextOn
+            || $nextOn > now('Asia/Aden')->toDateString()) {
+            throw new DomainException('cash_period_observation_requires_ended_period');
+        }
+        $this->lock();
+        $account = $this->account($accountId);
+        $count = DB::table('treasury_cash_counts')->where('treasury_account_id', $accountId)
+            ->where('observed_at', '>=', $cutoff->modify('-1 day')->setTimezone($utc)->format('Y-m-d H:i:s'))
+            ->where('observed_at', '<', $cutoff->setTimezone($utc)->format('Y-m-d H:i:s'))
+            ->orderByDesc('observed_at')->orderByDesc('id')->lockForUpdate()->first();
+        if ($count === null || SignedMinor::parse($count->variance_minor) !== 0) {
+            return null;
+        }
+
+        $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count->id)
+            ->lockForUpdate()->first();
+        if ($review === null || (int) $review->accepted !== 1
+            || (int) $review->reviewed_by === (int) $count->counted_by
+            || $review->created_at < $count->observed_at
+            || DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $count->id)->lockForUpdate()->first()) {
+            return null;
+        }
+
+        $snapshot = $this->snapshot($account, beforeEffectiveOn: $nextOn);
+        $amount = Money::document($count->counted_minor);
+        if ($amount !== SignedMinor::parse($count->recorded_minor) || $amount !== $snapshot['recorded_minor']
+            || ! hash_equals($snapshot['ledger_hash'], $count->ledger_hash)) {
+            return null;
+        }
+
+        $recorded = $this->observationAudit('treasury.cash_count_recorded', 'treasury_cash_count', $count, 'counted_by',
+            ['treasury_account_id', 'reference', 'counted_minor', 'recorded_minor', 'variance_minor', 'ledger_hash', 'evidence']);
+        $reviewed = $this->observationAudit('treasury.cash_count_reviewed', 'treasury_cash_count_review', $review, 'reviewed_by',
+            ['treasury_cash_count_id', 'evidence']);
+        $recordedInstant = $recorded['observed_at'] ?? null;
+        if (! is_string($recordedInstant)
+            || preg_match('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z\z/', $recordedInstant) !== 1
+            || str_replace('T', ' ', substr($recordedInstant, 0, 19)) !== $count->observed_at
+            || ($reviewed['accepted'] ?? null) !== true || ($reviewed['financial_adjustment_created'] ?? null) !== false) {
+            return null;
+        }
+
+        return [
+            'account_id' => (string) $account->id,
+            'count_id' => (string) $count->id,
+            'review_id' => (string) $review->id,
+            'observed_at_utc' => $recordedInstant,
+            'counted_minor' => $amount,
+            'ledger_hash' => $snapshot['ledger_hash'],
+        ];
+    }
+
+    private function observationAudit(string $event, string $entity, object $row, string $actorField, array $fields): ?array
+    {
+        $events = AuditEvent::query()->where('event', $event)->where('entity_type', $entity)
+            ->where('entity_id', (string) $row->id)->lockForUpdate()->get();
+        if ($events->count() !== 1 || (int) $events[0]->actor_user_id !== (int) $row->$actorField) {
+            return null;
+        }
+        $after = $events[0]->after;
+        foreach ([...$fields, $actorField] as $field) {
+            if ((! is_string($after[$field] ?? null) && ! is_int($after[$field] ?? null))
+                || (string) $after[$field] !== (string) $row->$field) {
+                return null;
+            }
+        }
+
+        return $after;
     }
 
     /** Fresh reviewed equal observation, under the shared issuance fence. */
