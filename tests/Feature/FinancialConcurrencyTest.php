@@ -127,6 +127,129 @@ class FinancialConcurrencyTest extends TestCase
         }
     }
 
+    private function closeRaceFixture(): array
+    {
+        $now = new \DateTimeImmutable('2026-11-25T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        DB::table('financial_scopes')->insert([
+            'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
+            'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
+        ]);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-11', 'start_on' => '2026-11-01',
+            'next_on' => '2026-12-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $meter = $this->fixture();
+        $actor = User::factory()->create(['role' => 'admin']);
+        $actor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor,
+            (int) $meter->subscriber_id, (int) $meter->id, (string) Str::uuid(), $now)['invoice'];
+        return [$now, $meter, $actor, $invoice];
+    }
+
+    private function awaitCloseRaceFile(string $path): void
+    {
+        $deadline = microtime(true) + 10;
+        while (! is_file($path)) {
+            if (microtime(true) > $deadline) throw new \RuntimeException('Close race barrier timed out: '.$path);
+            usleep(1000);
+        }
+    }
+
+    /** The real coordinator holds the scope lock while its synthetic proof
+     * source synchronizes with an independent competing writer. */
+    private function closeWins(string $kind): void
+    {
+        [$now, $meter, $actor, $invoice] = $this->closeRaceFixture();
+        $dir = sys_get_temp_dir().'/water-close-race-'.Str::uuid();
+        mkdir($dir, 0700);
+        $tables = ['meters', 'invoices', 'payments', 'transactions', 'readings',
+            'invoice_tariff_lines', 'financial_posting_operations', 'financial_posting_events', 'payment_allocation_revisions'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $uuid = (string) Str::uuid();
+        try {
+            $results = $this->race(
+                function () use ($dir, $actor, $uuid): array {
+                    $proof = new class($dir) implements \App\Services\FinancialCloseProofSource {
+                        public function __construct(private string $dir) {}
+                        public function authorize(string $scope, string $capability, int $actorId): bool
+                        {
+                            return $scope === 'water' && $capability === 'request' && $actorId > 0;
+                        }
+                        public function evidence(string $action, array $period, int $actorId): array
+                        {
+                            file_put_contents($this->dir.'/closer', (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id);
+                            $deadline = microtime(true) + 10;
+                            while (! is_file($this->dir.'/attempt')) {
+                                if (microtime(true) > $deadline) throw new \RuntimeException('Writer never attempted close race.');
+                                usleep(1000);
+                            }
+                            // Keep the scope lock held while the other process
+                            // reaches its write; it must not finish before commit.
+                            usleep(250000);
+                            if (is_file($this->dir.'/done')) throw new \RuntimeException('Writer finished before freeze committed.');
+                            return ['facts' => ['predecessor_verified' => true, 'writers_drained' => true,
+                                'predecessor_hash' => str_repeat('a', 64)]];
+                        }
+                    };
+                    return (new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(), $proof))
+                        ->execute('water', '2026-11', 'freeze', (int) $actor->id,
+                            ['uuid' => $uuid, 'version' => 0, 'reason' => 'Synthetic month close race'],
+                            new \DateTimeImmutable('2026-12-01T00:00:00+03:00'));
+                },
+                function () use ($dir, $kind, $now, $meter, $actor, $invoice): mixed {
+                    $this->awaitCloseRaceFile($dir.'/closer');
+                    file_put_contents($dir.'/attempt', (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id);
+                    try {
+                        return match ($kind) {
+                            'receipt' => app(\App\Services\GatedCashReceiptWriter::class)->collect(
+                                User::findOrFail($actor->id), (int) $meter->subscriber_id, '0.30', (string) Str::uuid(), $now)['payment']->id,
+                            'replacement' => app(\App\Services\SingleMeterService::class)->replace(
+                                Meter::findOrFail($meter->id), ['unique_code' => 'QA-CLOSE-RACE-NEW'],
+                                '2026-11-25', 'Synthetic competing physical meter replacement', (int) $actor->id)['current_meter']->id,
+                            'direct' => DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->update(['amount' => '0.01']),
+                        };
+                    } finally {
+                        touch($dir.'/done');
+                    }
+                }
+            );
+            $this->assertNotSame(file_get_contents($dir.'/closer'), file_get_contents($dir.'/attempt'));
+            $this->assertTrue($results[0]['ok'], json_encode($results));
+            $this->assertSame('FROZEN', $results[0]['value']['current_state']);
+            $this->assertFalse($results[1]['ok'], json_encode($results));
+            match ($kind) {
+                'receipt' => $this->assertSame('financial_scope_not_active', $results[1]['message']),
+                'replacement' => $this->assertSame(ValidationException::class, $results[1]['error']),
+                'direct' => $this->assertStringContainsString('Financial invoice detail is fenced', $results[1]['message']),
+            };
+            $this->assertEquals($before, $snapshot());
+            $this->assertDatabaseHas('financial_scopes', ['scope_key' => 'water', 'active_freeze_uuid' => $uuid]);
+            $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'FROZEN', 'version' => 1]);
+            $this->assertDatabaseCount('financial_close_commands', 1);
+            $this->assertDatabaseCount('financial_period_closures', 0);
+        } finally {
+            foreach (glob($dir.'/*') as $file) unlink($file);
+            rmdir($dir);
+        }
+    }
+
+    public function test_close_race_freeze_rejects_competing_receipt(): void
+    {
+        $this->closeWins('receipt');
+    }
+
+    public function test_close_race_freeze_rejects_competing_meter_replacement(): void
+    {
+        $this->closeWins('replacement');
+    }
+
+    public function test_close_race_freeze_rejects_direct_invoice_detail_update(): void
+    {
+        $this->closeWins('direct');
+    }
+
     public function test_parallel_distinct_accounts_issue_unique_invoice_sequence_numbers(): void
     {
         $a = $this->fixture();
