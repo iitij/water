@@ -71,6 +71,13 @@ final class FinancialWriteGate
                 || $period->next_on !== $expected['next']) {
                 throw new DomainException('financial_period_not_open');
             }
+            // Even if the mutable projection were reopened by a privileged
+            // bypass, terminal evidence must never be treated as an open period.
+            if (DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first()
+                || DB::table('financial_close_commands')->where('period_id', $period->id)
+                    ->where('action', 'approve')->lockForUpdate()->first()) {
+                throw new DomainException('financial_period_permanently_closed');
+            }
             $version = $this->counter($period->version);
             $id = $this->counter($period->id);
             if ($id === 0 || $effectiveOn > $asOf->setTimezone(new DateTimeZone($gate->timezone))->format('Y-m-d')) {
