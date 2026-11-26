@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
+use App\Support\AccountMoney;
+use App\Support\MoneyBoundary;
+use App\Support\SignedMinor;
 
 class Invoice extends Model
 {
@@ -68,6 +72,46 @@ class Invoice extends Model
         if ($errors !== []) {
             throw \Illuminate\Validation\ValidationException::withMessages($errors);
         }
+    }
+
+    /**
+     * A new invoice and its created-event allocation revision share the same
+     * transaction. Acquire the issuance fence before the subscriber or insert.
+     * This is not permission to bypass the financial invoice issuing service.
+     */
+    public function hasRegisteredLedger(): bool
+    {
+        $ids = Transaction::withTrashed()->where('reference_type', self::class)
+            ->where('reference_id', $this->id)->whereIn('type', ['invoice', 'invoice_reversal'])->pluck('id');
+        return DB::table('financial_posting_events')->where('scope_key', 'water')
+            ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+            ->whereIn('source_id', $ids->map(fn ($id) => (string) $id)->all())->exists();
+    }
+
+    public function save(array $options = [])
+    {
+        $writer = $options['financial_invoice_writer'] ?? null;
+        unset($options['financial_invoice_writer']);
+        $cancelling = $this->exists && ($this->isDirty(['voided_at', 'void_reason', 'voided_by'])
+            || ($this->isDirty('status') && ($this->status === 'cancelled' || $this->getOriginal('status') === 'cancelled')));
+        if ($this->exists && ! $cancelling) return parent::save($options);
+
+        return DB::transaction(function () use ($options, $writer, $cancelling) {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
+            Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
+            $required = config('financial_candidate.invoices') === true
+                || ($cancelling && $this->hasRegisteredLedger()) || $writer !== null;
+            if ($required) {
+                $allowed = $writer instanceof \App\Services\GatedInvoiceTransferWriter
+                    && ($cancelling
+                        ? $this->status === 'cancelled' && $writer->allowsCancellation((int) $this->id, (int) $this->voided_by)
+                        : $this->status === 'issued' && $writer->allowsIssue((int) $this->subscriber_id, (int) $this->meter_id));
+                if (! $allowed) throw new \DomainException('gated_invoice_model_writer_required');
+            }
+            return parent::save($options);
+        });
     }
 
     // ─── Relationships ───
@@ -136,13 +180,22 @@ class Invoice extends Model
     /**
      * المبلغ المتبقي
      */
-    public function getRemainingAmount(): float
+    public function getRemainingMinor(): int
     {
         if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
-            return 0.0;
+            return 0;
         }
-        // المبلغ الكلي المستحق لهذه الفاتورة فقط (تجاهل المتأخرات السابقة لتجنب المضاعفة)
-        return max(0, (float) $this->total_amount - (float) $this->amount_paid);
+        $billed = AccountMoney::stored($this, 'total_amount');
+        $paid = AccountMoney::stored($this, 'amount_paid');
+        if ($billed < 0 || $paid < 0 || $paid > $billed) {
+            throw new \LogicException('Invoice allocation must be between zero and its own billed amount.');
+        }
+        return SignedMinor::subtract($billed, $paid);
+    }
+
+    public function getRemainingAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getRemainingMinor());
     }
 
     public function scopeWithOwnDebt(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
@@ -168,43 +221,46 @@ class Invoice extends Model
 
     public function canCollect(): bool
     {
-        return $this->getCollectibleAmount() > 0;
+        return $this->getCollectibleMinor() > 0;
     }
 
     /**
      * Live collection suggestion, not the historical amount printed at issue.
      * Only the newest invoice represents cumulative outstanding debt.
      */
-    public function getCollectibleAmount(): float
+    public function getCollectibleMinor(): int
     {
         if ($this->trashed() || in_array($this->status, ['draft', 'cancelled'], true)) {
-            return 0.0;
+            return 0;
         }
+        return $this->isLatestInvoice() ? $this->getTrueRemainingMinor() : $this->getRemainingMinor();
+    }
 
-        return round($this->isLatestInvoice()
-            ? $this->getTrueRemainingAmount()
-            : $this->getRemainingAmount(), 2);
+    public function getCollectibleAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getCollectibleMinor());
     }
 
     /**
      * المبلغ المتبقي التراكمي (يضم هذه الفاتورة والفواتير السابقة لنفس الحساب)
      */
-    public function getTrueRemainingAmount(): float
+    public function getTrueRemainingMinor(): int
     {
         if (in_array($this->status, ['draft', 'cancelled'], true) || $this->trashed()) {
-            return 0.0;
+            return 0;
         }
-        $thisRemaining = $this->getRemainingAmount();
+        $remaining = $this->getRemainingMinor();
+        foreach (self::where('subscriber_id', $this->subscriber_id)
+            ->where('id', '<', $this->id)->whereNotIn('status', ['draft', 'cancelled'])
+            ->orderBy('id')->cursor() as $invoice) {
+            $remaining = SignedMinor::add($remaining, $invoice->getRemainingMinor());
+        }
+        return $remaining;
+    }
 
-        $olderInvoicesRemaining = self::where('subscriber_id', $this->subscriber_id)
-            ->where('id', '<', $this->id)
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->get()
-            ->sum(function ($inv) {
-                return $inv->getRemainingAmount();
-            });
-
-        return $thisRemaining + $olderInvoicesRemaining;
+    public function getTrueRemainingAmount(): float
+    {
+        return MoneyBoundary::numericMajorOutput($this->getTrueRemainingMinor());
     }
     /**
      * هل هذه الفاتورة هي الأحدث للمشترك/العداد؟
@@ -221,7 +277,8 @@ class Invoice extends Model
 
     /**
      * Invoice payment status is independent of cumulative account debt.
-     * Retain the existing grace/strict policy until the overdue audit (ACC-11).
+     * Overdue takes priority over partial payment when an own debt remains.
+     * The grace deadline is inclusive of the whole calendar day.
      */
     public function updateStatus(): void
     {
@@ -229,17 +286,17 @@ class Invoice extends Model
             return;
         }
 
-        $remaining = round($this->getRemainingAmount(), 2);
-        $gracePeriod = (int) Setting::get('grace_period', '14');
+        $remaining = $this->getRemainingMinor();
+        $gracePeriod = max(0, min(365, (int) Setting::get('grace_period', '14')));
         $strictOverdue = Setting::get('strict_overdue_on_new_invoice', '0') === '1';
 
         if ($remaining <= 0) {
             $status = 'paid';
-        } elseif ((float) $this->amount_paid > 0) {
-            $status = 'partially_paid';
         } elseif (($strictOverdue && ! $this->isLatestInvoice())
-            || ($this->bill_date && now()->isAfter($this->bill_date->copy()->addDays($gracePeriod)))) {
+            || ($this->bill_date && today()->gt($this->bill_date->copy()->startOfDay()->addDays($gracePeriod)))) {
             $status = 'overdue';
+        } elseif (AccountMoney::stored($this, 'amount_paid') > 0) {
+            $status = 'partially_paid';
         } else {
             $status = 'issued';
         }
@@ -249,22 +306,4 @@ class Invoice extends Model
         }
     }
 
-    /**
-     * توليد رقم فاتورة فريد
-     */
-    public static function generateBillNumber(): string
-    {
-        $prefix = 'INV-' . date('Ym') . '-';
-        $lastInvoice = static::withTrashed()
-            ->where('bill_number', 'like', $prefix . '%')
-            ->orderByDesc('bill_number')
-            ->first();
-
-        if ($lastInvoice) {
-            $lastNumber = (int) str_replace($prefix, '', $lastInvoice->bill_number);
-            return $prefix . str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
-        }
-
-        return $prefix . '0001';
-    }
 }

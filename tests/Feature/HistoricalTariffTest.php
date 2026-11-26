@@ -34,7 +34,7 @@ class HistoricalTariffTest extends TestCase
 
     private function read(Meter $meter, string $start, string $end, int $previous, int $current): Reading
     {
-        return Reading::create(['meter_id' => $meter->id, 'reading_date' => '2026-04-10',
+        return $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-04-10',
             'period_start' => $start, 'period_end' => $end,
             'previous_reading' => $previous, 'current_reading' => $current]);
     }

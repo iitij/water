@@ -37,7 +37,7 @@ class FinancialReportsTest extends TestCase
             ->assertJsonPath('summary.total_outstanding', 430)
             ->assertJsonPath('summary.overdue_amount', 280)
             ->assertJsonPath('summary.invoices_count', 4)
-            ->assertJsonPath('summary.paid_invoices_count', 1)
+            ->assertJsonPath('summary.paid_invoices_count', 2)
             ->assertJsonPath('summary.overdue_invoices_count', 1)
             ->assertJsonPath('summary.readings_count', 0)
             ->assertJsonPath('summary.consumption_units', 0)
@@ -49,7 +49,7 @@ class FinancialReportsTest extends TestCase
             ->assertJsonCount(2, 'square_breakdown');
 
         $statuses = collect($response->json('status_breakdown'))->keyBy('key');
-        $this->assertEquals(['key' => 'paid', 'label' => 'مسددة', 'value' => 100, 'count' => 1], $statuses['paid']);
+        $this->assertEquals(['key' => 'paid', 'label' => 'مسددة', 'value' => 140, 'count' => 2], $statuses['paid']);
         $this->assertEquals(['key' => 'partially_paid', 'label' => 'مسددة جزئياً', 'value' => 200, 'count' => 1], $statuses['partially_paid']);
         $this->assertEquals(['key' => 'overdue', 'label' => 'متأخرة', 'value' => 300, 'count' => 1], $statuses['overdue']);
         $squares = collect($response->json('square_breakdown'))->keyBy('key');
@@ -107,6 +107,48 @@ class FinancialReportsTest extends TestCase
             ->assertJsonPath('collections_by_method', []);
     }
 
+    public function test_month_end_dashboard_and_report_share_valid_receipts_without_future_dates(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 31)->setTime(12, 0));
+        [$first] = $this->seedReport();
+        $finance = app(\App\Services\FinancialReportingService::class);
+        $months = $finance->monthlyCollections();
+        $this->assertSame(['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'], array_column($months, 'month'));
+        $this->assertSame(205.0, $months[5]['value']);
+        $this->assertSame(175.0, $finance->grossReceipts('2026-10-01', '2026-10-31', $first->square_id));
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.monthly_collection', 205)
+            ->assertJsonPath('monthly_revenue_chart.data.5', 205);
+        $this->getJson('/api/admin/reports')->assertOk()->assertJsonPath('summary.total_collected', 205);
+        $this->travelTo(now()->setDate(2026, 10, 15)->setTime(12, 0));
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.monthly_collection', 80)
+            ->assertJsonPath('monthly_revenue_chart.data.5', 80);
+    }
+
+    public function test_current_account_debt_and_credit_are_not_netted_or_filtered_by_invoice_dates(): void
+    {
+        $square = Square::create(['name' => 'Ledger report test']);
+        $debtor = $square->subscribers()->create(['name' => 'Debtor', 'status' => 'active']);
+        $creditor = $square->subscribers()->create(['name' => 'Creditor', 'status' => 'active']);
+        $other = Square::create(['name' => 'Other'])->subscribers()->create(['name' => 'Other creditor', 'status' => 'active']);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $debtor->id, 'unique_code' => 'REPORT-LEDGER']);
+        \App\Models\Tariff::create(['name' => 'Synthetic report tariff', 'unit_price' => 600, 'is_active' => true]);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+            'period_start' => '2026-01-01', 'period_end' => '2026-02-01', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\InvoiceService::class)->generateInvoice($debtor, $meter);
+        app(\App\Services\PaymentService::class)->collectPayment($creditor, 250.25);
+        app(\App\Services\PaymentService::class)->collectPayment($other, 100);
+        $this->getJson('/api/admin/reports?from_date=2025-01-01&to_date=2025-01-31&square_id='.$square->id)
+            ->assertOk()->assertJsonPath('summary.total_outstanding', 0)
+            ->assertJsonPath('account_balances.debt', 600)
+            ->assertJsonPath('account_balances.credit', 250.25)
+            ->assertJsonPath('account_balances.basis', 'current_subscriber_ledger');
+        $this->getJson('/api/admin/dashboard')->assertOk()
+            ->assertJsonPath('stats_overview.outstanding_amount', 600)
+            ->assertJsonPath('stats_overview.account_credit', 350.25);
+    }
+
     public function test_invalid_filters_are_rejected_and_existing_authorization_is_retained(): void
     {
         $this->getJson('/api/admin/reports?from_date=2026-10-31&to_date=2026-10-01')
@@ -116,6 +158,62 @@ class FinancialReportsTest extends TestCase
         $this->getJson('/api/admin/reports')->assertForbidden();
     }
 
+    public function test_dashboard_rejects_invalid_stored_invoice_allocation_without_mutating_it(): void
+    {
+        $subscriber = Square::create(['name' => 'Synthetic invalid allocation'])->subscribers()
+            ->create(['name' => 'Invalid allocation fixture', 'status' => 'active']);
+        $this->invoice($subscriber, ['total_amount' => 40, 'amount_paid' => 60]);
+        $before = Invoice::query()->get()->toArray();
+        $this->getJson('/api/admin/dashboard')->assertServerError();
+        $this->assertSame($before, Invoice::query()->get()->toArray());
+    }
+
+    public function test_reports_aggregate_exact_cents_and_preserve_source_documents(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 31)->setTime(12, 0));
+        $square = Square::create(['name' => 'Exact reporting square']);
+        $debtor = $square->subscribers()->create(['name' => 'Exact debtor', 'status' => 'active']);
+        $creditor = $square->subscribers()->create(['name' => 'Exact creditor', 'status' => 'active']);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $debtor->id, 'unique_code' => 'P3-EXACT']);
+        \App\Models\Tariff::create(['name' => 'P3 tariff', 'unit_price' => '0.30', 'is_active' => true, 'start_date' => '2026-01-01']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-10-01',
+            'period_start' => '2026-09-01', 'period_end' => '2026-10-01', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\InvoiceService::class)->generateInvoice($debtor, $meter);
+        $payments = app(\App\Services\PaymentService::class);
+        $payments->collectPayment($debtor, '0.10');
+        $payments->collectPayment($creditor, '0.10');
+        $payments->collectPayment($creditor, '0.20');
+        $finance = app(\App\Services\FinancialReportingService::class);
+        $this->assertSame(40, $finance->grossReceiptMinor('2026-10-01', '2026-10-31', $square->id));
+        $this->assertSame(['debt' => 0.20, 'credit' => 0.30, 'basis' => 'current_subscriber_ledger'],
+            $finance->accountBalances($square->id));
+        $before = \Illuminate\Support\Facades\DB::table('transactions')->orderBy('id')->get()->toArray();
+        $this->getJson('/api/admin/reports?from_date=2026-10-01&to_date=2026-10-31&square_id='.$square->id)
+            ->assertOk()
+            ->assertJsonPath('summary.total_collected', 0.40)
+            ->assertJsonPath('summary.total_invoiced', 0.30)
+            ->assertJsonPath('summary.total_outstanding', 0.20)
+            ->assertJsonPath('summary.consumption_units', 1)
+            ->assertJsonPath('account_balances.debt', 0.20)
+            ->assertJsonPath('account_balances.credit', 0.30)
+            ->assertJsonPath('revenue_series.0.value', 0.40)
+            ->assertJsonPath('square_breakdown.0.value', 0.40)
+            ->assertJsonPath('financial_movements.gross_valid_receipts', 0.40)
+            ->assertJsonPath('financial_movements.invoice_postings', 0.30)
+            ->assertJsonPath('financial_movements.ledger_net_movement', 0.10);
+        $this->assertEquals($before, \Illuminate\Support\Facades\DB::table('transactions')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_report_rejects_invalid_stored_allocation_instead_of_clamping_it(): void
+    {
+        $subscriber = Square::create(['name' => 'Invalid report allocation'])->subscribers()
+            ->create(['name' => 'Invalid report fixture', 'status' => 'active']);
+        $this->invoice($subscriber, ['total_amount' => '1.00', 'amount_paid' => '1.01']);
+        $before = Invoice::query()->get()->toArray();
+        $this->getJson('/api/admin/reports?from_date=2026-10-01&to_date=2026-10-31')->assertServerError();
+        $this->assertSame($before, Invoice::query()->get()->toArray());
+    }
+
     private function seedReport(): array
     {
         $first = Square::create(['name' => 'المربع الأول'])->subscribers()->create(['name' => 'المشترك الأول', 'status' => 'active']);
@@ -123,7 +221,8 @@ class FinancialReportsTest extends TestCase
         $this->invoice($first, ['total_amount' => 100, 'amount_paid' => 100, 'status' => 'paid']);
         $this->invoice($first, ['bill_date' => '2026-10-31', 'total_amount' => 200, 'amount_paid' => 50, 'previous_balance' => 900, 'status' => 'partially_paid']);
         $this->invoice($second, ['total_amount' => 300, 'amount_paid' => 20, 'previous_balance' => 600, 'status' => 'overdue']);
-        $this->invoice($second, ['total_amount' => 40, 'amount_paid' => 60]);
+        // Allocations cannot exceed the invoice's own billed amount. Excess funds belong to account credit.
+        $this->invoice($second, ['total_amount' => 40, 'amount_paid' => 40, 'status' => 'paid']);
         $this->invoice($first, ['bill_date' => '2026-09-30', 'total_amount' => 80]);
         $this->invoice($first, ['total_amount' => 900, 'deleted_at' => now()]);
         $this->payment($first, 50, '2026-10-01 00:00:00');

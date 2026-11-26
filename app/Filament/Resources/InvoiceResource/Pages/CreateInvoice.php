@@ -4,7 +4,7 @@ namespace App\Filament\Resources\InvoiceResource\Pages;
 
 use App\Filament\Resources\InvoiceResource;
 use App\Models\Subscriber;
-use App\Services\InvoiceService;
+use App\Filament\Actions\ProspectiveInvoiceAction;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -16,9 +16,6 @@ class CreateInvoice extends CreateRecord
     {
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
 
-        return app(InvoiceService::class)->generateInvoice(
-            subscriber: $subscriber,
-            notes: $data['notes'] ?? null,
-        );
+        return ProspectiveInvoiceAction::issue($subscriber, null, $data);
     }
 }

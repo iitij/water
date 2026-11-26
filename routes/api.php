@@ -61,6 +61,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Subscribers: custom actions must precede the resource's /{id} route.
     Route::get('/subscribers/{id}/summary', [SubscriberController::class, 'summary']);
     Route::get('/subscribers/{id}/statement', [SubscriberController::class, 'statement']);
+    Route::get('/subscribers/{id}/ledger-statement', [\App\Http\Controllers\Api\LedgerStatementController::class, 'show'])->whereNumber('id');
+    Route::get('/subscribers/{id}/ledger-statement/xlsx', [\App\Http\Controllers\Api\LedgerStatementController::class, 'xlsx'])->whereNumber('id');
+    Route::get('/subscribers/{id}/ledger-statement/pdf', [\App\Http\Controllers\Api\LedgerStatementController::class, 'pdf'])->whereNumber('id');
     Route::get('/subscribers/{id}/transactions', [SubscriberController::class, 'transactions']);
     Route::get('/subscribers/{id}/unpaid-invoices-summary', [SubscriberController::class, 'unpaidInvoicesSummary']);
     Route::get('/subscribers/{id}/allocation-reconciliation', [SubscriberController::class, 'allocationReconciliation'])->whereNumber('id');
@@ -134,6 +137,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/whatsapp', [PaymentController::class, 'sendWhatsApp']);
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::post('/payments/{id}/refund', [PaymentController::class, 'recordRefund'])->whereNumber('id');
+    Route::post('/payments/{id}/completed-cash-refund-requests', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'submit'])->whereNumber('id');
+    Route::get('/completed-cash-refund-requests/{uuid}', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'show'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approve'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/close', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'close'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-proposal', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'proposeResolution'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approveResolution'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-post', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'postResolution'])->whereUuid('uuid');
+    // Signed evidence transport; service and controller keep these staging-only.
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-document', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'recordDocument'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-document-review', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'reviewDocument'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-source-attestation', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'attestSource'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-settlements/readiness', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'readiness']);
+    Route::post('/completed-cash-refund-settlements/settle', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'settle']);
+    Route::post('/completed-cash-refund-settlements/renew', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'renew']);
     Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
@@ -195,12 +212,41 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('roles', RoleController::class)->parameters(['roles' => 'id']);
 
     // صندوق المحصّل: فتح/إغلاق/اعتماد/تقرير (خطة 2.0 — الفصل 5.2).
+    Route::post('/noncash-claims', [\App\Http\Controllers\Api\NonCashClaimController::class, 'store']);
+    Route::get('/noncash-claims', [\App\Http\Controllers\Api\NonCashClaimController::class, 'index']);
+    Route::post('/noncash-claims/{id}/clear', [\App\Http\Controllers\Api\NonCashClaimController::class, 'clear'])->whereNumber('id');
+    Route::post('/noncash-claims/{id}/reject', [\App\Http\Controllers\Api\NonCashClaimController::class, 'reject'])->whereNumber('id');
+    Route::post('/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'store']);
+    Route::get('/cash-sessions/{id}/late-receipt-reviews', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'index'])->whereNumber('id');
+    Route::post('/late-receipt-reviews/{id}/clear-cash', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'clearCash'])->whereNumber('id');
+    Route::post('/late-receipt-reviews/{id}/clear-bank', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'clearBank'])->whereNumber('id');
+    Route::post('/late-receipt-reviews/{id}/decide', [\App\Http\Controllers\Api\LateReceiptReviewController::class, 'decide'])->whereNumber('id');
     Route::get('/cash-sessions/current', [CashSessionController::class, 'current']);
     Route::get('/cash-sessions/{id}/report', [CashSessionController::class, 'report'])->whereNumber('id');
     Route::get('/cash-sessions/{id}/report/pdf', [CashSessionController::class, 'downloadPdf'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/close', [CashSessionController::class, 'close'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/correct-duplicate', [CashSessionController::class, 'correctDuplicate'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/handovers', [CashSessionController::class, 'recordHandover'])->whereNumber('id');
+    Route::get('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'transfers']);
+    Route::post('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'dispatchTransfer']);
+    Route::post('/treasury/transfers/{id}/receive', [\App\Http\Controllers\Api\TreasuryController::class, 'receiveTransfer'])->whereNumber('id');
+    Route::get('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'index'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/bank-statements', [\App\Http\Controllers\Api\BankReconciliationController::class, 'store'])->whereNumber('id');
+    Route::get('/treasury/bank-statements/{id}', [\App\Http\Controllers\Api\BankReconciliationController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/bank-statements/{id}/collections', [\App\Http\Controllers\Api\BankReconciliationController::class, 'confirmCollection'])->whereNumber('id');
+    Route::post('/treasury/bank-statements/{id}/fees', [\App\Http\Controllers\Api\BankReconciliationController::class, 'recordFee'])->whereNumber('id');
+    Route::post('/treasury/bank-statements/{id}/matches', [\App\Http\Controllers\Api\BankReconciliationController::class, 'matchLine'])->whereNumber('id');
+    Route::get('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'index'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/cash-counts', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'store'])->whereNumber('id');
+    Route::get('/treasury/cash-counts/{id}', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/cash-counts/{id}/adjustment', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'adjust'])->whereNumber('id');
+    Route::post('/treasury/cash-counts/{id}/review', [\App\Http\Controllers\Api\TreasuryCashCountController::class, 'review'])->whereNumber('id');
+    Route::get('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'index']);
+    Route::post('/treasury/accounts', [\App\Http\Controllers\Api\TreasuryController::class, 'store']);
+    Route::get('/treasury/accounts/{id}', [\App\Http\Controllers\Api\TreasuryController::class, 'show'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/postings', [\App\Http\Controllers\Api\TreasuryController::class, 'post'])->whereNumber('id');
+    Route::post('/treasury/accounts/{id}/fund-collector', [\App\Http\Controllers\Api\TreasuryController::class, 'fundCollector'])->whereNumber('id');
     Route::apiResource('cash-sessions', CashSessionController::class)
         ->only(['index', 'store', 'show'])
         ->parameters(['cash-sessions' => 'id']);

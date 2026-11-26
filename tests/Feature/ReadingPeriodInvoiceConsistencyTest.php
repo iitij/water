@@ -51,7 +51,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         float $previous = 0,
         ?int $invoiceId = null
     ): Reading {
-        return Reading::create([
+        return $this->insertLegacyReading([
             'meter_id' => $meter->id,
             'reading_date' => $entered,
             'actual_reading_date' => $entered,
@@ -64,31 +64,31 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         ]);
     }
 
-    public function test_monthly_configured_day_31_is_clamped_to_short_february(): void
+    public function test_observation_interval_is_independent_of_configured_monthly_day(): void
     {
         $meter = $this->meter();
         $meter->subscriber->update(['subscription_start_date' => '2025-02-01']);
         Setting::set('reading_period', 'monthly');
         Setting::set('reading_day', '31');
 
-        $period = app(ReadingService::class)->calculateReadingPeriod($meter->id);
+        $period = app(ReadingService::class)->calculateReadingPeriod($meter->id, '2025-02-18');
 
         $this->assertSame('2025-02-01', $period['period_start']);
-        $this->assertSame('2025-02-28', $period['period_end']);
+        $this->assertSame('2025-02-18', $period['period_end']);
     }
 
-    public function test_next_period_uses_latest_period_end_not_latest_inserted_id(): void
+    public function test_next_interval_uses_latest_actual_observation_not_inserted_id(): void
     {
         $meter = $this->meter();
-        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 20);
-        $this->reading($meter, '2026-01-01', '2026-01-31', '2026-03-20', 10);
+        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-20', 20);
+        $this->reading($meter, '2026-01-01', '2026-01-31', '2026-03-12', 10);
         Setting::set('reading_period', 'monthly');
         Setting::set('reading_day', 'last_day');
 
-        $period = app(ReadingService::class)->calculateReadingPeriod($meter->id);
+        $period = app(ReadingService::class)->calculateReadingPeriod($meter->id, '2026-04-09');
 
-        $this->assertSame('2026-03-01', $period['period_start']);
-        $this->assertSame('2026-03-31', $period['period_end']);
+        $this->assertSame('2026-03-20', $period['period_start']);
+        $this->assertSame('2026-04-09', $period['period_end']);
         $this->assertSame(20.0, $meter->fresh()->getLastReadingValue());
     }
 
@@ -104,7 +104,7 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $this->assertSame('2026-01-01', $invoice->billing_period_start->toDateString());
         $this->assertSame('2026-02-28', $invoice->billing_period_end->toDateString());
         $this->assertSame([$january->id, $february->id], $invoice->readings()->orderBy('period_start')->pluck('id')->all());
-        $this->assertSame(25, $invoice->readings->sum('consumption_units'));
+        $this->assertEqualsWithDelta(25, (float) $invoice->readings->sum('consumption_units'), 0.001);
         $this->assertEqualsWithDelta(15000, (float) $invoice->consumption_fee, 0.01);
     }
 
@@ -122,8 +122,8 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
         $id = $response->json('reading.id');
         $reading = Reading::findOrFail($id);
         $this->assertSame('2026-03-05', $reading->actual_reading_date->toDateString());
-        $this->assertSame('2026-02-01', $reading->period_start);
-        $this->assertSame('2026-02-28', $reading->period_end);
+        $this->assertSame('2026-01-01', $reading->period_start);
+        $this->assertSame('2026-03-05', $reading->period_end);
     }
 
     public function test_updating_a_reading_cannot_overlap_another_consumption_period(): void
@@ -188,15 +188,15 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
     public function test_meter_period_endpoint_returns_reading_from_latest_consumption_period(): void
     {
         $meter = $this->meter();
-        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-12', 20);
-        $this->reading($meter, '2026-01-01', '2026-01-31', '2026-03-20', 10);
+        $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-20', 20);
+        $this->reading($meter, '2026-01-01', '2026-01-31', '2026-03-12', 10);
         Setting::set('reading_period', 'monthly');
         Setting::set('reading_day', 'last_day');
 
-        $this->getJson('/api/readings/calculate-dates?meter_id='.$meter->id)
+        $this->getJson('/api/readings/calculate-dates?meter_id='.$meter->id.'&reading_date=2026-04-09')
             ->assertOk()
-            ->assertJsonPath('period_start', '2026-03-01')
-            ->assertJsonPath('period_end', '2026-03-31')
+            ->assertJsonPath('period_start', '2026-03-20')
+            ->assertJsonPath('period_end', '2026-04-09')
             ->assertJsonPath('last_reading', 20);
     }
 
@@ -258,33 +258,39 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
     }
 
 
-    public function test_editing_an_entered_date_updates_the_matching_actual_date(): void
+    public function test_editing_an_observation_date_updates_its_interval_end(): void
     {
         $meter = $this->meter();
-        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-05', 'current_reading' => 10,
+        ])->assertCreated()->json('reading.id');
 
-        $this->putJson('/api/readings/'.$reading->id, [
+        $this->putJson('/api/readings/'.$id, [
             'reading_date' => '2026-03-09',
         ])->assertOk();
 
-        $this->assertSame('2026-03-09', $reading->fresh()->actual_reading_date->toDateString());
-        $this->assertSame('2026-02-01', $reading->fresh()->period_start);
-        $this->assertSame('2026-02-28', $reading->fresh()->period_end);
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('2026-03-09', $reading->actual_reading_date->toDateString());
+        $this->assertSame('2026-01-01', $reading->period_start);
+        $this->assertSame('2026-03-09', $reading->period_end);
     }
 
-    public function test_editing_entered_date_preserves_a_distinct_actual_date(): void
+    public function test_editing_entry_date_preserves_explicit_observation_date(): void
     {
         $meter = $this->meter();
-        $reading = $this->reading($meter, '2026-02-01', '2026-02-28', '2026-03-05', 10);
-        $reading->update(['actual_reading_date' => '2026-03-07']);
+        $id = $this->postJson('/api/readings', [
+            'meter_id' => $meter->id, 'reading_date' => '2026-03-08',
+            'actual_reading_date' => '2026-03-07', 'current_reading' => 10,
+        ])->assertCreated()->json('reading.id');
 
-        $this->putJson('/api/readings/'.$reading->id, [
+        $this->putJson('/api/readings/'.$id, [
             'reading_date' => '2026-03-09',
         ])->assertOk();
 
-        $this->assertSame('2026-03-07', $reading->fresh()->actual_reading_date->toDateString());
+        $reading = Reading::findOrFail($id);
+        $this->assertSame('2026-03-07', $reading->actual_reading_date->toDateString());
+        $this->assertSame('2026-03-07', $reading->period_end);
     }
-
 
     public function test_idempotent_retry_cannot_silently_change_its_saved_period(): void
     {
@@ -294,8 +300,8 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
             'meter_id' => $meter->id,
             'reading_date' => '2026-03-05',
             'current_reading' => 20,
-            'period_start' => '2026-02-01',
-            'period_end' => '2026-02-28',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-03-05',
             'sync_uuid' => $uuid,
         ];
         $id = $this->postJson('/api/readings', $original)->assertCreated()->json('reading.id');
@@ -308,8 +314,8 @@ class ReadingPeriodInvoiceConsistencyTest extends TestCase
 
         $this->assertDatabaseHas('readings', [
             'id' => $id,
-            'period_start' => '2026-02-01',
-            'period_end' => '2026-02-28',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-03-05',
         ]);
         $this->assertDatabaseCount('readings', 1);
     }

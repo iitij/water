@@ -73,6 +73,7 @@ class ApiEndpoints {
 
   // Payments.
   static const payments = 'payments';
+  static const lateReceiptReviews = 'late-receipt-reviews';
   static const bulkDeletePayments = 'payments/bulk-delete';
   static String payment(int id) => 'payments/$id';
   static String paymentPdf(int id) => 'payments/$id/pdf';

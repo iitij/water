@@ -82,6 +82,7 @@ class MobileApiIntegrationTest extends TestCase
                 'path_number' => 15,
                 'subscriber_id' => $subscriber->id,
                 'initial_reading' => 10,
+                'installed_at' => now()->subDays(15)->toDateString(),
             ])
             ->assertCreated();
 
@@ -114,7 +115,7 @@ class MobileApiIntegrationTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', false)
-            ->assertJsonPath('reading.consumption_units', 15);
+            ->assertJsonPath('reading.consumption_units', '15.00');
 
         // Duplicate sync_uuid returns 200 with duplicate=true
         $this->actingAs($this->admin, 'sanctum')

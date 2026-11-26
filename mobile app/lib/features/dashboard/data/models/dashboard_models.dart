@@ -105,11 +105,11 @@ class DashboardStatsModel extends DashboardStats {
       readingsThisMonth: adminInt(json['readings_this_month']),
       subscribersSparkline: _doubles(
         json['subscribers_sparkline'],
-        const [7, 3, 4, 5, 6, 3, 5],
+        const <double>[],
       ),
       collectionSparkline: _doubles(
         json['collection_sparkline'],
-        const [3, 5, 7, 4, 6, 8, 5],
+        const <double>[],
       ),
     );
   }

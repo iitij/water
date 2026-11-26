@@ -9,6 +9,7 @@ class SystemUser extends Equatable {
     this.avatarUrl,
     this.permissions = const [],
     this.createdAt,
+    this.disabledAt,
   });
 
   final int id;
@@ -18,6 +19,8 @@ class SystemUser extends Equatable {
   final List<String> roles;
   final List<String> permissions;
   final DateTime? createdAt;
+  final DateTime? disabledAt;
+  bool get isDisabled => disabledAt != null;
 
   String get roleLabel {
     const labels = {
@@ -39,6 +42,7 @@ class SystemUser extends Equatable {
     roles,
     permissions,
     createdAt,
+    disabledAt,
   ];
 }
 

@@ -11,7 +11,7 @@ abstract final class ReportStrings {
   static const invoiced = 'قيمة الفواتير';
   static const collected = 'التحصيل';
   static const activeReceipts = 'السندات الفعالة خلال الفترة';
-  static const outstanding = 'المتبقي من الفواتير';
+  static const outstanding = 'المتبقي الحالي من فواتير الفترة';
   static const overdue = 'المتأخرات';
   static const revenue = 'حركة التحصيل';
   static const revenueSubtitle = 'السندات الفعالة حسب يوم التحصيل';

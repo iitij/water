@@ -100,7 +100,7 @@ class CashSessionController extends ApiController
 
         $session = $this->sessions->open(
             $user,
-            (float) ($data['opening_amount'] ?? 0),
+            ($data['opening_amount'] ?? 0),
             $data['square_id'] ?? null,
             $data['notes'] ?? null,
         );
@@ -132,7 +132,7 @@ class CashSessionController extends ApiController
 
         $session = $this->sessions->close(
             $session,
-            (float) $data['counted_amount'],
+            $data['counted_amount'],
             $data['notes'] ?? null,
         );
 
@@ -199,6 +199,7 @@ class CashSessionController extends ApiController
             'session' => $session,
             'summary' => $data['cash_session'],
             'payments' => $data['payments'],
+            'handovers' => $data['handovers'],
             'generatedAt' => optional($data['generated_at'])->format('Y-m-d H:i'),
             'amountInWords' => $session->counted_amount === null
                 ? null
@@ -229,32 +230,60 @@ class CashSessionController extends ApiController
         return response()->json(['correction' => $correction]);
     }
 
+    public function recordHandover(Request $request, int $id, \App\Services\ProspectiveHandoverEntry $entry)
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:999999999999.99'],
+            'reference' => ['required', 'string', 'max:150'],
+            'received_on' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'evidence' => ['required', 'string', 'min:10', 'max:2000'],
+            'treasury_account_id' => ['nullable', 'integer', 'min:1'],
+            'operation_uuid' => ['nullable', 'uuid'],
+        ]);
+        return response()->json($entry->receive($request->user(), CashSession::findOrFail($id), $data));
+    }
+
     private function reportData(CashSession $session): array
     {
-        $payments = Payment::query()
-            ->with(['subscriber:id,name', 'meter:id,unique_code', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])
-            ->where('cash_session_id', $session->id)
-            ->orderBy('id')
-            ->get()
-            ->map(fn (Payment $payment) => [
-                'id' => $payment->id,
-                'receipt_number' => $payment->receipt_number,
-                'subscriber' => $payment->subscriber?->name,
-                'meter' => $payment->meter?->unique_code ?? $payment->retired_meter_code,
-                'account_transfer' => $payment->accountTransfer,
-                'amount' => number_format((float) $payment->amount, 2, '.', ''),
-                'payment_method' => $payment->payment_method,
-                'voided' => $payment->voided_at !== null && $payment->voided_via !== 'closed_correction',
-                'corrected_after_close' => $payment->voided_via === 'closed_correction',
-                'void_reason' => $payment->voided_via === 'closed_correction' ? null : $payment->void_reason,
-                'time' => optional($payment->created_at)->format('H:i'),
-            ])->values()->all();
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($session): array {
+            $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
+            $payments = Payment::query()
+                ->with(['subscriber:id,name', 'meter:id,unique_code', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])
+                ->where('cash_session_id', $session->id)
+                ->orderBy('id')
+                ->get()
+                ->map(fn (Payment $payment) => [
+                    'id' => $payment->id,
+                    'receipt_number' => $payment->receipt_number,
+                    'subscriber' => $payment->subscriber?->name,
+                    'meter' => $payment->meter?->unique_code ?? $payment->retired_meter_code,
+                    'account_transfer' => $payment->accountTransfer,
+                    'amount' => number_format((float) $payment->amount, 2, '.', ''),
+                    'payment_method' => $payment->payment_method,
+                    'voided' => $payment->voided_at !== null && $payment->voided_via !== 'closed_correction',
+                    'corrected_after_close' => $payment->voided_via === 'closed_correction',
+                    'void_reason' => $payment->voided_via === 'closed_correction' ? null : $payment->void_reason,
+                    'time' => optional($payment->created_at)->format('H:i'),
+                ])->values()->all();
 
-        return [
-            'cash_session' => $this->sessions->summary($session),
-            'payments' => $payments,
-            'generated_at' => now(),
-        ];
+            $handovers = \App\Models\CashHandover::query()
+                ->where('cash_session_id', $session->id)
+                ->orderBy('received_on')->orderBy('id')->get()
+                ->map(fn ($row) => [
+                    'id' => $row->id,
+                    'reference' => $row->reference,
+                    'amount' => $row->amount,
+                    'received_on' => $row->received_on->toDateString(),
+                    'received_by' => $row->received_by,
+                ])->values()->all();
+
+            return [
+                'cash_session' => $this->sessions->summary($session),
+                'handovers' => $handovers,
+                'payments' => $payments,
+                'generated_at' => now(),
+            ];
+        }, 3);
     }
 
     private function authorizeCollector(User $user): void

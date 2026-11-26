@@ -51,6 +51,7 @@ class MobileConnectivityFixesTest extends TestCase
                 'status' => 'active',
             ])->id,
             'initial_reading' => 0,
+            'installed_at' => now()->subDays(15)->toDateString(),
             'status' => 'active',
         ]);
         Device::create([
@@ -97,57 +98,73 @@ class MobileConnectivityFixesTest extends TestCase
     {
         [$meter] = $this->meterFixture();
         $uuid = (string) Str::uuid();
+        $date = now()->toDateString();
+        $recordedAt = now()->toIso8601String();
 
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'meter_locked',
                 'notes' => 'باب مغلق والمشترك خارج المدينة',
-                'recorded_at' => now()->toIso8601String(),
+                'recorded_at' => $recordedAt,
                 'sync_uuid' => $uuid,
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', false)
             ->assertJsonPath('fault.fault_type', 'meter_locked');
 
-        // نفس sync_uuid مرة أخرى → يُعاد نفس السجل دون تكرار.
+        // إعادة الطلب المطابق فقط: المعرّف لا يجيز تغيير الدليل الأصلي.
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'meter_locked',
+                'notes' => 'باب مغلق والمشترك خارج المدينة',
+                'recorded_at' => $recordedAt,
                 'sync_uuid' => $uuid,
             ])
             ->assertCreated()
             ->assertJsonPath('duplicate', true);
+
+        // حذف الملاحظات الأصلية ليس إعادة مطابقة للطلب.
+        $this->postJson('/api/readings/faults', [
+            'meter_id' => $meter->id,
+            'reading_date' => $date,
+            'fault_type' => 'meter_locked',
+            'sync_uuid' => $uuid,
+        ])->assertConflict()->assertJsonMissingPath('fault');
 
         $this->assertSame(1, ReadingFault::count());
         $fault = ReadingFault::first();
         $this->assertSame($meter->subscriber->square_id, $fault->square_id);
         $this->assertSame($meter->subscriber->id, $fault->subscriber_id);
         $this->assertSame($this->admin->id, $fault->user_id);
+        $this->assertSame('باب مغلق والمشترك خارج المدينة', $fault->notes);
     }
 
     public function test_reading_faults_sync_batch_and_index(): void
     {
         [$meter] = $this->meterFixture();
+        $absentUuid = (string) Str::uuid();
+        $brokenUuid = (string) Str::uuid();
+        $date = now()->toDateString();
 
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults/sync-batch', [
                 'faults' => [
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'subscriber_absent',
-                        'sync_uuid' => (string) Str::uuid(),
+                        'sync_uuid' => $absentUuid,
                     ],
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'meter_broken',
                         'notes' => 'الزجاج مكسور',
-                        'sync_uuid' => (string) Str::uuid(),
+                        'sync_uuid' => $brokenUuid,
                     ],
                 ],
             ])
@@ -160,14 +177,22 @@ class MobileConnectivityFixesTest extends TestCase
                 'faults' => [
                     [
                         'meter_id' => $meter->id,
-                        'reading_date' => now()->toDateString(),
+                        'reading_date' => $date,
                         'fault_type' => 'subscriber_absent',
-                        'sync_uuid' => ReadingFault::first()->sync_uuid,
+                        'sync_uuid' => $absentUuid,
+                    ],
+                    [
+                        'meter_id' => $meter->id,
+                        'reading_date' => $date,
+                        'fault_type' => 'meter_broken',
+                        'notes' => 'الزجاج مكسور',
+                        'sync_uuid' => $brokenUuid,
                     ],
                 ],
             ])
             ->assertOk()
-            ->assertJsonPath('duplicate_count', 1);
+            ->assertJsonPath('synced_count', 0)
+            ->assertJsonPath('duplicate_count', 2);
 
         $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/readings/faults?fault_type=meter_broken')
@@ -178,7 +203,7 @@ class MobileConnectivityFixesTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson('/api/readings/faults', [
                 'meter_id' => $meter->id,
-                'reading_date' => now()->toDateString(),
+                'reading_date' => $date,
                 'fault_type' => 'aliens_ate_the_meter',
                 'sync_uuid' => (string) Str::uuid(),
             ])
@@ -384,7 +409,11 @@ class MobileConnectivityFixesTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/payments?invoice_id='.$invoice->id.'&voided=all')
             ->assertOk()
-            ->assertJsonCount(1, 'data');
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.invoice.id', $invoice->id)
+            ->assertJsonPath('data.0.receipt_data.invoice_remaining', number_format((float) $invoice->total_amount - 200, 2, '.', ''))
+            ->assertJsonMissingPath('data.0.invoice.amount_paid')
+            ->assertJsonMissingPath('data.0.invoice.subscriber_id');
 
         // وفلتر voided=only يعيد لا شيء لعدم وجود سندات ملغاة.
         $this->actingAs($this->admin, 'sanctum')

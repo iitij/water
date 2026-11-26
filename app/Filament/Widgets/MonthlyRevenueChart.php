@@ -2,9 +2,8 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Payment;
+use App\Services\FinancialReportingService;
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Carbon;
 
 class MonthlyRevenueChart extends ChartWidget
 {
@@ -14,32 +13,20 @@ class MonthlyRevenueChart extends ChartWidget
 
     protected function getData(): array
     {
-        $months = collect();
-        $data = collect();
-
-        for ($i = 5; $i >= 0; $i--) {
-            $date = Carbon::now()->subMonths($i);
-            $months->push($date->translatedFormat('M Y'));
-
-            $total = Payment::whereMonth('payment_date', $date->month)
-                ->whereYear('payment_date', $date->year)
-                ->sum('amount');
-
-            $data->push((float) $total);
-        }
+        $months = app(FinancialReportingService::class)->monthlyCollections();
 
         return [
             'datasets' => [
                 [
                     'label' => 'التحصيل (ريال)',
-                    'data' => $data->toArray(),
+                    'data' => array_column($months, 'value'),
                     'backgroundColor' => 'rgba(5, 150, 105, 0.2)',
                     'borderColor' => 'rgb(5, 150, 105)',
                     'borderWidth' => 2,
                     'fill' => true,
                 ],
             ],
-            'labels' => $months->toArray(),
+            'labels' => array_column($months, 'label'),
         ];
     }
 

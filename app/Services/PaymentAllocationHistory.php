@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
+
 use App\Models\Subscriber;
 use Illuminate\Support\Facades\DB;
 
@@ -23,26 +26,27 @@ class PaymentAllocationHistory
         $byInvoice = array_fill_keys(array_keys($paid), 0);
         $bySource = array_fill_keys(array_keys($sourceAmounts), 0);
         foreach ($rows as $row) {
-            if (($row['payment_id'] === null) === ($row['account_transfer_id'] === null)
+            if (count(array_filter([$row['payment_id'], $row['account_transfer_id'], $row['held_cash_credit_id'] ?? null], fn ($id) => $id !== null)) !== 1
                 || ! is_int($row['amount_minor']) || $row['amount_minor'] <= 0) {
                 throw new \LogicException('Invalid allocation source or amount.');
             }
-            $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : 'transfer:'.$row['account_transfer_id'];
+            AccountMoney::positiveAllocation($row['amount_minor']);
+            $sourceKey = $row['payment_id'] !== null ? 'payment:'.$row['payment_id'] : ($row['account_transfer_id'] !== null ? 'transfer:'.$row['account_transfer_id'] : 'held:'.$row['held_cash_credit_id']);
             if (! array_key_exists($sourceKey, $bySource)) {
                 throw new \LogicException('Unknown allocation credit source.');
             }
-            $bySource[$sourceKey] += $row['amount_minor'];
+            $bySource[$sourceKey] = SignedMinor::add($bySource[$sourceKey], $row['amount_minor']);
             if ($row['invoice_id'] === null) {
-                $unallocated += $row['amount_minor'];
+                $unallocated = SignedMinor::add($unallocated, $row['amount_minor']);
             } else {
                 if (! array_key_exists($row['invoice_id'], $byInvoice)) {
                     throw new \LogicException('Allocation outside the account invoice set.');
                 }
-                $allocated += $row['amount_minor'];
-                $byInvoice[$row['invoice_id']] += $row['amount_minor'];
+                $allocated = SignedMinor::add($allocated, $row['amount_minor']);
+                $byInvoice[$row['invoice_id']] = SignedMinor::add($byInvoice[$row['invoice_id']], $row['amount_minor']);
             }
         }
-        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || $allocated + $unallocated !== $available) {
+        if ($byInvoice !== $paid || $bySource !== $sourceAmounts || SignedMinor::add($allocated, $unallocated) !== $available) {
             throw new \LogicException('Allocation snapshot does not conserve money.');
         }
         $integrity = app(AllocationSnapshotIntegrity::class);
@@ -64,7 +68,7 @@ class PaymentAllocationHistory
         ]);
         foreach (array_chunk($rows, 300, true) as $chunk) {
             DB::table('payment_allocations')->insert(array_map(
-                fn ($row, $position) => $row + ['revision_id' => $id, 'position' => $position + 1],
+                fn ($row, $position) => $row + ['held_cash_credit_id' => null, 'revision_id' => $id, 'position' => $position + 1],
                 $chunk, array_keys($chunk)
             ));
         }

@@ -15,6 +15,11 @@ permissions:
 jobs:
   mysql-migrations:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        scenario: [fresh, legacy-clean, legacy-financial]
     services:
       mysql:
         image: mysql:8.0
@@ -39,6 +44,7 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_DATABASE: water_test
+      WATER_SINGLE_METER_TEST_DB: water_test
       DB_USERNAME: water
       DB_PASSWORD: ci_water_only
       CACHE_STORE: array
@@ -57,14 +63,27 @@ jobs:
         run: |
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
-      - name: Rebuild disposable database from all migrations
-        run: php artisan migrate:fresh --force --no-interaction
-      - name: Verify MySQL single current meter uniqueness
+      - name: Build current schema in fresh scenario
+        if: matrix.scenario == 'fresh'
+        run: php artisan migrate --force --no-interaction
+      - name: Run scenario and require explicit success
+        env:
+          SCENARIO: ${{ matrix.scenario }}
         run: |
+          set -euo pipefail
           php -l tests/scripts/mysql_single_meter_smoke.php
-          php tests/scripts/mysql_single_meter_smoke.php
-          php artisan water:audit-single-meter
+          php tests/scripts/mysql_single_meter_smoke.php "$SCENARIO" 2>&1 | tee single-meter-smoke.log
+          case "$SCENARIO" in
+            fresh) grep -Fx 'PASS: fresh single-meter uniqueness and foreign key' single-meter-smoke.log ;;
+            legacy-clean) grep -Fx 'PASS: historical operational cleanup and final constraints' single-meter-smoke.log ;;
+            legacy-financial) grep -Fx 'PASS: historical financial protection and rollback' single-meter-smoke.log ;;
+            *) exit 1 ;;
+          esac
+      - name: Audit fresh single-meter schema
+        if: matrix.scenario == 'fresh'
+        run: php artisan water:audit-single-meter
       - name: Exercise retired billing schema upgrade and financial guard
+        if: matrix.scenario == 'fresh'
         run: |
           php -l tests/scripts/mysql_retired_billing_upgrade_smoke.php
           php tests/scripts/mysql_retired_billing_upgrade_smoke.php

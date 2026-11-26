@@ -5,6 +5,10 @@ namespace App\Services;
 use App\Models\Subscriber;
 use App\Models\Invoice;
 use App\Models\Reading;
+use App\Support\AccountMoney;
+use App\Support\MoneyBoundary;
+use App\Support\ReadingQuantity;
+use App\Support\SignedMinor;
 use Carbon\Carbon;
 use OpenSpout\Writer\XLSX\Writer;
 use OpenSpout\Common\Entity\Row;
@@ -14,12 +18,34 @@ use OpenSpout\Common\Entity\Style\Color;
 
 class DataExportService
 {
+    /** XLSX numbers have a 15-significant-digit precision budget; reject loss of cents. */
+    private function spreadsheetMajor(int $minor): float
+    {
+        if ($minor < -999999999999999 || $minor > 999999999999999) {
+            throw new \OverflowException('Spreadsheet numeric cell would lose exact hundredths.');
+        }
+        return MoneyBoundary::numericMajorOutput($minor);
+    }
+
+    private function temporaryWorkbookPath(string $prefix): string
+    {
+        $path = tempnam(sys_get_temp_dir(), $prefix);
+        if ($path === false) {
+            throw new \RuntimeException('Unable to allocate export workbook.');
+        }
+        if (! rename($path, $path.'.xlsx')) {
+            @unlink($path);
+            throw new \RuntimeException('Unable to name export workbook.');
+        }
+        return $path.'.xlsx';
+    }
+
     /**
      * تصدير بيانات المشتركين
      */
     public function exportSubscribers(?int $squareId = null, ?string $status = null): string
     {
-        $query = Subscriber::with(['square', 'meters'])
+        $query = Subscriber::with(['square', 'currentMeter'])
             ->orderBy('square_id')
             ->orderBy('id');
 
@@ -56,66 +82,76 @@ class DataExportService
             'تاريخ التسجيل',
         ];
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'subscribers_') . '.xlsx';
+        $tempPath = $this->temporaryWorkbookPath('subscribers_');
         $writer = new Writer();
-        $writer->openToFile($tempPath);
+        try {
+            $writer->openToFile($tempPath);
 
-        $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
-        $writer->addRow(new Row($headerCells, $headerStyle));
+            $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
+            $writer->addRow(new Row($headerCells, $headerStyle));
 
-        $index = 1;
-        $rowStyle = (new Style())->setFontSize(10);
-        $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F8FAFC');
+            $index = 1;
+            $rowStyle = (new Style())->setFontSize(10);
+            $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F8FAFC');
 
-        foreach ($subscribers as $sub) {
-            $primaryMeter = $sub->currentMeter;
-            $allMeterCodes = $primaryMeter?->unique_code ?? '-';
-            $allPaths = $primaryMeter?->path_number !== null ? (string)$primaryMeter->path_number : '-';
+            foreach ($subscribers as $sub) {
+                $primaryMeter = $sub->currentMeter;
+                $allMeterCodes = $primaryMeter?->unique_code ?? '-';
+                $allPaths = $primaryMeter?->path_number !== null ? (string)$primaryMeter->path_number : '-';
 
-            $netBalance = $sub->getAccountBalance();
-            $totalCredit = max(0, $netBalance);
-            $totalDebit = max(0, -$netBalance);
+                $netBalance = $sub->getAccountBalanceMinor();
+                $totalCredit = max(0, $netBalance);
+                $totalDebit = max(0, SignedMinor::negate($netBalance));
 
-            $meterStatus = match ($primaryMeter?->status) {
-                'active' => 'نشط',
-                'inactive' => 'غير نشط',
-                'removed' => 'مسحوب',
-                'suspended' => 'موقوف',
-                default => ($primaryMeter ? ($primaryMeter->status ?? 'نشط') : 'لا يوجد عداد'),
-            };
+                $meterStatus = match ($primaryMeter?->status) {
+                    'active' => 'نشط',
+                    'inactive' => 'غير نشط',
+                    'removed' => 'مسحوب',
+                    'suspended' => 'موقوف',
+                    default => ($primaryMeter ? ($primaryMeter->status ?? 'نشط') : 'لا يوجد عداد'),
+                };
 
-            $subStatus = match ($sub->status) {
-                'active' => 'نشط',
-                'inactive' => 'غير نشط',
-                'suspended' => 'موقوف',
-                default => $sub->status ?? 'نشط',
-            };
+                $subStatus = match ($sub->status) {
+                    'active' => 'نشط',
+                    'inactive' => 'غير نشط',
+                    'suspended' => 'موقوف',
+                    default => $sub->status ?? 'نشط',
+                };
 
 
-            $startDate = $sub->subscription_start_date ? Carbon::parse($sub->subscription_start_date)->format('Y-m-d') : '-';
-            $createdAt = $sub->created_at ? Carbon::parse($sub->created_at)->format('Y-m-d H:i') : '-';
+                $startDate = $sub->subscription_start_date ? Carbon::parse($sub->subscription_start_date)->format('Y-m-d') : '-';
+                $createdAt = $sub->created_at ? Carbon::parse($sub->created_at)->format('Y-m-d H:i') : '-';
 
-            $cells = [
-                Cell::fromValue($index++),
-                Cell::fromValue($sub->name ?? ''),
-                Cell::fromValue($sub->phone ?? ''),
-                Cell::fromValue($sub->square?->name ?? 'غير محدد'),
-                Cell::fromValue($sub->address ?? '-'),
-                Cell::fromValue($allMeterCodes),
-                Cell::fromValue($allPaths),
-                Cell::fromValue($meterStatus),
-                Cell::fromValue(round($totalCredit, 2)),
-                Cell::fromValue(round($totalDebit, 2)),
-                Cell::fromValue(round($netBalance, 2)),
-                Cell::fromValue($subStatus),
-                Cell::fromValue($startDate),
-                Cell::fromValue($createdAt),
-            ];
+                $cells = [
+                    Cell::fromValue($index++),
+                    Cell::fromValue($sub->name ?? ''),
+                    Cell::fromValue($sub->phone ?? ''),
+                    Cell::fromValue($sub->square?->name ?? 'غير محدد'),
+                    Cell::fromValue($sub->address ?? '-'),
+                    Cell::fromValue($allMeterCodes),
+                    Cell::fromValue($allPaths),
+                    Cell::fromValue($meterStatus),
+                    Cell::fromValue($this->spreadsheetMajor($totalCredit)),
+                    Cell::fromValue($this->spreadsheetMajor($totalDebit)),
+                    Cell::fromValue($this->spreadsheetMajor($netBalance)),
+                    Cell::fromValue($subStatus),
+                    Cell::fromValue($startDate),
+                    Cell::fromValue($createdAt),
+                ];
 
-            $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+                $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+            }
+
+            $writer->close();
+        } catch (\Throwable $error) {
+            try {
+                $writer->close();
+            } catch (\Throwable) {
+                // Keep the original export failure.
+            }
+            @unlink($tempPath);
+            throw $error;
         }
-
-        $writer->close();
         return $tempPath;
     }
 
@@ -173,63 +209,77 @@ class DataExportService
             'ملاحظات',
         ];
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'invoices_') . '.xlsx';
+        $tempPath = $this->temporaryWorkbookPath('invoices_');
         $writer = new Writer();
-        $writer->openToFile($tempPath);
+        try {
+            $writer->openToFile($tempPath);
 
-        $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
-        $writer->addRow(new Row($headerCells, $headerStyle));
+            $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
+            $writer->addRow(new Row($headerCells, $headerStyle));
 
-        $index = 1;
-        $rowStyle = (new Style())->setFontSize(10);
-        $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F0FDF4');
+            $index = 1;
+            $rowStyle = (new Style())->setFontSize(10);
+            $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F0FDF4');
 
-        foreach ($invoices as $inv) {
-            $sub = $inv->subscriber;
-            $meter = $inv->meter;
+            foreach ($invoices as $inv) {
+                $sub = $inv->subscriber;
+                $meter = $inv->meter;
 
-            $statusText = match ($inv->status) {
-                'paid' => 'مسددة',
-                'partially_paid' => 'مسددة جزئياً',
-                'issued' => 'صادرة (مستحقة)',
-                'overdue' => 'متأخرة',
-                'cancelled' => 'ملغاة',
-                'draft' => 'مسودة',
-                default => $inv->status ?? 'صادرة',
-            };
+                $statusText = match ($inv->status) {
+                    'paid' => 'مسددة',
+                    'partially_paid' => 'مسددة جزئياً',
+                    'issued' => 'صادرة (مستحقة)',
+                    'overdue' => 'متأخرة',
+                    'cancelled' => 'ملغاة',
+                    'draft' => 'مسودة',
+                    default => $inv->status ?? 'صادرة',
+                };
 
-            $totalWithPrev = (float)$inv->total_amount + (float)$inv->previous_balance;
-            $remaining = $inv->getRemainingAmount();
+                $total = AccountMoney::stored($inv, 'total_amount');
+                $previous = AccountMoney::stored($inv, 'previous_balance');
+                $consumptionFee = AccountMoney::stored($inv, 'consumption_fee');
+                $paid = AccountMoney::stored($inv, 'amount_paid');
+                $totalWithPrev = SignedMinor::add($total, $previous);
+                $remaining = $inv->getRemainingMinor();
 
-            $billDate = $inv->bill_date ? Carbon::parse($inv->bill_date)->format('Y-m-d') : '-';
-            $periodStart = $inv->billing_period_start ? Carbon::parse($inv->billing_period_start)->format('Y-m-d') : '-';
-            $periodEnd = $inv->billing_period_end ? Carbon::parse($inv->billing_period_end)->format('Y-m-d') : '-';
+                $billDate = $inv->bill_date ? Carbon::parse($inv->bill_date)->format('Y-m-d') : '-';
+                $periodStart = $inv->billing_period_start ? Carbon::parse($inv->billing_period_start)->format('Y-m-d') : '-';
+                $periodEnd = $inv->billing_period_end ? Carbon::parse($inv->billing_period_end)->format('Y-m-d') : '-';
 
-            $cells = [
-                Cell::fromValue($index++),
-                Cell::fromValue($inv->bill_number ?? (string)$inv->id),
-                Cell::fromValue($billDate),
-                Cell::fromValue($sub?->name ?? '-'),
-                Cell::fromValue($sub?->phone ?? '-'),
-                Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
-                Cell::fromValue($meter?->unique_code ?? $inv->retired_meter_code ?? '-'),
-                Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
-                Cell::fromValue($periodStart),
-                Cell::fromValue($periodEnd),
-                Cell::fromValue((float)($inv->consumption_fee ?? 0)),
-                Cell::fromValue((float)($inv->previous_balance ?? 0)),
-                Cell::fromValue((float)($inv->total_amount ?? 0)),
-                Cell::fromValue(round($totalWithPrev, 2)),
-                Cell::fromValue((float)($inv->amount_paid ?? 0)),
-                Cell::fromValue(round($remaining, 2)),
-                Cell::fromValue($statusText),
-                Cell::fromValue($inv->notes ?? '-'),
-            ];
+                $cells = [
+                    Cell::fromValue($index++),
+                    Cell::fromValue($inv->bill_number ?? (string)$inv->id),
+                    Cell::fromValue($billDate),
+                    Cell::fromValue($sub?->name ?? '-'),
+                    Cell::fromValue($sub?->phone ?? '-'),
+                    Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
+                    Cell::fromValue($meter?->unique_code ?? $inv->retired_meter_code ?? '-'),
+                    Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
+                    Cell::fromValue($periodStart),
+                    Cell::fromValue($periodEnd),
+                    Cell::fromValue($this->spreadsheetMajor($consumptionFee)),
+                    Cell::fromValue($this->spreadsheetMajor($previous)),
+                    Cell::fromValue($this->spreadsheetMajor($total)),
+                    Cell::fromValue($this->spreadsheetMajor($totalWithPrev)),
+                    Cell::fromValue($this->spreadsheetMajor($paid)),
+                    Cell::fromValue($this->spreadsheetMajor($remaining)),
+                    Cell::fromValue($statusText),
+                    Cell::fromValue($inv->notes ?? '-'),
+                ];
 
-            $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+                $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+            }
+
+            $writer->close();
+        } catch (\Throwable $error) {
+            try {
+                $writer->close();
+            } catch (\Throwable) {
+                // Keep the original export failure.
+            }
+            @unlink($tempPath);
+            throw $error;
         }
-
-        $writer->close();
         return $tempPath;
     }
 
@@ -288,51 +338,61 @@ class DataExportService
             'تاريخ التسجيل بالمنظومة',
         ];
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'readings_') . '.xlsx';
+        $tempPath = $this->temporaryWorkbookPath('readings_');
         $writer = new Writer();
-        $writer->openToFile($tempPath);
+        try {
+            $writer->openToFile($tempPath);
 
-        $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
-        $writer->addRow(new Row($headerCells, $headerStyle));
+            $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
+            $writer->addRow(new Row($headerCells, $headerStyle));
 
-        $index = 1;
-        $rowStyle = (new Style())->setFontSize(10);
-        $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F0FDFA');
+            $index = 1;
+            $rowStyle = (new Style())->setFontSize(10);
+            $altRowStyle = (new Style())->setFontSize(10)->setBackgroundColor('F0FDFA');
 
-        foreach ($readings as $rd) {
-            $meter = $rd->meter;
-            $sub = $meter?->subscriber ?? $rd->invoice?->subscriber;
+            foreach ($readings as $rd) {
+                $meter = $rd->meter;
+                $sub = $meter?->subscriber ?? $rd->invoice?->subscriber;
 
-            $invoicedText = $rd->is_invoiced ? 'مفوترة' : 'غير مفوترة';
+                $invoicedText = $rd->is_invoiced ? 'مفوترة' : 'غير مفوترة';
 
-            $readingDate = $rd->reading_date ? Carbon::parse($rd->reading_date)->format('Y-m-d') : '-';
-            $actualDate = $rd->actual_reading_date ? Carbon::parse($rd->actual_reading_date)->format('Y-m-d') : '-';
-            $createdAt = $rd->created_at ? Carbon::parse($rd->created_at)->format('Y-m-d H:i') : '-';
+                $readingDate = $rd->reading_date ? Carbon::parse($rd->reading_date)->format('Y-m-d') : '-';
+                $actualDate = $rd->actual_reading_date ? Carbon::parse($rd->actual_reading_date)->format('Y-m-d') : '-';
+                $createdAt = $rd->created_at ? Carbon::parse($rd->created_at)->format('Y-m-d H:i') : '-';
 
-            $cells = [
-                Cell::fromValue($index++),
-                Cell::fromValue($readingDate),
-                Cell::fromValue($actualDate),
-                Cell::fromValue($sub?->name ?? '-'),
-                Cell::fromValue($sub?->phone ?? '-'),
-                Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
-                Cell::fromValue($meter?->unique_code ?? $rd->retired_meter_code ?? '-'),
-                Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
-                Cell::fromValue((float)($rd->previous_reading ?? 0)),
-                Cell::fromValue((float)($rd->current_reading ?? 0)),
-                Cell::fromValue((int)($rd->consumption_units ?? 0)),
-                Cell::fromValue($rd->period_start ?? '-'),
-                Cell::fromValue($rd->period_end ?? '-'),
-                Cell::fromValue($invoicedText),
-                Cell::fromValue($rd->invoice?->bill_number ?? ($rd->invoice_id ? (string)$rd->invoice_id : '-')),
-                Cell::fromValue($rd->creator?->name ?? 'النظام'),
-                Cell::fromValue($createdAt),
-            ];
+                $cells = [
+                    Cell::fromValue($index++),
+                    Cell::fromValue($readingDate),
+                    Cell::fromValue($actualDate),
+                    Cell::fromValue($sub?->name ?? '-'),
+                    Cell::fromValue($sub?->phone ?? '-'),
+                    Cell::fromValue($sub?->square?->name ?? 'غير محدد'),
+                    Cell::fromValue($meter?->unique_code ?? $rd->retired_meter_code ?? '-'),
+                    Cell::fromValue($meter?->path_number !== null ? (string)$meter->path_number : '-'),
+                    Cell::fromValue($this->spreadsheetMajor(ReadingQuantity::hundredths($rd->getRawOriginal('previous_reading')))),
+                    Cell::fromValue($this->spreadsheetMajor(ReadingQuantity::hundredths($rd->getRawOriginal('current_reading')))),
+                    Cell::fromValue($this->spreadsheetMajor(ReadingQuantity::hundredths($rd->getRawOriginal('consumption_units')))),
+                    Cell::fromValue($rd->period_start ?? '-'),
+                    Cell::fromValue($rd->period_end ?? '-'),
+                    Cell::fromValue($invoicedText),
+                    Cell::fromValue($rd->invoice?->bill_number ?? ($rd->invoice_id ? (string)$rd->invoice_id : '-')),
+                    Cell::fromValue($rd->creator?->name ?? 'النظام'),
+                    Cell::fromValue($createdAt),
+                ];
 
-            $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+                $writer->addRow(new Row($cells, ($index % 2 === 0) ? $altRowStyle : $rowStyle));
+            }
+
+            $writer->close();
+        } catch (\Throwable $error) {
+            try {
+                $writer->close();
+            } catch (\Throwable) {
+                // Keep the original export failure.
+            }
+            @unlink($tempPath);
+            throw $error;
         }
-
-        $writer->close();
         return $tempPath;
     }
 }

@@ -24,7 +24,7 @@ class EditMeter extends EditRecord
                 ->color('warning')
                 ->visible(fn (): bool => $this->record?->isCurrent() === true)
                 ->modalHeading('استبدال العداد الحالي')
-                ->modalDescription('تنبيه: تُحذف بيانات العداد السابق وقراءاته وفواتيره وسنداته نهائياً، دون أرشيف. لا يمكن التراجع عن العملية.')
+                ->modalDescription('تنبيه: يُزال العداد السابق وقراءاته غير المفوترة وغير المرتبطة مالياً نهائياً. تبقى الفواتير والسندات والقراءات المرتبطة بها محفوظة.')
                 ->form([
                     \Filament\Forms\Components\TextInput::make('new_unique_code')
                         ->label('رقم العداد الجديد')
@@ -38,7 +38,7 @@ class EditMeter extends EditRecord
                         ->default(fn (): ?int => $this->record?->path_number),
                     \Filament\Forms\Components\TextInput::make('initial_reading')
                         ->label('القراءة الابتدائية للعداد الجديد')
-                        ->integer()
+                        ->numeric()->step(0.01)->maxValue(9999999999.99)->rule('decimal:0,2')
                         ->minValue(0)
                         ->default(0)
                         ->required(),
@@ -67,7 +67,7 @@ class EditMeter extends EditRecord
                         \Illuminate\Support\Facades\Auth::id(),
                     );
                     \Filament\Notifications\Notification::make()
-                        ->title('تم استبدال العداد وحذف بيانات السابق نهائياً')
+                        ->title('تم استبدال العداد مع حفظ المستندات المالية')
                         ->success()
                         ->send();
                     $this->redirect(MeterResource::getUrl('edit', [

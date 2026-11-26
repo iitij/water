@@ -42,7 +42,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('choosing the actual date preserves approved billing period and disables changes during saving', (tester) async {
+  testWidgets('choosing the actual date closes the observation interval and disables changes during saving', (tester) async {
     final pending = Completer<ReadingSaveResult>();
     ReadingSubmission? sent;
     when(() => repository.submitReading(any())).thenAnswer((call) {
@@ -66,12 +66,12 @@ void main() {
     expect(sent, isNotNull);
     expect(sent!.readingDate, selected);
     expect(sent!.periodStart, start);
-    expect(sent!.periodEnd, end);
+    expect(sent!.periodEnd, selected);
     expect(sent!.previousReading, 10);
     expect(sent!.currentReading, 15);
     expect(tester.widget<InkWell>(find.byKey(const ValueKey('actual-reading-date'))).onTap, isNull);
     pending.complete(ReadingSaveResult(reading: Reading(id: 1, meterId: 81,
-      readingDate: selected, periodStart: start, periodEnd: end,
+      readingDate: selected, periodStart: start, periodEnd: selected,
       previousReading: 10, currentReading: 15, consumptionUnits: 5), isPendingSync: false));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

@@ -36,6 +36,10 @@ class InvoiceResource extends Resource
             \Filament\Schemas\Components\Section::make('بيانات الفاتورة')
                 ->columns(2)
                 ->schema([
+                    \App\Filament\Actions\ProspectiveInvoiceAction::identity()
+                        ->visible(fn (?Invoice $record) => $record === null)
+                        ->dehydrated(fn (?Invoice $record) => $record === null && app(\App\Services\ProspectiveInvoiceEntry::class)->enabled())
+                        ->required(fn (?Invoice $record) => $record === null && app(\App\Services\ProspectiveInvoiceEntry::class)->enabled()),
                     Forms\Components\Select::make('subscriber_id')
                         ->disabled(fn (?Invoice $record) => $record?->isFinanciallyLocked() ?? false)
                         ->label('المشترك')
@@ -59,7 +63,6 @@ class InvoiceResource extends Resource
                     Forms\Components\TextInput::make('bill_number')
                         ->visible(fn (?Invoice $record) => $record !== null)
                         ->label('رقم الفاتورة')
-                        ->default(fn() => Invoice::generateBillNumber())
                         ->disabled()
                         ->dehydrated(false),
 
@@ -470,9 +473,12 @@ class InvoiceResource extends Resource
                         && auth()->user()?->can('delete', $record))
                     ->action(function (Invoice $record, array $data) {
                         \Illuminate\Support\Facades\Gate::authorize('delete', $record);
-                        app(\App\Services\InvoiceCancellationService::class)->cancel($record, $data['reason'], auth()->id(), 'web');
+                        \App\Filament\Actions\ProspectiveInvoiceAction::cancel($record, $data);
                     })
-                    ->form([Forms\Components\Textarea::make('reason')->label('سبب الإلغاء')->required()->minLength(10)->maxLength(1000)])
+                    ->form([
+                        \App\Filament\Actions\ProspectiveInvoiceAction::identity(),
+                        Forms\Components\Textarea::make('reason')->label('سبب الإلغاء')->required()->minLength(10)->maxLength(1000),
+                    ])
                     ->requiresConfirmation(),
                 \Filament\Actions\Action::make('collect_payment')
                     ->label('تحصيل')
@@ -480,6 +486,7 @@ class InvoiceResource extends Resource
                     ->color('success')
                     ->visible(fn (Invoice $record) => $record->canCollect() && auth()->user()?->can('create', Payment::class))
                     ->form([
+                        ...\App\Filament\Actions\ProspectiveCashReceiptAction::fields(),
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
                             ->default(fn (Invoice $record) => $record->getCollectibleAmount())
@@ -490,11 +497,7 @@ class InvoiceResource extends Resource
 
                         Forms\Components\Select::make('payment_method')
                             ->label('طريقة الدفع')
-                            ->options([
-                                'cash' => 'نقدي',
-                                'bank_transfer' => 'تحويل بنكي',
-                                'check' => 'شيك',
-                            ])
+                            ->options(fn () => \App\Filament\Actions\ProspectiveCashReceiptAction::methods())
                             ->default('cash')
                             ->reactive()
                             ->required(),
@@ -514,17 +517,7 @@ class InvoiceResource extends Resource
                     ])
                     ->action(function (Invoice $record, array $data): void {
                         \Illuminate\Support\Facades\Gate::authorize('create', Payment::class);
-                        $service = new PaymentService();
-                        $payment = $service->collectPayment(
-                            subscriber: $record->subscriber,
-                            amount: (float) $data['amount'],
-                            invoiceId: $record->id,
-                            paymentMethod: $data['payment_method'],
-                            referenceNumber: $data['reference_number'] ?? null,
-                            notes: $data['notes'] ?? null,
-                            reason: $data['reason'] ?? null,
-                            userId: auth()->id(),
-                        );
+                        $payment = \App\Filament\Actions\ProspectiveCashReceiptAction::collect($record->subscriber, $data, (int) $record->id);
 
                         Notification::make()
                             ->title('تم التحصيل بنجاح')
@@ -540,7 +533,9 @@ class InvoiceResource extends Resource
                     ->label('إصدار فاتورة عداد')
                     ->icon('heroicon-o-calculator')
                     ->color('primary')
+                    ->visible(fn () => auth()->user()?->can('create', Invoice::class))
                     ->form([
+                        \App\Filament\Actions\ProspectiveInvoiceAction::identity(),
                         Forms\Components\Select::make('subscriber_id')
                             ->label('المشترك')
                             ->searchable()
@@ -590,23 +585,17 @@ class InvoiceResource extends Resource
                     ->action(function (array $data): void {
                         try {
                             $subIdInt = $data['subscriber_id'];
-                            $subscriber = Subscriber::find($subIdInt);
-                            $meter = \App\Models\Meter::find($data['meter_id']);
-                            $service = new InvoiceService();
-
-                            $invoice = $service->generateInvoice(
-                                subscriber: $subscriber,
-                                meter: $meter,
-                                notes: $data['notes'] ?? null,
-                                includeReadings: true,
-                                invoiceType: 'meter'
-                            );
+                            $subscriber = Subscriber::findOrFail($subIdInt);
+                            $meter = \App\Models\Meter::where('subscriber_id', $subscriber->id)->findOrFail($data['meter_id']);
+                            $invoice = \App\Filament\Actions\ProspectiveInvoiceAction::issue($subscriber, $meter, $data);
 
                             \Filament\Notifications\Notification::make()
                                 ->title('تم إنشاء الفاتورة')
                                 ->body("فاتورة رقم: {$invoice->bill_number} - الإجمالي: {$invoice->total_amount} ريال")
                                 ->success()
                                 ->send();
+                        } catch (\Illuminate\Validation\ValidationException $error) {
+                            throw $error;
                         } catch (\Exception $e) {
                             \Filament\Notifications\Notification::make()
                                 ->title('عفواً، لا يمكن إنشاء الفاتورة')

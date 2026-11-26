@@ -209,7 +209,9 @@ class SubscriberResource extends Resource
                     ->label('تحصيل دفعة')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
+                    ->visible(fn () => auth()->user()?->can('create', \App\Models\Payment::class) ?? false)
                     ->form([
+                        ...\App\Filament\Actions\ProspectiveCashReceiptAction::fields(),
                         Forms\Components\TextInput::make('amount')
                             ->label('المبلغ')
                             ->numeric()
@@ -229,11 +231,7 @@ class SubscriberResource extends Resource
 
                         Forms\Components\Select::make('payment_method')
                             ->label('طريقة الدفع')
-                            ->options([
-                                'cash' => 'نقدي',
-                                'bank_transfer' => 'تحويل بنكي',
-                                'check' => 'شيك',
-                            ])
+                            ->options(fn () => \App\Filament\Actions\ProspectiveCashReceiptAction::methods())
                             ->default('cash')
                             ->required(),
 
@@ -242,14 +240,7 @@ class SubscriberResource extends Resource
                             ->rows(2),
                     ])
                     ->action(function (Subscriber $record, array $data): void {
-                        $service = new PaymentService;
-                        $payment = $service->collectPayment(
-                            subscriber: $record,
-                            amount: (float) $data['amount'],
-                            invoiceId: $data['invoice_id'] ?? null,
-                            paymentMethod: $data['payment_method'],
-                            notes: $data['notes'] ?? null,
-                        );
+                        $payment = \App\Filament\Actions\ProspectiveCashReceiptAction::collect($record, $data);
 
                         Notification::make()
                             ->title('تم التحصيل بنجاح')
@@ -259,6 +250,11 @@ class SubscriberResource extends Resource
                     }),
 
 
+                Action::make('ledger_statement')
+                    ->label('كشف الحساب')
+                    ->icon('heroicon-o-document-text')
+                    ->visible(fn (Subscriber $record): bool => static::canView($record))
+                    ->url(fn (Subscriber $record): string => static::getUrl('ledger-statement', ['record' => $record])),
                 ViewAction::make(),
                 EditAction::make(),
             ])
@@ -284,6 +280,7 @@ class SubscriberResource extends Resource
             'index' => Pages\ListSubscribers::route('/'),
             'create' => Pages\CreateSubscriber::route('/create'),
             'edit' => Pages\EditSubscriber::route('/{record}/edit'),
+            'ledger-statement' => Pages\SubscriberLedgerStatement::route('/{record}/ledger-statement'),
         ];
     }
 }

@@ -4,64 +4,54 @@ namespace App\Console\Commands;
 
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Models\Subscriber;
 use App\Models\Transaction;
+use App\Support\AccountMoney;
+use App\Support\SignedMinor;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * The former destructive rebuild cannot reconstruct reversals, refunds,
+ * transfers or historical provenance. Keep the old entry point read-only.
+ */
 class MigrateToLedger extends Command
 {
     protected $signature = 'ledger:migrate';
-    protected $description = 'Migrate existing invoices and payments to the transactions ledger';
+    protected $description = 'Read-only audit of original invoice and payment postings; never rebuild the ledger';
 
-    public function handle()
+    public function handle(): int
     {
-        DB::transaction(function () {
-            // Clear existing transactions
-            Transaction::query()->delete();
-
-            // 1. Migrate Invoices (Debit)
-            $invoices = Invoice::all();
-            foreach ($invoices as $invoice) {
-                // The new charges are: total_amount + credit_applied. 
-                // Wait, if credit was applied, it means they had credit, but the invoice value is subtotal.
-                $subtotal = $invoice->consumption_fee;
-
-                Transaction::create([
-                    'subscriber_id' => $invoice->subscriber_id,
-                    'type' => 'invoice',
-                    'amount' => -$subtotal, // Debit
-                    'description' => 'إصدار فاتورة رقم ' . $invoice->bill_number,
-                    'reference_type' => Invoice::class,
-                    'reference_id' => $invoice->id,
-                    'created_at' => $invoice->created_at,
-                    'updated_at' => $invoice->updated_at,
-                ]);
-            }
-
-            // 2. Migrate Payments (Credit)
-            $payments = Payment::all();
-            foreach ($payments as $payment) {
-                Transaction::create([
-                    'subscriber_id' => $payment->subscriber_id,
-                    'type' => 'payment',
-                    'amount' => $payment->amount, // Credit
-                    'description' => 'سند قبض رقم ' . $payment->receipt_number,
-                    'reference_type' => Payment::class,
-                    'reference_id' => $payment->id,
-                    'created_at' => $payment->created_at,
-                    'updated_at' => $payment->updated_at,
-                ]);
-            }
-
-            // 3. Update Subscriber Balances
-            $subscribers = Subscriber::all();
-            foreach ($subscribers as $subscriber) {
-                $totalBalance = Transaction::where('subscriber_id', $subscriber->id)->sum('amount');
-                $subscriber->updateQuietly(['balance' => $totalBalance]);
-            }
-
-            $this->info('Migration to ledger completed successfully.');
-        });
+        $issues = 0;
+        foreach ([Invoice::class => 'invoice', Payment::class => 'payment'] as $model => $type) {
+            $model::query()->chunkById(200, function ($documents) use ($type, &$issues) {
+                foreach ($documents as $doc) {
+                    $rows = Transaction::withTrashed()->where('reference_type', get_class($doc))
+                        ->where('reference_id', $doc->id)->where('type', $type)->get();
+                    if ($type === 'invoice' && $doc->status === 'draft') {
+                        $valid = $rows->isEmpty();
+                    } else {
+                        try {
+                            $amount = AccountMoney::stored($doc, $type === 'invoice' ? 'total_amount' : 'amount');
+                            $expected = $type === 'invoice' ? SignedMinor::negate($amount) : $amount;
+                            $valid = ($type === 'invoice' ? $amount >= 0 : $amount > 0)
+                                && $rows->count() === 1 && ! $rows->first()->trashed()
+                                && (int) $rows->first()->subscriber_id === (int) $doc->subscriber_id
+                                && AccountMoney::stored($rows->first()) === $expected
+                                && (int) ($rows->first()->meter_id ?? 0) === (int) ($doc->meter_id ?? 0)
+                                && (int) ($rows->first()->retired_meter_id ?? 0) === (int) ($doc->retired_meter_id ?? 0);
+                        } catch (\InvalidArgumentException|\OverflowException) {
+                            // Malformed observed DECIMAL is evidence of a problem,
+                            // not permission to round and certify the source.
+                            $valid = false;
+                        }
+                    }
+                    if (! $valid) {
+                        $issues++;
+                        $this->warn($type.' #'.$doc->id.' has a missing, duplicate or mismatched original posting.');
+                    }
+                }
+            });
+        }
+        $this->info('Read-only original posting audit; issues: '.$issues.'. No data changed.');
+        return $issues === 0 ? self::SUCCESS : self::FAILURE;
     }
 }

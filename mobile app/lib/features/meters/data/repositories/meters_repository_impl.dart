@@ -211,7 +211,7 @@ class MetersRepositoryImpl implements MetersRepository {
     required String uniqueCode,
     required String reason,
     required String removedAt,
-    required int initialReading,
+    required double initialReading,
     int? pathNumber,
   }) async {
     final result = await _remote.replaceMeter(meterId, {

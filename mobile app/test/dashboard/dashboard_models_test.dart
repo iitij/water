@@ -4,7 +4,7 @@ import 'package:water_project/features/dashboard/data/models/report_models.dart'
 
 void main() {
   group('DashboardDataModel', () {
-    test('parses the documented payload and computes net due without duplication', () {
+    test('parses the payload and falls back to own invoice debt without counting earlier arrears twice', () {
       final dashboard = DashboardDataModel.fromJson({
         'stats_overview': {
           'active_subscribers_count': 145,
@@ -40,12 +40,12 @@ void main() {
       expect(dashboard.stats.activeSubscribersCount, 145);
       expect(dashboard.stats.monthlyCollection, 480000);
       expect(dashboard.monthlyRevenue.length, 2);
-      expect(dashboard.overdueInvoices.single.remainingAmount, 1200);
+      expect(dashboard.overdueInvoices.single.remainingAmount, 800);
       expect(dashboard.overdueInvoices.single.subscriberName, 'أحمد');
 
       final restored = DashboardDataModel.fromJson(dashboard.toJson());
       expect(restored.overdueInvoices.single.trueRemainingAmount, isNull);
-      expect(restored.overdueInvoices.single.remainingAmount, 1200);
+      expect(restored.overdueInvoices.single.remainingAmount, 800);
     });
 
     test('honours true_remaining_amount and legacy stats aliases', () {

@@ -175,11 +175,31 @@ class _VoidRequestsSheetState extends State<VoidRequestsSheet> {
 
     setState(() => _busy.add(request.id));
     try {
-      await widget.repository.decideVoidRequest(
-        request.id,
-        approve: approve,
-        notes: notes,
-      );
+      final repository = widget.repository;
+      final bool ok;
+      if (request.requiresBoundDecision) {
+        if (repository is! BoundVoidRequestsRepository ||
+            request.requestId == null ||
+            request.requestId! <= 0) {
+          throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.', <String, List<String>>{});
+        }
+        ok = await (repository as BoundVoidRequestsRepository).decideBoundVoidRequest(
+          request,
+          approve: approve,
+          notes: notes,
+        );
+      } else {
+        // Compatibility for lists from the legacy server only. Never retry a
+        // bound decision without its request identity after a failure.
+        ok = await repository.decideVoidRequest(
+          request.id,
+          approve: approve,
+          notes: notes,
+        );
+      }
+      if (!ok) {
+        throw const UnexpectedFailure('لم يؤكد الخادم تنفيذ القرار.');
+      }
       if (!mounted) return;
       AppFeedback.success(
         context,

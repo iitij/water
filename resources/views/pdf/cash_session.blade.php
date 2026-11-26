@@ -223,7 +223,7 @@
             <div class="value">{{ $summary['opening_amount'] ?? '0.00' }}</div>
         </div>
         <div class="total-box">
-            <div class="label">المتوقع من السندات</div>
+            <div class="label">{{ ($summary['settlement_basis'] ?? null) === 'physical_cash' ? 'النقد المتوقع (شامل الافتتاح)' : 'المتوقع المسجل سابقاً' }}</div>
             <div class="value">{{ $summary['expected_amount'] ?? '0.00' }}</div>
         </div>
         <div class="total-box">
@@ -235,6 +235,39 @@
             <div class="value">{{ $summary['variance_amount'] ?? '—' }}</div>
         </div>
     </div>
+
+    @if ($summary['counted_cash_allocation_eligible'] ?? false)
+        <div class="section-title">تخصيص فائض النقد المعدود (بعد الاعتماد)</div>
+        <div class="meta">
+            <div>الفائض الأصلي المتاح للتخصيص: {{ $summary['counted_cash_surplus_capacity'] }}</div>
+            <div>المخصص لسندات متأخرة: {{ $summary['counted_cash_surplus_allocated'] }}</div>
+            <div>الفائض غير المخصص: {{ $summary['counted_cash_surplus_available'] }}</div>
+        </div>
+    @endif
+
+    @if (isset($summary['treasury_handover']))
+        @php $handover = $summary['treasury_handover']; @endphp
+        <div class="section-title">التسليم الفعلي للخزينة (النقد المعدود فقط)</div>
+        <div class="meta">
+            <div>النقد الواجب تسليمه: {{ $handover['target_amount'] ?? 'غير قابل للتحقق' }}</div>
+            <div>التسليم الموثق: {{ $handover['received_amount'] }}</div>
+            <div>المتبقي للتسليم: {{ $handover['remaining_amount'] ?? 'غير قابل للتحقق' }}</div>
+        </div>
+        @if (! empty($handovers))
+            <table>
+                <thead><tr><th>مرجع التسليم</th><th>تاريخ الاستلام</th><th>معرّف المستلم</th><th>المبلغ</th></tr></thead>
+                <tbody>
+                    @foreach ($handovers as $receipt)
+                        <tr><td>{{ $receipt['reference'] }}</td><td>{{ $receipt['received_on'] }}</td>
+                            <td>{{ $receipt['received_by'] }}</td><td>{{ $receipt['amount'] }}</td></tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
+        @if ($handover['status'] === 'not_eligible' || $handover['status'] === 'inconsistent')
+            <p class="muted">يلزم تدقيق التسوية الأصلية. اعتماد الصندوق وحده لا يثبت استلام الخزينة.</p>
+        @endif
+    @endif
 
     @if ($amountInWords)
         <div class="words">

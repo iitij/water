@@ -27,7 +27,7 @@ class CashSessionRequiredException implements Exception {
 ///
 /// القرار يعتمد على صندوق مفتوح **معروف محلياً** حتى لا يمنع انقطاع الشبكة
 /// المحصّل من العمل؛ وعند غياب المعرفة (لم يُفتح صندوق قط) يُسمح بالتحصيل
-/// الأوفلاين لأن الخادم سيرفضه لاحقاً إن كان غير صحيح، مع تنبيه واضح.
+/// الأوفلاين فقط عند معرفة هوية صندوق مفتوح؛ لا يجوز تخمين صندوق عملية مالية.
 class CashSessionService extends ChangeNotifier {
   CashSessionService({required CashSessionApi api, AuditLogService? audit})
     : _api = api,
@@ -63,9 +63,8 @@ class CashSessionService extends ChangeNotifier {
   /// هل يجوز تسجيل تحصيل الآن؟
   ///
   /// * صندوق مفتوح معروف → نعم.
-  /// * لا صندوق معروف (لم ننجح في الجلب بعد) → نعم مؤقتاً، لأن المنع الكامل
-  ///   عند أول تشغيل بلا شبكة يعطّل الميدان بلا فائدة.
-  bool get canCollect => _current == null || _current!.isOpen;
+  /// * لا صندوق معروف → لا تحصيل حتى يتم التحقق من هوية الصندوق.
+  bool get canCollect => _current?.isOpen ?? false;
 
   /// يرمي استثناءً عربياً إن كان الصندوق مغلقاً/بانتظار الاعتماد.
   void ensureCanCollect() {

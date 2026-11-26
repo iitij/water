@@ -1063,31 +1063,24 @@ class _StatementTab extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: 4, end: 16),
                   child: AppIconButton(
-                    icon: Icons.picture_as_pdf_outlined,
-                    tooltip: 'تصدير كشف الحساب PDF',
+                    icon: Icons.receipt_long_outlined,
+                    tooltip: 'كشف الحساب المالي حسب الفترة',
                     size: 38,
-                    onPressed: () async {
-                      try {
-                        await StatementPdfService.shareStatement(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => LedgerStatementScreen(
+                          subscriberId: detail.subscriber.id,
                           subscriberName: subscriberName,
-                          summary: detail.summary,
-                          entries: state.statement,
-                        );
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                SubscriberExperienceStrings.exportFailed,
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text('هذه حركات حسب المرجع. للكشف المالي الكامل اختر أيقونة كشف الحساب وحدد الفترة.'),
             ),
             if (state.statementLoading) const LinearProgressIndicator(),
           ],
@@ -1137,7 +1130,7 @@ class _StatementTab extends StatelessWidget {
                           ),
                           const Gap(3),
                           Text(
-                            '${e.createdAt ?? ''} • ${e.party} • رصيد تراكمي: ${e.runningBalance}',
+                            '${e.createdAt ?? ''} • ${e.party} • رصيد الحركات المعروضة: ${e.runningBalance}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall,

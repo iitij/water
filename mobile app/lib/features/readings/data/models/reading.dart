@@ -199,7 +199,7 @@ class ReadingSubmission {
   final String? imagePath;
   final bool autoIssueInvoice;
 
-  double get consumption => currentReading - previousReading;
+  double get consumption => ((currentReading * 100).round() - (previousReading * 100).round()) / 100;
 
   Map<String, dynamic> toJson({String? localId}) => {
     if (localId != null) 'client_action_id': localId,

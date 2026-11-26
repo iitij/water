@@ -11,12 +11,32 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class PostedFinancialDocumentTest extends TestCase
 {
     use RefreshDatabase;
+
+    // Only synthetic corruption fixtures temporarily bypass the SQLite update trigger.
+    // Never used in production. MySQL DDL implicitly commits, so do not drop triggers there.
+    private function simulateLegacyLedgerMutation(callable $operation): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            if (app(\App\Services\LedgerProtection::class)->active()) {
+                $this->markTestSkipped('Legacy corruption fixture requires an unprotected isolated database.');
+            }
+            $operation();
+            return;
+        }
+        DB::unprepared('DROP TRIGGER IF EXISTS ledger_reject_update');
+        try {
+            $operation();
+        } finally {
+            app(\App\Services\LedgerProtection::class)->install();
+        }
+    }
 
     private function meter(): Meter
     {
@@ -31,7 +51,7 @@ class PostedFinancialDocumentTest extends TestCase
     private function postInvoice(Meter $meter): Invoice
     {
         \App\Models\Tariff::create(['name' => 'Synthetic posted invoice tariff', 'unit_price' => 600, 'is_active' => true]);
-        \App\Models\Reading::create(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-02-01',
             'period_start' => '2026-01-01', 'period_end' => '2026-02-01',
             'previous_reading' => 0, 'current_reading' => 1]);
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'sanctum');
@@ -95,6 +115,50 @@ class PostedFinancialDocumentTest extends TestCase
         $this->assertSame('250.00', $payment->fresh()->amount);
         $this->assertSame('0.00', $invoice->fresh()->amount_paid);
         $this->assertSame(600.0, $meter->subscriber->getAccountDebt());
+    }
+
+    public function test_ledger_rejects_wrong_document_amount_owner_type_and_missing_reference(): void
+    {
+        $meter = $this->meter();
+        $invoice = $this->postInvoice($meter);
+        $other = $this->meter();
+        $ledger = app(\App\Services\TransactionService::class);
+        foreach ([
+            fn () => $ledger->recordTransaction($meter->subscriber, 'invoice', -601, reference: $invoice, meter: $meter),
+            fn () => $ledger->recordTransaction($other->subscriber, 'invoice', -600, reference: $invoice, meter: $other),
+            fn () => $ledger->recordTransaction($meter->subscriber, 'payment', 600, reference: $invoice, meter: $meter),
+            fn () => $ledger->recordTransaction($meter->subscriber, 'invoice', -600),
+            fn () => $ledger->recordTransaction($meter->subscriber, 'invoice', -600.001, reference: $invoice, meter: $meter),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Invalid ledger posting accepted');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('transaction', $exception->errors());
+            }
+        }
+        $first = Transaction::sole();
+        $this->assertSame($first->id, $ledger->recordTransaction($meter->subscriber, 'invoice', -600,
+            reference: $invoice, meter: $meter)->id);
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertSame(600.0, $meter->subscriber->getAccountDebt());
+        $this->assertSame(0.0, $other->subscriber->getAccountBalance());
+    }
+
+    public function test_legacy_ledger_command_is_read_only_even_with_missing_posting(): void
+    {
+        $meter = $this->meter();
+        $invoice = $this->postInvoice($meter);
+        $payment = app(PaymentService::class)->collectPayment($meter->subscriber, 250, $invoice->id);
+        app(PaymentService::class)->voidPayment($payment, 'Synthetic correction of receipt');
+        $before = Transaction::withTrashed()->orderBy('id')->get()->toArray();
+        $this->artisan('ledger:migrate')->assertExitCode(0);
+        $this->assertSame($before, Transaction::withTrashed()->orderBy('id')->get()->toArray());
+        $this->simulateLegacyLedgerMutation(fn () => DB::table('transactions')->where('reference_type', Invoice::class)
+            ->where('reference_id', $invoice->id)->update(['deleted_at' => now()]));
+        $before = Transaction::withTrashed()->orderBy('id')->get()->toArray();
+        $this->artisan('ledger:migrate')->assertExitCode(1);
+        $this->assertSame($before, Transaction::withTrashed()->orderBy('id')->get()->toArray());
     }
 
     public function test_unposted_draft_edit_does_not_create_ledger_entry(): void

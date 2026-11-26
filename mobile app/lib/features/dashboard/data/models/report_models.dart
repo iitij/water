@@ -60,13 +60,18 @@ class FinancialReportModel extends FinancialReport {
     super.hasDetailedData,
     super.refundsDisbursed,
     super.netReceiptsAfterRefunds,
+    super.currentAccountDebt,
+    super.currentAccountCredit,
   });
 
   factory FinancialReportModel.fromJson(dynamic value) {
     final root = adminDataMap(value);
     final summary = root['summary'] is Map ? adminMap(root['summary']) : root;
     final movements = adminMap(root['financial_movements']);
+    final balances = adminMap(root['account_balances']);
     return FinancialReportModel(
+      currentAccountDebt: adminNullableDouble(balances['debt']),
+      currentAccountCredit: adminNullableDouble(balances['credit']),
       refundsDisbursed: movements['refunds_disbursed'] == null ? null : adminDouble(movements['refunds_disbursed']),
       netReceiptsAfterRefunds: movements['net_receipts_after_refunds'] == null ? null : adminDouble(movements['net_receipts_after_refunds']),
       totalInvoiced: adminDouble(
@@ -152,6 +157,8 @@ class FinancialReportModel extends FinancialReport {
 
   Map<String, dynamic> toJson() => {
     'has_detailed_data': hasDetailedData,
+    if (currentAccountDebt != null && currentAccountCredit != null)
+      'account_balances': {'debt': currentAccountDebt, 'credit': currentAccountCredit, 'basis': 'current_subscriber_ledger'},
     if (refundsDisbursed != null && netReceiptsAfterRefunds != null)
       'financial_movements': {'refunds_disbursed': refundsDisbursed, 'net_receipts_after_refunds': netReceiptsAfterRefunds},
     'summary': {

@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../../core/field_operations/field_session_scope.dart';
+import '../../../../core/network/interceptors/auth_interceptor.dart';
 import '../../../../core/finance/finance_api_client.dart';
 import '../../../../core/finance/finance_sync_queue.dart';
 import '../../../../core/network/finance_endpoints.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../audit/services/audit_log_service.dart';
+import '../../../cash_sessions/services/cash_session_service.dart';
 import '../../../invoices/data/datasources/invoices_remote_datasource.dart';
 import '../../../invoices/data/models/invoice_model.dart';
 import '../../../invoices/data/models/invoice_query.dart';
@@ -30,33 +33,50 @@ class PaymentsRepositoryImpl
     implements
         PaymentsRepository,
         PaginatedPaymentsRepository,
-        SortedVoidRequestsRepository {
+        SortedVoidRequestsRepository,
+        BoundVoidRequestsRepository {
   const PaymentsRepositoryImpl({
     required PaymentsRemoteDataSource remote,
     required InvoicesRemoteDataSource invoices,
     required NetworkInfo networkInfo,
     FinanceSyncQueueRepository? syncQueue,
+    FieldSessionScope? Function()? captureScope,
     AuditLogService? audit,
+    CashSessionService? cashSessions,
     Uuid uuid = const Uuid(),
     this.offlineEnabled = true,
+    this.prospectiveVoidRequests = const bool.fromEnvironment('WATER_PROSPECTIVE_VOID'),
   }) : _remote = remote,
        _invoices = invoices,
        _network = networkInfo,
        _syncQueue = syncQueue,
+       _captureScope = captureScope,
        _audit = audit,
+       _cashSessions = cashSessions,
        _uuid = uuid;
 
   final PaymentsRemoteDataSource _remote;
   final InvoicesRemoteDataSource _invoices;
   final NetworkInfo _network;
   final FinanceSyncQueueRepository? _syncQueue;
+  final FieldSessionScope? Function()? _captureScope;
+
+  Map<String, dynamic>? _sessionExtra(FieldSessionScope? scope) {
+    scope?.ensureCurrent();
+    return scope == null ? null : {
+      AuthInterceptor.sessionGenerationKey: scope.generation,
+      AuthInterceptor.sessionServerKey: scope.server,
+    };
+  }
 
   /// سجل التدقيق المحلي (S4-05): يسجّل التحصيل والإلغاء حتى بلا شبكة.
   final AuditLogService? _audit;
+  final CashSessionService? _cashSessions;
   final Uuid _uuid;
 
   /// تعطيل الطابور المحلي عند الحاجة في الاختبارات.
   final bool offlineEnabled;
+  final bool prospectiveVoidRequests;
 
   @override
   Future<List<PaymentModel>> list(PaymentQuery query) => _remote.list(query);
@@ -69,6 +89,7 @@ class PaymentsRepositoryImpl
 
   @override
   Future<CollectPaymentOutcome> collect(CollectPaymentRequest request) async {
+    final scope = _captureScope?.call();
     final validationError = request.validate();
     if (validationError != null) {
       throw ValidationFailure(validationError, <String, List<String>>{});
@@ -77,19 +98,29 @@ class PaymentsRepositoryImpl
     // يُنشأ UUID v4 واحد قبل المحاولة الشبكية ويُعاد استخدامه عند السقوط أوفلاين
     // لمنع ازدواجية السند إذا وصلت الحزمة للخادم وانقطع الرد.
     final syncUuid = _uuid.v4();
+    // Freeze date and till before the first network attempt, including lost replies.
+    request = request.copyWith(paymentDate: request.paymentDate ?? DateTime.now());
+    final session = _cashSessions?.current;
+    if (_cashSessions != null && (session == null || !session.isOpen)) {
+      throw const ValidationFailure('افتح صندوقاً معروفاً قبل تسجيل التحصيل.', <String, List<String>>{});
+    }
+    final cashSessionId = session?.id;
 
     final online = await _network.isConnected;
+    scope?.ensureCurrent();
     if (!online && offlineEnabled) {
-      return _enqueueOffline(request, syncUuid: syncUuid);
+      return _enqueueOffline(request, syncUuid: syncUuid, cashSessionId: cashSessionId, scope: scope);
     }
 
     try {
       final outcome = request.invoiceId != null
           ? await _remote.payInvoice(
               request.invoiceId!,
-              request.toPayPayload(syncUuid: syncUuid),
+              <String, dynamic>{...request.toPayPayload(syncUuid: syncUuid), if (cashSessionId != null) 'cash_session_id': cashSessionId},
+              sessionExtra: _sessionExtra(scope),
             )
-          : await _remote.create(request.toCreatePayload(syncUuid: syncUuid));
+          : await _remote.create(<String, dynamic>{...request.toCreatePayload(syncUuid: syncUuid), if (cashSessionId != null) 'cash_session_id': cashSessionId}, sessionExtra: _sessionExtra(scope));
+      scope?.ensureCurrent();
 
       _record(
         'payment.collected',
@@ -104,9 +135,10 @@ class PaymentsRepositoryImpl
       );
       return outcome;
     } on AppFailure catch (failure) {
+      scope?.ensureCurrent();
       // انقطاع أثناء الطلب → ندرجه في الطابور بنفس sync_uuid بدل إخبار المحصل بالفشل.
       if (_isNetworkLike(failure) && offlineEnabled) {
-        return _enqueueOffline(request, syncUuid: syncUuid);
+        return _enqueueOffline(request, syncUuid: syncUuid, cashSessionId: cashSessionId, scope: scope);
       }
       rethrow;
     }
@@ -115,8 +147,11 @@ class PaymentsRepositoryImpl
   Future<CollectPaymentOutcome> _enqueueOffline(
     CollectPaymentRequest request, {
     required String syncUuid,
+    required int? cashSessionId,
+    FieldSessionScope? scope,
   }) async {
-    final localReceipt = 'REC-LOCAL-${DateTime.now().millisecondsSinceEpoch}';
+    scope?.ensureCurrent();
+    final localReceipt = 'REC-LOCAL-$syncUuid';
     final queue = _syncQueue;
     if (queue == null) {
       throw const NetworkFailure(
@@ -130,6 +165,8 @@ class PaymentsRepositoryImpl
         payload: <String, dynamic>{
           if (request.invoiceId != null) 'invoice_id': request.invoiceId,
           ...request.toCreatePayload(syncUuid: syncUuid),
+          if (cashSessionId != null) 'cash_session_id': cashSessionId,
+          'deferred_sync': true,
         },
         createdAt: DateTime.now(),
         idempotencyKey: syncUuid,
@@ -137,6 +174,7 @@ class PaymentsRepositoryImpl
       ),
     );
 
+    scope?.ensureCurrent();
     _record(
       'payment.queued_offline',
       entityId: request.subscriberId,
@@ -155,6 +193,7 @@ class PaymentsRepositoryImpl
         meterId: request.meterId,
         invoiceId: request.invoiceId,
         receiptNumber: localReceipt,
+        cashSessionId: cashSessionId,
         amount: request.amount,
         method: request.method,
         referenceNumber: request.referenceNumber,
@@ -205,6 +244,7 @@ class PaymentsRepositoryImpl
     int id, {
     required String reason,
   }) async {
+    final scope = _captureScope?.call();
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
       throw const ValidationFailure(
@@ -213,8 +253,36 @@ class PaymentsRepositoryImpl
       );
     }
 
+    if (prospectiveVoidRequests) {
+      // Destructive correction is online-only in the candidate. A lost reply
+      // is an unknown outcome; never turn it into a new queued mutation.
+      scope?.ensureCurrent();
+      final online = await _network.isConnected;
+      scope?.ensureCurrent();
+      if (!online) {
+        throw const NetworkFailure('الإلغاء يحتاج اتصالاً مباشراً. لم يُرسل الطلب ولم يُحفظ للمزامنة.');
+      }
+      final intent = _uuid.v4();
+      try {
+        final outcome = await _remote.requestBoundVoid(
+          id, reason: trimmed, intentUuid: intent, sessionExtra: _sessionExtra(scope),
+        );
+        scope?.ensureCurrent();
+        return outcome;
+      } on AppFailure catch (failure) {
+        scope?.ensureCurrent();
+        if (_isNetworkLike(failure)) {
+          throw const NetworkFailure(
+            'نتيجة طلب الإلغاء غير مؤكدة. حدّث السند وراجع طلباته قبل أي محاولة جديدة؛ لم يُضف طلب للمزامنة.',
+          );
+        }
+        rethrow;
+      }
+    }
+
     try {
-      final outcome = await _remote.voidPayment(id, reason: trimmed);
+      final outcome = await _remote.voidPayment(id, reason: trimmed, sessionExtra: _sessionExtra(scope));
+      scope?.ensureCurrent();
       _record(
         outcome.pendingApproval
             ? 'payment.void_pending_approval'
@@ -225,6 +293,7 @@ class PaymentsRepositoryImpl
       );
       return outcome;
     } on AppFailure catch (failure) {
+      scope?.ensureCurrent();
       final queue = _syncQueue;
       if (!offlineEnabled || queue == null || !_isNetworkLike(failure)) {
         rethrow;
@@ -240,6 +309,7 @@ class PaymentsRepositoryImpl
         ),
       );
 
+      scope?.ensureCurrent();
       _record(
         'payment.void_queued_offline',
         entityType: 'Payment',
@@ -298,6 +368,37 @@ class PaymentsRepositoryImpl
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
     );
+    return ok;
+  }
+
+  @override
+  Future<bool> decideBoundVoidRequest(
+    PaymentVoidRequest request, {
+    required bool approve,
+    String? notes,
+  }) async {
+    final requestId = request.requestId;
+    if (!request.requiresBoundDecision || requestId == null || requestId <= 0) {
+      throw const ValidationFailure('معرّف طلب الإلغاء غير مؤكد. حدّث القائمة.', <String, List<String>>{});
+    }
+    final scope = _captureScope?.call();
+    scope?.ensureCurrent();
+    // Stable namespaced UUID: retries cannot create another approval.
+    final operationUuid = approve
+        ? _uuid.v5(
+            '8b1dbcca-196a-46b3-9162-1bbeb480cf37',
+            'water:void-approval:${request.id}:$requestId',
+          )
+        : null;
+    final ok = await _remote.decideBoundVoidRequest(
+      request.id,
+      requestId: requestId,
+      approve: approve,
+      operationUuid: operationUuid,
+      notes: notes,
+      sessionExtra: _sessionExtra(scope),
+    );
+    scope?.ensureCurrent();
     return ok;
   }
 

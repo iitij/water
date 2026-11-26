@@ -128,35 +128,43 @@ class ReadingResource extends Resource
             \Filament\Schemas\Components\Grid::make(2)
                 ->schema([
                     Forms\Components\DatePicker::make('period_start')
-                        ->label('فترة القراءة (من تاريخ)')
+                        ->label('من تاريخ القراءة السابقة')
                         ->readOnly()
                         ->dehydrated()
                         ->required(),
 
                     Forms\Components\DatePicker::make('period_end')
-                        ->label('فترة القراءة (إلى تاريخ)')
+                        ->label('إلى تاريخ القراءة الحالية')
                         ->readOnly()
                         ->dehydrated()
                         ->required()
-                        ->unique(
-                            table: \App\Models\Reading::class,
-                            column: 'period_end',
-                            modifyRuleUsing: function (\Illuminate\Validation\Rules\Unique $rule, $get) {
-                                return $rule->where('meter_id', $get('meter_id'));
-                            },
-                            ignoreRecord: true
-                        ),
+                        ->helperText('يُحسب تلقائياً من تاريخ أخذ القراءة.'),
                 ]),
 
             Forms\Components\DatePicker::make('reading_date')
-                ->label('تاريخ إدخال القراءة الفعلي')
+                ->label('تاريخ أخذ القراءة الفعلي')
                 ->default(now())
+                ->live()
+                ->afterStateUpdated(function ($set, $get, $state, ?Reading $record) {
+                    if (! $state || ! $get('meter_id')) return;
+                    if ($record !== null) {
+                        if ($record->period_basis === 'observation') {
+                            $set('period_end', \Carbon\CarbonImmutable::parse($state)->toDateString());
+                        }
+                        return;
+                    }
+                    $period = app(\App\Services\ReadingService::class)
+                        ->calculateReadingPeriod((int) $get('meter_id'), $state);
+                    $set('period_start', $period['period_start']);
+                    $set('period_end', $period['period_end']);
+                })
                 ->required()
-                ->helperText('التاريخ الذي تمت فيه قراءة العداد فعلياً من قبل المحصل.'),
+                ->helperText('تاريخ أخذ القراءة فعلياً، وهو نهاية فترة الاستهلاك.'),
 
             Forms\Components\TextInput::make('current_reading')
                 ->label('القراءة الحالية')
-                ->numeric()
+                ->numeric()->minValue(0)->maxValue(9999999999.99)->step(0.01)
+                ->rule('decimal:0,2')
                 ->rules([
                     fn($get, ?\Illuminate\Database\Eloquent\Model $record) => function (string $attribute, $value, \Closure $fail) use ($get, $record) {
                         if (! $get('meter_id')) return;
@@ -250,8 +258,30 @@ class ReadingResource extends Resource
                     ->falseLabel('غير مفوترة'),
             ])
             ->actions([
+                \Filament\Actions\Action::make('resume_auto_invoice')
+                    ->label('إعادة محاولة إصدار الفاتورة')
+                    ->visible(fn (Reading $record): bool => auth()->user()?->can('create', \App\Models\Invoice::class)
+                        && app(\App\Services\ProspectiveReadingAutoInvoice::class)->canResume($record, auth()->user()))
+                    ->requiresConfirmation()
+                    ->action(function (Reading $record): void {
+                        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Invoice::class);
+                        $auto = app(\App\Services\ProspectiveReadingAutoInvoice::class);
+                        abort_unless($auto->canResume($record, auth()->user()), 409);
+                        try {
+                            $invoice = $auto->attempt($record, auth()->user(), null);
+                            if ($invoice === null || $invoice->status === 'cancelled') {
+                                throw new \DomainException('gated_auto_invoice_intent_conflict');
+                            }
+                            \Filament\Notifications\Notification::make()
+                                ->title('تم إصدار الفاتورة من الطلب الأصلي')->success()->send();
+                        } catch (\DomainException|\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            // Confirmation-only action has no input schema for field errors.
+                            \Filament\Notifications\Notification::make()
+                                ->title('تعذر استئناف إصدار الفاتورة')->body($error->getMessage())->danger()->send();
+                        }
+                    }),
                 \Filament\Actions\EditAction::make()
-                    ->hidden(fn (Reading $record): bool => $record->is_invoiced),
+                    ->hidden(fn (Reading $record): bool => $record->is_invoiced || $record->period_basis !== 'observation'),
                 \Filament\Actions\DeleteAction::make()
                     ->hidden(fn (Reading $record): bool => $record->is_invoiced),
             ])
@@ -271,7 +301,24 @@ class ReadingResource extends Resource
                         ->extraAttributes([
                             'x-show' => "getSelectedRecordsCount() && !document.querySelector('tr.reading-invoiced input[type=checkbox]:checked')",
                         ])
-                        ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                        ->visible(fn () => auth()->user()?->can('create', \App\Models\Invoice::class))
+                        ->form([\App\Filament\Actions\ProspectiveInvoiceAction::identity()])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Invoice::class);
+                            if (app(\App\Services\ProspectiveInvoiceEntry::class)->enabled() || isset($data['operation_uuid'])) {
+                                $result = app(\App\Services\ProspectiveReadingBatchInvoices::class)->issue(
+                                    auth()->user(), $records->modelKeys(), null, $data['operation_uuid'] ?? null);
+                                if ($result['invoices_issued'] > 0) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('تمت معالجة '.$result['invoices_issued'].' فاتورة دون تكرار القيود')
+                                        ->success()->send();
+                                }
+                                if ($result['errors'] !== []) {
+                                    $errors = array_map(fn ($error) => 'العداد '.$error['meter_id'].': '.$error['message'], $result['errors']);
+                                    throw \Illuminate\Validation\ValidationException::withMessages(['data' => implode("\n", array_slice($errors, 0, 5))]);
+                                }
+                                return;
+                            }
                             if ($records->contains('is_invoiced', true)) {
                                 \Filament\Notifications\Notification::make()
                                     ->title('لا يمكن إصدار الفواتير')

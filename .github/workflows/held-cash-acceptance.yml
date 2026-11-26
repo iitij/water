@@ -1,0 +1,135 @@
+name: Held cash full acceptance (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sqlite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Held cash and adjustment tests on SQLite
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/GatedCountedCashWriterTest.php
+      - name: Changed-path allocation, reports and ledger regressions on SQLite
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/PaymentAllocationHistoryTest.php tests/Feature/FinancialReportsTest.php
+      - name: Independent registry regressions on SQLite
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
+
+      - name: Directly affected refund and custody regressions
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_p1_refund_|test_p1_corrections_refund_valid_retired_receipt' tests/Feature/Acc09P1ExactMoneyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/InvoiceOverduePolicyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/SingleCurrentMeterTest.php tests/Feature/StrictSingleMeterPurgeTest.php tests/Feature/SingleMeterOfflineReplacementRaceTest.php
+      - name: SQLite direct ledger write guards
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/LedgerDatabaseProtectionTest.php
+  mysql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: water_test
+          MYSQL_USER: water_qa
+          MYSQL_PASSWORD: disposable_qa_password
+          MYSQL_ROOT_PASSWORD: disposable_root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: water_test
+      DB_USERNAME: water_qa
+      DB_PASSWORD: disposable_qa_password
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pcntl, posix, mbstring, pdo_mysql, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
+          coverage: none
+      - name: Verify source and install locked dependencies
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum composer.lock
+          test ! -e .env
+          test ! -e .env.testing
+          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
+          composer install --no-interaction --no-progress --prefer-dist
+          git diff --exit-code -- composer.lock
+      - name: Permit migration triggers in disposable MySQL only
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
+      - name: Held cash and adjustment tests on MySQL
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/GatedCountedCashWriterTest.php
+      - name: Changed-path allocation and report regressions on MySQL
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_target_fifo_credit_and_void_create_conserved_immutable_revisions|test_failure_to_save_allocation_rolls_back_receipt_and_ledger|test_reconciliation_detects_wrong_invoice_paid_distribution_with_equal_totals|test_database_rejects_rewriting_or_deleting_saved_allocations' tests/Feature/PaymentAllocationHistoryTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialReportsTest.php
+      - name: Independent registry regressions on MySQL
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialLedgerRegistryVerifierTest.php tests/Feature/FinancialLedgerEvidenceTest.php
+
+      - name: Directly affected refund and custody regressions
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_p1_refund_|test_p1_corrections_refund_valid_retired_receipt' tests/Feature/Acc09P1ExactMoneyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_preserves_receipt_and_till_and_removes_credit_from_future_billing' tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/TreasuryRegisterTest.php tests/Feature/TreasuryCustodyEvidenceTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/NonCashClaimTest.php tests/Feature/TreasuryBankCollectionTest.php tests/Feature/TreasuryCollectionClaimProofTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/Acc09P1ExactMoneyTest.php tests/Feature/FinancialReversalTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/ReadingPeriodInvoiceConsistencyTest.php tests/Feature/InvoiceOverduePolicyTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/SingleCurrentMeterTest.php tests/Feature/StrictSingleMeterPurgeTest.php tests/Feature/SingleMeterOfflineReplacementRaceTest.php
+      - name: Actual MySQL concurrency on changed correction paths
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round113_|test_parallel_invoice_and_explicit_replacement_preserve_any_committed_financial_document|test_round112_|test_round111_|test_round110_|test_p1_corrections_concurrent_refund_and_void_cannot_both_commit|test_p1_corrections_reciprocal_transfers_conserve_both_accounts|test_invoice_and_collection_in_parallel_conserve_the_balance' tests/Feature/FinancialConcurrencyTest.php
+      - name: MySQL direct ledger write guards
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/LedgerMysqlProtectionTest.php

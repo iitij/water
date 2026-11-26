@@ -40,10 +40,11 @@ class PaymentsRemoteDataSource {
   }
 
   /// #50 `POST /api/payments` — سند قبض عام (قد يكون بلا فاتورة → توزيع FIFO).
-  Future<CollectPaymentOutcome> create(Map<String, dynamic> payload) async {
+  Future<CollectPaymentOutcome> create(Map<String, dynamic> payload, {Map<String, dynamic>? sessionExtra}) async {
     final response = await _client.post(
       FinanceEndpoints.payments,
       body: payload,
+      sessionExtra: sessionExtra,
     );
     return _parseOutcome(response);
   }
@@ -51,11 +52,13 @@ class PaymentsRemoteDataSource {
   /// #44 `POST /api/invoices/{id}/pay` — التحصيل من شاشة الفاتورة/المحصل السريع.
   Future<CollectPaymentOutcome> payInvoice(
     int invoiceId,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    Map<String, dynamic>? sessionExtra,
+  }) async {
     final response = await _client.post(
       FinanceEndpoints.invoicePay(invoiceId),
       body: payload,
+      sessionExtra: sessionExtra,
     );
     return _parseOutcome(response);
   }
@@ -90,6 +93,7 @@ class PaymentsRemoteDataSource {
   Future<VoidPaymentOutcome> voidPayment(
     int id, {
     required String reason,
+    Map<String, dynamic>? sessionExtra,
   }) async {
     final trimmed = reason.trim();
     if (trimmed.length < 10) {
@@ -101,13 +105,54 @@ class PaymentsRemoteDataSource {
     final response = await _client.post(
       FinanceEndpoints.paymentVoid(id),
       body: <String, dynamic>{'reason': trimmed},
+      sessionExtra: sessionExtra,
     );
     final map = JsonUtils.asMap(response);
     final pending = map?['pending_approval'] == true;
     final data =
         JsonUtils.asMap(map?['payment']) ?? JsonUtils.asMap(map?['data']);
+    if (sessionExtra != null && data == null) {
+      throw const UnexpectedFailure('لم يؤكد الخادم هوية السند المطلوب إلغاؤه.');
+    }
     final payment = data == null ? await byId(id) : PaymentModel.fromJson(data);
     return VoidPaymentOutcome(payment: payment, pendingApproval: pending);
+  }
+
+  /// Explicit online intent: no message-only or receipt-only acknowledgement.
+  Future<VoidPaymentOutcome> requestBoundVoid(
+    int id, {
+    required String reason,
+    required String intentUuid,
+    Map<String, dynamic>? sessionExtra,
+  }) async {
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoid(id),
+      body: <String, dynamic>{
+        'reason': reason.trim(),
+        'intent_uuid': intentUuid,
+      },
+      sessionExtra: sessionExtra,
+    );
+    final map = JsonUtils.asMap(response);
+    final payment = JsonUtils.asMap(map?['payment']);
+    final pending = map?['pending_approval'];
+    final requestId = JsonUtils.asIntOrNull(map?['request_id']);
+    if (map == null ||
+        map['intent_uuid'] != intentUuid ||
+        pending is! bool ||
+        payment == null ||
+        JsonUtils.asIntOrNull(payment['id']) != id ||
+        !payment.containsKey('voided_at') ||
+        (payment['voided_at'] != null) == pending ||
+        (pending && (requestId == null || requestId <= 0))) {
+      throw const UnexpectedFailure(
+        'لم يؤكد الخادم نتيجة طلب الإلغاء. حدّث السند قبل أي محاولة جديدة.',
+      );
+    }
+    return VoidPaymentOutcome(
+      payment: PaymentModel.fromJson(payment),
+      pendingApproval: pending,
+    );
   }
 
   /// `GET /api/payments/void-requests` — طلبات الإلغاء بانتظار اعتماد المشرف.
@@ -155,6 +200,43 @@ class PaymentsRemoteDataSource {
     final map = JsonUtils.asMap(response);
     // الخادم يعيد {message, payment, receipt_data} بعد تنفيذ القرار.
     return map != null && (map['payment'] != null || map['message'] != null);
+  }
+
+  /// No success inferred from a message-only response or a different request.
+  Future<bool> decideBoundVoidRequest(
+    int id, {
+    required int requestId,
+    required bool approve,
+    String? operationUuid,
+    String? notes,
+    Map<String, dynamic>? sessionExtra,
+  }) async {
+    if (requestId <= 0 || (approve != (operationUuid != null))) {
+      throw const ValidationFailure('هوية قرار الإلغاء غير صالحة.', <String, List<String>>{});
+    }
+    final response = await _client.post(
+      FinanceEndpoints.paymentVoidDecision(id),
+      body: <String, dynamic>{
+        'approve': approve,
+        'request_id': requestId,
+        if (operationUuid != null) 'operation_uuid': operationUuid,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+      sessionExtra: sessionExtra,
+    );
+    final map = JsonUtils.asMap(response);
+    final payment = JsonUtils.asMap(map?['payment']);
+    if (map == null ||
+        JsonUtils.asIntOrNull(map['request_id']) != requestId ||
+        map['operation_uuid'] != operationUuid ||
+        !map.containsKey('operation_uuid') ||
+        payment == null ||
+        JsonUtils.asIntOrNull(payment['id']) != id ||
+        !payment.containsKey('voided_at') ||
+        (payment['voided_at'] != null) != approve) {
+      throw const UnexpectedFailure('لم يؤكد الخادم هوية قرار الإلغاء ونتيجته.');
+    }
+    return true;
   }
 
   /// #52 `POST /api/payments/bulk-delete`

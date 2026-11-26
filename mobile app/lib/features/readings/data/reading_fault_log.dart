@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/field_operations/field_session_scope.dart';
+
 import '../domain/reading_fault.dart';
 
 /// سجل تعذّر القراءة على الجهاز.
@@ -19,7 +21,25 @@ abstract interface class ReadingFaultLog {
 }
 
 class SharedPreferencesReadingFaultLog implements ReadingFaultLog {
-  SharedPreferencesReadingFaultLog({SharedPreferences? prefs}) : _prefs = prefs;
+  SharedPreferencesReadingFaultLog({SharedPreferences? prefs, this.scope}) : _prefs = prefs;
+
+  final FieldSessionScope? scope;
+  String _ownedKey(DateTime day) => '${scope?.prefix ?? ''}${keyFor(day)}';
+
+  Future<List<DateTime>> days() async {
+    scope?.ensureCurrent();
+    final store = await _store;
+    scope?.ensureCurrent();
+    final prefix = '${scope?.prefix ?? ''}reading.faults.';
+    final result = <DateTime>[];
+    for (final key in store.getKeys()) {
+      if (!key.startsWith(prefix)) continue;
+      final suffix = key.substring(prefix.length);
+      final day = DateTime.tryParse(suffix);
+      if (day != null && key == _ownedKey(day)) result.add(day);
+    }
+    return result..sort();
+  }
 
   SharedPreferences? _prefs;
 
@@ -35,7 +55,10 @@ class SharedPreferencesReadingFaultLog implements ReadingFaultLog {
 
   @override
   Future<List<ReadingFault>> forDay(DateTime day) async {
-    final raw = (await _store).getStringList(keyFor(day)) ?? const <String>[];
+    scope?.ensureCurrent();
+    final store = await _store;
+    scope?.ensureCurrent();
+    final raw = store.getStringList(_ownedKey(day)) ?? const <String>[];
     final faults = <ReadingFault>[];
     for (final entry in raw) {
       final parsed = _decode(entry);
@@ -53,20 +76,26 @@ class SharedPreferencesReadingFaultLog implements ReadingFaultLog {
       fault,
       ...existing.where((item) => item.meterId != fault.meterId),
     ];
-    await (await _store).setStringList(
-      keyFor(day),
+    final store = await _store;
+    scope?.ensureCurrent();
+    final saved = await store.setStringList(
+      _ownedKey(day),
       merged.map(_encode).toList(growable: false),
     );
+    if (!saved) throw StateError('Unable to persist reading fault.');
   }
 
   @override
   Future<void> clear({required int meterId, required DateTime day}) async {
     final existing = await forDay(day);
     final kept = existing.where((item) => item.meterId != meterId).toList();
-    await (await _store).setStringList(
-      keyFor(day),
+    final store = await _store;
+    scope?.ensureCurrent();
+    final saved = await store.setStringList(
+      _ownedKey(day),
       kept.map(_encode).toList(growable: false),
     );
+    if (!saved) throw StateError('Unable to persist reading fault.');
   }
 
   static String _encode(ReadingFault fault) {

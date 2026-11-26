@@ -150,8 +150,8 @@ class _InvoiceDetailView extends StatelessWidget {
                   for (final row in invoice.allocationSnapshot!.rows)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(row.receiptNumber ?? 'مصدر محاسبي'),
-                      subtitle: Text(row.accountTransferId == null ? 'سند قبض' : 'تحويل محاسبي'),
+                      title: Text(row.heldCashCreditId != null ? 'تسوية فائض #${row.heldCashCreditId}' : (row.receiptNumber ?? 'مصدر محاسبي')),
+                      subtitle: Text(row.heldCashCreditId != null ? 'تسوية فائض محتجز غير نقدية' : (row.accountTransferId == null ? 'سند قبض' : 'تحويل محاسبي')),
                       trailing: Text(CurrencyFormatter.withLabel(row.amountMinor / 100)),
                     ),
                   const Divider(),

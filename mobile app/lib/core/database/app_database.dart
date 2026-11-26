@@ -55,7 +55,7 @@ class AppDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -173,6 +173,12 @@ class AppDatabase extends GeneratedDatabase {
               );
             }
             await purgeRetiredOfflineFields(this);
+          }
+          if (from < 7 && to >= 7) {
+            final columns = await _select('PRAGMA table_info(pending_sync_actions)');
+            if (!columns.any((row) => row['name'] == 'owner_server')) {
+              await customStatement('ALTER TABLE pending_sync_actions ADD COLUMN owner_server TEXT');
+            }
           }
         },
         beforeOpen: (_) async {
@@ -298,6 +304,7 @@ class AppDatabase extends GeneratedDatabase {
       last_error TEXT,
       server_response_json TEXT,
       owner_user_id TEXT,
+      owner_server TEXT,
       next_attempt_at TEXT,
       last_status_code INTEGER
     )''',
@@ -592,7 +599,7 @@ class AppDatabase extends GeneratedDatabase {
   /// نُصدّر الصفوف كما هي في الجداول (لا نماذج ناقصة) حتى تعود النسخة مطابقة:
   /// المزامنة تعتمد على `local_id` و`server_id` معاً، وأي تحويل يفقد أحدهما
   /// يُنشئ صفوفاً مكرّرة عند الاستعادة.
-  Future<Map<String, dynamic>> exportFieldData() async => <String, dynamic>{
+  Future<Map<String, dynamic>> exportFieldData() => transaction(() async => <String, dynamic>{
         'squares': await _select('SELECT * FROM cached_squares ORDER BY server_id'),
         'subscribers': await _select('SELECT * FROM cached_subscribers ORDER BY server_id'),
         'meters': await _select('SELECT * FROM cached_meters ORDER BY server_id'),
@@ -600,7 +607,7 @@ class AppDatabase extends GeneratedDatabase {
         'readings': await _select('SELECT * FROM cached_readings ORDER BY local_id'),
         'pending_actions': await _select('SELECT * FROM pending_sync_actions ORDER BY created_at'),
         'settings': await _select('SELECT * FROM cached_settings ORDER BY setting_key'),
-      };
+      });
 
   /// استعادة نسخة محلية.
   ///
@@ -687,6 +694,31 @@ class AppDatabase extends GeneratedDatabase {
           'يوجد عمل ميداني غير مرسل على هذا الجهاز. زامنه أو عالجه قبل استعادة النسخة حتى لا تُفقد البيانات.',
         );
       }
+      // Validate queue identities before touching any cached tables. A backup
+      // is not authorization to overwrite existing acknowledged/discarded work.
+      if (pendingActions && data.containsKey('pending_actions')) {
+        final actions = data['pending_actions'];
+        if (actions is! List) throw const FormatException('Invalid backup queue.');
+        final ids = <String>{};
+        const states = {'pending', 'retrying', 'syncing', 'failed',
+          'needs_attention', 'synced', 'discarded'};
+        for (final action in actions) {
+          if (action is! Map || action['id'] is! String ||
+              (action['id'] as String).trim().isEmpty ||
+              action['action_type'] is! String ||
+              (action['action_type'] as String).isEmpty ||
+              action['payload_json'] is! String ||
+              !states.contains(action['state'])) {
+            throw const FormatException('Invalid backup action.');
+          }
+          final id = action['id'] as String;
+          if (!ids.add(id) || await getSyncAction(id) != null) {
+            throw StateError('Backup action identity already exists; no data was restored.');
+          }
+          final payload = jsonDecode(action['payload_json'] as String);
+          if (payload is! Map) throw const FormatException('Invalid backup action payload.');
+        }
+      }
       for (final entry in tables.entries) {
         final rows = data[entry.key];
         if (rows is! List) continue;
@@ -707,16 +739,15 @@ class AppDatabase extends GeneratedDatabase {
       if (pendingActions) {
         final actions = data['pending_actions'];
         if (actions is List) {
-          await _execute("DELETE FROM pending_sync_actions WHERE state != 'synced'");
           for (final action in actions.whereType<Map>()) {
             final id = action['id']?.toString();
             if (id == null || id.isEmpty) continue;
             await _execute(
-              '''INSERT OR REPLACE INTO pending_sync_actions(
+              '''INSERT INTO pending_sync_actions(
                  id, action_type, payload_json, state, attempt_count, created_at,
                  updated_at, last_error, server_response_json, owner_user_id,
-                 next_attempt_at, last_status_code
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  owner_server, next_attempt_at, last_status_code
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
               [
                 id,
                 action['action_type'] ?? action['type'] ?? 'unknown',
@@ -728,6 +759,7 @@ class AppDatabase extends GeneratedDatabase {
                 action['last_error'],
                 action['server_response_json'],
                 action['owner_user_id'],
+                action['owner_server'],
                 action['next_attempt_at'],
                 _int(action['last_status_code']),
               ],
@@ -853,7 +885,7 @@ class AppDatabase extends GeneratedDatabase {
   Future<Map<String, Object?>?> getLatestCachedReading(int meterId) async {
     final rows = await _select(
       '''SELECT * FROM cached_readings WHERE meter_id = ?
-         ORDER BY period_end DESC, reading_date DESC, updated_at DESC LIMIT 1''',
+         ORDER BY COALESCE(actual_reading_date, reading_date) DESC, updated_at DESC, local_id DESC LIMIT 1''',
       [Variable.withInt(meterId)],
     );
     return rows.isEmpty ? null : rows.first;
@@ -881,6 +913,7 @@ class AppDatabase extends GeneratedDatabase {
     required Map<String, dynamic> reading,
     required String actionId,
     String? ownerUserId,
+    String? ownerServer,
   }) async {
     final enrichedReading = <String, dynamic>{
       ...reading,
@@ -912,9 +945,9 @@ class AppDatabase extends GeneratedDatabase {
       );
       await _execute(
         '''INSERT INTO pending_sync_actions(
-          id, action_type, payload_json, state, attempt_count, created_at, updated_at, owner_user_id
-        ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?, ?)''',
-        [actionId, _jsonEncode(enrichedReading), _now(), _now(), effectiveOwner],
+          id, action_type, payload_json, state, attempt_count, created_at, updated_at, owner_user_id, owner_server
+         ) VALUES (?, 'reading.create', ?, 'pending', 0, ?, ?, ?, ?)''',
+        [actionId, _jsonEncode(enrichedReading), _now(), _now(), effectiveOwner, ownerServer],
       );
       await _execute(
         'UPDATE cached_meters SET last_reading = ? WHERE server_id = ?',
@@ -991,7 +1024,7 @@ class AppDatabase extends GeneratedDatabase {
         '''UPDATE cached_meters SET last_reading = COALESCE(
              (SELECT current_reading FROM cached_readings
               WHERE meter_id = ?
-              ORDER BY period_end DESC, reading_date DESC, updated_at DESC LIMIT 1),
+              ORDER BY COALESCE(actual_reading_date, reading_date) DESC, updated_at DESC, local_id DESC LIMIT 1),
              initial_reading
            ) WHERE server_id = ?''',
         [meterId, meterId],
@@ -1078,13 +1111,14 @@ class AppDatabase extends GeneratedDatabase {
     String? createdAt,
     String? lastError,
     String? ownerUserId,
+    String? ownerServer,
     String? nextAttemptAt,
   }) async {
     final timestamp = createdAt ?? _now();
     await _execute(
-      '''INSERT OR REPLACE INTO pending_sync_actions(
-        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, next_attempt_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+      '''INSERT INTO pending_sync_actions(
+        id, action_type, payload_json, state, attempt_count, created_at, updated_at, last_error, owner_user_id, owner_server, next_attempt_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
       [
         id,
         type,
@@ -1095,16 +1129,17 @@ class AppDatabase extends GeneratedDatabase {
         _now(),
         lastError,
         ownerUserId,
+        ownerServer,
         nextAttemptAt,
       ],
     );
     _notifySyncQueueChanged();
   }
 
-  Future<List<Map<String, Object?>>> getActiveSyncActions({int limit = 500}) => _select(
+  Future<List<Map<String, Object?>>> getActiveSyncActions({int? limit = 500}) => _select(
         '''SELECT * FROM pending_sync_actions
            WHERE state IN ('pending', 'retrying', 'syncing', 'failed', 'needs_attention')
-           ORDER BY created_at ASC, id ASC LIMIT ${limit.clamp(1, 1000)}''',
+           ORDER BY created_at ASC, id ASC ${limit == null ? '' : 'LIMIT ${limit.clamp(1, 1000)}'}''',
       );
 
   Future<List<Map<String, Object?>>> getPendingActions({
@@ -1136,7 +1171,7 @@ class AppDatabase extends GeneratedDatabase {
   Future<int> getPendingActionCount() async {
     final rows = await _select(
       '''SELECT COUNT(*) AS count FROM pending_sync_actions
-         WHERE state IN ('pending', 'retrying', 'syncing', 'failed')''',
+         WHERE state IN ('pending', 'retrying', 'syncing', 'failed', 'needs_attention')''',
     );
     return rows.isEmpty ? 0 : (_int(rows.first['count']) ?? 0);
   }
@@ -1151,6 +1186,7 @@ class AppDatabase extends GeneratedDatabase {
     String? nextAttemptAt,
     bool clearNextAttempt = false,
     int? lastStatusCode,
+    bool clearLastStatusCode = false,
   }) async {
     await _execute(
       '''UPDATE pending_sync_actions SET state = ?,
@@ -1174,7 +1210,9 @@ class AppDatabase extends GeneratedDatabase {
         [nextAttemptAt, id],
       );
     }
-    if (lastStatusCode != null) {
+    if (clearLastStatusCode) {
+      await _execute('UPDATE pending_sync_actions SET last_status_code = NULL WHERE id = ?', [id]);
+    } else if (lastStatusCode != null) {
       await _execute(
         'UPDATE pending_sync_actions SET last_status_code = ? WHERE id = ?',
         [lastStatusCode, id],

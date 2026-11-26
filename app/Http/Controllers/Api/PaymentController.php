@@ -24,7 +24,7 @@ class PaymentController extends ApiController
         $query = Payment::with([
             'subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number',
             'meter:id,unique_code,path_number',
-            'invoice:id,bill_number,status,total_amount', 'user:id,name',
+            'invoice:id,bill_number,status,total_amount,amount_paid,subscriber_id,deleted_at', 'user:id,name',
             'accountTransfer:id,payment_id,from_subscriber_id,to_subscriber_id,amount,created_at',
         ])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id');
 
@@ -67,6 +67,8 @@ class PaymentController extends ApiController
 
         return $query->paginate($this->perPage($request))->through(function (Payment $payment) {
             $payment->setAttribute('receipt_data', $this->receiptData($payment));
+            // The exact debt projection needs these columns; keep the existing list response contract.
+            $payment->invoice?->makeHidden(['amount_paid', 'subscriber_id', 'deleted_at']);
 
             return $payment;
         })->appends($request->query());
@@ -98,6 +100,8 @@ class PaymentController extends ApiController
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'cash_session_id' => ['nullable', 'integer', 'min:1'],
+            'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         $subscriber = Subscriber::findOrFail($data['subscriber_id']);
         if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
@@ -113,9 +117,12 @@ class PaymentController extends ApiController
             }
         }
 
-        $payment = $paymentService->collectPayment(
+        $entry = app(\App\Services\ProspectiveCashReceiptEntry::class);
+        $payment = $entry->enabled()
+            ? $entry->collect($request->user(), $subscriber, $data)
+            : $paymentService->collectPayment(
             $subscriber,
-            (float) $data['amount'],
+            $data['amount'],
             $data['invoice_id'] ?? null,
             $data['payment_method'],
             $data['reference_number'] ?? null,
@@ -125,6 +132,8 @@ class PaymentController extends ApiController
             $data['payment_date'] ?? null,
             $data['meter_id'] ?? null,
             $data['sync_uuid'] ?? null,
+            $data['cash_session_id'] ?? null,
+            (bool) ($data['deferred_sync'] ?? false),
         );
         $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
 
@@ -168,17 +177,27 @@ class PaymentController extends ApiController
     {
         $this->authorizeApi(Payment::class, 'void');
 
+        $candidate = $this->prospectiveVoidApi();
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'operation_uuid' => ['nullable', 'uuid'],
+            'intent_uuid' => ['nullable', 'uuid'],
         ]);
 
+        $intent = isset($data['intent_uuid']) ? strtolower($data['intent_uuid']) : null;
+        abort_if(! $candidate && ($intent !== null || isset($data['operation_uuid'])), 409,
+            'مسار الإلغاء المالي المؤكد غير متاح.');
+        abort_if($candidate && ($intent === null && ! isset($data['operation_uuid'])), 409,
+            'يجب تأكيد طلب الإلغاء عبر اتصال مباشر ومعرّف عملية صالح.');
         $payment = Payment::findOrFail($id);
-        $result = $paymentService->requestVoid(
-            $payment,
-            (string) $data['reason'],
-            $request->user()->id,
-            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
-        );
+        $result = $candidate
+            ? $this->voidCandidateCall(fn () => app(\App\Services\GatedReceiptVoidWriter::class)->request(
+                $request->user(), $id, (string) $data['reason'], now()->toDateTimeImmutable(),
+                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null, $intent))
+            : $paymentService->requestVoid(
+                $payment, (string) $data['reason'], $request->user()->id,
+                $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+            );
 
         /** @var Payment $payment */
         $payment = $result['payment'];
@@ -188,6 +207,8 @@ class PaymentController extends ApiController
             return response()->json([
                 'message' => 'السند يتجاوز حد الإلغاء المسموح؛ أُرسل طلب إلغاء لاعتماد المشرف.',
                 'pending_approval' => true,
+                ...($candidate ? ['request_id' => $result['request_id']] : []),
+                ...($intent !== null ? ['intent_uuid' => $result['intent_uuid']] : []),
                 'payment' => $payment,
                 'receipt_data' => $this->receiptData($payment),
             ], 202);
@@ -196,6 +217,7 @@ class PaymentController extends ApiController
         return response()->json([
             'message' => 'تم إلغاء سند القبض وإعادة احتساب الأرصدة.',
             'pending_approval' => false,
+            ...($intent !== null ? ['intent_uuid' => $result['intent_uuid']] : []),
             'payment' => $payment,
             'receipt_data' => $this->receiptData($payment),
         ]);
@@ -210,11 +232,18 @@ class PaymentController extends ApiController
             ->voidRequested()
             ->with(['subscriber:id,name,phone,square_id', 'subscriber.square:id,name,code', 'subscriber.meters:id,subscriber_id,path_number', 'meter:id,unique_code,path_number', 'voidRequester:id,name'])
             ->latest('void_requested_at');
+        $candidate = $this->prospectiveVoidApi();
+        if ($candidate) {
+            $query->addSelect(['request_id' => DB::table('audit_events')->select('id')
+                ->whereColumn('entity_id', 'payments.id')->where('entity_type', Payment::class)
+                ->where('event', 'financial.void_request_gated')->orderByDesc('id')->limit(1)]);
+        }
         $this->applySorting($query, $request, self::LIST_SORTS['void_requests']);
         $payments = $query->paginate($this->perPage($request))->appends($request->query());
 
         return $payments->through(fn (Payment $payment) => [
             'id' => $payment->id,
+            ...($candidate ? ['request_id' => $payment->request_id === null ? null : (int) $payment->request_id] : []),
             'created_at' => $payment->created_at?->toISOString(),
             'square_id' => $payment->subscriber?->square_id,
             'square_name' => $payment->subscriber?->square?->name,
@@ -237,19 +266,29 @@ class PaymentController extends ApiController
     {
         $this->authorizeVoidApprover($request->user());
 
+        $candidate = $this->prospectiveVoidApi();
+        abort_if(! $candidate && ($request->has('request_id') || $request->has('operation_uuid')), 409,
+            'مسار القرار المالي المرتبط بالطلب غير متاح. لا يمكن تنفيذه عبر المسار السابق.');
         $data = $request->validate([
             'approve' => ['required', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            ...($candidate ? [
+                'request_id' => ['required', 'integer', 'min:1'],
+                'operation_uuid' => [\Illuminate\Validation\Rule::requiredIf($request->boolean('approve')), 'nullable', 'uuid'],
+            ] : []),
         ]);
 
         $payment = Payment::findOrFail($id);
-        $payment = $paymentService->decideVoidRequest(
-            $payment,
-            (bool) $data['approve'],
-            $request->user(),
-            $data['notes'] ?? null,
-            $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
-        );
+        $payment = $candidate
+            ? $this->voidCandidateCall(fn () => app(\App\Services\GatedReceiptVoidWriter::class)->decide(
+                $request->user(), $id, (bool) $data['approve'], $data['notes'] ?? null,
+                now()->toDateTimeImmutable(),
+                isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null,
+                (int) $data['request_id']))['payment']
+            : $paymentService->decideVoidRequest(
+                $payment, (bool) $data['approve'], $request->user(), $data['notes'] ?? null,
+                $request->header('X-Client-Source') === 'mobile' ? 'mobile' : 'api',
+            );
 
         $payment->load(['subscriber.square', 'meter', 'invoice', 'user']);
 
@@ -257,6 +296,8 @@ class PaymentController extends ApiController
             'message' => $data['approve']
                 ? 'تم اعتماد إلغاء السند وإعادة احتساب الأرصدة.'
                 : 'تم رفض طلب الإلغاء وبقي السند صالحاً.',
+            ...($candidate ? ['request_id' => (int) $data['request_id'],
+                'operation_uuid' => isset($data['operation_uuid']) ? strtolower($data['operation_uuid']) : null] : []),
             'payment' => $payment,
             'receipt_data' => $this->receiptData($payment),
         ]);
@@ -272,13 +313,11 @@ class PaymentController extends ApiController
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'disbursement_confirmed' => ['required', 'accepted'],
+            'treasury_account_id' => ['nullable', 'integer', 'min:1'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        $refund = app(\App\Services\PaymentRefundService::class)->record(
-            Payment::findOrFail($id), $request->user(), (string) $data['amount'],
-            $data['disbursement_reference'], $data['method'], $data['disbursed_on'],
-            $data['reason'], $data['evidence']
-        );
-        return response()->json(['refund' => $refund]);
+        return response()->json(app(\App\Services\ProspectiveRefundEntry::class)->record(
+            $request->user(), Payment::findOrFail($id), $data));
     }
 
     public function transferAccount(Request $request, int $id)
@@ -288,11 +327,10 @@ class PaymentController extends ApiController
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'no_new_cash_movement' => ['required', 'accepted'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
-        $transfer = app(\App\Services\PaymentAccountTransferService::class)->transfer(
-            Payment::findOrFail($id), (int) $data['to_subscriber_id'], $request->user(), $data['reason'], $data['evidence']
-        );
-        return response()->json(['transfer' => $transfer]);
+        return response()->json(app(\App\Services\ProspectiveSubscriberTransferEntry::class)->transfer(
+            $request->user(), Payment::findOrFail($id), $data));
     }
 
     public function destroy(int $id)
@@ -418,6 +456,25 @@ class PaymentController extends ApiController
             'message_template' => app(WhatsAppService::class)->paymentMessage($payment),
             'pdf_url' => url('/api/payments/'.$payment->id.'/pdf'),
         ];
+    }
+
+    /** Explicitly restricted candidate; never activate in a production environment. */
+    private function prospectiveVoidApi(): bool
+    {
+        if (config('financial_candidate.void_api') !== true) return false;
+        abort_unless(app()->environment(['testing', 'staging']), 503, 'مسار الاختبار المالي غير متاح في الإنتاج.');
+        return true;
+    }
+
+    private function voidCandidateCall(callable $action): array
+    {
+        try {
+            return $action();
+        } catch (\DomainException $error) {
+            // Do not fall back to the legacy writer on a gate or identity failure.
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'تعذر تنفيذ العملية المالية: '.$error->getMessage(), $error);
+        }
     }
 
     /** اعتماد الإلغاء يحتاج صلاحية مشرف صريحة. */

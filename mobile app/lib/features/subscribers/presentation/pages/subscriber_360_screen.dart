@@ -34,7 +34,7 @@ import '../../../readings/presentation/widgets/record_reading_sheet.dart';
 import '../../domain/entities/subscriber.dart';
 import '../../domain/repositories/subscribers_repository.dart';
 import '../cubit/subscriber360_cubit.dart';
-import '../widgets/statement_pdf_service.dart';
+import 'ledger_statement_screen.dart';
 import 'subscriber_form_screen.dart';
 import 'subscribers_screen.dart'
     show CollectPaymentLauncher, launchDefaultSubscriberPayment;

@@ -17,14 +17,24 @@ class CreateReading extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $meter = Meter::findOrFail($data['meter_id']);
-        app(CurrentMeterReadingGuard::class)->assertCanCreate(
-            $meter,
-            $data['current_reading'] ?? null,
-            $data['period_start'] ?? null,
-            $data['period_end'] ?? null,
-        );
+        if (! $meter->isCurrent()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'meter_id' => ['لا يمكن تسجيل قراءة جديدة على عداد منزوع.'],
+            ]);
+        }
+        if ((float) ($data['current_reading'] ?? 0) < $meter->getLastReadingValue()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+            ]);
+        }
+
         $data['previous_reading'] = $meter->getLastReadingValue();
         $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
+        $period = app(\App\Services\ReadingService::class)
+            ->calculateReadingPeriod($meter->id, $data['actual_reading_date']);
+        $data['period_start'] = $period['period_start'];
+        $data['period_end'] = $period['period_end'];
+        $data['period_basis'] = 'observation';
 
         return $data;
     }
@@ -37,16 +47,33 @@ class CreateReading extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         return DB::transaction(function () use ($data): Model {
+            $subscriberId = Meter::findOrFail((int) $data['meter_id'])->subscriber_id;
+            \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
             $meter = Meter::query()->lockForUpdate()->findOrFail((int) $data['meter_id']);
-            app(CurrentMeterReadingGuard::class)->assertCanCreate(
-                $meter,
-                $data['current_reading'] ?? null,
-                $data['period_start'] ?? null,
-                $data['period_end'] ?? null,
-            );
+            abort_unless((int) $meter->subscriber_id === (int) $subscriberId, 409);
+            if (! $meter->isCurrent()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                        'meter_id' => ['لا يمكن تسجيل قراءة جديدة على عداد منزوع.'],
+                ]);
+            }
+            if ((float) ($data['current_reading'] ?? 0) < $meter->getLastReadingValue()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                        'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                ]);
+            }
+
             $data['previous_reading'] = $meter->getLastReadingValue();
             $data['actual_reading_date'] = $data['actual_reading_date'] ?? $data['reading_date'];
+            $period = app(\App\Services\ReadingService::class)
+                ->calculateReadingPeriod($meter->id, $data['actual_reading_date']);
+            $data['period_start'] = $period['period_start'];
+            $data['period_end'] = $period['period_end'];
+            $data['period_basis'] = 'observation';
 
+            app(CurrentMeterReadingGuard::class)->assertCanCreate(
+                $meter, $data['current_reading'], $data['period_start'],
+                $data['period_end'], $data['actual_reading_date'],
+            );
             return Reading::create($data);
         });
     }

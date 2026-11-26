@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/field_operations/field_session_scope.dart';
+import '../../../../core/network/interceptors/auth_interceptor.dart';
 import '../../../../core/utils/date_period_calculator.dart';
 import '../../../meters/data/models/meter.dart';
 import '../../domain/readings_repository.dart';
@@ -16,15 +18,30 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     required AppDatabase database,
     Uuid? uuid,
     String? Function()? ownerUserIdProvider,
+    FieldSessionScope Function()? captureScope,
   })  : _database = database,
         _remote = ReadingsRemoteDataSource(dio),
         _uuid = uuid ?? const Uuid(),
-        _ownerUserIdProvider = ownerUserIdProvider;
+        _ownerUserIdProvider = ownerUserIdProvider,
+        _captureScope = captureScope;
 
   final AppDatabase _database;
   final ReadingsRemoteDataSource _remote;
   final Uuid _uuid;
   final String? Function()? _ownerUserIdProvider;
+  final FieldSessionScope Function()? _captureScope;
+
+  Future<void> _checkLocalOwner(String id, FieldSessionScope? scope) async {
+    if (scope == null) return;
+    final row = await _database.getSyncAction(id);
+    scope.ensureCurrent();
+    if (row == null || row['owner_user_id'] != scope.userId ||
+        row['owner_server'] != scope.server || row['state'] == 'syncing' ||
+        row['state'] == 'synced' || row['state'] == 'discarded' ||
+        row['attempt_count'] != 0) {
+      throw StateError('Local reading requires verified ownership and no prior delivery attempt.');
+    }
+  }
 
   @override
   Future<MeterPeriodResponse> getMeterPeriod(Meter meter) async {
@@ -45,33 +62,27 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
   Future<MeterPeriodResponse> _calculateOfflinePeriod(Meter meter) async {
     final cachedPeriod = await _database.getCachedMeterPeriod(meter.id);
     final latest = await _database.getLatestCachedReading(meter.id);
-    final periodName = await _database.getCachedSetting('reading_period') ?? 'monthly';
-    final readingDay = await _database.getCachedSetting('reading_day') ?? 'last_day';
     final autoSetting = await _database.getCachedSetting('auto_issue_invoice_on_reading');
     final cachedMeter = await _database.getCachedMeter(meter.id);
 
-    final latestEnd = _parseDate(latest?['period_end']);
-    final latestDate = _parseDate(latest?['reading_date']);
-    final cachedPeriodEnd = _parseDate(cachedPeriod?['period_end']);
+    final latestDate = _parseDate(
+      latest?['actual_reading_date'] ?? latest?['reading_date'],
+    );
     final cachedPeriodStart = _parseDate(cachedPeriod?['period_start']);
     final lastReading = _asDouble(latest?['current_reading']) ??
         _asDouble(cachedPeriod?['last_reading']) ??
         _asDouble(cachedMeter?['last_reading']) ??
         meter.lastReading;
 
-    final result = latest == null && cachedPeriodStart != null && cachedPeriodEnd != null
-        ? ReadingPeriodResult(
-            periodStart: cachedPeriodStart,
-            periodEnd: cachedPeriodEnd,
-          )
-        : DatePeriodCalculator.calculate(
-            lastReadingPeriodEnd: latestEnd,
-            lastReadingDate: latestEnd == null ? latestDate : null,
-            subscriptionStartDate: meter.subscriptionStartDate ??
-                _parseDate(cachedMeter?['subscription_start_date']),
-            readingPeriod: periodName,
-            readingDay: readingDay,
-          );
+    final result = DatePeriodCalculator.calculate(
+      lastReadingDate: latestDate ??
+          (latest == null ? cachedPeriodStart : null),
+      installedAt: meter.installedAt ??
+          _parseDate(cachedMeter?['installed_at']),
+      subscriptionStartDate: meter.subscriptionStartDate ??
+          _parseDate(cachedMeter?['subscription_start_date']),
+      now: DateTime.now(),
+    );
 
     final cachedAuto = cachedPeriod?['auto_issue_invoice'];
     final autoIssue = cachedAuto != null
@@ -89,6 +100,8 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<ReadingSaveResult> submitReading(ReadingSubmission submission) async {
+    final scope = _captureScope?.call();
+    final owner = scope?.userId ?? _ownerUserIdProvider?.call();
     // A stale or removed meter must never be queued for new readings.
     final cachedMeter = await _database.getCachedMeter(submission.meterId);
     if (cachedMeter != null && cachedMeter['removed_at'] != null) {
@@ -109,17 +122,24 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     }
 
     final localId = _uuid.v4();
+    scope?.ensureCurrent();
     try {
       final response = await _remote.createReading(
         submission,
         clientActionId: localId,
+        sessionExtra: scope == null ? null : {
+          AuthInterceptor.sessionGenerationKey: scope.generation,
+          AuthInterceptor.sessionServerKey: scope.server,
+        },
       );
+      scope?.ensureCurrent();
       final readingJson = _asMap(response['reading']) ?? <String, dynamic>{};
       final id = _asInt(readingJson['id'] ?? response['reading_id']);
       if (id == null) {
         return await _queueOfflineSubmission(
           localId,
           submission,
+          scope: scope, owner: owner,
           message: 'لم يُرجع الخادم رقم القراءة؛ حُفظ الطلب للمزامنة الآمنة.',
         );
       }
@@ -150,13 +170,16 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
       );
     } on DioException catch (error) {
       if (!_isRetryableDelivery(error)) rethrow;
-      return _queueOfflineSubmission(localId, submission);
+      scope?.ensureCurrent();
+      return _queueOfflineSubmission(localId, submission, scope: scope, owner: owner);
     }
   }
 
   Future<ReadingSaveResult> _queueOfflineSubmission(
     String localId,
     ReadingSubmission submission, {
+    FieldSessionScope? scope,
+    String? owner,
     String message = 'حُفظت القراءة على الجهاز وستتم مزامنتها عند عودة الاتصال.',
   }) async {
     // A removed meter is evicted from SQLite. Never create an offline action
@@ -171,11 +194,13 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     final readingPayload = submission.toJson(localId: localId)
       ..['local_id'] = localId
       ..['image_path'] = submission.imagePath;
+    scope?.ensureCurrent();
     await _database.saveOfflineReading(
       localId: localId,
       actionId: localId,
       reading: readingPayload,
-      ownerUserId: _ownerUserIdProvider?.call(),
+      ownerUserId: owner,
+      ownerServer: scope?.server,
     );
     return ReadingSaveResult(
       reading: Reading(
@@ -272,32 +297,59 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     return filtered;
   }
 
+  // A pending reading can be the starting value of another queued reading.
+  // Refuse silent edits/deletes rather than corrupt the local chain.
+  Future<void> _assertNoCachedSuccessor(Reading reading) async {
+    final latest = await _database.getLatestCachedReading(reading.meterId);
+    if (latest == null) return;
+    final date = _parseDate(latest['actual_reading_date'] ?? latest['reading_date']);
+    if (date == null) return;
+    final original = reading.actualReadingDate ?? reading.readingDate;
+    if (_dateOnlyValue(date).isAfter(_dateOnlyValue(original))) {
+      throw StateError('لا يمكن تعديل أو حذف قراءة أصبحت أساساً لقراءة لاحقة. زامن القراءات أولاً.');
+    }
+  }
+
   @override
   Future<Reading> updateReading(
     Reading reading,
     double newCurrentReading, {
     DateTime? newReadingDate,
   }) async {
+    final scope = _captureScope?.call();
     if (reading.isInvoiced) {
       throw StateError('لا يمكن تعديل قراءة مفوترة.');
     }
     if (newCurrentReading < reading.previousReading) {
       throw StateError('القراءة الحالية لا يمكن أن تكون أقل من القراءة السابقة.');
     }
+    await _assertNoCachedSuccessor(reading);
     final effectiveDate = newReadingDate ?? reading.readingDate;
     final effectiveActualDate = newReadingDate ?? reading.actualReadingDate ?? reading.readingDate;
+    // Newly queued readings use observation boundaries. Server-backed
+    // readings retain their original basis; the server validates/recomputes.
+    final effectiveEnd = reading.id == null
+        ? _dateOnlyValue(effectiveActualDate)
+        : reading.periodEnd;
+    if (reading.id == null &&
+        (!effectiveEnd.isAfter(_dateOnlyValue(reading.periodStart)) ||
+         effectiveEnd.isAfter(_dateOnlyValue(DateTime.now())))) {
+      throw StateError('تاريخ القراءة يجب أن يلي بداية الفترة وألا يقع في المستقبل.');
+    }
     final payload = {
       'reading_date': _dateOnly(effectiveDate),
       'actual_reading_date': _dateOnly(effectiveActualDate),
       'period_start': _dateOnly(reading.periodStart),
-      'period_end': _dateOnly(reading.periodEnd),
+      'period_end': _dateOnly(effectiveEnd),
       'previous_reading': reading.previousReading,
       'current_reading': newCurrentReading,
-      'consumption_units': newCurrentReading - reading.previousReading,
+      'consumption_units': ((newCurrentReading * 100).round() - (reading.previousReading * 100).round()) / 100,
     };
     if (reading.id == null) {
       final localId = reading.localId;
       if (localId == null) throw StateError('معرّف القراءة المحلية غير موجود.');
+      await _database.transaction(() async {
+      await _checkLocalOwner(localId, scope);
       await _database.updateCachedReading(localId: localId, values: payload);
       final queuedAction = await _database.getSyncAction(localId);
       final queuedPayloadRaw = queuedAction?['payload_json'];
@@ -324,6 +376,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
           payloadJson: jsonEncode(queuePayload),
         );
       }
+      });
       return Reading(
         id: reading.id,
         localId: localId,
@@ -331,10 +384,10 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
         readingDate: effectiveDate,
         actualReadingDate: effectiveActualDate,
         periodStart: reading.periodStart,
-        periodEnd: reading.periodEnd,
+        periodEnd: effectiveEnd,
         previousReading: reading.previousReading,
         currentReading: newCurrentReading,
-        consumptionUnits: newCurrentReading - reading.previousReading,
+        consumptionUnits: ((newCurrentReading * 100).round() - (reading.previousReading * 100).round()) / 100,
         isInvoiced: false,
         meterCode: reading.meterCode,
         pathNumber: reading.pathNumber,
@@ -367,10 +420,15 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<void> deleteReading(Reading reading) async {
+    final scope = _captureScope?.call();
     if (reading.isInvoiced) throw StateError('لا يمكن حذف قراءة مفوترة.');
     if (reading.id == null) {
+      await _assertNoCachedSuccessor(reading);
       final localId = reading.localId;
-      if (localId != null) await _database.deleteCachedReadingByLocalId(localId);
+      if (localId != null) await _database.transaction(() async {
+        await _checkLocalOwner(localId, scope);
+        await _database.deleteCachedReadingByLocalId(localId);
+      });
       return;
     }
     await _remote.deleteReading(reading.id!);
@@ -379,6 +437,7 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
 
   @override
   Future<BulkOperationResult> bulkDeleteReadings(List<Reading> readings) async {
+    final scope = _captureScope?.call();
     if (readings.isEmpty) return const BulkOperationResult(succeededCount: 0);
     final localReadings = readings
         .where((reading) => reading.id == null && !reading.isInvoiced)
@@ -389,12 +448,19 @@ class ReadingsRepositoryImpl implements ReadingsRepository {
     var skipped = locallySkipped;
     var failed = 0;
 
+    // Preflight the entire local selection before deleting any pending row.
+    await _database.transaction(() async {
+    for (final reading in localReadings) {
+      await _assertNoCachedSuccessor(reading);
+      if (reading.localId != null) await _checkLocalOwner(reading.localId!, scope);
+    }
     for (final reading in localReadings) {
       if (reading.localId != null) {
         await _database.deleteCachedReadingByLocalId(reading.localId!);
         deleted++;
       }
     }
+    });
     if (serverReadings.isNotEmpty) {
       final response = await _remote.bulkDelete(
         serverReadings.map((reading) => reading.id!).toList(growable: false),

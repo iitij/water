@@ -66,6 +66,15 @@ class MeterForm
                             ->required()
                             ->searchable()
                             ->live(),
+                        Forms\Components\DatePicker::make('installed_at')
+                            ->label('تاريخ تركيب العداد')
+                            ->maxDate(today())
+                            ->disabled(fn (?\App\Models\Meter $record) => $record?->readings()->withTrashed()->exists() ?? false),
+                        Forms\Components\TextInput::make('initial_reading')
+                            ->label('القراءة الابتدائية')
+                            ->numeric()->minValue(0)->maxValue(9999999999.99)->step(0.01)
+                            ->rule('decimal:0,2')->default(0)->required()
+                            ->disabled(fn (?\App\Models\Meter $record) => $record?->readings()->withTrashed()->exists() ?? false),
                         Forms\Components\Select::make('status')
                             ->label('حالة العداد')
                             ->options([

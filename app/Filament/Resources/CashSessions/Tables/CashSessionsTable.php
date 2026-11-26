@@ -4,6 +4,8 @@ namespace App\Filament\Resources\CashSessions\Tables;
 
 use App\Models\CashSession;
 use App\Services\CashSessionService;
+use App\Services\ProspectiveSettlementEntry;
+use App\Services\ProspectiveHandoverEntry;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -52,7 +54,8 @@ class CashSessionsTable
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('expected_amount')
-                    ->label('المتوقع')
+                    ->label('المتوقع للتسوية')
+                    ->getStateUsing(fn (CashSession $record): float => app(CashSessionService::class)->expectedAmount($record))
                     ->numeric(2)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('counted_amount')
@@ -68,6 +71,17 @@ class CashSessionsTable
                         abs((float) $state) < 0.01 => 'success',
                         default => 'danger',
                     }),
+                Tables\Columns\TextColumn::make('treasury_handover')
+                    ->label('التسليم للخزينة')
+                    ->getStateUsing(fn (CashSession $record): string => match (app(\App\Services\CashHandoverService::class)->summary($record)['status']) {
+                        'not_eligible' => 'غير قابل للتسوية',
+                        'not_required' => 'لا نقد معدود',
+                        'pending' => 'لم يوثق التسليم',
+                        'partial' => 'تسليم جزئي',
+                        'complete' => 'اكتمل التسليم',
+                        default => 'خلل يتطلب المراجعة',
+                    })
+                    ->badge(),
                 Tables\Columns\TextColumn::make('closing_notes')
                     ->label('ملاحظات الإغلاق')
                     ->limit(40)
@@ -100,6 +114,97 @@ class CashSessionsTable
                     ->preload(),
             ])
             ->recordActions([
+                Action::make('record_treasury_handover')
+                    ->label('توثيق استلام الخزينة')
+                    ->icon('heroicon-o-banknotes')
+                    ->visible(function (CashSession $record): bool {
+                        $user = Auth::user();
+                        $service = app(\App\Services\CashHandoverService::class);
+                        return $user && $service->canRecord($user)
+                            && (int) $record->user_id !== (int) $user->id
+                            && in_array($service->summary($record)['status'], ['pending', 'partial'], true);
+                    })
+                    ->form([
+                        \Filament\Forms\Components\Hidden::make('operation_uuid')
+                            ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                            ->dehydrated(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->required(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->rules(['nullable', 'uuid']),
+                        \Filament\Forms\Components\Select::make('treasury_account_id')
+                            ->label('الخزينة المستلمة')
+                            ->options(fn (): array => \Illuminate\Support\Facades\DB::table('treasury_accounts')
+                                ->where('channel', 'cash')->orderBy('id')->get()
+                                ->mapWithKeys(fn ($account) => [$account->id => $account->code.' — '.$account->name])->all())
+                            ->visible(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->dehydrated(fn () => app(ProspectiveHandoverEntry::class)->enabled())
+                            ->required(fn () => app(ProspectiveHandoverEntry::class)->enabled()),
+                        \Filament\Forms\Components\TextInput::make('amount')
+                            ->label('النقد المستلم فعلياً')->numeric()->minValue(0.01)->required()
+                            ->helperText(fn (CashSession $record): string => 'المتبقي للتسليم: '.(app(\App\Services\CashHandoverService::class)->summary($record)['remaining_amount'] ?? '—')),
+                        \Filament\Forms\Components\TextInput::make('reference')
+                            ->label('مرجع سند التسليم')->required()->maxLength(150),
+                        \Filament\Forms\Components\DatePicker::make('received_on')
+                            ->label('تاريخ الاستلام الفعلي')->default(now())->maxDate(now())->required(),
+                        Textarea::make('evidence')->label('دليل الاستلام الفعلي')->required()->minLength(10)->maxLength(2000),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (CashSession $record, array $data): void {
+                        try {
+                            app(ProspectiveHandoverEntry::class)->receive(Auth::user(), $record, $data);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
+                        Notification::make()->title('تم توثيق الاستلام الفعلي')->success()->send();
+                    }),
+                Action::make('late_receipt_review')
+                    ->label('مراجعة سند مؤجل')
+                    ->color('warning')
+                    ->visible(function (CashSession $record): bool {
+                        $user = Auth::user();
+                        return ! $record->isOpen() && $user
+                            && (int) $record->user_id !== (int) $user->id
+                            && app(\App\Services\LateReceiptReviewService::class)->canDecide($user)
+                            && \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                                ->where('cash_session_id', $record->id)->where('status', 'pending')->exists();
+                    })
+                    ->form([
+                        \Filament\Forms\Components\Select::make('review_id')
+                            ->label('المطالبة المعلقة (المشترك، المبلغ، الطريقة، التاريخ)')
+                            ->options(fn (CashSession $record): array => \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                                ->join('subscribers', 'subscribers.id', '=', 'late_receipt_reviews.subscriber_id')
+                                ->where('cash_session_id', $record->id)->where('late_receipt_reviews.status', 'pending')
+                                ->select('late_receipt_reviews.*', 'subscribers.name as subscriber_name')
+                                ->orderBy('late_receipt_reviews.id')->get()
+                                ->mapWithKeys(fn ($row) => [$row->id => '#'.$row->id.' | '.$row->subscriber_name.' | '.$row->amount.' | '.$row->payment_method.' | '.$row->payment_date])->all())
+                            ->searchable()->required(),
+                        \Filament\Forms\Components\Radio::make('decision')
+                            ->label('القرار')->options(['approve' => 'اعتماد', 'reject' => 'رفض'])->required(),
+                        \Filament\Forms\Components\Select::make('settlement_method')
+                            ->label('طريقة الإثبات عند الاعتماد')
+                            ->helperText(fn (CashSession $record): string => 'الفائض الأصلي غير المخصص: '.number_format(app(\App\Services\LateReceiptReviewService::class)->countedCashAllocation($record)['available_minor'] / 100, 2, '.', ''))
+                            ->options(['separate_handover' => 'تسليم نقدي مستقل خارج المبلغ المعدود', 'verified_non_cash' => 'إثبات تحصيل غير نقدي', 'already_counted' => 'ضمن فائض النقد المعدود المثبت']),
+                        \Filament\Forms\Components\TextInput::make('evidence_reference')
+                            ->label('مرجع التسوية المستقل عند الاعتماد')->maxLength(150),
+                        Textarea::make('evidence')->label('الدليل وسبب القرار')->required()->minLength(10)->maxLength(2000),
+                    ])
+                    ->requiresConfirmation()
+                    ->action(function (CashSession $record, array $data): void {
+                        $review = \Illuminate\Support\Facades\DB::table('late_receipt_reviews')
+                            ->where('cash_session_id', $record->id)->find((int) $data['review_id']);
+                        abort_unless($review, 404);
+                        try {
+                            app(ProspectiveSettlementEntry::class)->decide(Auth::user(), (int) $review->id, [
+                                'approve' => $data['decision'] === 'approve',
+                                'evidence' => $data['evidence'],
+                                'evidence_reference' => $data['evidence_reference'] ?? null,
+                                'settlement_method' => $data['settlement_method'] ?? null,
+                            ]);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            // Preserve the mounted review and evidence; never fall back.
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
+                        Notification::make()->title('تم تسجيل قرار المراجعة')->success()->send();
+                    }),
                 Action::make('correct_duplicate')
                     ->label('تصحيح سند مكرر')
                     ->color('warning')

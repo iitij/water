@@ -52,3 +52,14 @@ abstract interface class PaymentsRepository {
   String sendWhatsappPath(int paymentId);
   String printFallbackPath(int paymentId);
 }
+
+
+/// Bound financial decisions must never silently fall back to the legacy
+/// receipt-only decision endpoint when the selected request changes.
+abstract interface class BoundVoidRequestsRepository {
+  Future<bool> decideBoundVoidRequest(
+    PaymentVoidRequest request, {
+    required bool approve,
+    String? notes,
+  });
+}

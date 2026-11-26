@@ -9,6 +9,10 @@ use App\Models\Square;
 use App\Models\Subscriber;
 use App\Models\Transaction;
 use App\Services\PaymentService;
+use App\Support\AccountMoney;
+use App\Support\DecimalDomain;
+use App\Support\MoneyBoundary;
+use App\Support\SignedMinor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -81,16 +85,23 @@ class SubscriberController extends ApiController
             'meters' => fn ($q) => $q->withCount('readings')->orderBy('id'),
             'currentMeter:id,subscriber_id,unique_code,path_number,status,removed_at',
             'invoices' => fn ($q) => $q->with(['meter:id,unique_code,path_number'])->latest('bill_date')->latest('id'),
-            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at'])->withSum('refunds as refunded_amount', 'amount')->latest('payment_date')->latest('id'),
+            'payments' => fn ($q) => $q->with(['meter:id,unique_code', 'user:id,name', 'accountTransfer:id,payment_id,to_subscriber_id,amount,created_at', 'refunds:id,payment_id,amount'])->latest('payment_date')->latest('id'),
             'transactions' => fn ($q) => $q->latest(),
         ])->findOrFail($id);
 
         $subscriber->setAttribute('financial_summary', $this->financialSummary($subscriber));
         $subscriber->setAttribute('account_balance', $subscriber->getAccountBalance());
         $subscriber->setAttribute('incoming_account_transfers', \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->orderBy('created_at')->orderBy('id')->get(['id', 'payment_id', 'to_subscriber_id', 'amount', 'created_at']));
+        $subscriber->payments->each(function (Payment $payment) {
+            $sum = $this->refundMinor($payment);
+            $payment->setAttribute('refunded_amount', $payment->refunds->isEmpty() ? null :
+                ($payment->getConnection()->getDriverName() === 'mysql' ? SignedMinor::decimal($sum) : MoneyBoundary::numericMajorOutput($sum)));
+            $payment->unsetRelation('refunds');
+        });
         $subscriber->meters->each(function (Meter $meter) {
-            $meter->setAttribute('meter_credit', round(max(0, (float) $meter->balance), 2));
-            $meter->setAttribute('meter_debit', round($meter->getOutstandingBalance(), 2));
+            $balance = $this->meterMinor($meter);
+            $meter->setAttribute('meter_credit', MoneyBoundary::numericMajorOutput(max(0, $balance)));
+            $meter->setAttribute('meter_debit', MoneyBoundary::numericMajorOutput(max(0, SignedMinor::negate($balance))));
             $meter->setAttribute('last_reading', $meter->readings()->latest('id')->value('current_reading'));
         });
         $subscriber->invoices->each(fn (Invoice $invoice) => $this->decorateInvoice($invoice));
@@ -186,26 +197,26 @@ class SubscriberController extends ApiController
                 'date' => optional($invoice->bill_date)->format('Y-m-d'),
                 'reference' => $invoice->bill_number,
                 'description' => 'فاتورة '.$this->invoiceTypeLabel($invoice->invoice_type),
-                'amount' => (float) $invoice->total_amount,
-                'previous_balance' => (float) $invoice->previous_balance,
-                'amount_paid' => (float) $invoice->amount_paid,
+                'amount' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($invoice, 'total_amount')),
+                'previous_balance' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($invoice, 'previous_balance')),
+                'amount_paid' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($invoice, 'amount_paid')),
                 'remaining_amount' => $invoice->getRemainingAmount(),
                 'true_remaining_amount' => $invoice->getTrueRemainingAmount(),
                 'status' => $invoice->status,
                 'meter' => $invoice->meter,
             ];
         });
-        $payments = $subscriber->payments()->with(['meter:id,unique_code,path_number', 'accountTransfer'])->withSum('refunds as refunded_amount', 'amount')->get()->map(function (Payment $payment) {
+        $payments = $subscriber->payments()->with(['meter:id,unique_code,path_number', 'accountTransfer', 'refunds:id,payment_id,amount'])->get()->map(function (Payment $payment) {
             return [
                 'id' => $payment->id,
                 'type' => 'payment',
                 'date' => optional($payment->payment_date)->format('Y-m-d'),
                 'reference' => $payment->receipt_number,
                 'description' => 'سند قبض'.($payment->reason ? ' - '.$payment->reason : ''),
-                'amount' => (float) $payment->amount,
+                'amount' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($payment)),
                 'payment_method' => $payment->payment_method,
                 'voided_at' => $payment->voided_at,
-                'refunded_amount' => (float) $payment->refunded_amount,
+                'refunded_amount' => MoneyBoundary::numericMajorOutput($this->refundMinor($payment)),
                 'transferred_to_subscriber_id' => $payment->accountTransfer?->to_subscriber_id,
                 'meter' => $payment->meter,
             ];
@@ -213,7 +224,7 @@ class SubscriberController extends ApiController
         $transactions = $invoices->concat($payments)->sortByDesc('date')->values();
 
         return response()->json([
-            'subscriber' => ['id' => $subscriber->id, 'name' => $subscriber->name, 'general_balance' => (float) $subscriber->balance],
+            'subscriber' => ['id' => $subscriber->id, 'name' => $subscriber->name, 'general_balance' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($subscriber, 'balance'))],
             'transactions' => $transactions,
             'ledger' => $subscriber->transactions()->orderBy('created_at')->orderBy('id')->get(),
             'financial_summary' => $this->financialSummary($subscriber),
@@ -238,21 +249,22 @@ class SubscriberController extends ApiController
             $query->where('type', $request->query('type'));
         }
 
-        $runningBalance = 0.0;
+        $runningBalance = 0;
         $rows = $query->orderBy('created_at')->orderBy('id')->get()->map(function (Transaction $transaction) use (&$runningBalance) {
-            $runningBalance += (float) $transaction->amount;
+            $amount = AccountMoney::stored($transaction);
+            $runningBalance = SignedMinor::add($runningBalance, $amount);
 
             return [
                 'id' => $transaction->id,
                 'type' => $transaction->type,
-                'amount' => (float) $transaction->amount,
+                'amount' => MoneyBoundary::numericMajorOutput($amount),
                 'meter_id' => $transaction->meter_id,
                 'party' => $transaction->meter_id
                     ? 'عداد رقم: '.$transaction->meter_id.($transaction->meter?->unique_code ? ' ('.$transaction->meter->unique_code.')' : '')
                     : ($transaction->retired_meter_id ? 'عداد مستبدل: '.$transaction->retired_meter_code : 'الحساب العام للمشترك'),
                 'description' => $transaction->description,
                 'created_at' => $transaction->created_at?->format('Y-m-d H:i'),
-                'running_balance' => round($runningBalance, 2),
+                'running_balance' => MoneyBoundary::numericMajorOutput($runningBalance),
             ];
         });
 
@@ -273,6 +285,8 @@ class SubscriberController extends ApiController
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'sync_uuid' => ['nullable', 'uuid'],
+            'cash_session_id' => ['nullable', 'integer', 'min:1'],
+            'deferred_sync' => ['sometimes', 'boolean'],
         ]);
         if (! empty($data['invoice_id']) && ! Invoice::where('id', $data['invoice_id'])->where('subscriber_id', $subscriber->id)->exists()) {
             return response()->json(['message' => 'الفاتورة المحددة لا تتبع هذا المشترك.'], 422);
@@ -281,9 +295,12 @@ class SubscriberController extends ApiController
             return response()->json(['message' => 'العداد المحدد لا يتبع هذا المشترك.'], 422);
         }
 
-        $payment = $paymentService->collectPayment(
+        $entry = app(\App\Services\ProspectiveCashReceiptEntry::class);
+        $payment = $entry->enabled()
+            ? $entry->collect($request->user(), $subscriber, $data)
+            : $paymentService->collectPayment(
             $subscriber,
-            (float) $data['amount'],
+            $data['amount'],
             $data['invoice_id'] ?? null,
             $data['payment_method'],
             $data['reference_number'] ?? null,
@@ -318,22 +335,22 @@ class SubscriberController extends ApiController
         // (references_remote_datasource.SubscriberDueSummary) — تُضاف إضافياً
         // دون كسر المفاتيح القديمة (general_balance/invoices/total_remaining).
         $latestUnpaid = $invoices->sortByDesc('id')->first();
-        $invoiceDebt = round($invoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()), 2);
+        $invoiceDebt = MoneyBoundary::numericMajorOutput(SignedMinor::sum($invoices->map(fn (Invoice $invoice) => $invoice->getRemainingMinor())));
         $subscriber->loadMissing('meters');
-        $net = $subscriber->getAccountBalance();
-        $outstanding = max(0, -$net);
+        $net = $subscriber->getAccountBalanceMinor();
+        $outstanding = max(0, SignedMinor::negate($net));
         $credit = max(0, $net);
 
         return response()->json([
             'subscriber_id' => $subscriber->id,
-            'general_balance' => (float) $subscriber->balance,
+            'general_balance' => MoneyBoundary::numericMajorOutput(AccountMoney::stored($subscriber, 'balance')),
             'invoices' => $invoices,
             'total_remaining' => $invoiceDebt,
             'invoice_id' => $latestUnpaid?->id,
             'bill_number' => $latestUnpaid?->bill_number,
             'due_amount' => $invoiceDebt,
-            'outstanding_balance' => round($outstanding, 2),
-            'credit_balance' => round($credit, 2),
+            'outstanding_balance' => MoneyBoundary::numericMajorOutput($outstanding),
+            'credit_balance' => MoneyBoundary::numericMajorOutput($credit),
             'open_invoices_count' => $invoices->count(),
         ]);
     }
@@ -388,26 +405,50 @@ class SubscriberController extends ApiController
         ];
     }
 
+    private function meterMinor(Meter $meter): int
+    {
+        return MoneyBoundary::readDecimal($meter->getRawOriginal('balance'), DecimalDomain::D10,
+            $meter->getConnection()->getDriverName(), signed: true);
+    }
+
+    private function refundMinor(Payment $payment): int
+    {
+        return SignedMinor::sum($payment->refunds->map(fn ($refund) => AccountMoney::stored($refund)));
+    }
+
+    private function transferMinor(Subscriber $subscriber, string $column): int
+    {
+        $total = 0;
+        foreach (\App\Models\PaymentAccountTransfer::where($column, $subscriber->id)->orderBy('id')->cursor() as $transfer) {
+            $total = SignedMinor::add($total, AccountMoney::stored($transfer));
+        }
+        return $total;
+    }
+
     private function financialSummary(Subscriber $subscriber): array
     {
-        $generalBalance = (float) $subscriber->balance;
-        $meterCredit = (float) $subscriber->meters->sum(fn (Meter $meter) => max(0, (float) $meter->balance));
-        $meterDebit = (float) $subscriber->meters->sum(fn (Meter $meter) => $meter->getOutstandingBalance());
-        $net = $subscriber->getAccountBalance();
-        $totalCredit = max(0, $net);
-        $totalDebit = max(0, -$net);
+        $generalBalance = AccountMoney::stored($subscriber, 'balance');
+        $meterCredit = 0;
+        $meterDebit = 0;
+        foreach ($subscriber->meters as $meter) {
+            $balance = $this->meterMinor($meter);
+            $meterCredit = SignedMinor::add($meterCredit, max(0, $balance));
+            $meterDebit = SignedMinor::add($meterDebit, max(0, SignedMinor::negate($balance)));
+        }
+        $net = $subscriber->getAccountBalanceMinor();
+        $money = static fn (int $minor): float => MoneyBoundary::numericMajorOutput($minor);
 
         return [
-            'total_credit_balance' => round($totalCredit, 2),
-            'total_debit_balance' => round($totalDebit, 2),
-            'account_balance' => round($totalCredit - $totalDebit, 2),
-            'transferred_in' => (float) \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriber->id)->sum('amount'),
-            'transferred_out' => (float) \App\Models\PaymentAccountTransfer::where('from_subscriber_id', $subscriber->id)->sum('amount'),
-            'general_balance' => round($generalBalance, 2),
-            'general_credit_balance' => round(max(0, $generalBalance), 2),
-            'general_debit_balance' => round(max(0, -$generalBalance), 2),
-            'meters_credit_balance' => round($meterCredit, 2),
-            'meters_debit_balance' => round($meterDebit, 2),
+            'total_credit_balance' => $money(max(0, $net)),
+            'total_debit_balance' => $money(max(0, SignedMinor::negate($net))),
+            'account_balance' => $money($net),
+            'transferred_in' => $money($this->transferMinor($subscriber, 'to_subscriber_id')),
+            'transferred_out' => $money($this->transferMinor($subscriber, 'from_subscriber_id')),
+            'general_balance' => $money($generalBalance),
+            'general_credit_balance' => $money(max(0, $generalBalance)),
+            'general_debit_balance' => $money(max(0, SignedMinor::negate($generalBalance))),
+            'meters_credit_balance' => $money($meterCredit),
+            'meters_debit_balance' => $money($meterDebit),
         ];
     }
 

@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\FinancialAmount;
+use App\Support\ExactMoney;
+
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Reading;
@@ -19,7 +22,8 @@ class InvoiceService
         ?\App\Models\Meter $meter = null,
         ?string $notes = null,
         bool $includeReadings = true,
-        string $invoiceType = 'meter'
+        string $invoiceType = 'meter',
+        ?GatedInvoiceTransferWriter $gatedWriter = null
     ): Invoice {
         // Reject obsolete internal callers even when they bypass the public
         // API and try to create a charge-only invoice without meter readings.
@@ -29,13 +33,22 @@ class InvoiceService
             ]);
         }
 
-        return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType) {
-            Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
+        return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType, $gatedWriter) {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Financial issuance lock is missing.');
+            }
+            $lockedSubscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             if ($includeReadings) {
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
                 $meter = \App\Models\Meter::query()->where('subscriber_id', $subscriber->id)
                     ->lockForUpdate()->findOrFail($meter->id);
                 $meter = app(CurrentMeterBillingGuard::class)->resolve($subscriber, $meter);
+            }
+
+            if (! ($gatedWriter !== null && $includeReadings && $meter !== null
+                && $gatedWriter->allowsIssue((int) $subscriber->id, (int) $meter->id))
+                && ($gatedWriter !== null || config('financial_candidate.invoices') === true)) {
+                throw new \DomainException('gated_invoice_writer_required');
             }
 
             // 1. حساب الاستهلاك - نأخذ آخر قراءة فقط للاستهلاك الحالي، وما قبلها يُحتسب متأخرات
@@ -57,28 +70,53 @@ class InvoiceService
                 ]);
             }
 
+            // Validate physical observations before pricing, numbering or any financial write.
+            // Existing calendar-only pending invoices retain their historical period policy.
+            if ($uninvoicedReadings->contains(fn (Reading $reading) => $reading->period_basis !== 'legacy_calendar')) {
+                // The subscriber and current meter are already locked. Re-read the
+                // active same-meter chain with current locking reads, including its billed anchor.
+                $chain = Reading::query()->where('meter_id', $meter->id)
+                    ->orderBy('id')->lockForUpdate()->get()
+                    ->map(fn (Reading $reading) => $reading->getRawOriginal())->all();
+                try {
+                    \App\Support\ObservationBillingChain::assertValid(
+                        $chain,
+                        $uninvoicedReadings->modelKeys(),
+                        $meter->getRawOriginal('installed_at') ?? $lockedSubscriber->getRawOriginal('subscription_start_date'),
+                        $meter->getRawOriginal('initial_reading'),
+                    );
+                } catch (\InvalidArgumentException $error) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['readings' => $error->getMessage()]);
+                }
+            }
+
             $pricing = app(HistoricalTariffService::class)->quote($uninvoicedReadings);
             $consumptionFee = $pricing['total'];
 
             // 2. المتأخرات السابقة (فقط فواتير سابقة غير مسددة من نفس النوع)
-            $previousBalance = 0;
+            $previousMinor = 0;
             $unpaidInvoicesQuery = Invoice::where('subscriber_id', $subscriber->id)
                 ->whereNotIn('status', ['draft', 'cancelled'])
                 ->whereColumn('total_amount', '>', 'amount_paid');
 
             $unpaidInvoices = $unpaidInvoicesQuery->get();
-            $previousBalance = $unpaidInvoices->sum(fn($inv) => $inv->getRemainingAmount());
+            foreach ($unpaidInvoices as $unpaidInvoice) {
+                $billed = FinancialAmount::parse($unpaidInvoice->total_amount)->minor;
+                $paid = FinancialAmount::parse($unpaidInvoice->amount_paid)->minor;
+                if ($billed < 0 || $paid < 0) {
+                    throw new \LogicException('Negative billed or paid amount.');
+                }
+                $previousMinor = FinancialAmount::add($previousMinor, max(0, $billed - $paid));
+            }
+            $previousBalance = FinancialAmount::storageDecimal($previousMinor, 'previous_balance');
 
             // ملاحظة: سيتم استدعاء تحديث حالة الفواتير السابقة في نهاية الدالة لتعمل حسب المنطق الصحيح
             // 5. خصم الرصيد الدائن
-            $subtotal = $consumptionFee;
+            $subtotalMoney = ExactMoney::parse($consumptionFee);
+            $subtotal = $subtotalMoney->decimal();
 
-            $creditApplied = 0;
-            $availableBalance = $subscriber->getAccountCredit();
-            
-            if ($availableBalance > 0 && $subtotal > 0) {
-                $creditApplied = min($availableBalance, (float) $subtotal);
-            }
+            $availableMinor = max(0, app(TransactionService::class)->accountBalanceMinor($subscriber));
+            $creditApplied = ExactMoney::fromMinor(min($availableMinor, $subtotalMoney->minor))->decimal();
 
             // 6. فترة استهلاك المياه؛ وجود قراءة غير مفوترة شرط مؤكد أعلاه
             $billingPeriodStart = $uninvoicedReadings->min('period_start');
@@ -88,12 +126,13 @@ class InvoiceService
             $totalAmount = $subtotal;
 
             // 8. إنشاء الفاتورة
-            $invoice = Invoice::create([
+            $issuedAt = now();
+            $invoice = new Invoice([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
                 'invoice_type' => $invoiceType,
-                'bill_number' => Invoice::generateBillNumber(),
-                'bill_date' => now()->toDateString(),
+                'bill_number' => app(DocumentSequenceService::class)->reserveForIssue('INV', $issuedAt->format('Ym')),
+                'bill_date' => $issuedAt->toDateString(),
                 'billing_period_start' => $billingPeriodStart,
                 'billing_period_end' => $billingPeriodEnd,
                 'consumption_fee' => $consumptionFee,
@@ -104,11 +143,14 @@ class InvoiceService
                 'status' => 'issued',
                 'notes' => $notes,
             ]);
+            if (! $invoice->save(['financial_invoice_writer' => $gatedWriter])) {
+                throw new \RuntimeException('Invoice was not persisted.');
+            }
 
             // 8. إنشاء بنود الفاتورة
             $items = [];
 
-            if ($consumptionFee > 0) {
+            if ($subtotalMoney->minor > 0) {
                 $items[] = [
                     'invoice_id' => $invoice->id,
                     'type' => 'consumption',
@@ -117,7 +159,7 @@ class InvoiceService
                 ];
             }
 
-            if ($previousBalance > 0) {
+            if ($previousMinor > 0) {
                 $items[] = [
                     'invoice_id' => $invoice->id,
                     'type' => 'previous_balance',
@@ -148,10 +190,11 @@ class InvoiceService
             $transactionService->recordTransaction(
                 subscriber: $subscriber,
                 type: 'invoice',
-                amount: -$subtotal, // الفاتورة تعتبر دين (Debit)
+                amount: $subtotalMoney->negate()->decimal(), // الفاتورة تعتبر دين (Debit)
                 description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
                 reference: $invoice,
-                meter: $meter
+                meter: $meter,
+                invoiceWriter: $gatedWriter
             );
 
             // تحديث رصيد المشترك بعد إنشاء الفاتورة والمعاملة المالية

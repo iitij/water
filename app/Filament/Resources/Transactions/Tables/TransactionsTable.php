@@ -29,7 +29,7 @@ class TransactionsTable
                     ->label('نوع الحركة')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'payment' => 'success',
+                        'payment', 'held_cash_credit' => 'success',
                         'invoice' => 'danger',
                         'adjustment' => 'warning',
                         default => 'gray',
@@ -41,6 +41,7 @@ class TransactionsTable
                         'payment_reversal' => 'عكس سند قبض',
                         'invoice_reversal' => 'عكس فاتورة',
                         'payment_transfer_in' => 'تصحيح تخصيص وارد',
+                        'held_cash_credit' => 'تسوية فائض محتجز (دائن غير نقدي)',
                         'payment_refund' => 'استرداد رصيد دائن',
                         default => $state,
                     })

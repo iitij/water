@@ -24,6 +24,7 @@ class CashSession extends Model
         'square_id',
         'session_date',
         'opening_amount',
+        'settlement_basis',
         'expected_amount',
         'counted_amount',
         'variance_amount',

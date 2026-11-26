@@ -61,6 +61,7 @@ class UserController extends ApiController
     {
         $this->authorizeApi(User::class, 'update');
         $user = User::findOrFail($id);
+        abort_if($user->isDisabled(), 409, 'الحساب معطل ولا يمكن تعديله.');
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
@@ -80,6 +81,8 @@ class UserController extends ApiController
             Storage::disk('public')->delete($user->avatar);
         }
         DB::transaction(function () use ($user, $data, $request, $avatarPath) {
+            $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            abort_if($user->isDisabled(), 409, 'الحساب معطل ولا يمكن تعديله.');
             $attributes = collect($data)->only(['name', 'email'])->all();
             if (! empty($data['password'])) $attributes['password'] = Hash::make($data['password']);
             if ($avatarPath !== null) {
@@ -97,33 +100,33 @@ class UserController extends ApiController
     {
         $this->authorizeApi(User::class, 'delete');
         $user = User::findOrFail($id);
-        if ((int) $user->id === (int) request()->user()->id) {
-            return response()->json(['message' => 'لا يمكن حذف المستخدم الحالي.'], 409);
+        if (! $user->deactivate(request()->user())) {
+            return response()->json(['message' => 'لا يمكن تعطيل هذا الحساب أو أنه معطل بالفعل.'], 409);
         }
-        if ($user->hasRole('super_admin')) {
-            return response()->json(['message' => 'لا يمكن حذف حساب مدير النظام الأعلى عبر واجهة الموبايل.'], 409);
-        }
-        $user->delete();
-        return response()->json(['message' => 'تم حذف المستخدم.']);
+
+        return response()->json(['message' => 'تم تعطيل المستخدم مع حفظ سجلاته.']);
     }
 
     public function bulkDelete(Request $request)
     {
         $this->authorizeApi(User::class, 'deleteAny');
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:users,id']]);
-        $deleted = 0;
+        $disabled = 0;
         $skipped = [];
-        DB::transaction(function () use ($data, &$deleted, &$skipped, $request) {
-            foreach (User::whereIn('id', $data['ids'])->lockForUpdate()->get() as $user) {
-                if ((int) $user->id === (int) $request->user()->id || $user->hasRole('super_admin')) {
+        DB::transaction(function () use ($data, &$disabled, &$skipped, $request) {
+            $actor = $request->user();
+            $locked = User::lockAccounts([...$data['ids'], $actor->id]);
+            foreach ($locked->only($data['ids']) as $user) {
+                if (! $user->deactivate($actor, bulk: true)) {
                     $skipped[] = $user->id;
                     continue;
                 }
-                $user->delete();
-                $deleted++;
+                $disabled++;
             }
         });
-        return response()->json(['deleted_count' => $deleted, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
+
+        // Keep the legacy count for existing Flutter clients; rows are never deleted.
+        return response()->json(['deleted_count' => $disabled, 'deactivated_count' => $disabled, 'skipped_count' => count($skipped), 'skipped_ids' => $skipped]);
     }
 
     private function userPayload(User $user): array
@@ -142,6 +145,7 @@ class UserController extends ApiController
             'roles' => $roles,
             'permissions' => $user->getAllPermissions()->pluck('name')->values(),
             'created_at' => $user->created_at?->toISOString(),
+            'disabled_at' => $user->disabled_at?->toISOString(),
         ];
     }
 }

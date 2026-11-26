@@ -174,10 +174,10 @@ abstract final class WorkspaceCatalog {
       keywords: 'اكسل ملفات export xlsx',
     ),
     WorkspaceEntry(
-      title: LaravelScreenStrings.readingSettings, description: 'فترات القراءة وطريقة احتسابها',
+      title: LaravelScreenStrings.readingSettings, description: 'إعدادات جدولة زيارات قراءة العدادات',
       icon: Icons.calendar_month_outlined, route: '${RouteNames.settings}?section=reading',
       group: WorkspaceGroup.settings, permissions: ['View:ReadingSettings'],
-      keywords: 'قراءة قراءات reading settings',
+      keywords: 'إعدادات قراءة قراءات زيارات reading settings',
     ),
     WorkspaceEntry(
       title: LaravelScreenStrings.invoiceSettings, description: 'الشعار والحقول وشكل الفاتورة',

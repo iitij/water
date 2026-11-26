@@ -7,6 +7,7 @@ use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
 use App\Services\InvoiceService;
+use App\Services\ProspectiveReadingAutoInvoice;
 use App\Services\ReadingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -104,8 +105,11 @@ class ReadingController extends ApiController
             ]);
         }
 
-        $lastReading = $meter->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
-        $period = $this->readingService->calculateReadingPeriod($meterId);
+        $lastReading = $this->readingService->latestReading($meter->id);
+        $period = $this->readingService->calculateReadingPeriod(
+            $meterId,
+            request()->query('reading_date') ?: today()->toDateString()
+        );
 
         return response()->json([
             'meter' => $meter,
@@ -170,37 +174,33 @@ class ReadingController extends ApiController
         $data = $request->validate([
             'reading_date' => ['sometimes', 'required', 'date'],
             'actual_reading_date' => ['sometimes', 'nullable', 'date'],
-            'current_reading' => ['sometimes', 'required', 'numeric', 'min:0'],
-            'previous_reading' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'current_reading' => ['sometimes', 'required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
+            'previous_reading' => ['sometimes', 'required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'period_start' => ['sometimes', 'required', 'date'],
             'period_end' => ['sometimes', 'required', 'date', 'after_or_equal:period_start'],
         ]);
-        $previous = (float) ($data['previous_reading'] ?? $reading->previous_reading);
-        $current = (float) ($data['current_reading'] ?? $reading->current_reading);
-        if ($current < $previous) {
-            return response()->json(['errors' => ['current_reading' => ['القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة.']]], 422);
+        // There is one writable interval contract. Calendar-era records are
+        // not a reason to retain a second, incorrect editing algorithm.
+        if ($reading->period_basis !== 'observation') {
+            throw ValidationException::withMessages([
+                'period_start' => ['هذه القراءة لا تتبع منطق الفترات الفعلية؛ لا يمكن تعديلها عبر مسار القراءات.'],
+            ]);
         }
-        $periodStart = $data['period_start'] ?? $reading->period_start;
-        $periodEnd = $data['period_end'] ?? $reading->period_end;
-        $periodStart = Carbon::parse($periodStart)->toDateString();
-        $periodEnd = Carbon::parse($periodEnd)->toDateString();
-        if ($periodEnd < $periodStart) {
-            return response()->json(['errors' => ['period_end' => ['نهاية فترة القراءة يجب ألا تسبق بدايتها.']]], 422);
+        if (isset($data['period_start'])
+            && Carbon::parse($data['period_start'])->toDateString() !== Carbon::parse($reading->period_start)->toDateString()) {
+            throw ValidationException::withMessages(['period_start' => ['بداية الفترة محسوبة من القراءة السابقة.']]);
         }
-        if (Reading::where('meter_id', $reading->meter_id)->where('id', '!=', $reading->id)
-            ->where('period_start', '<=', $periodEnd)
-            ->where('period_end', '>=', $periodStart)->exists()) {
-            return response()->json(['errors' => ['period_start' => ['تتداخل فترة القراءة مع فترة أخرى للعداد.']]], 422);
+        if (isset($data['previous_reading']) && (float) $data['previous_reading'] !== (float) $reading->previous_reading) {
+            throw ValidationException::withMessages(['previous_reading' => ['القراءة السابقة قيمة محسوبة لا تُعدل يدوياً.']]);
         }
-        // Reading date is the entered date when no separate actual date was
-        // explicitly stored. Keep both in sync on edits without overwriting
-        // an intentionally distinct actual date from an older record.
-        if (array_key_exists('reading_date', $data)
-            && ! array_key_exists('actual_reading_date', $data)
-            && ($reading->actual_reading_date === null
-                || $reading->actual_reading_date->toDateString() === $reading->reading_date->toDateString())) {
-            $data['actual_reading_date'] = $data['reading_date'];
+
+        // The model owns validation and synchronization of both date fields.
+        // Client period fields are not authoritative.
+        unset($data['period_start'], $data['period_end'], $data['previous_reading']);
+        if (array_key_exists('actual_reading_date', $data) && $data['actual_reading_date'] === null) {
+            throw ValidationException::withMessages(['actual_reading_date' => ['يلزم تحديد تاريخ أخذ القراءة الفعلي.']]);
         }
+
         $reading->update($data);
 
         return response()->json(['message' => 'تم تحديث القراءة بنجاح.', 'reading' => $this->decorateReading($reading->fresh(['meter.subscriber', 'invoice']))]);
@@ -225,7 +225,9 @@ class ReadingController extends ApiController
         $deleted = 0;
         $skipped = 0;
         DB::transaction(function () use ($data, &$deleted, &$skipped) {
-            foreach (Reading::whereIn('id', $data['ids'])->lockForUpdate()->get() as $reading) {
+            $meterIds = Reading::whereIn('id', $data['ids'])->whereNotNull('meter_id')->pluck('meter_id')->unique()->sort()->values();
+            Meter::query()->whereIn('id', $meterIds)->orderBy('id')->lockForUpdate()->get();
+            foreach (Reading::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $reading) {
                 if ($reading->is_invoiced) {
                     $skipped++;
 
@@ -246,7 +248,13 @@ class ReadingController extends ApiController
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer', 'distinct', 'exists:readings,id'],
             'notes' => ['nullable', 'string'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
+        if (config('financial_candidate.invoices') === true || isset($data['operation_uuid'])) {
+            $result = app(\App\Services\ProspectiveReadingBatchInvoices::class)->issue(
+                $request->user(), $data['ids'], $data['notes'] ?? null, $data['operation_uuid'] ?? null);
+            return response()->json($result, $result['invoices_issued'] > 0 ? 201 : 422);
+        }
         $readings = Reading::with('meter.subscriber')->whereIn('id', $data['ids'])->where('is_invoiced', false)->get();
         if ($readings->isEmpty()) {
             return response()->json(['message' => 'لا توجد قراءات غير مفوترة ضمن الاختيار.'], 422);
@@ -287,7 +295,7 @@ class ReadingController extends ApiController
             'readings' => ['required', 'array', 'min:1', 'max:100'],
             'readings.*.meter_id' => ['required', 'integer'],
             'readings.*.reading_date' => ['required', 'date'],
-            'readings.*.current_reading' => ['required', 'numeric', 'min:0'],
+            'readings.*.current_reading' => ['required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'readings.*.actual_reading_date' => ['nullable', 'date'],
             'readings.*.period_start' => ['nullable', 'date'],
             'readings.*.period_end' => ['nullable', 'date'],
@@ -297,6 +305,7 @@ class ReadingController extends ApiController
             'readings.*.image' => ['nullable', 'image', 'max:5120'],
             'readings.*.image_base64' => ['nullable', 'string'],
             'readings.*.image_filename' => ['nullable', 'string', 'max:255'],
+            'readings.*.notes' => ['nullable', 'string'],
         ]);
 
         $results = [];
@@ -350,7 +359,7 @@ class ReadingController extends ApiController
             'meter_id' => ['required', 'integer', 'exists:meters,id'],
             'reading_date' => ['required', 'date'],
             'actual_reading_date' => ['nullable', 'date'],
-            'current_reading' => ['required', 'numeric', 'min:0'],
+            'current_reading' => ['required', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'period_start' => ['nullable', 'date'],
             'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
             'sync_uuid' => ['nullable', 'uuid'],
@@ -363,6 +372,38 @@ class ReadingController extends ApiController
         ];
     }
 
+    private function existingReadingReplay(Meter $meter, array $data, Request $request): ?array
+    {
+        if (empty($data['sync_uuid'])) {
+            return null;
+        }
+        $existing = Reading::withTrashed()->where('sync_uuid', $data['sync_uuid'])->first();
+        if (! $existing) {
+            return null;
+        }
+        abort_if($existing->trashed(), 409, 'عملية القراءة المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
+        $sameOwner = (int) ($existing->created_by ?? 0) === (int) ($request->user()?->id ?? 0);
+        $sameReading = (int) $existing->meter_id === $meter->id
+            && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
+            && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString()
+            && Carbon::parse($existing->actual_reading_date ?? $existing->reading_date)->toDateString()
+                === Carbon::parse($data['actual_reading_date'] ?? $data['reading_date'])->toDateString();
+        $samePeriod = true;
+        foreach (['period_start', 'period_end'] as $field) {
+            $originalField = 'submitted_'.$field;
+            $expected = $existing->{$originalField} ?? $existing->{$field};
+            if (isset($data[$field])
+                && Carbon::parse($data[$field])->toDateString()
+                    !== Carbon::parse($expected)->toDateString()) {
+                $samePeriod = false;
+                break;
+            }
+        }
+        abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
+
+        return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
+    }
+
     private function createReading(array $data, Request $request, ?int $batchIndex = null): array
     {
         if (empty($data['sync_uuid'])) {
@@ -371,91 +412,122 @@ class ReadingController extends ApiController
                 $data['sync_uuid'] = strtolower($fallbackId);
             }
         }
-        $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
         if (! empty($data['sync_uuid'])) {
-            $existing = Reading::withTrashed()->where('sync_uuid', $data['sync_uuid'])->first();
-            if ($existing) {
-                abort_if($existing->trashed(), 409, 'عملية القراءة المرتبطة بمعرّف المزامنة محذوفة مسبقاً.');
-                $sameOwner = (int) ($existing->created_by ?? 0) === (int) ($request->user()?->id ?? 0);
-                $sameReading = (int) $existing->meter_id === $meter->id
-                    && round((float) $existing->current_reading, 2) === round((float) $data['current_reading'], 2)
-                    && Carbon::parse($existing->reading_date)->toDateString() === Carbon::parse($data['reading_date'])->toDateString();
-                $samePeriod = true;
-                foreach (['period_start', 'period_end'] as $field) {
-                    if (isset($data[$field])
-                        && Carbon::parse($data[$field])->toDateString()
-                            !== Carbon::parse($existing->{$field})->toDateString()) {
-                        $samePeriod = false;
-                        break;
-                    }
-                }
-                abort_unless($sameOwner && $sameReading && $samePeriod, 409, 'معرّف المزامنة مستخدم مسبقاً لقراءة مختلفة أو لحساب آخر.');
-
-                return ['reading' => $existing->load(['meter.subscriber', 'invoice']), 'duplicate' => true, 'invoice_issued' => (bool) $existing->invoice_id, 'invoice_data' => $existing->invoice, 'invoice_error' => null];
-            }
+            $data['sync_uuid'] = strtolower($data['sync_uuid']);
+        }
+        $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
+        if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
+            return $this->finishProtectedReplay($replay, $data, $request);
         }
 
         // Replacement also locks the physical meter row. Keep validation,
         // period calculation and insertion inside that SAME row lock so a
         // reading cannot slip between the preflight guard and meter deletion.
-        $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
-            $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
-            $lastReading = $locked->readings()->orderByDesc('period_end')->orderByDesc('id')->first();
-            $previous = $lastReading
-                ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
-            $current = (float) $data['current_reading'];
-
-            $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id);
-            $periodStart = $data['period_start'] ?? $calculatedPeriod['period_start'];
-            $periodEnd = $data['period_end'] ?? $calculatedPeriod['period_end'];
-            app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
-                $locked, $current, $periodStart, $periodEnd,
-            );
-
-            $imagePath = null;
-            $imageFile = $batchIndex === null
-                ? $request->file('image') : $request->file("readings.$batchIndex.image");
-            if ($imageFile) {
-                $imagePath = $imageFile->store('readings', 'public');
-            } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
-                $decodedImage = base64_decode($data['image_base64'], true);
-                if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
-                    $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
-                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-                        $ext = 'jpg';
-                    }
-                    $storedName = 'readings/'.Str::uuid().'.'.$ext;
-                    Storage::disk('public')->put($storedName, $decodedImage);
-                    $imagePath = $storedName;
+        try {
+            $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
+                \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
+                $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
+                abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);
+                // A simultaneous retry may have committed while this request waited for the meter lock.
+                // Check identity again before rejecting a repeated observation date or writing an image.
+                if ($replay = $this->existingReadingReplay($locked, $data, $request)) {
+                    return $replay;
                 }
-            }
+                $lastReading = $this->readingService->latestReading($locked->id);
+                $previous = $lastReading
+                    ? (float) $lastReading->current_reading : (float) $locked->initial_reading;
+                $current = (float) $data['current_reading'];
 
-            return Reading::create([
-                'meter_id' => $locked->id,
-                'created_by' => $request->user()?->id,
-                'reading_date' => $data['reading_date'],
-                'actual_reading_date' => $data['actual_reading_date'] ?? $data['reading_date'],
-                'previous_reading' => $previous,
-                'current_reading' => $current,
-                'consumption_units' => max(0, (int) ($current - $previous)),
-                'period_start' => $periodStart,
-                'period_end' => $periodEnd,
-                'sync_uuid' => $data['sync_uuid'] ?? null,
-                'image_path' => $imagePath,
-            ]);
-        });
+                // Report retired meters and invalid physical readings before
+                // trying to derive the interval from an installation anchor.
+                if (! $locked->isCurrent()) {
+                    throw ValidationException::withMessages([
+                        'meter_id' => ['لا يمكن تسجيل قراءة على عداد منزوع أو مستبدل.'],
+                    ]);
+                }
+                if ($current < $previous) {
+                    throw ValidationException::withMessages([
+                        'current_reading' => ['القراءة الحالية أقل من القراءة السابقة.'],
+                    ]);
+                }
+                $calculatedPeriod = $this->readingService->calculateReadingPeriod($locked->id, $data['actual_reading_date'] ?? $data['reading_date']);
+                // The server's observed dates are authoritative. Legacy mobile
+                // clients may send a calendar forecast; never bill that forecast.
+                $periodStart = $calculatedPeriod['period_start'];
+                $periodEnd = $calculatedPeriod['period_end'];
+                app(\App\Services\CurrentMeterReadingGuard::class)->assertCanCreate(
+                    $locked, $current, $periodStart, $periodEnd,
+                    $data['actual_reading_date'] ?? $data['reading_date'],
+                );
+
+                $created = Reading::create([
+                    'meter_id' => $locked->id,
+                    'created_by' => $request->user()?->id,
+                    'reading_date' => $data['reading_date'],
+                    'actual_reading_date' => $data['actual_reading_date'] ?? $data['reading_date'],
+                    'previous_reading' => $previous,
+                    'current_reading' => $current,
+                    'period_start' => $periodStart,
+                    'period_end' => $periodEnd,
+                    'period_basis' => 'observation',
+                    'submitted_period_start' => $data['period_start'] ?? null,
+                    'submitted_period_end' => $data['period_end'] ?? null,
+                    'sync_uuid' => $data['sync_uuid'] ?? null,
+                ]);
+
+                app(ProspectiveReadingAutoInvoice::class)->capture($created, $request->user(), $data['notes'] ?? null);
+
+                // Reserve the unique reading identity before creating a file on disk.
+                $imagePath = null;
+                $imageFile = $batchIndex === null
+                    ? $request->file('image') : $request->file("readings.$batchIndex.image");
+                if ($imageFile) {
+                    $imagePath = $imageFile->store('readings', 'public');
+                } elseif (! empty($data['image_base64']) && is_string($data['image_base64'])) {
+                    $decodedImage = base64_decode($data['image_base64'], true);
+                    if ($decodedImage !== false && strlen($decodedImage) > 0 && strlen($decodedImage) <= 5 * 1024 * 1024) {
+                        $ext = strtolower(pathinfo((string) ($data['image_filename'] ?? 'jpg'), PATHINFO_EXTENSION));
+                        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                            $ext = 'jpg';
+                        }
+                        $storedName = 'readings/'.Str::uuid().'.'.$ext;
+                        Storage::disk('public')->put($storedName, $decodedImage);
+                        $imagePath = $storedName;
+                    }
+                }
+                if ($imagePath !== null) {
+                    $created->update(['image_path' => $imagePath]);
+                }
+
+                return $created;
+            }, 3);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $exception) {
+            // Other subscribers use different row locks. The global unique index
+            // arbitrates a UUID collision; resolve the winner only after rollback.
+            if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
+                return $this->finishProtectedReplay($replay, $data, $request);
+            }
+            throw $exception;
+        }
+
+        if (is_array($reading)) {
+            return $this->finishProtectedReplay($reading, $data, $request);
+        }
 
         $invoice = null;
         $invoiceError = null;
         $invoiceIssued = false;
-        if (filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN)) {
+        $auto = app(ProspectiveReadingAutoInvoice::class);
+        $protected = config('financial_candidate.invoices') === true || $auto->hasIntent($reading);
+        if ($protected || filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN)) {
             try {
-                $invoice = app(InvoiceService::class)->generateInvoice(
-                    subscriber: $meter->subscriber,
-                    meter: $meter,
-                    notes: $data['notes'] ?? null,
-                );
-                $invoiceIssued = true;
+                $invoice = $protected
+                    ? $auto->attempt($reading, $request->user(), $data['notes'] ?? null)
+                    : app(InvoiceService::class)->generateInvoice(
+                        subscriber: $meter->subscriber, meter: $meter, notes: $data['notes'] ?? null,
+                    );
+                $invoiceIssued = $invoice !== null && $invoice->status !== 'cancelled';
+                if ($invoice !== null)
                 $invoice->load(['subscriber.square', 'meter', 'items', 'readings']);
             } catch (\Throwable $exception) {
                 $invoiceError = $exception->getMessage();
@@ -479,6 +551,28 @@ class ReadingController extends ApiController
             'invoice_data' => $invoice ? $this->invoicePayload($invoice, $request) : null,
             'invoice_error' => $invoiceError,
         ];
+    }
+
+    /** Resume only a durable original intent, after the reading transaction has ended. */
+    private function finishProtectedReplay(array $result, array $data, Request $request): array
+    {
+        $reading = $result['reading'];
+        $auto = app(ProspectiveReadingAutoInvoice::class);
+        try {
+            if (! $auto->hasIntent($reading)) return $result;
+            // A separately billed observation is never automatically billed again.
+            if ($reading->invoice_id !== null) return $result;
+            $invoice = $auto->attempt($reading, $request->user(), $data['notes'] ?? null);
+            if ($invoice !== null && $invoice->status !== 'cancelled') {
+                $invoice->load(['subscriber.square', 'meter', 'items', 'readings']);
+                $result['invoice_issued'] = true;
+                $result['invoice_data'] = $this->invoicePayload($invoice, $request);
+                $result['reading'] = $this->decorateReading($reading->fresh(['meter.subscriber.square', 'invoice']));
+            }
+        } catch (\Throwable $error) {
+            $result['invoice_error'] = $error->getMessage();
+        }
+        return $result;
     }
 
     private function decorateReading(Reading $reading): Reading

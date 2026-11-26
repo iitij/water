@@ -30,6 +30,22 @@ class PaymentResource extends Resource
             \Filament\Schemas\Components\Section::make('بيانات الدفع')
                 ->columns(2)
                 ->schema([
+                    Forms\Components\Hidden::make('sync_uuid')
+                        ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                        ->dehydrated(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->required(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->rules(['nullable', 'uuid']),
+
+                    Forms\Components\Select::make('cash_session_id')
+                        ->label('صندوق التحصيل الأصلي')
+                        ->placeholder('بدون صندوق محصّل')
+                        ->options(fn () => \App\Models\CashSession::query()->open()
+                            ->where('user_id', auth()->id())->orderBy('id')
+                            ->get()->mapWithKeys(fn ($session) => [$session->id => '#'.$session->id.' — '.$session->session_date->toDateString()])->all())
+                        ->visible(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->dehydrated(fn (?Payment $record): bool => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled())
+                        ->helperText('إذا كان لديك صندوق مفتوح، يجب اختياره صراحةً. لا يتم نقل السند إلى صندوق آخر.'),
+
                     Forms\Components\Select::make('subscriber_id')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('المشترك')
@@ -100,9 +116,9 @@ class PaymentResource extends Resource
 
                     Forms\Components\TextInput::make('receipt_number')
                         ->label('رقم سند القبض')
-                        ->default(fn () => Payment::generateReceiptNumber())
+                        ->placeholder('يُولّد عند إصدار السند')
                         ->disabled()
-                        ->dehydrated(fn (?Payment $record) => $record === null),
+                        ->dehydrated(false),
 
                     Forms\Components\TextInput::make('amount')
                         ->disabled(fn (?Payment $record) => $record !== null)
@@ -115,17 +131,15 @@ class PaymentResource extends Resource
                     Forms\Components\DatePicker::make('payment_date')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('تاريخ الدفع')
-                        ->default(now())
+                        ->default(fn () => now('Asia/Aden')->toDateString())
                         ->required(),
 
                     Forms\Components\Select::make('payment_method')
                         ->disabled(fn (?Payment $record) => $record !== null)
                         ->label('طريقة الدفع')
-                        ->options([
-                            'cash' => 'نقدي',
-                            'bank_transfer' => 'تحويل بنكي',
-                            'check' => 'شيك',
-                        ])
+                        ->options(fn (?Payment $record) => $record === null && app(\App\Services\ProspectiveCashReceiptEntry::class)->enabled()
+                            ? ['cash' => 'نقدي']
+                            : ['cash' => 'نقدي', 'bank_transfer' => 'تحويل بنكي', 'check' => 'شيك'])
                         ->default('cash')
                         ->required(),
 
@@ -197,6 +211,7 @@ class PaymentResource extends Resource
                     ]),
             ])
             ->actions([
+                ...\App\Filament\Actions\ProspectiveReceiptVoidActions::make(),
                 \Filament\Actions\Action::make('view_allocations')
                     ->label('تخصيصات السند')
                     ->icon('heroicon-o-list-bullet')
@@ -217,9 +232,24 @@ class PaymentResource extends Resource
                             && ($user->hasRole('super_admin') || ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
                     })
                     ->form([
+                        Forms\Components\Hidden::make('operation_uuid')
+                            ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                            ->dehydrated(fn () => app(\App\Services\ProspectiveRefundEntry::class)->enabled())
+                            ->required(fn () => app(\App\Services\ProspectiveRefundEntry::class)->enabled()),
+                        Forms\Components\Select::make('treasury_account_id')
+                            ->label('حساب الخزينة الذي تم الصرف منه')
+                            ->options(fn (\Filament\Schemas\Components\Utilities\Get $get): array =>
+                                \Illuminate\Support\Facades\DB::table('treasury_accounts')
+                                    ->where('channel', match ($get('method')) {
+                                        'treasury_cash' => 'cash', 'bank_transfer' => 'bank', default => '',
+                                    })->orderBy('id')->get()
+                                    ->mapWithKeys(fn ($account) => [$account->id => $account->code.' — '.$account->name])->all())
+                            ->visible(fn () => app(\App\Services\ProspectiveRefundEntry::class)->enabled())
+                            ->dehydrated(fn () => app(\App\Services\ProspectiveRefundEntry::class)->enabled())
+                            ->required(fn () => app(\App\Services\ProspectiveRefundEntry::class)->enabled()),
                         Forms\Components\TextInput::make('amount')->label('المبلغ المصروف فعلياً')->numeric()->required()->minValue(0.01),
                         Forms\Components\TextInput::make('disbursement_reference')->label('مرجع مستند الصرف الخارجي')->required()->minLength(3)->maxLength(150),
-                        Forms\Components\Select::make('method')->label('مصدر الصرف')->options(['treasury_cash' => 'الخزينة الرئيسية', 'bank_transfer' => 'تحويل بنكي'])->required(),
+                        Forms\Components\Select::make('method')->label('مصدر الصرف')->options(['treasury_cash' => 'الخزينة الرئيسية', 'bank_transfer' => 'تحويل بنكي'])->live()->required(),
                         Forms\Components\DatePicker::make('disbursed_on')->label('تاريخ الصرف الفعلي')->default(now())->maxDate(now())->required(),
                         Forms\Components\Textarea::make('reason')->label('سبب الاسترداد')->required()->minLength(10)->maxLength(1000),
                         Forms\Components\Textarea::make('evidence')->label('دليل الصرف والاستلام')->required()->minLength(10)->maxLength(2000),
@@ -228,10 +258,11 @@ class PaymentResource extends Resource
                     ->requiresConfirmation()
                     ->action(function (Payment $record, array $data): void {
                         abort_unless($data['disbursement_confirmed'] ?? false, 422);
-                        app(\App\Services\PaymentRefundService::class)->record(
-                            $record, auth()->user(), (string) $data['amount'], $data['disbursement_reference'],
-                            $data['method'], $data['disbursed_on'], $data['reason'], $data['evidence']
-                        );
+                        try {
+                            app(\App\Services\ProspectiveRefundEntry::class)->record(auth()->user(), $record, $data);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
                         \Filament\Notifications\Notification::make()->title('تم تسجيل الاسترداد المثبت')->success()->send();
                     }),
                 \Filament\Actions\Action::make('transfer_account')
@@ -243,6 +274,10 @@ class PaymentResource extends Resource
                             && ($user->hasRole('super_admin') || ($user->can('cash_sessions.approve') && $user->can('payments.void.approve')));
                     })
                     ->form([
+                        Forms\Components\Hidden::make('operation_uuid')
+                            ->default(fn () => (string) \Illuminate\Support\Str::uuid())
+                            ->dehydrated(fn () => app(\App\Services\ProspectiveSubscriberTransferEntry::class)->enabled())
+                            ->required(fn () => app(\App\Services\ProspectiveSubscriberTransferEntry::class)->enabled()),
                         Forms\Components\Select::make('to_subscriber_id')
                             ->label('المشترك الصحيح')->searchable()->required()
                             ->getSearchResultsUsing(fn (string $search) => \App\Models\Subscriber::where('name', 'like', '%'.$search.'%')->limit(50)->pluck('name', 'id')->all())
@@ -254,9 +289,11 @@ class PaymentResource extends Resource
                     ->requiresConfirmation()
                     ->action(function (Payment $record, array $data): void {
                         abort_unless($data['no_new_cash_movement'] ?? false, 422);
-                        app(\App\Services\PaymentAccountTransferService::class)->transfer(
-                            $record, (int) $data['to_subscriber_id'], auth()->user(), $data['reason'], $data['evidence']
-                        );
+                        try {
+                            app(\App\Services\ProspectiveSubscriberTransferEntry::class)->transfer(auth()->user(), $record, $data);
+                        } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
                         \Filament\Notifications\Notification::make()->title('تم تصحيح تخصيص المبلغ دون قبض جديد')->success()->send();
                     }),
                 \Filament\Actions\Action::make('generate_pdf')

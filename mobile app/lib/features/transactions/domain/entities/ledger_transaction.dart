@@ -39,6 +39,7 @@ class LedgerTransaction extends Equatable {
     'payment_reversal' => 'عكس سند قبض',
     'invoice_reversal' => 'عكس فاتورة',
     'payment_transfer_in' => 'تصحيح تخصيص وارد',
+    'held_cash_credit' => 'تسوية فائض محتجز (دائن غير نقدي)',
     'payment_refund' => 'استرداد رصيد دائن',
     _ => type,
   };

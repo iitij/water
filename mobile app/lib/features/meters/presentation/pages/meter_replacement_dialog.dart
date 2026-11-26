@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/meter.dart';
 import '../../domain/meters_repository.dart';
 
-/// Replacements permanently delete the previous meter's data. Online only.
+/// Replaces the physical meter; posted financial documents are protected. Online only.
 class MeterReplacementDialog extends StatefulWidget {
   const MeterReplacementDialog({required this.meter, required this.repository, super.key});
 
@@ -62,7 +62,7 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
         meterId: widget.meter.id,
         uniqueCode: _code.text.trim(),
         pathNumber: _path.text.trim().isEmpty ? null : int.parse(_path.text.trim()),
-        initialReading: int.parse(_initial.text.trim()),
+        initialReading: double.parse(_initial.text.trim()),
         reason: _reason.text.trim(),
         removedAt: DateTime.now().toIso8601String().split('T').first,
       );
@@ -93,8 +93,8 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                 Text('العداد السابق: ${widget.meter.uniqueCode}'),
                 const SizedBox(height: 8),
                 const Text(
-                  'سيُحذف العداد السابق نهائياً مع قراءاته وفواتيره وسنداته وبياناته المرتبطة. '
-                  'لن يُحتفظ بسجل تاريخي للعداد السابق. '
+                  'سيُستبدل العداد السابق نهائياً، وتُحفظ المستندات المالية المعتمدة ورصيد المشترك. '
+                  'لا يمكن استبدال عداد لديه استهلاك غير مفوتر يتطلب المعالجة. '
                   'لا يمكن التراجع عن العملية، وتتطلب اتصالاً بالخادم.',
                 ),
                 const SizedBox(height: 16),
@@ -122,11 +122,12 @@ class _MeterReplacementDialogState extends State<MeterReplacementDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _initial,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'القراءة الابتدائية للعداد الجديد'),
                   validator: (text) {
-                    final value = int.tryParse(text?.trim() ?? '');
-                    return value == null || value < 0 ? 'أدخل قراءة صحيحة غير سالبة' : null;
+                    final raw = text?.trim() ?? '';
+                    return RegExp(r'^\d{1,10}(\.\d{1,2})?$').hasMatch(raw)
+                        ? null : 'أدخل قراءة غير سالبة بمنزلتين عشريتين كحد أقصى';
                   },
                 ),
                 const SizedBox(height: 12),

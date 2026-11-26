@@ -1,9 +1,4 @@
 <?php
-
-use App\Models\Subscriber;
-use App\Services\PaymentService;
-
-$ps = new PaymentService();
-$ps->recalculateInvoices(Subscriber::find(53));
-
-echo "Recalculation done for 53!\n";
+// Retired ad hoc mutating script. Use approved application operations or read-only ledger:audit.
+fwrite(STDERR, "Disabled: this legacy script must not mutate application data.\n");
+exit(1);

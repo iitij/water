@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\Meter;
-use App\Models\Reading;
 use App\Models\Square;
 use App\Models\Subscriber;
 use App\Services\InvoiceService;
@@ -23,6 +22,25 @@ class PaymentAllocationHistoryTest extends TestCase
         \App\Models\Tariff::create(['name' => 'Synthetic baseline tariff', 'unit_price' => 600, 'is_active' => true]);
     }
 
+    // Only synthetic corruption fixtures temporarily bypass the SQLite update trigger.
+    // Never used in production. MySQL DDL implicitly commits, so do not drop triggers there.
+    private function simulateLegacyLedgerMutation(callable $operation): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            if (app(\App\Services\LedgerProtection::class)->active()) {
+                $this->markTestSkipped('Legacy corruption fixture requires an unprotected isolated database.');
+            }
+            $operation();
+            return;
+        }
+        DB::unprepared('DROP TRIGGER IF EXISTS ledger_reject_update');
+        try {
+            $operation();
+        } finally {
+            app(\App\Services\LedgerProtection::class)->install();
+        }
+    }
+
     private function account(): Subscriber
     {
         return Subscriber::create([
@@ -34,7 +52,7 @@ class PaymentAllocationHistoryTest extends TestCase
 
     private function bill(Meter $meter, string $start, string $end, int $previous, int $current): Invoice
     {
-        Reading::create(['meter_id' => $meter->id, 'reading_date' => $end,
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => $end,
             'period_start' => $start, 'period_end' => $end,
             'previous_reading' => $previous, 'current_reading' => $current]);
         return app(InvoiceService::class)->generateInvoice($meter->subscriber, $meter);
@@ -145,12 +163,53 @@ class PaymentAllocationHistoryTest extends TestCase
 
         // Deliberately simulate a legacy accounting discrepancy; the read audit
         // must report it without silently changing the account or replaying money.
-        DB::table('transactions')->where('subscriber_id', $subscriber->id)->where('type', 'payment')->update(['amount' => 750]);
+        $this->simulateLegacyLedgerMutation(fn () => DB::table('transactions')->where('subscriber_id', $subscriber->id)->where('type', 'payment')->update(['amount' => 750]));
         $this->assertFalse($reader->reconcile($subscriber)['matches']);
         $this->assertSame(-25, $reader->reconcile($subscriber)['difference_minor']);
         $this->assertSame($before->id, $this->current($subscriber)->id);
     }
 
+
+    public function test_reconciliation_detects_offsetting_posting_errors_even_when_net_balance_matches(): void
+    {
+        $subscriber = $this->account();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'RECON-1']);
+        $invoice = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 1);
+        $payment = app(PaymentService::class)->collectPayment($subscriber, 750.25, $invoice->id);
+        $audit = app(\App\Services\FinancialReconciliationService::class);
+        $this->assertTrue($audit->inspect($subscriber)['matches']);
+        $this->artisan('ledger:audit', ['--subscriber' => $subscriber->id])->assertExitCode(0);
+        $this->simulateLegacyLedgerMutation(function () use ($invoice, $payment) {
+            DB::table('transactions')->where('reference_type', Invoice::class)->where('reference_id', $invoice->id)->update(['amount' => -610]);
+            DB::table('transactions')->where('reference_type', \App\Models\Payment::class)->where('reference_id', $payment->id)->update(['amount' => 760.25]);
+        });
+        $before = DB::table('transactions')->orderBy('id')->get()->toArray();
+        $result = $audit->inspect($subscriber);
+        $this->assertFalse($result['matches']);
+        $this->assertSame(15025, $result['ledger_minor']);
+        $this->assertSame($result['expected_ledger_minor'], $result['ledger_minor']);
+        $this->assertSame(['posting_mismatch', 'posting_mismatch'], array_column($result['issues'], 'code'));
+        $projection = app(\App\Services\PaymentAllocationReadService::class)->reconcile($subscriber);
+        $this->assertSame(0, $projection['difference_minor']);
+        $this->assertFalse($projection['matches']);
+        $this->artisan('ledger:audit', ['--subscriber' => $subscriber->id])->assertExitCode(1);
+        $this->assertEquals($before, DB::table('transactions')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_reconciliation_detects_wrong_invoice_paid_distribution_with_equal_totals(): void
+    {
+        $subscriber = $this->account();
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'RECON-2']);
+        $first = $this->bill($meter, '2026-01-01', '2026-01-31', 0, 1);
+        $second = $this->bill($meter, '2026-02-01', '2026-02-28', 1, 2);
+        app(PaymentService::class)->collectPayment($subscriber, 600);
+        DB::table('invoices')->where('id', $first->id)->update(['amount_paid' => 500]);
+        DB::table('invoices')->where('id', $second->id)->update(['amount_paid' => 100]);
+        $result = app(\App\Services\FinancialReconciliationService::class)->inspect($subscriber);
+        $this->assertFalse($result['matches']);
+        $this->assertSame(60000, $result['paid_minor']);
+        $this->assertSame(['allocation_invoice_mismatch', 'allocation_invoice_mismatch'], array_column($result['issues'], 'code'));
+    }
 
     public function test_database_rejects_rewriting_or_deleting_saved_allocations(): void
     {
