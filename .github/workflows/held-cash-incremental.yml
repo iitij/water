@@ -103,3 +103,5 @@ jobs:
 
       - name: Verify registry fence and current-read behavior
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialPostingRegistryTest.php
+      - name: Verify two independent MySQL connections and stale snapshot rejection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_mysql_registry_fence_' tests/Feature/FinancialPostingRegistryTest.php
