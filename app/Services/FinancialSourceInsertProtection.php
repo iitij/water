@@ -191,6 +191,35 @@ final class FinancialSourceInsertProtection
                 : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
             $defs['fin_held_'.$table.'_insert'] = [$table, "BEFORE INSERT ON {$table} FOR EACH ROW {$body}", $body, 'INSERT'];
         }
+        // Allocation history is an operational snapshot, not an independent
+        // accounting posting. Its immutable revision timestamp selects the
+        // operational period. A reinstatement must use the new revision's
+        // date, never the date of the original release journal.
+        // MySQL TIMESTAMP is an instant; use epoch arithmetic to avoid
+        // depending on the reader's session time zone or time-zone tables.
+        $localDate = static fn (string $timestamp): string => $sqlite
+            ? "date({$timestamp}, '+3 hours')"
+            : "DATE(DATE_ADD('1970-01-01 00:00:00', INTERVAL (UNIX_TIMESTAMP({$timestamp}) + 10800) SECOND))";
+        $revisionDate = "(SELECT ".$localDate('r.created_at')." FROM payment_allocation_revisions r WHERE r.id = NEW.revision_id{$current})";
+        foreach ([
+            'payment_allocation_revisions' => $localDate('NEW.created_at'),
+            'payment_allocations' => $revisionDate,
+            'held_cash_shadow_reinstatements' => $revisionDate,
+        ] as $table => $date) {
+            $condition = "{$date} IS NULL
+                OR EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water'
+                    AND s.active_freeze_uuid IS NOT NULL{$current})
+                OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                    AND {$date} >= p.start_on AND {$date} < p.next_on
+                    AND (p.state <> 'OPEN'
+                        OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                        OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+            $condition = preg_replace('/\s+/', ' ', trim($condition));
+            $msg = 'Allocation source period is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_alloc_'.$table.'_insert'] = [$table, "BEFORE INSERT ON {$table} FOR EACH ROW {$body}", $body, 'INSERT'];
+        }
         // InnoDB CASCADE and SET NULL do not invoke child triggers.
         // Guard the parent before its referential actions can touch a dated
         // source. Keep unrelated parent deletion behavior unchanged.
