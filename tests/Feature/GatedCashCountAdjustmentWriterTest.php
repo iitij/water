@@ -1300,6 +1300,91 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
     }
 
+    private function mixedAtomicControl(int $variance = -6, array $classifications = ['posting_required', 'cash_returned']): array
+    {
+        $f = $this->batchResolutionControl($variance, '1.00', $classifications);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $recorder = $this->actor();
+        $byteReviewer = $this->actor();
+        $sourceReviewer = $this->actor();
+        $ids = [];
+        $keys = [];
+        foreach ($f['proposalIds'] as $uuid => $proposal) {
+            $issuer = 'qa-source-'.count($ids);
+            $reference = 'QA-DOC-'.count($ids);
+            $sourceRef = 'QA-EXTERNAL-'.count($ids);
+            $bytes = 'Synthetic QA evidence for the exact claim '.$uuid;
+            \Laravel\Sanctum\Sanctum::actingAs($recorder);
+            $doc = $service->recordResolutionDocument($recorder, $uuid, $proposal, $reference, $bytes, $this->nowAt());
+            \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+            $service->reviewResolutionDocument($byteReviewer, $uuid, $proposal, $doc['document_id'], $reference, $bytes,
+                'Independent reviewer compared the original document bytes', $this->nowAt());
+            $pair = sodium_crypto_sign_keypair();
+            $secret = sodium_crypto_sign_secretkey($pair);
+            $keys[$issuer] = base64_encode(sodium_crypto_sign_publickey($pair));
+            config(['financial_candidate.refund_source_public_keys' => $keys]);
+            $sig = base64_encode(sodium_crypto_sign_detached(
+                \App\Services\CompletedCashRefundRequest::sourceStatement($doc['document'], $issuer, $sourceRef), $secret));
+            sodium_memzero($secret);
+            \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+            $attest = $service->attestResolutionSource($sourceReviewer, $uuid, $proposal, $doc['document_id'],
+                $issuer, $sourceRef, $sig, 'Independent reviewer inspected the synthetic source statement', $this->nowAt());
+            $ids[$uuid] = $attest['attestation_id'];
+        }
+        return compact('f', 'ids', 'keys', 'service');
+    }
+
+    public function test_release_refund_mixed_atomic_posts_only_required_member_and_preserves_historical_proof(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $confirmation = 'Independent verified evidence supports the complete mixed cash settlement';
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $f['proposalIds'], $ids, $confirmation, $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(10, $result['batch']['total_claimed_minor']);
+        $this->assertSame(6, $result['batch']['posting_required_minor']);
+        $this->assertSame(0, $result['current_active_release_liquidity']['unresolved_refund_incident_count']);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->count());
+        $this->assertSame(0, DB::table('financial_posting_operations')->where('operation_uuid', $f['second'])->count());
+        $this->assertSame($f['counted'], $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25')));
+        config(['financial_candidate.refund_source_public_keys' => [], 'financial_candidate.refund_source_archived_public_keys' => []]);
+        $this->assertFalse($post()['registry_created']);
+        $this->getJson($f['root'].$f['uuid'])->assertOk()->assertJsonPath('completion_verified', true)
+            ->assertJsonPath('incident_unresolved', false);
+        $this->getJson($f['root'].$f['second'])->assertOk()->assertJsonPath('completion_verified', false)
+            ->assertJsonPath('incident_unresolved', false);
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_refund_batch_conflict', fn () =>
+            $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'], $confirmation, $this->nowAt()));
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->count());
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+    }
+
+    public function test_release_refund_mixed_atomic_zero_posting_closes_without_financial_effect(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl(0, ['no_disbursement', 'cash_returned']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $f['proposalIds'], $ids,
+            'Independent verified evidence supports no net cash disbursement', $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertFalse($result['batch']['financial_posting_created']);
+        $this->assertSame(0, $result['batch']['posting_required_minor']);
+        $this->assertSame(0, $result['current_active_release_liquidity']['unresolved_refund_incident_count']);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertEquals($before, $snapshot());
+        foreach (array_keys($ids) as $uuid) {
+            $this->getJson($f['root'].$uuid)->assertOk()->assertJsonPath('completion_verified', false)
+                ->assertJsonPath('incident_unresolved', false);
+        }
+    }
+
     public function test_release_refund_mixed_source_plan_requires_complete_independent_current_sources(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);

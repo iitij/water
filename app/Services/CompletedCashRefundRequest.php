@@ -348,7 +348,7 @@ final class CompletedCashRefundRequest
                 $this->assertExpectedProposal($sources['proposal'], $expectedProposalId);
                 $old = $this->verifiedResolution($request, $closed);
                 if ($old !== null) {
-                    if ((int) $old->actor_user_id !== (int) $actor->id || $old->after['confirmation'] !== $confirmation) {
+                    if ($old->event !== self::RESOLUTION_APPROVED || (int) $old->actor_user_id !== (int) $actor->id || $old->after['confirmation'] !== $confirmation) {
                         throw new DomainException('completed_refund_resolution_conflict');
                     }
                     return ['created' => false, 'incident_unresolved' => false, 'resolution' => $old->after];
@@ -605,7 +605,7 @@ final class CompletedCashRefundRequest
             });
     }
 
-    private function mixedSourcePlanLocked(User $actor, int $accountId, array $proposalIds, array $attestationIds, string $date): array
+    public function mixedSourcePlanLocked(User $actor, int $accountId, array $proposalIds, array $attestationIds, string $date): array
     {
         $plan = $this->mixedResolutionPlanLocked($actor, $accountId, $proposalIds, $date);
         ksort($proposalIds);
@@ -631,7 +631,8 @@ final class CompletedCashRefundRequest
             $evidence[] = ['operation_uuid' => $uuid, 'proposal_id' => $item['proposal_id'],
                 'proposal_hash' => $item['proposal_hash'], 'classification' => $item['classification'],
                 'claimed_minor' => $item['claimed_minor'], 'attestation_id' => $id,
-                'attestation_hash' => $proof['attestation_hash'], 'public_key_sha256' => $proof['public_key_sha256']];
+                'attestation_hash' => $proof['attestation_hash'], 'public_key_sha256' => $proof['public_key_sha256'],
+                'verified_public_key' => $proof['verified_public_key']];
         }
         // Bind the complete ordered selection, date, reviewer, and cash amounts.
         // Digest is for comparison/audit only, not a reusable write capability.
@@ -787,6 +788,16 @@ final class CompletedCashRefundRequest
             $reviewer, $accountId, $proposalIds, $confirmation, $now);
     }
 
+    /** Internal staging/test candidate; the writer repeats all checks under its gate. */
+    public function postMixedResolution(User $reviewer, int $accountId, array $proposalIds, array $attestationIds,
+        string $confirmation, DateTimeImmutable $now): array
+    {
+        self::authenticated($reviewer);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        return app(GatedRefundWriter::class)->recordBatchResolvedCashRefund(
+            $reviewer, $accountId, $proposalIds, $confirmation, $now, $attestationIds);
+    }
+
     private function batchAuditForCount(int $countId): ?AuditEvent
     {
         $rows = AuditEvent::query()->where('event', self::BATCH_APPROVED)->where('entity_id', (string) $countId)
@@ -802,7 +813,7 @@ final class CompletedCashRefundRequest
         }
     }
 
-    public function batchReplayLocked(User $reviewer, int $accountId, array $proposalIds, string $confirmation): ?array
+    public function batchReplayLocked(User $reviewer, int $accountId, array $proposalIds, string $confirmation, ?array $attestationIds = null): ?array
     {
         FinancialWriteGate::currentContext();
         self::authenticated($reviewer);
@@ -819,6 +830,14 @@ final class CompletedCashRefundRequest
         $group = $this->verifiedBatchResolution($first, $closed);
         if ($group === null) return null;
         $p = $group->after;
+        $mixed = ($p['format'] ?? null) === 'mixed-v1';
+        if ($mixed !== ($attestationIds !== null)) throw new DomainException('completed_refund_batch_conflict');
+        if ($mixed) {
+            ksort($attestationIds);
+            $binding = json_decode($p['source_binding_json'], true, 512, JSON_THROW_ON_ERROR);
+            $expected = array_column($binding['sources'], 'attestation_id', 'operation_uuid');
+            if ($expected !== $attestationIds) throw new DomainException('completed_refund_batch_conflict');
+        }
         if ($p['account_id'] !== $accountId || (int) $group->actor_user_id !== (int) $reviewer->id
             || $p['confirmation'] !== $confirmation || $p['proposal_ids_json'] !== json_encode($proposalIds, JSON_THROW_ON_ERROR)) {
             throw new DomainException('completed_refund_batch_conflict');
@@ -837,6 +856,7 @@ final class CompletedCashRefundRequest
             || $context['scope'] !== 'water') {
             throw new DomainException('completed_refund_batch_writer_required');
         }
+        if (isset($plan['source_binding'])) return $this->completeMixedPostingLocked($reviewer, $plan, $confirmation);
         $accountId = $plan['account_id'];
         $countId = $plan['count_id'];
         $total = $plan['total_claimed_minor'];
@@ -894,6 +914,7 @@ final class CompletedCashRefundRequest
         $group = $this->batchAuditForCount($countId);
         if ($group === null) return null;
         $p = $group->after;
+        if (($p['format'] ?? null) === 'mixed-v1') return $this->verifiedMixedBatch($request, $current, $group, $countId);
         $fail = 'completed_refund_batch_conflict';
         if (! is_array($p) || count($p) !== 11 || $group->entity_type !== 'completed_cash_refund_request'
             || $group->source !== 'internal' || (int) $group->actor_user_id <= 0
@@ -934,6 +955,125 @@ final class CompletedCashRefundRequest
         }
         if ($total !== $p['total_claimed_minor']
             || \App\Support\SignedMinor::subtract($p['recorded_balance_minor'], $total) !== $p['observed_balance_minor']) {
+            throw new DomainException($fail);
+        }
+        return $group;
+    }
+
+    private function completeMixedPostingLocked(User $reviewer, array $plan, string $confirmation): array
+    {
+        $context = FinancialWriteGate::currentContext();
+        $binding = $plan['source_binding'];
+        $accountId = $plan['account_id'];
+        $countId = $plan['count_id'];
+        $this->assertCountUnusedByBatch($countId);
+        $ids = [];
+        foreach ($plan['items'] as $item) $ids[$item['operation_uuid']] = $item['proposal_id'];
+        ksort($ids);
+        if (app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $context['effective_on'])
+            !== $plan['observed_balance_minor']) {
+            throw new DomainException('completed_refund_resolution_posting_balance');
+        }
+        $proof = ['format' => 'mixed-v1', 'account_id' => $accountId, 'count_id' => $countId,
+            'incident_count' => count($ids), 'total_claimed_minor' => $plan['total_claimed_minor'],
+            'posting_required_minor' => $plan['posting_required_minor'],
+            'recorded_balance_minor' => $plan['recorded_balance_minor'], 'observed_balance_minor' => $plan['observed_balance_minor'],
+            'proposal_ids_json' => json_encode($ids, JSON_THROW_ON_ERROR),
+            'source_binding_json' => json_encode($binding, JSON_THROW_ON_ERROR),
+            'source_binding_sha256' => $plan['source_binding_sha256'],
+            'approved_on' => $context['effective_on'], 'confirmation' => $confirmation,
+            'financial_posting_created' => $plan['posting_required_minor'] > 0];
+        $group = app(AuditLogger::class)->recordRequired(self::BATCH_APPROVED, [
+            'entity_type' => 'completed_cash_refund_request', 'entity_id' => (string) $countId,
+            'actor_user_id' => $reviewer->id, 'source' => 'internal', 'after' => $proof]);
+        foreach (array_keys($ids) as $uuid) {
+            $request = $this->find($uuid, true);
+            if ($this->verifiedResolution($request, $this->decision($request))?->id !== $group->id) {
+                throw new DomainException('completed_refund_batch_conflict');
+            }
+        }
+        return $proof;
+    }
+
+    /** Reconstruct the entire group from immutable sources; never require current trust
+     * to verify a completed posting. Snapshot keys are checked against the signed
+     * statement and attestation fingerprint, not used to authorize pending work.
+     */
+    private function verifiedMixedBatch(AuditEvent $request, AuditEvent $current, AuditEvent $group, int $countId): AuditEvent
+    {
+        $p = $group->after;
+        $fail = 'completed_refund_batch_conflict';
+        if (! is_array($p) || count($p) !== 14 || $group->entity_type !== 'completed_cash_refund_request'
+            || $group->source !== 'internal' || (int) $group->actor_user_id <= 0
+            || ($p['count_id'] ?? null) !== $countId || ! is_int($p['account_id'] ?? null)
+            || ! is_int($p['total_claimed_minor'] ?? null) || $p['total_claimed_minor'] <= 0
+            || ! is_int($p['posting_required_minor'] ?? null) || $p['posting_required_minor'] < 0
+            || $p['posting_required_minor'] >= $p['total_claimed_minor']
+            || ($p['financial_posting_created'] ?? null) !== ($p['posting_required_minor'] > 0)
+            || ! is_int($p['recorded_balance_minor'] ?? null) || ! is_int($p['observed_balance_minor'] ?? null)
+            || ! is_string($p['approved_on'] ?? null) || ! is_string($p['confirmation'] ?? null)
+            || mb_strlen(trim($p['confirmation'])) < 20 || mb_strlen($p['confirmation']) > 2000
+            || ! is_string($p['proposal_ids_json'] ?? null) || ! is_string($p['source_binding_json'] ?? null)
+            || ! is_string($p['source_binding_sha256'] ?? null)
+            || ! hash_equals($p['source_binding_sha256'], hash('sha256', $p['source_binding_json']))) {
+            throw new DomainException($fail);
+        }
+        $ids = json_decode($p['proposal_ids_json'], true, 512, JSON_THROW_ON_ERROR);
+        $binding = json_decode($p['source_binding_json'], true, 512, JSON_THROW_ON_ERROR);
+        if (! is_array($ids) || count($ids) < 2 || count($ids) > 50 || count($ids) !== ($p['incident_count'] ?? null)
+            || ($ids[$request->entity_id] ?? null) !== (int) $current->id || count(array_unique(array_values($ids))) !== count($ids)
+            || ! is_array($binding) || ! is_array($binding['sources'] ?? null) || count($binding['sources']) !== count($ids)) {
+            throw new DomainException($fail);
+        }
+        $reviewer = User::query()->lockForUpdate()->findOrFail($group->actor_user_id);
+        $total = $postingTotal = 0;
+        $evidence = [];
+        $used = [];
+        foreach ($ids as $uuid => $proposalId) {
+            $item = $binding['sources'][count($evidence)] ?? null;
+            if (! is_array($item) || ($item['operation_uuid'] ?? null) !== $uuid || ($item['proposal_id'] ?? null) !== $proposalId
+                || ! is_int($item['attestation_id'] ?? null) || $item['attestation_id'] <= 0
+                || isset($used[$item['attestation_id']]) || ! is_string($item['verified_public_key'] ?? null)
+                || (int) $group->id <= $item['attestation_id']) throw new DomainException($fail);
+            $used[$item['attestation_id']] = true;
+            $member = $this->find($uuid, true);
+            if ($member === null) throw new DomainException($fail);
+            $decision = $this->decision($member);
+            if ($decision === null || AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)
+                ->where('entity_id', $uuid)->lockForUpdate()->first()) throw new DomainException($fail);
+            $chain = $this->proposalChain($member, $decision);
+            if ($chain === []) throw new DomainException($fail);
+            $proposal = end($chain);
+            $posting = ($proposal->after['classification'] ?? null) === 'posting_required';
+            $sources = $this->resolutionSources($member, $decision, (int) $reviewer->id, $posting, $posting,
+                -$p['posting_required_minor'], true);
+            $q = $sources['proposal']->after;
+            if ($proposalId !== (int) $proposal->id || $q['count_id'] !== $countId || $q['account_id'] !== $p['account_id']
+                || $q['recorded_minor'] !== $p['recorded_balance_minor'] || $q['counted_minor'] !== $p['observed_balance_minor']
+                || $q['proposed_on'] !== $p['approved_on'] || $member->after['date'] !== $p['approved_on']) throw new DomainException($fail);
+            $source = $this->documentContext($reviewer, $uuid, $proposalId, $p['approved_on'],
+                function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                    use ($item): array {
+                    return $this->revalidateSourceProofLocked($actor, $request, $closed, $proposal, $excluded, $date,
+                        $item['attestation_id'], true, $item['verified_public_key']);
+                }, true);
+            if ($posting) $this->verifyResolutionPosting($member->after, (int) $reviewer->id, $p['confirmation']);
+            $minor = FinancialAmount::parse($member->after['amount'])->minor;
+            $total = \App\Support\SignedMinor::add($total, $minor);
+            if ($posting) $postingTotal = \App\Support\SignedMinor::add($postingTotal, $minor);
+            $evidence[] = ['operation_uuid' => $uuid, 'proposal_id' => $proposalId,
+                'proposal_hash' => $sources['identity']['proposal_hash'], 'classification' => $q['classification'],
+                'claimed_minor' => $minor, 'attestation_id' => $source['attestation_id'],
+                'attestation_hash' => $source['attestation_hash'], 'public_key_sha256' => $source['public_key_sha256'],
+                'verified_public_key' => $source['verified_public_key']];
+        }
+        $expected = ['version' => 1, 'reviewer_id' => (int) $reviewer->id, 'effective_on' => $p['approved_on'],
+            'account_id' => $p['account_id'], 'count_id' => $countId, 'recorded_balance_minor' => $p['recorded_balance_minor'],
+            'observed_balance_minor' => $p['observed_balance_minor'], 'total_claimed_minor' => $total,
+            'posting_required_minor' => $postingTotal, 'sources' => $evidence];
+        if ($p['source_binding_json'] !== json_encode($expected, JSON_THROW_ON_ERROR)
+            || $total !== $p['total_claimed_minor'] || $postingTotal !== $p['posting_required_minor']
+            || \App\Support\SignedMinor::subtract($p['recorded_balance_minor'], $postingTotal) !== $p['observed_balance_minor']) {
             throw new DomainException($fail);
         }
         return $group;
@@ -1218,7 +1358,7 @@ final class CompletedCashRefundRequest
     /** Shared exact validation for recording and pending-use revalidation. */
     private function sourceProofLocked(AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
         array $excluded, int $attesterId, int $documentId, string $issuer, string $sourceReference,
-        string $signature, string $substantiveReview, string $date, ?string $historicalFingerprint = null): array
+        string $signature, string $substantiveReview, string $date, ?string $historicalFingerprint = null, ?string $approvalKey = null): array
     {
         $fail = 'completed_refund_source_evidence';
         $document = AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->whereKey($documentId)->lockForUpdate()->first();
@@ -1260,7 +1400,10 @@ final class CompletedCashRefundRequest
         // Trust anchors are deployment configuration, never request data.
         $trusted = config('financial_candidate.refund_source_public_keys', []);
         $encodedKey = is_array($trusted) ? ($trusted[$issuer] ?? null) : null;
-        if ($historicalFingerprint !== null) {
+        if ($approvalKey !== null) {
+            if ($historicalFingerprint === null) throw new DomainException('completed_refund_source_evidence');
+            $encodedKey = $approvalKey;
+        } elseif ($historicalFingerprint !== null) {
             // Historical keys are provisioned independently by deployment.
             // They are never considered by the live verification path.
             if (! preg_match('/\A[0-9a-f]{64}\z/', $historicalFingerprint)) {
@@ -1295,7 +1438,7 @@ final class CompletedCashRefundRequest
             'signature' => $signature, 'substantive_review' => $substantiveReview, 'attested_on' => $date,
             'trusted_signature_verified' => true, 'physical_fact_automatically_verified' => false,
             'closure_authorized' => false];
-        return [$proof, $document, $review];
+        return [$proof, $document, $review, $encodedKey];
     }
 
     /**
@@ -1345,7 +1488,7 @@ final class CompletedCashRefundRequest
     }
 
     private function revalidateSourceProofLocked(User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
-        array $excluded, string $date, int $attestationId, bool $historical = false): array
+        array $excluded, string $date, int $attestationId, bool $historical = false, ?string $approvalKey = null): array
     {
         if (! $historical) FinancialWriteGate::currentContext();
         elseif (DB::transactionLevel() <= 0) throw new DomainException('completed_refund_source_evidence');
@@ -1371,9 +1514,9 @@ final class CompletedCashRefundRequest
         // Reconstruct the original signed statement and compare every
         // recorded field. Consult the current configured public key;
         // never trust a caller-provided key or stored success flag.
-        [$expected, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
+        [$expected, $document, $review, $verifiedKey] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
             (int) $audit->actor_user_id, $q['document_id'], $q['issuer'], $q['source_reference'],
-            $q['signature'], $q['substantive_review'], $q['attested_on'], $historical ? $q['public_key_sha256'] : null);
+            $q['signature'], $q['substantive_review'], $q['attested_on'], $historical ? $q['public_key_sha256'] : null, $approvalKey);
         if ($audit->entity_id !== $document->after['sha256'] || (int) $audit->id <= (int) $review->id
             || $this->proposalHash($q) !== $this->proposalHash($expected)) {
             throw new DomainException($fail);
@@ -1395,14 +1538,14 @@ final class CompletedCashRefundRequest
         if ($historical) {
             return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
                 'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
-                'public_key_sha256' => $q['public_key_sha256'], 'historical_signature_verified' => true,
+                'public_key_sha256' => $q['public_key_sha256'], 'verified_public_key' => $verifiedKey, 'historical_signature_verified' => true,
                 'current_trust_revalidated' => false, 'historical_trust_at_approval_proven' => false,
                 'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
                 'spending_authorized' => false, 'closure_authorized' => false];
         }
         return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
             'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
-            'public_key_sha256' => $q['public_key_sha256'], 'trusted_signature_revalidated' => true,
+            'public_key_sha256' => $q['public_key_sha256'], 'verified_public_key' => $verifiedKey, 'trusted_signature_revalidated' => true,
             'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
             'spending_authorized' => false, 'closure_authorized' => false, 'incident_unresolved' => true];
     }
@@ -1579,7 +1722,7 @@ final class CompletedCashRefundRequest
         if ($chain === []) throw new DomainException($fail);
         $proposal = end($chain);
         $q = $proposal->after;
-        if ($batchVariance !== null && ($mixedReadiness ? ($posted || $batchVariance > 0) : (! $postingRequired || $batchVariance >= 0))) {
+        if ($batchVariance !== null && ($mixedReadiness ? ($batchVariance > 0) : (! $postingRequired || $batchVariance >= 0))) {
             throw new DomainException($fail);
         }
         $expectedVariance = $batchVariance ?? ($postingRequired ? -FinancialAmount::parse($p['amount'])->minor : 0);
@@ -1766,7 +1909,7 @@ final class CompletedCashRefundRequest
         $current = $chain === [] ? null : end($chain);
         // An operation UUID alone is not a verified posting.
         return ['status' => $closed?->after['decision'] ?? ($op ? 'posting_recorded_unverified' : 'pending'),
-            'operation_exists' => $op, 'completion_verified' => ($resolution?->after['financial_posting_created'] ?? null) === true,
+            'operation_exists' => $op, 'completion_verified' => $op && ($resolution?->after['financial_posting_created'] ?? null) === true,
             'incident_unresolved' => $resolution === null,
             'resolution' => $resolution === null ? null : $resolution->after + ['approved_by' => (int) $resolution->actor_user_id],
             'current_proposal_id' => $current === null ? null : (int) $current->id,

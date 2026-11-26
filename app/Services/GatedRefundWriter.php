@@ -72,7 +72,7 @@ final class GatedRefundWriter
     }
 
     public function recordBatchResolvedCashRefund(User $reviewer, int $accountId, array $proposalIds,
-        string $confirmation, DateTimeImmutable $now): array
+        string $confirmation, DateTimeImmutable $now, ?array $attestationIds = null): array
     {
         CompletedCashRefundRequest::authenticated($reviewer);
         abort_unless(app()->environment(['testing', 'staging']), 503);
@@ -80,20 +80,24 @@ final class GatedRefundWriter
         $this->need(mb_strlen($confirmation) >= 20 && mb_strlen($confirmation) <= 2000, 'completed_cash_refund_confirmation');
         $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now,
-            function () use ($reviewer, $accountId, $proposalIds, $confirmation, $now, $date): array {
+            function () use ($reviewer, $accountId, $proposalIds, $confirmation, $now, $date, $attestationIds): array {
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
                 $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
                 $this->treasury->authorize($reviewer);
                 CompletedCashRefundRequest::authenticated($reviewer);
                 $service = app(CompletedCashRefundRequest::class);
-                $replay = $service->batchReplayLocked($reviewer, $accountId, $proposalIds, $confirmation);
+                $replay = $service->batchReplayLocked($reviewer, $accountId, $proposalIds, $confirmation, $attestationIds);
                 if ($replay !== null) return $replay;
-                $plan = $service->batchPostingPlanLocked($reviewer, $accountId, $proposalIds, $date);
+                $plan = $attestationIds === null
+                    ? $service->batchPostingPlanLocked($reviewer, $accountId, $proposalIds, $date)
+                    : $service->mixedSourcePlanLocked($reviewer, $accountId, $proposalIds, $attestationIds, $date);
+                $this->need(config('financial_candidate.completed_cash_refund') === true, 'completed_cash_refund_disabled');
                 $this->need($this->batchCompletion === null, 'completed_refund_batch_conflict');
                 $this->batchCompletion = [$plan, (int) $reviewer->id, $confirmation];
                 try {
                     foreach ($plan['items'] as $item) {
+                        if ($attestationIds !== null && $item['classification'] !== 'posting_required') continue;
                         $request = \App\Models\AuditEvent::query()->where('event', CompletedCashRefundRequest::EVENT)
                             ->where('entity_id', $item['operation_uuid'])->lockForUpdate()->sole();
                         $p = $request->after;
