@@ -7863,6 +7863,77 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_period_movements_preserve_owner_gross_effects_and_do_not_invent_balances(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-MOVEMENT-BANK', 'name' => 'Synthetic bank',
+            'channel' => 'bank', 'opening_on' => '2026-11-25', 'opening_amount' => '5.00',
+            'opening_reference' => 'QA-MOVEMENT-BANK-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '55555555-5555-4555-8555-555555555555', $this->nowAt())['account'];
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $destination = Subscriber::create(['name' => 'Synthetic movement recipient',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->transfer($reviewer, (int) $receipt->id,
+            (int) $destination->id, 'Independent documented transfer', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $tables = ['transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events',
+            'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $inspect = fn () => $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $result = $inspect();
+        $this->assertTrue($result['recorded_movements_verified']);
+        $this->assertFalse($result['opening_verified']);
+        $this->assertFalse($result['period_closing_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($result['liability_rollforward_verified']);
+        $rows = collect($result['rows'])->keyBy(fn ($row) => $row['sector'].':'.$row['key']);
+        $this->assertSame(50, $rows['subscriber:'.$subscriber->id]['incoming_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$subscriber->id]['outgoing_minor']);
+        $this->assertSame(20, $rows['subscriber:'.$subscriber->id]['net_movement_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$destination->id]['net_movement_minor']);
+        $this->assertSame(10000, $rows['cash:'.$account['id']]['recorded_opening_document_minor']);
+        $this->assertSame(25, $rows['cash:'.$account['id']]['net_movement_minor']);
+        $this->assertSame(500, $rows['bank:'.$bank['id']]['recorded_opening_document_minor']);
+        $this->assertSame(0, $rows['bank:'.$bank['id']]['net_movement_minor']);
+        $this->assertSame(-25, $rows['held_liability_effect:lot-'.$lot]['net_movement_minor']);
+        $this->assertSame(5, $rows['held_liability_effect:assignment-'.self::NEXT]['net_movement_minor']);
+        $this->assertSame(50, $result['sector_totals']['subscriber']['net_movement_minor']);
+        $this->assertSame(-20, $result['sector_totals']['held_liability_effect']['net_movement_minor']);
+        foreach ($result['rows'] as $row) {
+            $this->assertNull($row['opening_minor']);
+            $this->assertNull($row['closing_minor']);
+        }
+        $this->assertSame(DB::table('financial_posting_events')->count(), $result['registry_events']);
+        $this->assertSame($result, $inspect());
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_period_movements_with_missing_registry_source_publish_no_partial_totals(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '0.30');
+        $entry = DB::table('transactions')->where('reference_type', Payment::class)
+            ->where('reference_id', $receipt->id)->sole();
+        $result = $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['recorded_movements_verified']);
+        $this->assertSame([], $result['rows']);
+        $this->assertSame([], $result['sector_totals']);
+        $this->assertNull($result['movement_hash']);
+        $this->assertContains(['code' => 'required_registry_leg_missing_or_duplicate', 'source' => 'ledger_transaction',
+            'id' => $entry->id.':subscriber'], $result['source_issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseHas('payments', ['id' => $receipt->id]);
+    }
+
     public function test_close_evidence_unresolved_cash_claims_remain_visible_until_signed_settlement(): void
     {
         ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
