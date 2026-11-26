@@ -3082,6 +3082,68 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_invoice_model_fence_blocks_direct_document_and_ledger_writes(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic model fence tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-INVOICE-MODEL']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        $issueUuid = '66666666-6666-4666-8666-666666666666';
+        $cancelUuid = '88888888-8888-4888-8888-888888888888';
+        $document = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id, 'invoice_type' => 'meter',
+            'bill_number' => 'QA-DIRECT', 'bill_date' => '2026-11-25', 'billing_period_start' => '2026-11-01',
+            'billing_period_end' => '2026-11-24', 'consumption_fee' => '0.10', 'previous_balance' => '0.00',
+            'credit_applied' => '0.00', 'total_amount' => '0.10', 'amount_paid' => '0.00', 'status' => 'issued'];
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions', 'payments',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => true]);
+        $this->rejects('gated_invoice_model_writer_required', fn () => \App\Models\Invoice::create($document));
+        $this->rejects('gated_invoice_model_writer_required', fn () =>
+            (new \App\Models\Invoice($document))->saveQuietly(['financial_invoice_writer' => $writer]));
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id, $issueUuid, $this->nowAt())['invoice'];
+        $original = \App\Models\Transaction::where('reference_type', \App\Models\Invoice::class)
+            ->where('reference_id', $invoice->id)->where('type', 'invoice')->sole();
+        $reverse = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id, 'type' => 'invoice_reversal',
+            'amount' => '0.10', 'reference_type' => \App\Models\Invoice::class, 'reference_id' => $invoice->id];
+        $issued = [];
+        foreach ($tables as $table) $issued[$table] = $snapshot($table);
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.invoices' => $enabled]);
+            $this->rejects('gated_invoice_ledger_writer_required', fn () => \App\Models\Transaction::create($reverse));
+            $this->rejects('gated_invoice_ledger_writer_required', fn () =>
+                (new \App\Models\Transaction($reverse))->saveQuietly(['financial_invoice_writer' => $writer]));
+            $this->rejects('gated_invoice_ledger_writer_required', fn () => $ledger->reverseDocument($subscriber, $invoice, 'invoice'));
+            $this->rejects('gated_invoice_ledger_writer_required', fn () => $ledger->reverseDocument($subscriber, $invoice, 'invoice', $writer));
+            $this->rejects('gated_invoice_ledger_writer_required', fn () => $original->fresh()->forceFill(['amount' => '-0.20'])->saveQuietly());
+            $this->rejects('gated_invoice_model_writer_required', fn () => $invoice->fresh()->forceFill(['status' => 'cancelled',
+                'void_reason' => 'Unauthorized direct model cancellation', 'voided_by' => $actor->id])->saveQuietly());
+            foreach ($issued as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        }
+        config(['financial_candidate.invoices' => true]);
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id, 'Independent protected model cancellation',
+            $cancelUuid, $this->nowAt());
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame('-0.10', $original->fresh()->amount);
+        $this->assertSame(0, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $issueUuid, 'amount_minor' => -10]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'amount_minor' => 10]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $cancelUuid)->count());
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertSame($before['payments'], $snapshot('payments'));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_invoice_service_fence_preserves_original_and_reversal(): void
     {
         [, , $account, , , $subscriber] = $this->held();
