@@ -1,7 +1,7 @@
-name: Prospective refund incident atomic posting
+name: Prospective refund incident atomic rollback
 on:
   push:
-    branches: ['release/prospective-refund-incident-atomic-posting']
+    branches: ['release/prospective-refund-incident-atomic-rollback']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify atomic refund settlement and affected normal refund path
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_atomic_resolution_|test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify forced late approval audit failure rolls back exact refund
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_atomic_resolution_rollback_after_both_legs_before_approval' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify atomic refund settlement and affected normal refund path
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_atomic_resolution_|test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify forced late approval audit failure rolls back exact refund
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_atomic_resolution_rollback_after_both_legs_before_approval' tests/Feature/GatedCashCountAdjustmentWriterTest.php

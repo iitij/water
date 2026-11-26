@@ -1310,6 +1310,79 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
     }
 
+    public function test_release_refund_atomic_resolution_rollback_after_both_legs_before_approval(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $uuid = $f['uuid'];
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')->sole();
+        $payment = Payment::findOrFail($request->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $beforeBalance = $ledger->accountBalanceMinor($subscriber);
+        $cash = fn () => $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25'));
+        $beforeCash = $cash();
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions',
+            'treasury_accounts', 'treasury_postings', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events',
+            'treasury_cash_counts', 'treasury_cash_count_reviews', 'treasury_cash_adjustments'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id'
+        )->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $record = fn () => app(\App\Services\CompletedCashRefundRequest::class)->postResolution(
+            $f['approver'], $uuid, 'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
+        // Fail only after the exact operation has both registered legs AND its
+        // completed-refund audit. This proves the late failure point is reached.
+        $condition = "NEW.event = 'financial.completed_cash_refund_resolution_approved' AND NEW.entity_id = '{$uuid}'
+            AND EXISTS (SELECT 1 FROM financial_posting_events WHERE operation_uuid = '{$uuid}' AND leg = 'subscriber' AND amount_minor = -6)
+            AND EXISTS (SELECT 1 FROM financial_posting_events WHERE operation_uuid = '{$uuid}' AND leg = 'treasury' AND amount_minor = -6)
+            AND EXISTS (SELECT 1 FROM audit_events WHERE event = 'financial.completed_cash_refund')";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_refund_resolution_final_audit'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_refund_resolution_final_audit'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_refund_resolution_final_audit BEFORE INSERT ON audit_events {$body}");
+        \Illuminate\Support\Facades\Log::spy();
+        try {
+            try {
+                $record();
+                $this->fail('Refund incident committed despite final approval audit failure.');
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
+            }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with(
+                'audit.record_failed', \Mockery::on(static fn ($context) =>
+                    is_array($context) && ($context['event'] ?? null) === 'financial.completed_cash_refund_resolution_approved'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_refund_resolution_final_audit'))
+            )->once();
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame(0, DB::transactionLevel());
+            $this->assertSame($beforeBalance, $ledger->accountBalanceMinor($subscriber->fresh()));
+            $this->assertSame($beforeCash, $cash());
+            $this->getJson($f['root'].$uuid)->assertOk()->assertJsonPath('incident_unresolved', true)
+                ->assertJsonPath('operation_exists', false);
+            $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+                app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+            $liquidity = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($f['id']));
+            $this->assertSame(1, $liquidity['unresolved_refund_incident_count']);
+            $this->assertSame(0, $liquidity['available_for_ordinary_outflow_minor']);
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_refund_resolution_final_audit');
+        }
+        $result = $record();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame($beforeBalance - 6, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($beforeCash - 6, $cash());
+        $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(1, DB::table('payment_refunds')->where('disbursement_reference', $f['data']['reference'])->count());
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+        $this->assertSame(0, $result['current_active_release_liquidity']['unresolved_refund_incident_count']);
+        $after = $snapshot();
+        $this->assertFalse($record()['registry_created']);
+        $this->assertEquals($after, $snapshot());
+    }
+
     public function test_release_refund_atomic_resolution_posts_exact_two_legs_once(): void
     {
         $f = $this->resolutionControl('posting_required', -6);
