@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify MySQL approval audit retry c8bd29f199c690e80c0214fb33f2386198ea1cba (only failed case). Continue separate authenticated review, all outflows and production checks.",
+  "next": "Verify authenticated refund review 8a8b8d74b87684e5f22677c0a163e81dac917b72 exact CI; then request lifecycle, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2365,12 +2365,32 @@
     ]
   },
   "release_financial_approval_audit_retry": {
-    "status": "CANDIDATE_MYSQL_RETRY_NOT_VERIFIED",
+    "status": "TARGETED_MYSQL_RETRY_PASS",
     "base": "d0260d6666c924c47834da8f25b740f771832184",
     "branch": "release/prospective-financial-approval-audit-fence",
     "source": "c8bd29f199c690e80c0214fb33f2386198ea1cba",
     "scope": "Test-only correction: isolate original global user delete and update triggers independently on disposable MySQL; verify new exact rejection messages, restore original migrations in finally and assert both are installed. CI only failed case, retain SQLite and two unaffected MySQL tests from prior SHA; product source unchanged.",
-    "limits": "Await exact CI. Do not accept entire approval guard until retry passes. No production DDL, no historical corrections. Independently authenticated review still incomplete.",
-    "next": "Verify targeted retry then implement separate authenticated persisted completed-refund request and reviewer approval; review all outflows and allocators, Flutter and release readiness."
+    "limits": "Product source unchanged from d0260d6; retain accepted SQLite 3/114 and two successful MySQL cases from initial run. MySQL retry proves independently isolated actor guards and restoration of original guards.",
+    "next": "Verify authenticated persisted completed refund request and distinct reviewer session.",
+    "run": 45741035832,
+    "jobs": [
+      {
+        "id": 139645809091,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 55,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_authenticated_refund_review": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c8bd29f199c690e80c0214fb33f2386198ea1cba",
+    "branch": "release/prospective-authenticated-refund-review",
+    "source": "8a8b8d74b87684e5f22677c0a163e81dac917b72",
+    "scope": "Staging/testing-only authenticated submit, inspect and approve routes; immutable request audit with exact intent, canonical money/reference/actor/date/UUID, deny spoofed actor fields, reviewer from Sanctum session and distinct actor/issuer, locked exact verification, guard against ordinary new refund consuming request UUID/reference, no financial movement on request, atomic completed refund approval and exact replay. Separate request triggers and preflight group. Two targeted cases per engine (new authenticated flow and ordinary refund regression).",
+    "limits": "CI pending. No production activation. Pending requests have no cancel/reject/list or verified completion status yet; no global UUID reservation against other writers. Separate session tests use Sanctum actingAs, not real production credential issuance. First valid DML insert remains trusted application boundary. Other factual refund paths and allocation/outflow coverage, concurrency, Flutter and production remain. Intermediate 061ba8d not accepted.",
+    "next": "Verify final CI, fix confirmed failures. Review unresolved request lifecycle and global UUID conflict, same-subscriber factual refund and all outgoing/allocating writers, concurrency and production readiness."
   }
 }
