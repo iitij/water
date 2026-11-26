@@ -16,3 +16,5 @@ Limits: signed settlement service is internal; public signed API/document onboar
 Next: inspect exact job logs, fix only confirmed defects, avoid stacking further product changes before runtime acceptance; review authorized staged entrypoints for signed evidence/settlement and unresolved factual-disbursement handling, then remaining writer fences, permanent closure, Flutter and production.
 
 SQLite raw log verified: exact candidate, PHP 8.4.28, PHPUnit 12.5.29, in-memory database, composer.lock SHA-256 62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335, 9 tests / 236 assertions, job success. MySQL last observed running target step; no result yet.
+
+MySQL raw log verified: exact candidate, mysql:8.0 disposable water_test, PHP 8.4.28, PHPUnit 12.5.29, matching composer.lock SHA-256, 9 tests / 235 assertions. Both jobs succeeded: 18 tests / 471 assertions. Accepted only targeted signed policy and selected affected regressions; earlier pending candidates not implicitly accepted. PR remains draft and unmerged.
