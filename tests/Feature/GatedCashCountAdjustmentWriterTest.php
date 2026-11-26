@@ -3106,7 +3106,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => '10.00']));
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $writer = app(GatedCashReceiptWriter::class);
-        $payment = $writer->collect($actor, (int) $subscriber->id, '10.00', $uuid, $this->nowAt())['payment'];
+        $payment = $writer->collect($actor, (int) $subscriber->id, '10.00', $uuid, $this->nowAt(), (int) $session->id)['payment'];
         $entry = \App\Models\Transaction::where('reference_type', Payment::class)
             ->where('reference_id', $payment->id)->where('type', 'payment')->sole();
         $posting = ['subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => '10.00',
@@ -3129,7 +3129,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
         config(['financial_candidate.cash_receipts' => true]);
         $this->assertSame((int) $payment->id, (int) $writer->collect($actor, (int) $subscriber->id,
-            '10.00', $uuid, $this->nowAt())['payment']->id);
+            '10.00', $uuid, $this->nowAt(), (int) $session->id)['payment']->id);
         $this->assertSame(1000, $ledger->accountBalanceMinor($subscriber));
         $this->assertSame(1000, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
         $this->assertDatabaseCount('payments', 1);
