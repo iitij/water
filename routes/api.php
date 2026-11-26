@@ -144,6 +144,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/completed-cash-refund-requests/{uuid}/resolution-proposal', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'proposeResolution'])->whereUuid('uuid');
     Route::post('/completed-cash-refund-requests/{uuid}/resolution-approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approveResolution'])->whereUuid('uuid');
     Route::post('/completed-cash-refund-requests/{uuid}/resolution-post', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'postResolution'])->whereUuid('uuid');
+    // Signed evidence transport; service and controller keep these staging-only.
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-document', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'recordDocument'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-document-review', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'reviewDocument'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-source-attestation', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'attestSource'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-settlements/readiness', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'readiness']);
+    Route::post('/completed-cash-refund-settlements/settle', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'settle']);
+    Route::post('/completed-cash-refund-settlements/renew', [\App\Http\Controllers\Api\SignedCashRefundController::class, 'renew']);
     Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 
