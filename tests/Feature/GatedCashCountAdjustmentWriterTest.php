@@ -1633,6 +1633,80 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertGroupRenewalRace(true, true);
     }
 
+    public function test_release_refund_renewal_membership_rejects_counterfeit_equal_hashes_and_missing_member_marker(): void
+    {
+        ['f' => $f, 'ids' => $oldIds, 'service' => $service] = $this->mixedAtomicControl();
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-MEMBERSHIP-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $renewed = $service->renewResolutionGroup($actor, $f['id'], $f['proposalIds'], (int) $new['id'], self::EVIDENCE, $this->nowAt());
+        $ids = $renewed['proposal_ids'];
+        $originals = AuditEvent::query()->whereIn('id', array_values($ids))->orderBy('id')->get();
+        $this->assertCount(2, $originals);
+        $protection = app(\App\Services\CompletedCashRefundResolutionRevisionProtection::class);
+        $this->assertTrue($protection->active());
+        // Simulate counterfeit persisted evidence in the disposable database.
+        // Reinstall the authentic guard before every actual service call.
+        $replace = function (callable $change) use ($originals, $protection): void {
+            DB::unprepared('DROP TRIGGER completed_refund_res_rev_audit_update');
+            try {
+                foreach ($originals as $row) {
+                    $after = $change($row->after, (int) $row->id);
+                    DB::table('audit_events')->where('id', $row->id)->update(['after' => json_encode($after, JSON_THROW_ON_ERROR)]);
+                }
+            } finally {
+                $protection->install();
+            }
+            $this->assertTrue($protection->active());
+        };
+        $recorder = $this->actor();
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $check = function () use ($service, $f, $ids, $oldIds, $recorder, $snapshot): void {
+            $before = $snapshot();
+            \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+            $this->rejects('completed_refund_group_revision_evidence', fn () => $service->inspect($f['approver'], $f['uuid']));
+            $this->rejects('completed_refund_group_revision_evidence', fn () =>
+                $service->mixedResolutionReadiness($f['approver'], $f['id'], $ids, $this->nowAt()));
+            $this->rejects('completed_refund_group_revision_evidence', fn () =>
+                $service->postMixedResolution($f['approver'], $f['id'], $ids, $oldIds, self::EVIDENCE, $this->nowAt()));
+            \Laravel\Sanctum\Sanctum::actingAs($recorder);
+            $this->rejects('completed_refund_group_revision_evidence', fn () =>
+                $service->recordResolutionDocument($recorder, $f['uuid'], $ids[$f['uuid']], 'QA-MEMBERSHIP-DOC',
+                    'Synthetic new claim evidence for membership test', $this->nowAt()));
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame(0, DB::table('payment_refunds')->count());
+            $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        };
+        try {
+            $replace(static function (array $q, int $id): array {
+                $q['group_revision_hash'] = str_repeat('a', 64);
+                return $q;
+            });
+            $check(); // All stored hashes agree, but none is authentic.
+            $replace(static function (array $q, int $id) use ($ids, $f): array {
+                if ($id === $ids[$f['second']]) unset($q['group_revision_hash']);
+                return $q;
+            });
+            $check(); // One member claims to be an ordinary individual revision.
+            $replace(static function (array $q, int $id): array {
+                unset($q['group_revision_hash']);
+                return $q;
+            });
+            $check(); // Removing both markers cannot downgrade the group.
+        } finally {
+            $replace(static fn (array $q, int $id): array => $q);
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->mixedResolutionReadiness($f['approver'], $f['id'], $ids, $this->nowAt());
+        $this->assertSame(6, $plan['posting_required_minor']);
+        $this->assertFalse($plan['closure_authorized']);
+        $this->assertSame($ids[$f['uuid']], $service->inspect($f['approver'], $f['uuid'])['current_proposal_id']);
+    }
+
     public function test_release_refund_group_renewal_is_atomic_and_requires_new_signed_evidence(): void
     {
         ['f' => $f, 'ids' => $oldIds, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
