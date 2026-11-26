@@ -1,4 +1,4 @@
-name: Financial local month cutoff
+name: Financial settlement cutoff
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-local-cutoff'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-settlement-cutoff'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,12 +39,11 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify local month cutoff and affected source evidence
+      - name: Verify settlement cutoff and related evidence
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_(local_cutoff_|void_fence_|graph_fence_|allocation_fence_)|test_round140_|test_round137_void_immediate_and_approval|test_period_movements_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseUpgradeTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round142_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-local-cutoff'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-settlement-cutoff'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -103,7 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify local month cutoff and affected source evidence
+      - name: Verify settlement cutoff and related evidence
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_(local_cutoff_|void_fence_|graph_fence_|allocation_fence_)|test_round140_|test_round137_void_immediate_and_approval|test_period_movements_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseUpgradeTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_round142_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
