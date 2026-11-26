@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify database preflight 37c10ee29ae9a167fd8af927131b290f95be1cfd exact CI; resolve runtime trigger visibility without granting elevated privileges, direct insert boundaries and parent paths. Continue reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify runtime guard visibility 22897d146205c90e6604eca427adc96b9cad7889 exact CI; fix confirmed metadata visibility issues. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks; document raw DML trust boundary.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2134,12 +2134,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_database_preflight": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "1ba73b91b1252cfe4a093c3590edd0b3208f081e",
     "branch": "release/prospective-database-preflight",
     "source": "37c10ee29ae9a167fd8af927131b290f95be1cfd",
     "scope": "Read-only Artisan preflight with separate runtime grant allowlist and deployment guard checks; conservative rejection of global/elevated/delegated/unrecognized grants and ambiguous schema wildcard grants; no grant text or credential hashes printed. Unit tests plus disposable MySQL real restricted account DML and denied DDL/TRIGGER probes, deployment guard verification.",
-    "limits": "CI pending. Grant allowlist is not DML coverage proof or raw INSERT authorization. MySQL runtime trigger metadata visibility may require TRIGGER privilege; existing runtime services that inspect triggers need a safe verified alternative before deployment. Actual cPanel privilege capabilities not checked. No production grants modified, historical correction, main merge or production activation.",
-    "next": "Verify exact CI. Resolve runtime trigger visibility without granting TRIGGER/DDL; design independent restricted financial writer boundary and remaining direct INSERT/parent paths. Continue reserve discharge, liquidity, Flutter and integrated release checks."
+    "limits": "Both CI jobs passed: 2 unit tests and 43 assertions each; MySQL verified 11 guard groups, rejected elevated deployment account, accepted real restricted account, permitted probe DML and denied DROP/TRIGGER. Not application-wide DML coverage. No production grants changed.",
+    "next": "Verify a read-only live metadata view for runtime guard checks without TRIGGER privileges.",
+    "run": 45737048656,
+    "jobs": [
+      {
+        "id": 139632695431,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 43,
+        "exit": 0
+      },
+      {
+        "id": 139632695793,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 43,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_runtime_guard_visibility": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "37c10ee29ae9a167fd8af927131b290f95be1cfd",
+    "branch": "release/prospective-runtime-guard-visibility",
+    "source": "22897d146205c90e6604eca427adc96b9cad7889",
+    "scope": "Live non-updatable SQL SECURITY DEFINER view over current-schema trigger metadata; 9 protection classes share metadata query adapter. Optional runtime view config, direct deployment verification, no fallback. Test actual restricted MySQL account and fail-closed on missing trigger/view. SQLite retains native inspection.",
+    "limits": "CI pending; MySQL support and required permissions must be confirmed. Restricted account may need SELECT on financial tables for FK metadata checks. Definer must remain valid. No claim of preventing forged DML using compromised shared credentials. No production changes.",
+    "next": "Verify CI; correct any confirmed view or metadata privilege issues; then prioritize reserve discharge, integrated release and Flutter. Separate raw insert trust boundary from application authorization."
   }
 }
