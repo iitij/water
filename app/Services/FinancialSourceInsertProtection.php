@@ -115,6 +115,37 @@ final class FinancialSourceInsertProtection
                 }
             }
         }
+        // InnoDB CASCADE and SET NULL do not invoke child triggers.
+        // Guard the parent before its referential actions can touch a dated
+        // source. Keep unrelated parent deletion behavior unchanged.
+        $parents = [
+            'subscribers' => ['invoices' => ['subscriber_id'], 'payments' => ['subscriber_id']],
+            'meters' => ['invoices' => ['meter_id'], 'payments' => ['meter_id']],
+            'invoices' => ['payments' => ['invoice_id']],
+            'cash_sessions' => ['payments' => ['cash_session_id']],
+            'users' => ['invoices' => ['voided_by'], 'payments' => ['user_id', 'voided_by',
+                'void_requested_by', 'void_decided_by', 'whatsapp_sent_by']],
+        ];
+        foreach ($parents as $parent => $children) {
+            $checks = [];
+            foreach ($children as $child => $keys) {
+                $link = implode(' OR ', array_map(fn ($key) => "d.{$key} = OLD.id", $keys));
+                $date = 'd.'.self::DATES[$child];
+                $fenced = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water'
+                    AND s.active_freeze_uuid IS NOT NULL{$current})
+                    OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                        AND {$date} >= p.start_on AND {$date} < p.next_on
+                        AND (p.state <> 'OPEN'
+                            OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                            OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+                $checks[] = "EXISTS (SELECT 1 FROM {$child} d WHERE ({$link}) AND ({$fenced}){$current})";
+            }
+            $condition = preg_replace('/\s+/', ' ', trim(implode(' OR ', $checks)));
+            $msg = 'Financial source parent deletion is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_source_parent_'.$parent.'_delete'] = [$parent, "BEFORE DELETE ON {$parent} FOR EACH ROW {$body}", $body, 'DELETE'];
+        }
         return $defs;
     }
 
