@@ -9025,6 +9025,93 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_close_evidence_ended_bank_balances_require_complete_statements_and_period_movements(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-10', 'start_on' => '2026-10-01',
+            'next_on' => '2026-11-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $open = fn (string $code, string $date, string $amount, string $uuid) =>
+            (int) app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+                'code' => $code, 'name' => 'Synthetic bank account', 'channel' => 'bank',
+                'opening_on' => $date, 'opening_amount' => $amount,
+                'opening_reference' => $code.'-OPEN', 'opening_evidence' => self::EVIDENCE,
+            ], $uuid, $this->nowAt())['account']['id'];
+        $existing = $open('QA-BANK-PERIOD-EXISTING', '2026-10-20', '100.00', self::UUID);
+        $new = $open('QA-BANK-PERIOD-NEW', '2026-11-25', '50.00', self::OTHER);
+
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $statement = fn (int $account, string $from, string $to, string $opening, string $closing, array $lines = []) =>
+            $bank->import($importer, $account, [
+                'reference' => 'QA-BANK-STMT-'.$account.'-'.$from, 'from_date' => $from, 'to_date' => $to,
+                'opening_amount' => $opening, 'closing_amount' => $closing, 'evidence' => self::EVIDENCE,
+                'lines' => $lines,
+            ])['statement'];
+        $begin = $statement($existing, '2026-11-01', '2026-11-24', '100.00', '100.00');
+        $fee = $statement($existing, '2026-11-25', '2026-11-25', '100.00', '99.60', [
+            ['bank_reference' => 'QA-BANK-PERIOD-FEE', 'booked_on' => '2026-11-25', 'amount' => '-0.40'],
+        ]);
+        $recordFee = function (array $document, string $date, string $uuid, DateTimeImmutable $now) use ($reviewer): void {
+            $line = DB::table('bank_statement_lines')->where('bank_statement_id', $document['id'])->sole();
+            app(\App\Services\GatedBankFeeWriter::class)->record($reviewer, (int) $document['id'], (int) $line->id,
+                $date, 'QA-BANK-FEE-'.$date, 'Independent documented bank service fee', self::EVIDENCE, $uuid, $now);
+        };
+        $recordFee($fee, '2026-11-25', self::ADJUST, $this->nowAt());
+
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $inspect = fn () => $diagnostic->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $this->assertNull($inspect()['bank_period_balances']);
+
+        $now = new DateTimeImmutable('2026-12-01T08:00:00+03:00');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $end = $statement($existing, '2026-11-26', '2026-11-30', '99.60', '99.60');
+        $incomplete = $inspect();
+        $this->assertSame(['matched' => false, 'rows' => []], $incomplete['bank_period_balances']);
+        $this->assertContains('bank_period_balances_unmatched', $incomplete['blockers']);
+        $this->assertSame([], $incomplete['settlement']['bank_statement_balances']);
+
+        $newStatement = $statement($new, '2026-11-25', '2026-11-30', '50.00', '50.00');
+        $statementProof = fn (array $document) => ['id' => (string) $document['id'], 'content_hash' => $document['content_hash']];
+        $evidence = ['matched' => true, 'rows' => [
+            [
+                'account_id' => (string) $existing, 'account_opening_on' => '2026-10-20',
+                'from_on' => '2026-11-01', 'statement_opening_minor' => 10000, 'statement_closing_minor' => 9960,
+                'statements' => array_map($statementProof, [$begin, $fee, $end]),
+                'registered_opening_document_minor' => null, 'registered_net_movement_minor' => -40,
+            ],
+            [
+                'account_id' => (string) $new, 'account_opening_on' => '2026-11-25',
+                'from_on' => '2026-11-25', 'statement_opening_minor' => 5000, 'statement_closing_minor' => 5000,
+                'statements' => [$statementProof($newStatement)],
+                'registered_opening_document_minor' => 5000, 'registered_net_movement_minor' => 0,
+            ],
+        ]];
+        $tables = ['bank_statements', 'bank_statement_lines', 'bank_statement_matches', 'treasury_postings',
+            'financial_posting_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $result = $inspect();
+        $this->assertSame($evidence, $result['bank_period_balances']);
+        $this->assertNotContains('bank_period_balances_unmatched', $result['blockers']);
+        $this->assertFalse($result['period_end_balances_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $nextFee = $statement($existing, '2026-12-01', '2026-12-01', '99.60', '97.00', [
+            ['bank_reference' => 'QA-BANK-NEXT-FEE', 'booked_on' => '2026-12-01', 'amount' => '-2.60'],
+        ]);
+        $recordFee($nextFee, '2026-12-01', self::NEXT, $now);
+        $this->assertSame($evidence, $inspect()['bank_period_balances']);
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();

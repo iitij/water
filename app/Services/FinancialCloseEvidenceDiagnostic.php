@@ -78,6 +78,7 @@ final class FinancialCloseEvidenceDiagnostic
         $movement = $this->movements->inspect($periodId);
         $heldPeriod = $this->heldPeriod->inspect($periodId);
         $settlement = $this->settlements->inspect($actor, $periodId, $through);
+        $bankBalances = $ended ? $this->bankPeriodBalances($settlement, $movement) : null;
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -95,6 +96,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! $source['scanned_sources_match']) $blockers[] = 'document_registry_mismatch';
         if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
         if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
+        if ($bankBalances !== null && ! $bankBalances['matched']) $blockers[] = 'bank_period_balances_unmatched';
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';
@@ -109,9 +111,45 @@ final class FinancialCloseEvidenceDiagnostic
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
+            'bank_period_balances' => $bankBalances,
             'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
+    }
+
+    /**
+     * Match the bank statement endpoints against registered in-period effects.
+     * The first statement opening for a new account is its documented opening
+     * on the account's birth date, which can differ from the period start.
+     */
+    private function bankPeriodBalances(array $settlement, array $movement): array
+    {
+        if (! $settlement['bank_statements_match'] || ! $movement['recorded_movements_verified']) {
+            return ['matched' => false, 'rows' => []];
+        }
+
+        $bankMovements = collect($movement['rows'])->where('sector', 'bank')->keyBy('key');
+        $rows = [];
+        foreach ($settlement['bank_statement_balances'] as $balance) {
+            $key = $balance['account_id'];
+            $registered = $bankMovements->pull($key);
+            $openingDocument = $registered['recorded_opening_document_minor'] ?? 0;
+            $net = $registered['net_movement_minor'] ?? 0;
+            $openedInPeriod = $balance['account_opening_on'] >= $settlement['start_on'];
+            if (($openedInPeriod && ($registered === null || $openingDocument !== $balance['statement_opening_minor']))
+                || (! $openedInPeriod && $openingDocument !== 0)
+                || SignedMinor::add($balance['statement_opening_minor'], $net) !== $balance['statement_closing_minor']) {
+                return ['matched' => false, 'rows' => []];
+            }
+            $rows[] = $balance + [
+                'registered_opening_document_minor' => $openedInPeriod ? $openingDocument : null,
+                'registered_net_movement_minor' => $net,
+            ];
+        }
+
+        $matched = $bankMovements->isEmpty();
+
+        return ['matched' => $matched, 'rows' => $matched ? $rows : []];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
