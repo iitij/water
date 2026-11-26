@@ -159,6 +159,44 @@ class Payment extends Model
         }
     }
 
+    public static function receiptFenceEnabled(): bool
+    {
+        foreach (['cash_receipts', 'late_cash_settlements', 'noncash_settlements'] as $flag) {
+            if (config('financial_candidate.'.$flag) === true) return true;
+        }
+        return false;
+    }
+
+    public function hasRegisteredReceipt(): bool
+    {
+        $db = \Illuminate\Support\Facades\DB::class;
+        if ($this->sync_uuid !== null && $db::table('financial_posting_operations')
+            ->where('scope_key', 'water')->where('operation_uuid', $this->sync_uuid)->exists()) return true;
+        if (! $this->exists) return false;
+        $ids = Transaction::withTrashed()->where('reference_type', self::class)
+            ->where('reference_id', $this->id)->where('type', 'payment')->pluck('id');
+        return $db::table('financial_posting_events')->where('scope_key', 'water')
+            ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+            ->whereIn('source_id', $ids->map(fn ($id) => (string) $id)->all())->exists();
+    }
+
+    public function save(array $options = [])
+    {
+        $service = $options['financial_receipt_service'] ?? null;
+        unset($options['financial_receipt_service']);
+        if ($this->exists && $service === null) return parent::save($options);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $service) {
+            if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new \LogicException('Payment issuance lock is missing.');
+            }
+            if (($service !== null || self::receiptFenceEnabled() || $this->hasRegisteredReceipt())
+                && ! ($service instanceof PaymentService && $service->allowsReceiptCreation($this))) {
+                throw new \DomainException('gated_receipt_model_writer_required');
+            }
+            return parent::save($options);
+        });
+    }
+
     protected static function booted()
     {
         static::updating(function (Payment $payment): void {
