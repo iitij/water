@@ -79,15 +79,37 @@ class Invoice extends Model
      * transaction. Acquire the issuance fence before the subscriber or insert.
      * This is not permission to bypass the financial invoice issuing service.
      */
+    public function hasRegisteredLedger(): bool
+    {
+        $ids = Transaction::withTrashed()->where('reference_type', self::class)
+            ->where('reference_id', $this->id)->whereIn('type', ['invoice', 'invoice_reversal'])->pluck('id');
+        return DB::table('financial_posting_events')->where('scope_key', 'water')
+            ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
+            ->whereIn('source_id', $ids->map(fn ($id) => (string) $id)->all())->exists();
+    }
+
     public function save(array $options = [])
     {
-        if ($this->exists) return parent::save($options);
+        $writer = $options['financial_invoice_writer'] ?? null;
+        unset($options['financial_invoice_writer']);
+        $cancelling = $this->exists && ($this->isDirty(['voided_at', 'void_reason', 'voided_by'])
+            || ($this->isDirty('status') && ($this->status === 'cancelled' || $this->getOriginal('status') === 'cancelled')));
+        if ($this->exists && ! $cancelling) return parent::save($options);
 
-        return DB::transaction(function () use ($options) {
+        return DB::transaction(function () use ($options, $writer, $cancelling) {
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
+            $required = config('financial_candidate.invoices') === true
+                || ($cancelling && $this->hasRegisteredLedger()) || $writer !== null;
+            if ($required) {
+                $allowed = $writer instanceof \App\Services\GatedInvoiceTransferWriter
+                    && ($cancelling
+                        ? $this->status === 'cancelled' && $writer->allowsCancellation((int) $this->id, (int) $this->voided_by)
+                        : $this->status === 'issued' && $writer->allowsIssue((int) $this->subscriber_id, (int) $this->meter_id));
+                if (! $allowed) throw new \DomainException('gated_invoice_model_writer_required');
+            }
             return parent::save($options);
         });
     }
