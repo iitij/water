@@ -2690,10 +2690,14 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('invoices', 0);
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $resume = \Filament\Actions\Testing\TestAction::make('resume_auto_invoice')->table($reading);
-        \Livewire\Livewire::test($page)->callAction($resume)->assertHasActionErrors();
+        \Livewire\Livewire::test($page)->callAction($resume)->assertNotified('تعذر استئناف إصدار الفاتورة');
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
-        \Livewire\Livewire::test($page)->callAction($resume)->assertHasActionErrors();
+        \Livewire\Livewire::test($page)->callAction($resume)->assertNotified('تعذر استئناف إصدار الفاتورة');
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
         $this->assertDatabaseCount('invoices', 0);
         \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
         $other = $this->actor();
