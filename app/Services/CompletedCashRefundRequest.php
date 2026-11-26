@@ -2151,6 +2151,14 @@ final class CompletedCashRefundRequest
         }
         $chain = $closed === null ? [] : $this->proposalChain($request, $closed);
         $current = $chain === [] ? null : end($chain);
+        if ($current !== null) {
+            $q = $current->after;
+            if (! is_int($q['count_id'] ?? null)) throw new DomainException('completed_refund_group_revision_evidence');
+            $groupIds = $this->verifyGroupRevisionMembership($request->after['account_id'], $q['count_id'], null, true);
+            if ($groupIds !== [] && ($groupIds[$request->entity_id] ?? null) !== (int) $current->id) {
+                throw new DomainException('completed_refund_group_revision_evidence');
+            }
+        }
         // An operation UUID alone is not a verified posting.
         return ['status' => $closed?->after['decision'] ?? ($op ? 'posting_recorded_unverified' : 'pending'),
             'operation_exists' => $op, 'completion_verified' => $op && ($resolution?->after['financial_posting_created'] ?? null) === true,
