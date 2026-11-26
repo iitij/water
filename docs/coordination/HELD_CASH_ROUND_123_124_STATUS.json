@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify correction database protection b13f22d4bdbde215641d586dcfd23b333d8e56fb exact targeted CI; then raw payment/invoice and insert paths, preserving legal meter retirement and allocation updates. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify registered document database fence 76e33b15d7dd8b2b2cf2db2ca422f5afb28c6d72 exact targeted CI; then void and allocation projection, insert and remaining parent routes. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1999,12 +1999,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_correction_db_protection": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "4810546d2706341a49c41d98183fe74d6427ff46",
     "branch": "release/prospective-correction-db-protection",
     "source": "b13f22d4bdbde215641d586dcfd23b333d8e56fb",
     "scope": "Append-only refund and account transfer source documents at DB level; UPDATE and DELETE triggers both engines, SQLite INSERT OR REPLACE guard on primary and natural unique keys, MySQL restrictive parent FK rules checked. New migration verifies trigger definitions and fails closed. Focused raw and quiet deletion/replace cases plus affected refund and transfer regressions.",
-    "limits": "CI pending. Does not restrict new raw INSERT, invoice/payment raw mutations or every SQL path. Existing ledger protection and meter retirement untouched. New migration requires trigger privileges; no historical repair, main merge or production activation.",
-    "next": "Verify exact CI. Inventory raw payment/invoice mutations, delete/cascade and insertion proof; design compatible protection with allocation projections, void workflow and meter retirement. Continue reserve discharge, liquidity, Flutter and release checks."
+    "limits": "Exact targeted CI passed on both engines. New raw INSERT and invoice/payment raw mutations remain separate. No production activation.",
+    "next": "Protect registered invoice and receipt fixed fields, direct deletes and replace.",
+    "run": 45735029959,
+    "jobs": [
+      {
+        "id": 139626095611,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 199,
+        "exit": 0
+      },
+      {
+        "id": 139626095981,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 199,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_registered_document_db_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "b13f22d4bdbde215641d586dcfd23b333d8e56fb",
+    "branch": "release/prospective-invoice-receipt-db-fence",
+    "source": "76e33b15d7dd8b2b2cf2db2ca422f5afb28c6d72",
+    "scope": "DB triggers protect registered invoice and receipt identity and fixed financial fields, hard/soft deletes and conflicting SQLite REPLACE; direct parent deletes for registered documents. Preserve exact meter retirement provenance, nonfinancial notes, cancellation and allocation/status projections. Verify exact trigger definitions; new migration fails closed. Focused direct mutation case and affected invoice cancellation and receipt void regressions.",
+    "limits": "CI pending. Registered documents only; legacy unregistered documents excluded from new fixed-field fence to avoid historical rewrite. Raw INSERT, direct void-state/projection mutation, parent replacement/cascade bypass and broader integrated release readiness still open. Trigger privileges required; no production activation.",
+    "next": "Verify exact CI; then close invoice allocation/void projection and receipt void-state bypasses, direct insert and remaining parent routes with prospective design. Continue reserve discharge, liquidity, Flutter and release checks."
   }
 }
