@@ -1,7 +1,7 @@
-name: Prospective refund incident proposal revision
+name: Prospective refund incident batch readiness
 on:
   push:
-    branches: ['release/prospective-refund-incident-proposal-revision']
+    branches: ['release/prospective-refund-incident-batch-readiness']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify immutable revision and exact current proposal approval
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_revision_|test_release_refund_atomic_resolution_posts_exact_two_legs_once|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify aggregate shortage allocation and individual posting fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_batch_readiness_|test_release_refund_atomic_resolution_posts_exact_two_legs_once|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify immutable revision and exact current proposal approval
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_revision_|test_release_refund_atomic_resolution_posts_exact_two_legs_once|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify aggregate shortage allocation and individual posting fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_batch_readiness_|test_release_refund_atomic_resolution_posts_exact_two_legs_once|test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
