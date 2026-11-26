@@ -8981,6 +8981,50 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($after, $snapshot());
     }
 
+    public function test_close_evidence_locked_readiness_rejects_coordinator_transition_without_complete_proof(): void
+    {
+        $actor = $this->actor();
+        $other = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['version' => 0]);
+        $subscriber = Subscriber::create(['name' => 'Synthetic readiness subscriber',
+            'square_id' => Square::create(['name' => 'Synthetic readiness square'])->id, 'status' => 'active']);
+        app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        // Deliberately unregistered synthetic legacy payment: the diagnostic
+        // must report the mismatch, never adopt it or treat matching cash as proof.
+        app(PaymentService::class)->collectPayment($subscriber, '0.20');
+        $now = new DateTimeImmutable('2026-12-01T08:00:00+03:00');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $tables = ['financial_scopes', 'financial_periods', 'financial_close_commands',
+            'financial_period_closures', 'financial_posting_operations', 'financial_posting_events',
+            'payments', 'transactions', 'payment_allocation_revisions', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $report = $diagnostic->inspect($actor, $periodId, $now);
+        $this->assertContains('document_registry_mismatch', $report['blockers']);
+        $this->assertContains('period_movements_unmatched', $report['blockers']);
+        $this->assertContains('complete_writer_coverage_unverified', $report['blockers']);
+        $this->assertFalse($report['closure_authorized']);
+        $this->assertSame($report, DB::transaction(fn () => $diagnostic->inspectLocked($actor, $periodId, $now)));
+        $this->rejects('close_evidence_requires_locked_transaction',
+            fn () => $diagnostic->inspectLocked($actor, $periodId, $now));
+        $coordinator = new \App\Services\FinancialCloseCoordinator(app(\App\Support\FinancialClosePolicy::class),
+            app(\App\Services\FinancialCloseReadinessProofSource::class));
+        $command = ['uuid' => '77777777-7777-4777-8777-777777777777', 'version' => 0,
+            'reason' => 'Independent synthetic readiness validation'];
+        $this->rejects('close_unauthorized', fn () => $coordinator->execute('water', '2026-11', 'freeze', (int) $other->id, $command, $now));
+        $this->rejects('close_readiness_unverified:'.implode(',', $report['blockers']),
+            fn () => $coordinator->execute('water', '2026-11', 'freeze', (int) $actor->id, $command, $now));
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertEquals($before, $snapshot());
+        $this->assertDatabaseHas('financial_periods', ['id' => $periodId, 'state' => 'OPEN', 'version' => 0]);
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();
