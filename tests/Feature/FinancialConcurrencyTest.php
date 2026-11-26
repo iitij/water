@@ -127,6 +127,256 @@ class FinancialConcurrencyTest extends TestCase
         }
     }
 
+    private function closeRaceFixture(): array
+    {
+        $now = new \DateTimeImmutable('2026-11-25T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        DB::table('financial_scopes')->insert([
+            'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
+            'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
+        ]);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-11', 'start_on' => '2026-11-01',
+            'next_on' => '2026-12-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $meter = $this->fixture();
+        $actor = User::factory()->create(['role' => 'admin']);
+        $actor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor,
+            (int) $meter->subscriber_id, (int) $meter->id, (string) Str::uuid(), $now)['invoice'];
+        return [$now, $meter, $actor, $invoice];
+    }
+
+    private function awaitCloseRaceFile(string $path): void
+    {
+        $deadline = microtime(true) + 10;
+        while (! is_file($path)) {
+            if (microtime(true) > $deadline) throw new \RuntimeException('Close race barrier timed out: '.$path);
+            usleep(1000);
+        }
+    }
+
+    /** The real coordinator holds the scope lock while its synthetic proof
+     * source synchronizes with an independent competing writer. */
+    private function closeWins(string $kind): void
+    {
+        [$now, $meter, $actor, $invoice] = $this->closeRaceFixture();
+        $dir = sys_get_temp_dir().'/water-close-race-'.Str::uuid();
+        mkdir($dir, 0700);
+        $tables = ['meters', 'invoices', 'payments', 'transactions', 'readings',
+            'invoice_tariff_lines', 'financial_posting_operations', 'financial_posting_events', 'payment_allocation_revisions'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $uuid = (string) Str::uuid();
+        try {
+            $results = $this->race(
+                function () use ($dir, $actor, $uuid): array {
+                    $proof = new class($dir) implements \App\Services\FinancialCloseProofSource {
+                        public function __construct(private string $dir) {}
+                        public function authorize(string $scope, string $capability, int $actorId): bool
+                        {
+                            return $scope === 'water' && $capability === 'request' && $actorId > 0;
+                        }
+                        public function evidence(string $action, array $period, int $actorId): array
+                        {
+                            file_put_contents($this->dir.'/closer', (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id);
+                            $deadline = microtime(true) + 10;
+                            while (! is_file($this->dir.'/attempt')) {
+                                if (microtime(true) > $deadline) throw new \RuntimeException('Writer never attempted close race.');
+                                usleep(1000);
+                            }
+                            // Keep the scope lock held while the other process
+                            // reaches its write; it must not finish before commit.
+                            usleep(250000);
+                            if (is_file($this->dir.'/done')) throw new \RuntimeException('Writer finished before freeze committed.');
+                            return ['facts' => ['predecessor_verified' => true, 'writers_drained' => true,
+                                'predecessor_hash' => str_repeat('a', 64)]];
+                        }
+                    };
+                    return (new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(), $proof))
+                        ->execute('water', '2026-11', 'freeze', (int) $actor->id,
+                            ['uuid' => $uuid, 'version' => 0, 'reason' => 'Synthetic month close race'],
+                            new \DateTimeImmutable('2026-12-01T00:00:00+03:00'));
+                },
+                function () use ($dir, $kind, $now, $meter, $actor, $invoice): mixed {
+                    $this->awaitCloseRaceFile($dir.'/closer');
+                    file_put_contents($dir.'/attempt', (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id);
+                    try {
+                        return match ($kind) {
+                            'receipt' => app(\App\Services\GatedCashReceiptWriter::class)->collect(
+                                User::findOrFail($actor->id), (int) $meter->subscriber_id, '0.30', (string) Str::uuid(), $now)['payment']->id,
+                            'replacement' => app(\App\Services\SingleMeterService::class)->replace(
+                                Meter::findOrFail($meter->id), ['unique_code' => 'QA-CLOSE-RACE-NEW'],
+                                '2026-11-25', 'Synthetic competing physical meter replacement', (int) $actor->id)['current_meter']->id,
+                            'direct' => DB::table('invoice_tariff_lines')->where('invoice_id', $invoice->id)->update(['amount' => '0.01']),
+                        };
+                    } finally {
+                        touch($dir.'/done');
+                    }
+                }
+            );
+            $this->assertNotSame(file_get_contents($dir.'/closer'), file_get_contents($dir.'/attempt'));
+            $this->assertTrue($results[0]['ok'], json_encode($results));
+            $this->assertSame('FROZEN', $results[0]['value']['current_state']);
+            $this->assertFalse($results[1]['ok'], json_encode($results));
+            match ($kind) {
+                'receipt' => $this->assertSame('financial_scope_not_active', $results[1]['message']),
+                'replacement' => $this->assertSame(ValidationException::class, $results[1]['error']),
+                'direct' => $this->assertStringContainsString('Financial invoice detail is fenced', $results[1]['message']),
+            };
+            $this->assertEquals($before, $snapshot());
+            $this->assertDatabaseHas('financial_scopes', ['scope_key' => 'water', 'active_freeze_uuid' => $uuid]);
+            $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'FROZEN', 'version' => 1]);
+            $this->assertDatabaseCount('financial_close_commands', 1);
+            $this->assertDatabaseCount('financial_period_closures', 0);
+        } finally {
+            foreach (glob($dir.'/*') as $file) unlink($file);
+            rmdir($dir);
+        }
+    }
+
+    public function test_close_race_freeze_rejects_competing_receipt(): void
+    {
+        $this->closeWins('receipt');
+    }
+
+    public function test_close_race_freeze_rejects_competing_meter_replacement(): void
+    {
+        $this->closeWins('replacement');
+    }
+
+    public function test_close_race_freeze_rejects_direct_invoice_detail_update(): void
+    {
+        $this->closeWins('direct');
+    }
+
+    /** Force the opposite serialization order: the actual writer holds the
+     * scope lock before the coordinator attempts to freeze. The synthetic proof
+     * verifies the committed result under the coordinator's own transaction. */
+    private function writerWins(string $kind, bool $rollback = false): void
+    {
+        [$now, $meter, $actor, $invoice] = $this->closeRaceFixture();
+        $dir = sys_get_temp_dir().'/water-writer-first-'.Str::uuid();
+        mkdir($dir, 0700);
+        $uuid = (string) Str::uuid();
+        $freeze = (string) Str::uuid();
+        $balance = app(TransactionService::class)->accountBalanceMinor($meter->subscriber);
+        $tables = ['meters', 'invoices', 'payments', 'transactions', 'readings',
+            'invoice_tariff_lines', 'financial_posting_operations', 'financial_posting_events', 'payment_allocation_revisions'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        try {
+            $results = $this->race(
+                function () use ($dir, $kind, $rollback, $now, $meter, $actor, $uuid): mixed {
+                    $connectionId = (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+                    $held = false;
+                    DB::listen(function (\Illuminate\Database\Events\QueryExecuted $query) use ($dir, $connectionId, &$held): void {
+                        if ($held || ! str_contains(strtolower($query->sql), 'financial_scopes')
+                            || ! str_contains(strtolower($query->sql), 'for update')) return;
+                        $held = true;
+                        file_put_contents($dir.'/writer', $connectionId);
+                        $this->awaitCloseRaceFile($dir.'/attempt');
+                        usleep(250000);
+                        if (is_file($dir.'/proof')) throw new \RuntimeException('Close proof ran while writer held the scope lock.');
+                    });
+                    if ($rollback) {
+                        // Inject a failure after the real receipt insert, within
+                        // the same outer gate transaction, not before the write.
+                        DB::listen(function (\Illuminate\Database\Events\QueryExecuted $query): void {
+                            if (preg_match('/^insert\s+into\s+[\x60"]?payments[\x60"]?\s/i', $query->sql)) {
+                                throw new \RuntimeException('Synthetic post-insert writer failure');
+                            }
+                        });
+                    }
+                    return match ($kind) {
+                        'receipt' => app(\App\Services\GatedCashReceiptWriter::class)->collect(
+                            User::findOrFail($actor->id), (int) $meter->subscriber_id, '0.30', $uuid, $now)['payment']->id,
+                        'replacement' => app(\App\Services\SingleMeterService::class)->replace(
+                            Meter::findOrFail($meter->id), ['unique_code' => 'QA-WRITER-FIRST-NEW'],
+                            '2026-11-25', 'Synthetic writer-first meter replacement', (int) $actor->id)['current_meter']->id,
+                    };
+                },
+                function () use ($dir, $kind, $rollback, $actor, $meter, $invoice, $uuid, $freeze, $balance): array {
+                    $this->awaitCloseRaceFile($dir.'/writer');
+                    file_put_contents($dir.'/attempt', (string) DB::selectOne('SELECT CONNECTION_ID() AS id')->id);
+                    $proof = new class($dir, $kind, $rollback, (int) $meter->id, (int) $meter->subscriber_id,
+                        (int) $invoice->id, $uuid, $balance) implements \App\Services\FinancialCloseProofSource {
+                        public function __construct(private string $dir, private string $kind, private bool $rollback,
+                            private int $meterId, private int $subscriberId, private int $invoiceId,
+                            private string $uuid, private int $balance) {}
+                        public function authorize(string $scope, string $capability, int $actorId): bool
+                        {
+                            return $scope === 'water' && $capability === 'request' && $actorId > 0;
+                        }
+                        public function evidence(string $action, array $period, int $actorId): array
+                        {
+                            $receipt = DB::table('payments')->where('sync_uuid', $this->uuid)->lockForUpdate()->first();
+                            $operation = DB::table('financial_posting_operations')->where('operation_uuid', $this->uuid)->lockForUpdate()->first();
+                            $invoice = DB::table('invoices')->where('id', $this->invoiceId)->lockForUpdate()->first();
+                            $meters = DB::table('meters')->where('subscriber_id', $this->subscriberId)->lockForUpdate()->get();
+                            $ledger = DB::table('transactions')->where('subscriber_id', $this->subscriberId)->lockForUpdate()->get();
+                            $actualBalance = $ledger->sum(fn ($row) => \App\Support\MoneyBoundary::readDecimal(
+                                $row->amount, \App\Support\DecimalDomain::D12, DB::getDriverName(), signed: true));
+                            $expectedBalance = $this->balance + ($this->kind === 'receipt' && ! $this->rollback ? 30 : 0);
+                            $visible = $meters->count() === 1 && $actualBalance === $expectedBalance;
+                            if ($this->kind === 'receipt') {
+                                $visible = $visible && ($this->rollback
+                                    ? $receipt === null && $operation === null && $ledger->count() === 1
+                                    : $receipt !== null && $operation !== null && $ledger->count() === 2
+                                        && DB::table('financial_posting_events')->where('operation_uuid', $this->uuid)->lockForUpdate()->first() !== null);
+                            } else {
+                                $visible = $visible && (int) $meters->sole()->id !== $this->meterId
+                                    && $invoice->meter_id === null && (int) $invoice->retired_meter_id === $this->meterId
+                                    && $ledger->count() === 1;
+                            }
+                            file_put_contents($this->dir.'/proof', json_encode(['visible' => $visible, 'balance' => $actualBalance], JSON_THROW_ON_ERROR));
+                            return ['facts' => ['predecessor_verified' => true, 'writers_drained' => $visible,
+                                'predecessor_hash' => str_repeat('a', 64)]];
+                        }
+                    };
+                    return (new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(), $proof))
+                        ->execute('water', '2026-11', 'freeze', (int) $actor->id,
+                            ['uuid' => $freeze, 'version' => 0, 'reason' => 'Synthetic writer-first close race'],
+                            new \DateTimeImmutable('2026-12-01T00:00:00+03:00'));
+                }
+            );
+            $this->assertNotSame(file_get_contents($dir.'/writer'), file_get_contents($dir.'/attempt'));
+            $this->assertSame(! $rollback, $results[0]['ok'], json_encode($results));
+            if ($rollback) {
+                $this->assertSame('Synthetic post-insert writer failure', $results[0]['message']);
+                $this->assertEquals($before, $snapshot());
+            }
+            $this->assertTrue($results[1]['ok'], json_encode($results));
+            $this->assertSame('FROZEN', $results[1]['value']['current_state']);
+            $observed = json_decode(file_get_contents($dir.'/proof'), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertTrue($observed['visible']);
+            $this->assertSame($balance + ($kind === 'receipt' && ! $rollback ? 30 : 0), $observed['balance']);
+            $this->assertSame($observed['balance'], app(TransactionService::class)->accountBalanceMinor($meter->subscriber));
+            $this->assertDatabaseHas('financial_scopes', ['scope_key' => 'water', 'active_freeze_uuid' => $freeze]);
+            $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'FROZEN', 'version' => 1]);
+            $this->assertDatabaseCount('financial_close_commands', 1);
+            $this->assertDatabaseCount('financial_period_closures', 0);
+        } finally {
+            foreach (glob($dir.'/*') as $file) unlink($file);
+            rmdir($dir);
+        }
+    }
+
+    public function test_close_race_committed_receipt_is_visible_before_freeze(): void
+    {
+        $this->writerWins('receipt');
+    }
+
+    public function test_close_race_completed_replacement_is_visible_before_freeze(): void
+    {
+        $this->writerWins('replacement');
+    }
+
+    public function test_close_race_rolled_back_receipt_leaves_no_effect_before_freeze(): void
+    {
+        $this->writerWins('receipt', true);
+    }
+
     public function test_parallel_distinct_accounts_issue_unique_invoice_sequence_numbers(): void
     {
         $a = $this->fixture();

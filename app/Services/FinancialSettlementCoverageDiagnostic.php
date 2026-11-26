@@ -44,6 +44,13 @@ final class FinancialSettlementCoverageDiagnostic
         $start = $period->start_on;
         $next = static fn (string $day): string => (new DateTimeImmutable($day, new DateTimeZone('Asia/Aden')))->modify('+1 day')->format('Y-m-d');
         $end = $next($through);
+        // Effective DATE fields are local business dates; decisions and
+        // audit timestamps are UTC instants. Use the same half-open cutoff
+        // as the posting-source diagnostic.
+        $zone = new DateTimeZone('Asia/Aden');
+        $utc = new DateTimeZone('UTC');
+        $fromUtc = (new DateTimeImmutable($start, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
+        $toUtc = (new DateTimeImmutable($end, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
         $issues = [];
         $issue = static function (string $code, string $source, string $id, array $details = []) use (&$issues): void {
             $issues[$code.'|'.$source.'|'.$id] = ['code' => $code, 'source' => $source, 'id' => $id] + $details;
@@ -51,12 +58,16 @@ final class FinancialSettlementCoverageDiagnostic
         $accounts = DB::table('treasury_accounts')->where('channel', 'bank')->where('opening_on', '<=', $through)
             ->orderBy('id')->lockForUpdate()->get();
         $statementsChecked = 0;
+        $bankBalances = [];
         foreach ($accounts as $account) {
             $cursor = max($start, $account->opening_on);
             $statements = DB::table('bank_statements')->where('treasury_account_id', $account->id)
                 ->where('from_date', '<=', $through)->where('to_date', '>=', $cursor)
                 ->orderBy('from_date')->orderBy('id')->lockForUpdate()->get();
             $prior = null;
+            $opening = null;
+            $closing = null;
+            $statementEvidence = [];
             foreach ($statements as $statement) {
                 $id = (string) $statement->id;
                 $statementsChecked++;
@@ -88,6 +99,9 @@ final class FinancialSettlementCoverageDiagnostic
                         'integrity_matches' => $report['statement_integrity_matches'],
                     ]);
                 }
+                $opening ??= $report['recorded_opening_minor'];
+                $closing = $report['recorded_closing_minor'];
+                $statementEvidence[] = ['id' => $id, 'content_hash' => $statement->content_hash];
                 $cursor = max($cursor, $next($statement->to_date));
                 $prior = $statement;
             }
@@ -95,15 +109,26 @@ final class FinancialSettlementCoverageDiagnostic
                 $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
                     ['missing_from' => $cursor, 'missing_until_exclusive' => $end]);
             }
+            if ($opening !== null) {
+                $bankBalances[] = [
+                    'account_id' => (string) $account->id,
+                    'account_opening_on' => $account->opening_on,
+                    'from_on' => max($start, $account->opening_on),
+                    'statement_opening_minor' => $opening,
+                    'statement_closing_minor' => $closing,
+                    'statements' => $statementEvidence,
+                ];
+            }
         }
+        $bankStatementsMatch = $issues === [];
 
         // Audit decisions in the inspected interval, plus effective dates in it.
         // Verify the complete supporting session, including prior allocations,
         // without inventing or modifying any historical posting.
         $reviews = DB::table('late_receipt_reviews')->where('status', 'approved')->where('settlement_method', 'already_counted')
-            ->where(function ($q) use ($start, $end) {
+            ->where(function ($q) use ($start, $end, $fromUtc, $toUtc) {
                 $q->where(fn ($q) => $q->where('payment_date', '>=', $start)->where('payment_date', '<', $end))
-                    ->orWhere(fn ($q) => $q->where('decided_at', '>=', $start)->where('decided_at', '<', $end));
+                    ->orWhere(fn ($q) => $q->where('decided_at', '>=', $fromUtc)->where('decided_at', '<', $toUtc));
             })->orderBy('id')->lockForUpdate()->get();
         $sessions = $reviews->pluck('cash_session_id')->unique()->sort()->values();
         $verifiedSessions = 0;
@@ -116,7 +141,7 @@ final class FinancialSettlementCoverageDiagnostic
             }
         }
         foreach (AuditEvent::query()->where('event', 'financial.counted_cash_allocated')
-            ->where('occurred_at', '>=', $start)->where('occurred_at', '<', $end)->orderBy('id')->lockForUpdate()->get() as $audit) {
+            ->where('occurred_at', '>=', $fromUtc)->where('occurred_at', '<', $toUtc)->orderBy('id')->lockForUpdate()->get() as $audit) {
             $review = DB::table('late_receipt_reviews')->where('id', $audit->entity_id)->lockForUpdate()->first();
             if ($audit->entity_type !== 'late_receipt_review' || ! $review || $review->status !== 'approved'
                 || $review->settlement_method !== 'already_counted') {
@@ -126,6 +151,8 @@ final class FinancialSettlementCoverageDiagnostic
         ksort($issues, SORT_STRING);
         return ['period_id' => $periodId, 'start_on' => $start, 'through' => $through,
             'bank_accounts_checked' => $accounts->count(), 'bank_statements_checked' => $statementsChecked,
+            'bank_statements_match' => $bankStatementsMatch,
+            'bank_statement_balances' => $bankStatementsMatch ? $bankBalances : [],
             'counted_reviews_checked' => $reviews->count(), 'counted_sessions_verified' => $verifiedSessions,
             'issues' => array_values($issues), 'scanned_settlements_match' => $issues === [],
             'source_coverage_verified' => false, 'closure_authorized' => false];
