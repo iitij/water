@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify receipt fixture retry at f50a13da875175a7006ec148293ccd64c63496e3 on both engines. Preserve passed noncash/late cash cases; then fence direct reversal and quiet financial mutations without breaking legitimate void/transfer or meter replacement. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify reversal fence bca8d2f49aa43eca25996abaa27649617b8923f5 exact targeted CI; then protect quiet receipt financial mutations and other ledger/raw paths. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -1835,13 +1835,13 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_receipt_model_fence": {
-    "status": "TARGETED_FIXTURE_RETRY_PENDING",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "c50e29aba0627388a8a38562f5bf81e7d12bf25d",
     "branch": "release/prospective-receipt-model-fence",
     "source": "f50a13da875175a7006ec148293ccd64c63496e3",
     "scope": "PaymentService private receipt identity passed through Payment model and TransactionService/Transaction original receipt posting under issuance lock. New direct receipt or original payment ledger creation rejected when any receipt candidate flag enabled; registered receipt UUID/original ledger remains protected even with flags disabled. Explicit inactive service rejected. Original receipt posting quiet updates fenced. New targeted bypass test and changed noncash claim and late cash issuance regressions.",
-    "limits": "Retry not verified. Quiet Payment field mutations, payment reversals/transfer/refund/held credit ledger creation and raw query writes remain open. No historical repair, main merge or production activation.",
-    "next": "Verify exact retry logs and counts; then protect direct receipt reversal and quiet document financial mutations, preserving legitimate void/transfer and meter replacement.",
+    "limits": "Exact failed-case retry passed on both engines; noncash/late cash successful results preserved from prior run with identical product files. Quiet Payment mutations, other ledger types and raw query writes still open. No historical repair, main merge or production activation.",
+    "next": "Protect receipt reversal through active void/transfer writers.",
     "prior_run": {
       "source": "587622fcb2057e6dc4759b95543a10dc4bc48321",
       "run": 45730892777,
@@ -1870,6 +1870,33 @@
       "failed_case": "test_release_receipt_model_fence_blocks_direct_receipt_and_original_ledger",
       "failure": "gated_cash_destination_mismatch: fixture omitted explicit opened cash-session ID on issuance and replay."
     },
-    "retry_scope": "Only failed test on each engine; product files unchanged; fixture supplies explicit cash_session_id for issue and replay; preserve successful regression evidence."
+    "retry_scope": "Only failed test on each engine; product files unchanged; fixture supplies explicit cash_session_id for issue and replay; preserve successful regression evidence.",
+    "run": 45732005977,
+    "jobs": [
+      {
+        "id": 139616050294,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 51,
+        "exit": 0
+      },
+      {
+        "id": 139616049983,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 51,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_receipt_reversal_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "f50a13da875175a7006ec148293ccd64c63496e3",
+    "branch": "release/prospective-receipt-reversal-fence",
+    "source": "bca8d2f49aa43eca25996abaa27649617b8923f5",
+    "scope": "Gate payment_reversal creation at model and service levels under issuance lock; only active gated void writer for voided receipt or active gated transfer writer for matching receipt permits protected reversal. Registered original or reversal remains protected after flags disabled. Legacy unregistered reversals remain compatible with flags off. New direct/idle/quiet ledger bypass case plus changed-path void, transfer and legacy compatibility tests.",
+    "limits": "CI pending. Protected duplicate closed-cash correction has no prospective registry writer and is blocked; historical repair out of scope. Quiet Payment document mutation, raw query writes, other ledger types, and production activation remain open.",
+    "next": "Verify exact CI and fix confirmed failures; fence quiet receipt financial fields and void request/decision fields while preserving authorized service paths and meter replacement."
   }
 }
