@@ -7921,6 +7921,72 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('payment_refunds')->count());
     }
 
+    public function test_source_mutation_fence_preserves_closed_documents_and_allows_later_collection(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $protection = app(\App\Services\FinancialSourceInsertProtection::class);
+        $this->assertTrue($protection->active());
+        $tables = ['invoices' => 'bill_date', 'payments' => 'payment_date', 'payment_refunds' => 'disbursed_on',
+            'treasury_accounts' => 'opening_on', 'treasury_postings' => 'effective_on'];
+        $rows = [];
+        foreach ($tables as $table => $date) {
+            $rows[$table] = DB::table($table)->orderBy('id')->first();
+            $this->assertSame('2026-11-25', substr((string) $rows[$table]->$date, 0, 10));
+        }
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), array_keys($tables));
+        $before = $snapshot();
+        $reject = function (callable $mutation): void {
+            try {
+                $mutation();
+                $this->fail('Fenced financial source mutation unexpectedly accepted');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial source mutation is fenced', $error->getMessage());
+            }
+        };
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        foreach ($tables as $table => $date) {
+            $id = $rows[$table]->id;
+            $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+            $reject(fn () => DB::table($table)->where('id', $id)->delete());
+        }
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        foreach ($tables as $table => $date) {
+            $id = $rows[$table]->id;
+            $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+            $reject(fn () => DB::table($table)->where('id', $id)->delete());
+        }
+        $reject(fn () => DB::table('invoices')->where('id', $rows['invoices']->id)->update(['total_amount' => '999.00']));
+        $reject(fn () => DB::table('payments')->where('id', $rows['payments']->id)->update(['amount' => '999.00']));
+        foreach (['invoices', 'payments'] as $table) {
+            $reject(fn () => DB::table($table)->where('id', $rows[$table]->id)->update(['deleted_at' => '2026-12-02 08:30:00']));
+        }
+        $this->assertEquals($before, $snapshot());
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $subscriber = Subscriber::query()->findOrFail($rows['payments']->subscriber_id);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $later)['payment'];
+        $this->assertSame('2026-12-02', $receipt->payment_date->toDateString());
+        $after = $snapshot();
+        $reject(fn () => DB::table('payments')->where('id', $receipt->id)->update(['payment_date' => '2026-11-25']));
+        $this->assertEquals($after, $snapshot());
+        DB::unprepared('DROP TRIGGER fin_source_payments_update');
+        $this->assertFalse($protection->active());
+        $protection->install();
+        $this->assertTrue($protection->active());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
