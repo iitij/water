@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify registered document database fence 76e33b15d7dd8b2b2cf2db2ca422f5afb28c6d72 exact targeted CI; then void and allocation projection, insert and remaining parent routes. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
+  "next": "Verify invoice projection database fence 608a14ad699a8a6195c760c3564a7d2e6727050f exact targeted CI; then receipt void-state evidence, insert and parent paths. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2026,12 +2026,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_registered_document_db_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "b13f22d4bdbde215641d586dcfd23b333d8e56fb",
     "branch": "release/prospective-invoice-receipt-db-fence",
     "source": "76e33b15d7dd8b2b2cf2db2ca422f5afb28c6d72",
     "scope": "DB triggers protect registered invoice and receipt identity and fixed financial fields, hard/soft deletes and conflicting SQLite REPLACE; direct parent deletes for registered documents. Preserve exact meter retirement provenance, nonfinancial notes, cancellation and allocation/status projections. Verify exact trigger definitions; new migration fails closed. Focused direct mutation case and affected invoice cancellation and receipt void regressions.",
-    "limits": "CI pending. Registered documents only; legacy unregistered documents excluded from new fixed-field fence to avoid historical rewrite. Raw INSERT, direct void-state/projection mutation, parent replacement/cascade bypass and broader integrated release readiness still open. Trigger privileges required; no production activation.",
-    "next": "Verify exact CI; then close invoice allocation/void projection and receipt void-state bypasses, direct insert and remaining parent routes with prospective design. Continue reserve discharge, liquidity, Flutter and release checks."
+    "limits": "Exact targeted CI passed. Registered documents only. Raw INSERT, direct void/projection mutation and other parent routes remain open. Trigger privileges required; no production activation.",
+    "next": "Protect registered invoice paid and cancellation projections using persisted allocation and reversal evidence.",
+    "run": 45735629075,
+    "jobs": [
+      {
+        "id": 139628032286,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 281,
+        "exit": 0
+      },
+      {
+        "id": 139628031925,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 281,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_invoice_projection_db_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "76e33b15d7dd8b2b2cf2db2ca422f5afb28c6d72",
+    "branch": "release/prospective-invoice-projection-db-fence",
+    "source": "608a14ad699a8a6195c760c3564a7d2e6727050f",
+    "scope": "New verified DB trigger for registered invoice projection changes; amount_paid must match latest allocation revision; changed active status must be compatible with amount; cancellation requires existing matching active reversal and documented reason; cancelled projections immutable. Existing stale-projection diagnostic retains synthetic corruption injection by dropping/reinstalling only new trigger inside isolated test. Four focused/regression cases per engine.",
+    "limits": "CI pending. Evidence checks do not protect against forged raw INSERT or compromised database administrator. Overdue deadline policy still application-level; status and amount are separate writes. Receipt void-state DB guard, other parent routes and raw inserts still open. No historical correction, production activation or main merge.",
+    "next": "Verify exact CI, then design receipt void-state evidence and ordering without weakening existing gated reversal or approval scope. Continue direct insert, reserve discharge, liquidity, Flutter and integrated release checks."
   }
 }
