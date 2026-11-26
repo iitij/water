@@ -76,7 +76,8 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $result = app(RuntimeDatabasePrivileges::class)->inspect();
             $this->assertTrue($result['accepted'], json_encode($result));
             $this->artisan('financial:database-preflight', ['--runtime' => true])->assertExitCode(0);
-            $this->artisan('financial:database-preflight', ['--guards' => true])->assertExitCode(0);
+            $exit = \Illuminate\Support\Facades\Artisan::call('financial:database-preflight', ['--guards' => true]);
+            $this->assertSame(0, $exit, \Illuminate\Support\Facades\Artisan::output());
             $this->assertEquals($before, $metadata());
             $invoice = app(GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
                 (int) $meter->id, '66666666-6666-4666-8666-666666666666', $now)['invoice'];
@@ -125,7 +126,8 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
                 app(FinancialSourceInsertProtection::class)->install();
             }
             $useRuntime();
-            $this->artisan('financial:database-preflight', ['--guards' => true])->assertExitCode(0);
+            $exit = \Illuminate\Support\Facades\Artisan::call('financial:database-preflight', ['--guards' => true]);
+            $this->assertSame(0, $exit, \Illuminate\Support\Facades\Artisan::output());
         } finally {
             $useAdmin();
             DB::purge('qa_runtime');
