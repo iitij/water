@@ -3082,6 +3082,76 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_receipt_model_fence_blocks_direct_receipt_and_original_ledger(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $session = app(CashSessionService::class)->open($actor);
+        $uuid = '66666666-6666-4666-8666-666666666666';
+        $service = app(PaymentService::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        $data = ['subscriber_id' => $subscriber->id, 'user_id' => $actor->id,
+            'cash_session_id' => $session->id, 'receipt_number' => 'QA-DIRECT-RECEIPT',
+            'amount' => '10.00', 'payment_date' => '2026-11-25', 'payment_method' => 'cash', 'sync_uuid' => $uuid];
+        $tables = ['payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'audit_events', 'document_sequences', 'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.cash_receipts' => true]);
+        $this->rejects('gated_receipt_model_writer_required', fn () => Payment::create($data));
+        $this->rejects('gated_receipt_model_writer_required', fn () =>
+            (new Payment($data))->saveQuietly(['financial_receipt_service' => $service]));
+        $this->rejects('gated_receipt_ledger_writer_required', fn () => \App\Models\Transaction::create([
+            'subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => '10.00']));
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $writer = app(GatedCashReceiptWriter::class);
+        $payment = $writer->collect($actor, (int) $subscriber->id, '10.00', $uuid, $this->nowAt())['payment'];
+        $entry = \App\Models\Transaction::where('reference_type', Payment::class)
+            ->where('reference_id', $payment->id)->where('type', 'payment')->sole();
+        $posting = ['subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => '10.00',
+            'reference_type' => Payment::class, 'reference_id' => $payment->id];
+        $posted = [];
+        foreach ($tables as $table) $posted[$table] = $snapshot($table);
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.cash_receipts' => $enabled]);
+            $this->rejects('gated_receipt_model_writer_required', fn () => Payment::create($data));
+            $this->rejects('gated_receipt_ledger_writer_required', fn () => \App\Models\Transaction::create($posting));
+            $this->rejects('gated_receipt_ledger_writer_required', fn () =>
+                (new \App\Models\Transaction($posting))->saveQuietly(['financial_receipt_service' => $service]));
+            $this->rejects('gated_receipt_ledger_writer_required', fn () =>
+                $ledger->recordTransaction($subscriber, 'payment', '10.00', reference: $payment));
+            $this->rejects('gated_receipt_ledger_writer_required', fn () =>
+                $ledger->recordTransaction($subscriber, 'payment', '10.00', reference: $payment, receiptService: $service));
+            $this->rejects('gated_receipt_ledger_writer_required', fn () =>
+                $entry->fresh()->forceFill(['amount' => '20.00'])->saveQuietly());
+            foreach ($posted as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        }
+        config(['financial_candidate.cash_receipts' => true]);
+        $this->assertSame((int) $payment->id, (int) $writer->collect($actor, (int) $subscriber->id,
+            '10.00', $uuid, $this->nowAt())['payment']->id);
+        $this->assertSame(1000, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(1000, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => 1000]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    // These reuse only the changed issuance path, rather than re-running the accepted baseline suite.
+    public function test_release_receipt_model_fence_noncash_claim_issuance(): void
+    {
+        config(['financial_candidate.noncash_settlements' => true]);
+        $this->round134Collection('claim', false, true);
+    }
+
+    public function test_release_receipt_model_fence_late_cash_issuance(): void
+    {
+        config(['financial_candidate.late_cash_settlements' => true]);
+        $this->round134Collection('late_cash', false, true);
+    }
+
     public function test_release_invoice_model_fence_blocks_direct_document_and_ledger_writes(): void
     {
         [, , $account, , , $subscriber] = $this->held();
