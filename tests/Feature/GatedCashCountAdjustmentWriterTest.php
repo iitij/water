@@ -7863,6 +7863,64 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_source_insert_fence_blocks_direct_documents_and_allows_later_open_period(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+        $tables = ['invoices' => 'bill_date', 'payments' => 'payment_date', 'payment_refunds' => 'disbursed_on',
+            'treasury_accounts' => 'opening_on', 'treasury_postings' => 'effective_on'];
+        $rows = [];
+        foreach ($tables as $table => $date) {
+            $rows[$table] = array_diff_key((array) DB::table($table)->orderBy('id')->first(), ['id' => true]);
+            $this->assertSame('2026-11-25', substr((string) $rows[$table][$date], 0, 10));
+        }
+        $rows['invoices']['bill_number'] = 'QA-FENCED-INVOICE';
+        $rows['payments']['receipt_number'] = 'QA-FENCED-RECEIPT';
+        $rows['payments']['sync_uuid'] = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $rows['payment_refunds']['disbursement_reference'] = 'QA-FENCED-REFUND';
+        $rows['treasury_accounts']['code'] = 'QA-FENCED-ACCOUNT';
+        $rows['treasury_accounts']['opening_reference'] = 'QA-FENCED-OPEN';
+        $rows['treasury_postings']['evidence_reference'] = 'QA-FENCED-POST';
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), array_keys($tables));
+        $before = $snapshot();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (string $table, array $row): void {
+            try {
+                DB::table($table)->insert($row);
+                $this->fail('Source insert unexpectedly accepted: '.$table);
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial source period is fenced', $error->getMessage());
+            }
+        };
+        foreach ($rows as $table => $row) {
+            $reject($table, $row);
+            $reject($table, array_replace($row, [$tables[$table] => '2026-12-01']));
+        }
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        foreach ($rows as $table => $row) $reject($table, $row);
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $subscriber = Subscriber::query()->findOrFail($rows['payments']['subscriber_id']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $later)['payment'];
+        $this->assertSame('2026-12-02', $receipt->payment_date->toDateString());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            'effective_on' => '2026-12-02']);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
