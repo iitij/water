@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify authenticated refund review 8a8b8d74b87684e5f22677c0a163e81dac917b72 exact CI; then request lifecycle, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify completed refund lifecycle fc0488d37a6bc824b9ef6dafb20f00312fa208fb exact CI. Then unresolved factual refund incident spending fence and reconciliation, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2385,12 +2385,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_authenticated_refund_review": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "c8bd29f199c690e80c0214fb33f2386198ea1cba",
     "branch": "release/prospective-authenticated-refund-review",
     "source": "8a8b8d74b87684e5f22677c0a163e81dac917b72",
     "scope": "Staging/testing-only authenticated submit, inspect and approve routes; immutable request audit with exact intent, canonical money/reference/actor/date/UUID, deny spoofed actor fields, reviewer from Sanctum session and distinct actor/issuer, locked exact verification, guard against ordinary new refund consuming request UUID/reference, no financial movement on request, atomic completed refund approval and exact replay. Separate request triggers and preflight group. Two targeted cases per engine (new authenticated flow and ordinary refund regression).",
-    "limits": "CI pending. No production activation. Pending requests have no cancel/reject/list or verified completion status yet; no global UUID reservation against other writers. Separate session tests use Sanctum actingAs, not real production credential issuance. First valid DML insert remains trusted application boundary. Other factual refund paths and allocation/outflow coverage, concurrency, Flutter and production remain. Intermediate 061ba8d not accepted.",
-    "next": "Verify final CI, fix confirmed failures. Review unresolved request lifecycle and global UUID conflict, same-subscriber factual refund and all outgoing/allocating writers, concurrency and production readiness."
+    "limits": "Authenticated request and independent reviewer staging API passed targeted tests. Tests use Sanctum actingAs, not production token issuance. No production changes.",
+    "next": "Verify immutable rejected and withdrawn decisions, unresolved incident visibility and conflict prevention.",
+    "run": 45741927671,
+    "jobs": [
+      {
+        "id": 139648762572,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 117,
+        "exit": 0
+      },
+      {
+        "id": 139648762637,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 116,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_completed_refund_lifecycle": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "8a8b8d74b87684e5f22677c0a163e81dac917b72",
+    "branch": "release/prospective-completed-refund-lifecycle",
+    "source": "fc0488d37a6bc824b9ef6dafb20f00312fa208fb",
+    "scope": "Append-only separately protected rejected/withdrawn decisions, current decision date, authenticated requester-only withdrawal and independent reviewer-only rejection; exact decision replay; deny approval after closure and closure after posting. Preserve original assertion and reserved reference/UUID even when closed, no accounting posting on decision. Report explicit pending/rejected/withdrawn/posting_recorded_unverified states; unresolved incident remains visible. New lifecycle test and authenticated approval changed-path regression per engine.",
+    "limits": "CI pending. Closed assertions do not prove no cash moved. No incident resolution/correction workflow or list yet. Pending/rejected/withdrawn cash assertions are not yet included in outflow reserve; must explicitly block or conservatively account for unresolved claims before activation. Existing posting UUID presence is not certification; global UUID reservation across other writers remains. No production changes, no historical corrections.",
+    "next": "Verify exact CI. Prioritize unresolved factual refund incident spending fence and reconciled resolution (without double-counting posted refunds), then cross-writer coverage/concurrency and production readiness."
   }
 }
