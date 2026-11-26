@@ -1560,6 +1560,141 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_release_refund_group_renewal_is_atomic_and_requires_new_signed_evidence(): void
+    {
+        ['f' => $f, 'ids' => $oldIds, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-GROUP-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $countId = (int) $new['id'];
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $renew = fn (array $ids, string $evidence = self::EVIDENCE) =>
+            $service->renewResolutionGroup($actor, $f['id'], $ids, $countId, $evidence, $this->nowAt());
+        $this->rejects('completed_refund_group_revision_selection', fn () => $renew([$f['uuid'] => $f['proposalIds'][$f['uuid']]]));
+        $this->rejects('completed_refund_group_revision_selection', fn () =>
+            $renew(array_fill_keys(array_keys($f['proposalIds']), reset($f['proposalIds']))));
+        $this->rejects('completed_refund_group_revision_required', fn () =>
+            $service->proposeResolution($actor, $f['uuid'], $countId, 'posting_required', self::EVIDENCE,
+                $this->nowAt(), $f['proposalIds'][$f['uuid']]));
+        $this->assertEquals($before, $snapshot());
+
+        $condition = "NEW.event = 'financial.completed_cash_refund_resolution_revised'
+            AND NEW.entity_id = '{$f['second']}:{$countId}'
+            AND EXISTS (SELECT 1 FROM audit_events WHERE event = 'financial.completed_cash_refund_resolution_revised'
+                AND entity_id = '{$f['uuid']}:{$countId}')";
+        $body = DB::getDriverName() === 'sqlite'
+            ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'qa_group_renewal_second'); END"
+            : "FOR EACH ROW BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'qa_group_renewal_second'; END IF; END";
+        DB::unprepared("CREATE TRIGGER qa_group_renewal_second BEFORE INSERT ON audit_events {$body}");
+        \Illuminate\Support\Facades\Log::spy();
+        try {
+            try {
+                $renew($f['proposalIds']);
+                $this->fail('Group renewal committed despite second revision audit failure.');
+            } catch (\RuntimeException $error) {
+                $this->assertSame('Financial operation requires a durable audit record.', $error->getMessage());
+            }
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->with('audit.record_failed',
+                \Mockery::on(static fn ($context) =>
+                    ($context['event'] ?? null) === 'financial.completed_cash_refund_resolution_revised'
+                    && str_contains((string) ($context['error'] ?? ''), 'qa_group_renewal_second')))->once();
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS qa_group_renewal_second');
+        }
+        $result = $renew($f['proposalIds']);
+        $this->assertTrue($result['created']);
+        $this->assertSame(10, $result['total_claimed_minor']);
+        $this->assertSame(6, $result['posting_required_minor']);
+        $this->assertSame($countId, $result['count_id']);
+        foreach (['financial_posting_created', 'spending_authorized', 'closure_authorized'] as $field) {
+            $this->assertFalse($result[$field]);
+        }
+        $ids = $result['proposal_ids'];
+        $revisions = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->orderBy('id')->get();
+        $this->assertCount(2, $revisions);
+        foreach ($revisions as $revision) {
+            $uuid = $revision->after['operation_uuid'];
+            $this->assertSame($ids[$uuid], (int) $revision->id);
+            $this->assertSame($f['proposalIds'][$uuid], $revision->after['supersedes_id']);
+            $this->assertSame($result['group_revision_hash'], $revision->after['group_revision_hash']);
+            $this->assertSame(-6, $revision->after['variance_minor']);
+        }
+        $after = $snapshot();
+        $this->assertSame(array_replace($result, ['created' => false]), $renew(array_reverse($f['proposalIds'], true)));
+        $this->rejects('completed_refund_resolution_conflict', fn () => $renew($f['proposalIds'], self::EVIDENCE.' altered'));
+        $this->assertEquals($after, $snapshot());
+        $this->assertEquals(array_slice($before, 0, 5), array_slice($after, 0, 5));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_resolution_proposal_changed', fn () =>
+            $service->mixedSourceReadiness($f['approver'], $f['id'], $f['proposalIds'], $oldIds, $this->nowAt()));
+        $this->rejects('completed_refund_source_evidence', fn () =>
+            $service->mixedSourceReadiness($f['approver'], $f['id'], $ids, $oldIds, $this->nowAt()));
+
+        // New, independently reviewed documents and statements are bound to
+        // the revised proposals; none of the original audit rows is overwritten.
+        $recorder = $this->actor();
+        $byteReviewer = $this->actor();
+        $sourceReviewer = $this->actor();
+        $freshIds = [];
+        foreach ($ids as $uuid => $proposalId) {
+            $suffix = count($freshIds);
+            $reference = 'QA-RENEWED-DOC-'.$suffix;
+            $sourceRef = 'QA-RENEWED-SOURCE-'.$suffix;
+            $issuer = 'qa-renewed-'.$suffix;
+            $bytes = 'New synthetic independently sourced document for '.$uuid;
+            \Laravel\Sanctum\Sanctum::actingAs($recorder);
+            $doc = $service->recordResolutionDocument($recorder, $uuid, $proposalId, $reference, $bytes, $this->nowAt());
+            \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+            $service->reviewResolutionDocument($byteReviewer, $uuid, $proposalId, $doc['document_id'], $reference,
+                $bytes, self::EVIDENCE, $this->nowAt());
+            $pair = sodium_crypto_sign_keypair();
+            $secret = sodium_crypto_sign_secretkey($pair);
+            $keys[$issuer] = base64_encode(sodium_crypto_sign_publickey($pair));
+            config(['financial_candidate.refund_source_public_keys' => $keys]);
+            $signature = base64_encode(sodium_crypto_sign_detached(
+                \App\Services\CompletedCashRefundRequest::sourceStatement($doc['document'], $issuer, $sourceRef), $secret));
+            sodium_memzero($secret);
+            \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+            $freshIds[$uuid] = $service->attestResolutionSource($sourceReviewer, $uuid, $proposalId, $doc['document_id'],
+                $issuer, $sourceRef, $signature, self::EVIDENCE, $this->nowAt())['attestation_id'];
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->mixedSourceReadiness($f['approver'], $f['id'], $ids, $freshIds, $this->nowAt());
+        $this->assertTrue($plan['all_source_signatures_revalidated']);
+        $this->assertSame($countId, $plan['count_id']);
+        $this->assertSame(6, $plan['posting_required_minor']);
+        $this->assertFalse($plan['spending_authorized']);
+        $this->assertSame(4, AuditEvent::query()->where('event', 'financial.completed_cash_refund_source_attested')->count());
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+    }
+
+    public function test_release_refund_group_renewal_full_posting_uses_aggregate_variance(): void
+    {
+        // A fully posting group uses the total claim amount rather than
+        // either individual refund amount.
+        $f = $this->batchResolutionControl();
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-FULL-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $result = $service->renewResolutionGroup($actor, $f['id'], $f['proposalIds'], (int) $new['id'], self::EVIDENCE, $this->nowAt());
+        $this->assertSame(10, $result['posting_required_minor']);
+        $this->assertFalse($result['financial_posting_created']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->batchPostingResolutionReadiness($f['approver'], $f['id'], $result['proposal_ids'], $this->nowAt());
+        $this->assertSame(-10, $plan['expected_treasury_delta_minor']);
+        $this->assertFalse($plan['spending_authorized']);
+    }
+
     public function test_release_refund_mixed_source_plan_requires_complete_independent_current_sources(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
