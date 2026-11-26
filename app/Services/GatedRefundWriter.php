@@ -225,8 +225,8 @@ final class GatedRefundWriter
     /** Exact source and approval identity; never acquire a scope lock from a business-lock path. */
     public function verifyIncidentPosting(array $intent): void
     {
-        $this->need(DB::transactionLevel() > 0
-            && app(FinancialApprovalAuditProtection::class)->active(), 'completed_cash_refund_incident_unresolved');
+        $this->need(DB::transactionLevel() > 0, 'held_cash_reservation_context');
+        $this->need(app(FinancialApprovalAuditProtection::class)->active(), 'financial_approval_audit_protection_missing');
         $refund = PaymentRefund::query()->where('disbursement_reference', $intent['reference'])->lockForUpdate()->sole();
         $minor = \App\Support\FinancialAmount::parse($intent['amount'])->minor;
         $this->need((int) $refund->payment_id === $intent['payment_id']
