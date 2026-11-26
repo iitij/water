@@ -2659,6 +2659,106 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_reading_batch_invoice_api_preserves_partial_success_and_replay(): void
+    {
+        [, , $account, , , $first] = $this->held();
+        $actor = $this->actor();
+        $second = Subscriber::create(['name' => 'Synthetic second billing account', 'square_id' => $first->square_id, 'status' => 'active']);
+        $third = Subscriber::create(['name' => 'Synthetic already billed account', 'square_id' => $first->square_id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic bulk invoice tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meters = [];
+        $ids = [];
+        foreach ([$first, $second, $third] as $i => $subscriber) {
+            $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-READ-BATCH-'.$i]);
+            $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+                'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => $i + 1]);
+            $meters[] = $meter;
+            $ids[] = (int) \App\Models\Reading::where('meter_id', $meter->id)->sole()->id;
+        }
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $writer->issue($actor, (int) $third->id, (int) $meters[2]->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $batchUuid = '88888888-8888-4888-8888-888888888888';
+        $data = ['ids' => $ids, 'notes' => 'Synthetic reading batch', 'operation_uuid' => $batchUuid];
+        $url = '/api/readings/bulk-invoice';
+        $alias = '/api/readings/bulk-issue-invoices';
+        $tables = ['invoices', 'readings', 'invoice_items', 'invoice_tariff_lines', 'transactions', 'payments',
+            'payment_allocation_revisions', 'payment_allocations', 'audit_events', 'document_sequences',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url, $data)->assertUnprocessable()->assertJsonPath('invoices_issued', 0);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $response = $this->postJson($url, $data)->assertCreated()->assertJsonPath('invoices_issued', 2)
+            ->assertJsonCount(1, 'errors')->assertJsonPath('errors.0.meter_id', $meters[2]->id);
+        $this->assertDatabaseCount('invoices', 3);
+        $invoiceIds = collect($response->json('invoices'))->pluck('id')->all();
+        $committed = [];
+        foreach ($tables as $table) $committed[$table] = $snapshot($table);
+        $replay = $this->postJson($alias, array_replace($data, ['ids' => array_reverse($ids)]))
+            ->assertCreated()->assertJsonPath('invoices_issued', 2)->assertJsonCount(1, 'errors');
+        $this->assertSame($invoiceIds, collect($replay->json('invoices'))->pluck('id')->all());
+        $this->postJson($alias, array_replace($data, ['notes' => 'Different batch request']))->assertUnprocessable()
+            ->assertJsonPath('invoices_issued', 0);
+        $this->postJson($url, array_replace($data, ['operation_uuid' => '99999999-9999-4999-8999-999999999999']))
+            ->assertUnprocessable()->assertJsonPath('invoices_issued', 0);
+        foreach ([$first, $second] as $i => $subscriber) {
+            $uuid = \Ramsey\Uuid\Uuid::uuid5($batchUuid, 'water:reading-batch:meter:'.$meters[$i]->id)->toString();
+            $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'subscriber',
+                'amount_minor' => -10 * ($i + 1)]);
+            $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+            $this->rejects('gated_invoice_replay_conflict', fn () => $writer->issue($actor, (int) $subscriber->id,
+                (int) $meters[$i]->id, $uuid, $this->nowAt(), $data['notes'], [$ids[2]]));
+        }
+        config(['financial_candidate.invoices' => false]);
+        $this->postJson($url, $data)->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_reading_batch_invoice_filament_uses_same_meter_operation(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Invoice', 'ViewAny:Reading', 'View:Reading'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        \App\Models\Tariff::create(['name' => 'Synthetic Filament bulk tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-FILAMENT-BULK']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $reading = \App\Models\Reading::where('meter_id', $meter->id)->sole();
+        $batchUuid = '88888888-8888-4888-8888-888888888888';
+        config(['financial_candidate.invoices' => true]);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $page = \App\Filament\Resources\ReadingResource\Pages\ListReadings::class;
+        $action = \Filament\Actions\Testing\TestAction::make('issue_invoices')->table()->bulk();
+        $modal = \Livewire\Livewire::test($page)->selectTableRecords([$reading->id])
+            ->mountAction($action)->setActionData(['operation_uuid' => $batchUuid]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        $modal->assertActionDataSet(['operation_uuid' => $batchUuid]);
+        $this->assertDatabaseCount('invoices', 0);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->postJson('/api/readings/bulk-invoice', ['ids' => [$reading->id], 'operation_uuid' => $batchUuid])
+            ->assertCreated()->assertJsonPath('invoices.0.id', $invoice->id);
+        $uuid = \Ramsey\Uuid\Uuid::uuid5($batchUuid, 'water:reading-batch:meter:'.$meter->id)->toString();
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertDatabaseCount('invoices', 1);
+    }
+
     public function test_release_invoice_filament_create_and_modals_share_financial_identity(): void
     {
         [, , $account, , , $subscriber] = $this->held();
