@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify historical trust candidate 93fe8e92dd6c593ff5ffd167a13bf5f93dcb4f23 exact CI; then durable approval-time trust proof and atomic mixed settlement, remaining entrypoints, closure, Flutter and production.",
+  "next": "Verify mixed atomic candidate 4a2dd43bbd060f9fc4494d5d7e7f9ad26719be01 exact CI; then mixed rollback and concurrency, renewed evidence, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2970,12 +2970,38 @@
     ]
   },
   "release_refund_incident_historical_trust": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "3633f8cda1f3951e428648ab5184afc34971d4f9",
     "branch": "release/prospective-refund-incident-historical-trust",
     "source": "93fe8e92dd6c593ff5ffd167a13bf5f93dcb4f23",
     "scope": "Separate read-only historical signature verification using deployment-controlled archive issuer/fingerprint/public-key mapping. Current-key check remains mandatory for pending settlement. Verify exact original proposal chain prefix and evidence without reopening a closed period; reject missing or mismatched archive key. Explicitly distinguish signature validity from historical authorization and physical fact. Extended source test plus affected mixed source plan per engine.",
-    "limits": "CI unverified. No real trust anchors configured. Archived key proves signature only, not trust at approval time; durable approval-time trust snapshot remains required for operative mixed settlement. No archive key can authorize new spending. Existing operative authenticity review, aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
-    "next": "Verify exact CI; bind historical key identity and current verified source hashes into immutable mixed settlement approval, with all posting and nonposting members atomic, then test rollback/replay and races."
+    "limits": "Exact targeted CI logs verified on both engines. No real trust anchors configured. Archived key proves signature only, not trust at approval time; durable approval-time trust snapshot remains required for operative mixed settlement. No archive key can authorize new spending. Existing operative authenticity review, aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; bind historical key identity and current verified source hashes into immutable mixed settlement approval, with all posting and nonposting members atomic, then test rollback/replay and races.",
+    "run": 45750370725,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139676433849,
+        "tests": 2,
+        "assertions": 84,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139676434073,
+        "tests": 2,
+        "assertions": 84,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_mixed_atomic": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "93fe8e92dd6c593ff5ffd167a13bf5f93dcb4f23",
+    "branch": "release/prospective-refund-incident-mixed-atomic",
+    "source": "4a2dd43bbd060f9fc4494d5d7e7f9ad26719be01",
+    "scope": "Internal staging/test mixed group execution under one scope-first transaction. Recompute all current signed evidence, persist exact ordered binding and verified public-key bytes in protected count-keyed group audit; reuse existing refund writer only for posting-required members; zero-posting members must have no refund/operation. Reconstruct full group and verify archived signatures against approval snapshot; exact replay includes attestation selection. Two new cases plus two affected regressions per engine.",
+    "limits": "CI unverified. No real trusted issuer configured. Signature authenticates statement, not physical fact; substantive external evidence policy remains operational prerequisite. Historical snapshot depends on durable audit trust and database privilege protection. Earlier individual/all-posting paths authenticity policy, mixed rollback/concurrency, renewed evidence and aggregate revisions, all-writer direct-write/entrypoint protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; fix confirmed defects before proceeding, add mixed late-audit rollback, key revocation before settlement, competing group races, then finish entrypoint and deployment gates."
   }
 }
