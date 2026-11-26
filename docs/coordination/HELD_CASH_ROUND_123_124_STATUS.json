@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify concurrency candidate c11523852b8fd30e15811ace2579b8455429fe51 exact CI; then resolve remaining cash incident lifecycle and all-writer protection, accounting closure, Flutter and production.",
+  "next": "Verify proposal revision f8fd1d998f75d6bedd195a22acb1acf3d0276019 exact CI; then multi-incident settlement, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2692,12 +2692,31 @@
     ]
   },
   "release_refund_incident_concurrency": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_MYSQL_PASS",
     "base": "caa04bf4f997ced128871a7a144834effa2f9d50",
     "branch": "release/prospective-refund-incident-concurrency",
     "source": "c11523852b8fd30e15811ace2579b8455429fe51",
     "scope": "Test-only MySQL two independent forked workers and third coordinator connection. Coordinator holds scope row; both workers must be observed issuing locking SELECT in processlist before release. Identical retry race must return one creation and one replay; competing reviewer race must return one creation and one exact conflict. Verify both balances, one refund, one registry operation, exact two legs, one immutable approval, original closed decision and resolved cash fence. Two fresh cases; no repeat of accepted suites.",
-    "limits": "CI unverified. MySQL only; SQLite in-memory cannot exercise independent shared sessions. No product changes. Full concurrency coverage, multi-incident resolution, stale proposal replacement, direct writes, entrypoint coverage, accounting closure, Flutter and production remain open.",
-    "next": "Verify exact MySQL race evidence; then address competing incidents/stale proposal replacement and protect remaining outflow entrypoints."
+    "limits": "Exact MySQL logs verified, including both scope contention cases. MySQL only; SQLite in-memory cannot exercise independent shared sessions. No product changes. Full concurrency coverage, multi-incident resolution, stale proposal replacement, direct writes, entrypoint coverage, accounting closure, Flutter and production remain open.",
+    "next": "Verify exact MySQL race evidence; then address competing incidents/stale proposal replacement and protect remaining outflow entrypoints.",
+    "run": 45747284760,
+    "jobs": [
+      {
+        "engine": "mysql",
+        "id": 139666299613,
+        "tests": 2,
+        "assertions": 66,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_proposal_revision": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c11523852b8fd30e15811ace2579b8455429fe51",
+    "branch": "release/prospective-refund-incident-proposal-revision",
+    "source": "f8fd1d998f75d6bedd195a22acb1acf3d0276019",
+    "scope": "Append-only protected proposal revision chain, prior audit ID and hash, newer independently reviewed current count and exact variance/source-backed recorded liquidity. Explicit expected proposal ID for approval/posting of revised evidence; no substitution after verified settlement. Two new tests plus two affected approval/posting regressions on SQLite and MySQL.",
+    "limits": "CI unverified. Posting-required path still limited to same-day claims; multi-incident settlement, broader concurrency, direct-write and all entrypoint coverage, accounting closure, Flutter and production remain open.",
+    "next": "Verify exact revision CI; then design multi-incident settlement without using one shortage to discharge multiple claims."
   }
 }
