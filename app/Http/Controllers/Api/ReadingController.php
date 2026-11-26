@@ -7,6 +7,7 @@ use App\Models\Meter;
 use App\Models\Reading;
 use App\Models\Setting;
 use App\Services\InvoiceService;
+use App\Services\ProspectiveReadingAutoInvoice;
 use App\Services\ReadingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -304,6 +305,7 @@ class ReadingController extends ApiController
             'readings.*.image' => ['nullable', 'image', 'max:5120'],
             'readings.*.image_base64' => ['nullable', 'string'],
             'readings.*.image_filename' => ['nullable', 'string', 'max:255'],
+            'readings.*.notes' => ['nullable', 'string'],
         ]);
 
         $results = [];
@@ -415,7 +417,7 @@ class ReadingController extends ApiController
         }
         $meter = Meter::with(['subscriber.square'])->findOrFail((int) $data['meter_id']);
         if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
-            return $replay;
+            return $this->finishProtectedReplay($replay, $data, $request);
         }
 
         // Replacement also locks the physical meter row. Keep validation,
@@ -473,6 +475,8 @@ class ReadingController extends ApiController
                     'sync_uuid' => $data['sync_uuid'] ?? null,
                 ]);
 
+                app(ProspectiveReadingAutoInvoice::class)->capture($created, $request->user(), $data['notes'] ?? null);
+
                 // Reserve the unique reading identity before creating a file on disk.
                 $imagePath = null;
                 $imageFile = $batchIndex === null
@@ -501,26 +505,29 @@ class ReadingController extends ApiController
             // Other subscribers use different row locks. The global unique index
             // arbitrates a UUID collision; resolve the winner only after rollback.
             if ($replay = $this->existingReadingReplay($meter, $data, $request)) {
-                return $replay;
+                return $this->finishProtectedReplay($replay, $data, $request);
             }
             throw $exception;
         }
 
         if (is_array($reading)) {
-            return $reading;
+            return $this->finishProtectedReplay($reading, $data, $request);
         }
 
         $invoice = null;
         $invoiceError = null;
         $invoiceIssued = false;
-        if (filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN)) {
+        $auto = app(ProspectiveReadingAutoInvoice::class);
+        $protected = config('financial_candidate.invoices') === true || $auto->hasIntent($reading);
+        if ($protected || filter_var(Setting::get('auto_issue_invoice_on_reading', '0'), FILTER_VALIDATE_BOOLEAN)) {
             try {
-                $invoice = app(InvoiceService::class)->generateInvoice(
-                    subscriber: $meter->subscriber,
-                    meter: $meter,
-                    notes: $data['notes'] ?? null,
-                );
-                $invoiceIssued = true;
+                $invoice = $protected
+                    ? $auto->attempt($reading, $request->user(), $data['notes'] ?? null)
+                    : app(InvoiceService::class)->generateInvoice(
+                        subscriber: $meter->subscriber, meter: $meter, notes: $data['notes'] ?? null,
+                    );
+                $invoiceIssued = $invoice !== null && $invoice->status !== 'cancelled';
+                if ($invoice !== null)
                 $invoice->load(['subscriber.square', 'meter', 'items', 'readings']);
             } catch (\Throwable $exception) {
                 $invoiceError = $exception->getMessage();
@@ -544,6 +551,28 @@ class ReadingController extends ApiController
             'invoice_data' => $invoice ? $this->invoicePayload($invoice, $request) : null,
             'invoice_error' => $invoiceError,
         ];
+    }
+
+    /** Resume only a durable original intent, after the reading transaction has ended. */
+    private function finishProtectedReplay(array $result, array $data, Request $request): array
+    {
+        $reading = $result['reading'];
+        $auto = app(ProspectiveReadingAutoInvoice::class);
+        try {
+            if (! $auto->hasIntent($reading)) return $result;
+            // A separately billed observation is never automatically billed again.
+            if ($reading->invoice_id !== null) return $result;
+            $invoice = $auto->attempt($reading, $request->user(), $data['notes'] ?? null);
+            if ($invoice !== null && $invoice->status !== 'cancelled') {
+                $invoice->load(['subscriber.square', 'meter', 'items', 'readings']);
+                $result['invoice_issued'] = true;
+                $result['invoice_data'] = $this->invoicePayload($invoice, $request);
+                $result['reading'] = $this->decorateReading($reading->fresh(['meter.subscriber.square', 'invoice']));
+            }
+        } catch (\Throwable $error) {
+            $result['invoice_error'] = $error->getMessage();
+        }
+        return $result;
     }
 
     private function decorateReading(Reading $reading): Reading
