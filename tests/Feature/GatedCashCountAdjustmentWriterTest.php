@@ -4110,6 +4110,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
         $this->assertSame(20, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertHeldSourceInsertFence(['held_cash_release_withdrawals']);
     }
     public function test_release_coverage_rejects_orphan_audit_without_changing_reserve(): void
     {
@@ -8250,6 +8251,98 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ->where('reference_id', $invoice->id)->where('type', 'invoice_reversal')->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertDatabaseHas('financial_periods', ['id' => $periodId, 'state' => 'CLOSED']);
+    }
+
+    private function assertHeldSourceInsertFence(array $tables): void
+    {
+        $before = [];
+        foreach ($tables as $table) {
+            $before[$table] = DB::table($table)->get()->toArray();
+            $this->assertNotEmpty($before[$table], $table);
+        }
+        $period = DB::table('financial_periods')->where('month', '2026-11');
+        $period->update(['state' => 'FROZEN']);
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            if ($state === 'CLOSED') $period->update(['state' => 'CLOSED']);
+            foreach ($tables as $table) {
+                // On SQLite existing append-only collision guards can mask
+                // this predicate. Isolate only INSERT guards in disposable QA.
+                $restore = [];
+                if (DB::getDriverName() === 'sqlite') {
+                    foreach (DB::table('sqlite_master')->where('type', 'trigger')->where('tbl_name', $table)->get() as $trigger) {
+                        if (str_starts_with($trigger->name, 'fin_held_') ||
+                            ! preg_match('/\bBEFORE\s+INSERT\b/i', $trigger->sql)) continue;
+                        $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $trigger->name);
+                        $restore[] = $trigger->sql;
+                        DB::unprepared('DROP TRIGGER '.$trigger->name);
+                    }
+                }
+                try {
+                    DB::table($table)->insert((array) $before[$table][0]);
+                    $this->fail('Fenced held cash insert accepted: '.$table);
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Held cash source period is fenced', $error->getMessage(), $table);
+                } finally {
+                    foreach ($restore as $sql) DB::unprepared($sql);
+                }
+                $this->assertEquals($before[$table], DB::table($table)->get()->toArray());
+            }
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
+    public function test_source_held_fence_blocks_closed_liability_and_discharge_insertions(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $authorizer = $this->actor();
+        $executor = $this->actor();
+        $this->authorizeHeld($authorizer, $executor, 2);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $this->assertTrue($service->cancelPayoutAuthorization($authorizer, self::OTHER, self::EVIDENCE,
+            '2026-11-25', $this->nowAt())['created']);
+        $this->assertTrue($this->payoutHeld($executor, 5, '55555555-5555-4555-8555-555555555555')['created']);
+        $this->assertTrue($this->creditHeld($this->actor(), 10, '66666666-6666-4666-8666-666666666666')['created']);
+        $this->assertHeldSourceInsertFence(['treasury_held_cash_liabilities', 'treasury_held_cash_assignments',
+            'treasury_held_cash_payout_authorizations', 'treasury_held_cash_payout_cancellations',
+            'treasury_held_cash_payouts', 'treasury_held_cash_credits']);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        $credit = fn () => $service->credit($authorizer, self::NEXT, 10, 'QA-LATER-FENCED-CREDIT',
+            self::EVIDENCE, $uuid, '2026-12-02', $later);
+        $this->assertTrue($credit()['created']);
+        $this->assertFalse($credit()['created']);
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => $uuid, 'effective_on' => '2026-12-02']);
+        $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'CLOSED']);
+    }
+
+    public function test_source_held_fence_blocks_closed_release_journal_and_activation(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic fenced release tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-FENCED-RELEASE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $service->propose($actor, (int) $account['id'], (int) $credit->id, 10, $proposal,
+            'QA-FENCED-RELEASE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true]);
+        $service->recordActiveRelease($reviewer, (int) $account['id'], $proposal,
+            '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $this->assertHeldSourceInsertFence(['held_cash_release_proposals', 'held_cash_release_journal', 'held_cash_active_releases']);
     }
 
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
