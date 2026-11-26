@@ -7944,7 +7944,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $mutation();
                 $this->fail('Fenced financial source mutation unexpectedly accepted');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Financial source mutation is fenced', $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial source mutation is fenced')
+                    || str_contains($error->getMessage(), 'Financial source parent deletion is fenced'), $error->getMessage());
             }
         };
         // Test only, on the freshly migrated disposable database: other
@@ -8066,6 +8067,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET code = ? WHERE id = ?', [$old['code'], $openId]));
             $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET opening_reference = ? WHERE id = ?', [$old['opening_reference'], $openId]));
             $this->assertEquals($before, DB::table('treasury_accounts')->orderBy('id')->get()->toArray());
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
+    public function test_source_parent_fence_rejects_cascades_and_nullification(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $invoice = DB::table('invoices')->orderBy('id')->first();
+        $payment = (array) DB::table('payments')->orderBy('id')->first();
+        $sessionId = DB::table('cash_sessions')->insertGetId([
+            'user_id' => $actor->id, 'session_date' => '2026-11-25',
+        ]);
+        $copy = array_replace(array_diff_key($payment, ['id' => true]), [
+            'subscriber_id' => $invoice->subscriber_id, 'meter_id' => $invoice->meter_id,
+            'invoice_id' => $invoice->id, 'user_id' => $actor->id, 'cash_session_id' => $sessionId,
+            'receipt_number' => 'QA-PARENT-LINK', 'sync_uuid' => 'abababab-abab-4bab-8bab-abababababab',
+        ]);
+        DB::table('payments')->insert($copy);
+        $parents = ['subscribers' => $invoice->subscriber_id, 'meters' => $invoice->meter_id,
+            'invoices' => $invoice->id, 'users' => $actor->id, 'cash_sessions' => $sessionId];
+        $this->assertNotNull($parents['meters']);
+        $tables = ['invoices', 'payments', 'payment_refunds', 'treasury_accounts', 'treasury_postings'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        $competing = [];
+        if (DB::getDriverName() === 'sqlite') {
+            foreach (DB::table('sqlite_master')->where('type', 'trigger')->whereIn('tbl_name', array_keys($parents))->get() as $trigger) {
+                if (str_starts_with($trigger->name, 'fin_source_parent_') ||
+                    ! preg_match('/\bBEFORE\s+DELETE\b/i', $trigger->sql)) continue;
+                $competing[$trigger->name] = $trigger->sql;
+            }
+        } else {
+            foreach (\App\Services\FinancialTriggerMetadata::query() as $trigger) {
+                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_parent_') ||
+                    ! isset($parents[$trigger->EVENT_OBJECT_TABLE]) || $trigger->ACTION_TIMING !== 'BEFORE' ||
+                    $trigger->EVENT_MANIPULATION !== 'DELETE') continue;
+                $competing[$trigger->TRIGGER_NAME] = "CREATE TRIGGER {$trigger->TRIGGER_NAME} BEFORE DELETE ON {$trigger->EVENT_OBJECT_TABLE} FOR EACH ROW {$trigger->ACTION_STATEMENT}";
+            }
+        }
+        // Isolate only on the disposable fixture, so an earlier parent guard
+        // cannot mask the prospective fence. Never change product privileges.
+        $this->assertNotEmpty($competing);
+        foreach ($competing as $name => $sql) {
+            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $name);
+            DB::unprepared('DROP TRIGGER '.$name);
+        }
+        try {
+            foreach ($parents as $table => $id) {
+                try {
+                    DB::table($table)->where('id', $id)->delete();
+                    $this->fail('Parent deletion unexpectedly accepted: '.$table);
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Financial source parent deletion is fenced', $error->getMessage());
+                }
+                $this->assertDatabaseHas($table, ['id' => $id]);
+            }
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            foreach ($competing as $sql) DB::unprepared($sql);
         }
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
