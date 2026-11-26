@@ -8,12 +8,13 @@
     "resume_at": {
       "pr": 182,
       "branch": "release/permanent-close-pending-funding",
-      "sha": "f04c7623b22e503293ca7e05b3ba55852e525917",
-      "verification": "Targeted SQLite and MySQL 8 passed on this head: 10 tests and 134 assertions per engine. Draft and unmerged.",
-      "actions_run": "https://github.com/iitij/water/actions/runs/45897210729"
+      "sha": "d8caf55dc1b2e77bb0466def1a31241775711a4d",
+      "verification": "Targeted custody and close-coordinator suites passed on SQLite (26 tests, 326 assertions combined) and MySQL 8 (26 tests, 316 assertions combined). Composer production dependency validation and Vite build passed on the same commit. Candidate draft, unmerged.",
+      "actions_run": "https://github.com/iitij/water/actions/runs/45898326617",
+      "web_build": "https://github.com/iitij/water/actions/runs/45898326631"
     },
     "reference": "docs/coordination/PERMANENT_CLOSE_LOCKED_BALANCES_20261126.md",
-    "next": "Verify in-period cash receipts and ordinary cash reversals for pending tills at the cutoff, building on verified funding. Document the independent opening source and carry deadlines, finish writer coverage and verify independent close approval.",
+    "next": "Derive independent opening amounts and carry eligibility from documented sources, prove complete writer coverage and separation of close approval. Integrate broader release acceptance, including real mobile/desktop user flows, before production.",
     "owner_scope": "Backup and recovery work deferred from the active implementation per owner instruction on 2026-11-26."
   },
   "owner_scope_decision_2026_11_25": {
