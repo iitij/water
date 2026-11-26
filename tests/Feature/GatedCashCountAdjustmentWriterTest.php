@@ -1236,7 +1236,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
-    private function batchResolutionControl(int $variance = -10): array
+    private function batchResolutionControl(int $variance = -10, string $receiptAmount = '1.00'): array
     {
         [, , $account, , $lot, $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -1258,7 +1258,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.active_held_release' => true, 'financial_candidate.completed_cash_refund' => true]);
         $release->recordActiveRelease($reviewer, $id, $proposal, '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
         $other = Subscriber::create(['name' => 'Synthetic lifecycle refund recipient', 'square_id' => $subscriber->square_id, 'status' => 'active']);
-        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $other->id, '1.00',
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $other->id, $receiptAmount,
             '99999999-9999-4999-8999-999999999999', $this->nowAt())['payment'];
         $submit = '/api/payments/'.$receipt->id.'/completed-cash-refund-requests';
         $root = '/api/completed-cash-refund-requests/';
@@ -1298,6 +1298,90 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $approver = $this->actor();
         return compact('id', 'uuid', 'second', 'root', 'submit', 'data', 'requester', 'approver',
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
+    }
+
+    public function test_release_refund_batch_controls_cumulative_receipt_limit_rolls_back_first_member(): void
+    {
+        $f = $this->batchResolutionControl(-10, '0.09');
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $payment = Payment::findOrFail(AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole()->after['payment_id']);
+        $subscriber = Subscriber::findOrFail($payment->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(9, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame('0.09', $payment->amount);
+        $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions', 'treasury_accounts',
+            'treasury_postings', 'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'treasury_cash_counts', 'treasury_cash_count_reviews'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id'
+        )->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->batchPostingResolutionReadiness($f['approver'], $f['id'], $f['proposalIds'], $this->nowAt());
+        $this->assertSame([6, 4], array_column($plan['items'], 'claimed_minor'));
+        $this->assertFalse($plan['writer_eligibility_verified']);
+        $firstRegistered = false;
+        DB::listen(function (\Illuminate\Database\Events\QueryExecuted $query) use ($f, &$firstRegistered): void {
+            $sql = strtolower(ltrim($query->sql));
+            if (str_starts_with($sql, 'insert') && str_contains($sql, 'financial_posting_operations')
+                && in_array($f['uuid'], $query->bindings, true)) {
+                $firstRegistered = true;
+            }
+        });
+        try {
+            $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'],
+                'Independent proof confirms both original cash refunds were disbursed', $this->nowAt());
+            $this->fail('Cumulative refund exceeded the original receipt.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertSame(['يتجاوز الاسترداد الرصيد الدائن أو المبلغ المتبقي من السند.'], $error->errors()['amount']);
+        }
+        $this->assertTrue($firstRegistered, 'The first member must have been registered before second-member rejection.');
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertSame(9, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($f['balance'], $this->gate(fn () =>
+            app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($f['id'], '2026-11-25')));
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+    }
+
+    public function test_release_refund_batch_controls_immutable_group_and_exact_replay(): void
+    {
+        $f = $this->batchResolutionControl();
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $confirmation = 'Independent proof confirms both original cash refunds were disbursed';
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'], $confirmation, $this->nowAt());
+        $group = AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->sole();
+        $original = $group->getRawOriginal();
+        $duplicate = (array) DB::table('audit_events')->where('id', $group->id)->sole();
+        unset($duplicate['id']);
+        foreach ([
+            fn () => DB::table('audit_events')->where('id', $group->id)->update(['after' => '{}']),
+            fn () => DB::table('audit_events')->where('id', $group->id)->delete(),
+            fn () => DB::table('audit_events')->insert($duplicate),
+            fn () => DB::table('users')->where('id', $f['approver']->id)->delete(),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Protected batch evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        }
+        $this->assertEquals($original, $group->fresh()->getRawOriginal());
+        $other = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($other);
+        $this->rejects('completed_refund_batch_conflict', fn () =>
+            $service->postBatchResolution($other, $f['id'], $f['proposalIds'], $confirmation, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->assertFalse($service->postBatchResolution($f['approver'], $f['id'],
+            array_reverse($f['proposalIds'], true), $confirmation, $this->nowAt())['registry_created']);
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->count());
     }
 
     public function test_release_refund_batch_atomic_posts_all_claims_once(): void
