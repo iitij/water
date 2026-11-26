@@ -8669,6 +8669,98 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_source_treasury_fence_protects_eight_dated_documents(): void
+    {
+        [, , $cash, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $date = '2026-11-25';
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-R141-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => $date, 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-R141-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $this->nowAt())['account'];
+        $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, (int) $bank['id'], [
+            'reference' => 'QA-R141-STMT', 'from_date' => $date, 'to_date' => $date,
+            'opening_amount' => '0.00', 'closing_amount' => '0.20', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-R141-IN', 'booked_on' => $date, 'amount' => '0.30'], ['bank_reference' => 'QA-R141-FEE-LINE', 'booked_on' => $date, 'amount' => '-0.10']],
+        ]);
+        $statementId = (int) $statement['statement']['id'];
+        $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->where('bank_reference', 'QA-R141-IN')->value('id');
+        $bankUuid = '88888888-8888-4888-8888-888888888888';
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+            'sync_uuid' => $bankUuid, 'subscriber_id' => $subscriber->id, 'amount' => '0.30',
+            'payment_method' => 'check', 'instrument_reference' => 'QA-R141-CHECK', 'instrument_on' => $date,
+        ]);
+        $writer = app(\App\Services\GatedCollectionWriter::class);
+        $writer->clearClaim($reviewer, (int) $claim['id'], $statementId, $lineId, $date,
+            'QA-R141-BANK-PROOF', self::EVIDENCE, $bankUuid, $this->nowAt());
+        $sessions = app(CashSessionService::class);
+        $session = app(GatedTreasuryOpeningFundingWriter::class)->fund($issuer, $reviewer, (int) $cash['id'], '5.00',
+            'QA-FENCE-FUND', self::EVIDENCE, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', $this->nowAt())['session'];
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '6.00'), true, $reviewer);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $cash['id'],
+            '6.00', 'QA-R141-HANDOVER', $date, self::EVIDENCE, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
+        $lateUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $late = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
+            'sync_uuid' => $lateUuid, 'cash_session_id' => $session->id, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.50', 'payment_method' => 'cash', 'payment_date' => $date,
+        ]);
+        $writer->receiveLateCash($reviewer, (int) $late['id'], (int) $cash['id'], $date,
+            'QA-R141-LATE', self::EVIDENCE, $lateUuid, $this->nowAt());
+        $feeLine = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)
+            ->where('bank_reference', 'QA-R141-FEE-LINE')->value('id');
+        app(\App\Services\GatedBankFeeWriter::class)->record($reviewer, $statementId, $feeLine, $date,
+            'QA-FENCE-FEE', 'Independent documented bank service fee', self::EVIDENCE,
+            'dddddddd-dddd-4ddd-8ddd-dddddddddddd', $this->nowAt());
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($reviewer, [
+            'code' => 'QA-FENCE-DEST', 'name' => 'Synthetic cash destination', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '0.00', 'opening_reference' => 'QA-FENCE-DEST-OPEN',
+            'opening_evidence' => self::EVIDENCE,
+        ], 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $this->nowAt())['account'];
+        $transfer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $transfer->dispatch($issuer, [
+            'from_account_id' => (int) $cash['id'], 'to_account_id' => (int) $destination['id'],
+            'amount' => '1.00', 'reference' => 'QA-FENCE-TRANSFER', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE,
+        ], 'ffffffff-ffff-4fff-8fff-ffffffffffff', $this->nowAt());
+        $transferId = DB::table('treasury_transfers')->where('reference', 'QA-FENCE-TRANSFER')->value('id');
+        $transfer->receive($reviewer, (int) $transferId, [
+            'amount' => '1.00', 'reference' => 'QA-FENCE-TRANSFER-RECEIVE', 'received_on' => $date, 'evidence' => self::EVIDENCE,
+        ], '12121212-1212-4212-8212-121212121212', $this->nowAt());
+        $dates = ['cash_handovers' => 'received_on', 'cash_session_fundings' => 'issued_on',
+            'treasury_transfers' => 'dispatched_on', 'treasury_transfer_receipts' => 'received_on',
+            'treasury_bank_fees' => 'charged_on', 'treasury_cash_adjustments' => 'adjusted_on',
+            'treasury_bank_collections' => 'cleared_on', 'treasury_late_cash_receipts' => 'received_on'];
+        $before = [];
+        foreach ($dates as $table => $column) {
+            $before[$table] = (array) DB::table($table)->sole();
+            $this->assertSame($date, substr((string) $before[$table][$column], 0, 10));
+        }
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        $reject = function (callable $write, array $messages): void {
+            try {
+                $write();
+                $this->fail('Closed treasury source write unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertTrue(collect($messages)->contains(fn ($message) => str_contains($error->getMessage(), $message)), $error->getMessage());
+            }
+        };
+        foreach ($dates as $table => $column) {
+            $row = $before[$table];
+            $id = $row['id'];
+            $reject(fn () => DB::table($table)->where('id', $id)->update([$column => '2026-12-02']), ['Financial source mutation is fenced']);
+            $reject(fn () => DB::table($table)->where('id', $id)->delete(), ['Financial source mutation is fenced']);
+            unset($row['id']);
+            $row['reference'] .= '-NEW';
+            $reject(fn () => DB::table($table)->insert($row), ['Financial source period is fenced', 'Financial source replacement is fenced']);
+            $this->assertEquals($before[$table], (array) DB::table($table)->sole());
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
     public function test_round141_rejects_unrelated_receipts_combined_into_valid_registry_operation(): void
     {
         [, , , , , $subscriber] = $this->held();
