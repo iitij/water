@@ -104,7 +104,9 @@ final class FinancialSourceInsertProtection
             $changes = [];
             foreach (array_merge(['id', $column], self::PROTECTED_FIELDS[$table] ?? []) as $field) {
                 if ($field === 'meter_id') continue;
-                $changes[] = 'NOT ('.$same($field).')';
+                $changes[] = in_array($table, ['invoices', 'payments'], true)
+                    ? 'NOT ('.$same($field).')'
+                    : ($sqlite ? "OLD.{$field} IS NOT NEW.{$field}" : "NOT (OLD.{$field} <=> NEW.{$field})");
             }
             if (in_array($table, ['invoices', 'payments'], true)) {
                 $changes[] = "NOT COALESCE((({$provenance}) OR ({$documentRetirement})), 0)";
