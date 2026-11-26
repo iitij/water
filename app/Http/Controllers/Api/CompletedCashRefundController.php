@@ -62,6 +62,24 @@ final class CompletedCashRefundController extends ApiController
         }
     }
 
+    public function proposeResolution(Request $request, string $uuid, CompletedCashRefundRequest $service)
+    {
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $data = $request->validate([
+            'count_id' => ['required', 'integer', 'min:1'],
+            'classification' => ['required', 'in:no_disbursement,cash_returned,posting_required'],
+            'evidence' => ['required', 'string', 'min:20', 'max:2000'],
+            'actor_id' => ['prohibited'], 'reviewer_id' => ['prohibited'], 'requested_by' => ['prohibited'],
+            'amount' => ['prohibited'], 'account_id' => ['prohibited'], 'reference' => ['prohibited'],
+        ]);
+        try {
+            return response()->json($service->proposeResolution($request->user(), strtolower($uuid),
+                (int) $data['count_id'], $data['classification'], $data['evidence'], now()->toDateTimeImmutable()));
+        } catch (DomainException $error) {
+            throw new ConflictHttpException($error->getMessage(), $error);
+        }
+    }
+
     public function approve(Request $request, string $uuid, CompletedCashRefundRequest $service)
     {
         abort_unless(app()->environment(['testing', 'staging']), 503);
