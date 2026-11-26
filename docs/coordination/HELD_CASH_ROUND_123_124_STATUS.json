@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify document evidence candidate d6c6a00e1ec7942bcac985d4f6100889f4e199a1 exact CI; then substantive source verification and mixed settlement, remaining entrypoints, closure, Flutter and production.",
+  "next": "Verify source attestation candidate df92063cc5f9cabe1b3433e38d888b1808560d1e exact CI; then read-side source proof and trust lifecycle, mixed settlement, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2866,12 +2866,38 @@
     ]
   },
   "release_refund_incident_document_evidence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2",
     "branch": "release/prospective-refund-incident-document-evidence",
     "source": "d6c6a00e1ec7942bcac985d4f6100889f4e199a1",
     "scope": "Internal document digest registration and independent byte-comparison review, immutable audit metadata bound to request, decision, current proposal hash, account, payment, amount, refund reference and classification. Global digest/reference non-reuse in service, independent actors, same-byte replay, reject changed bytes and stale proposal, no original bytes stored or closure authority. Two new tests and one affected mixed-readiness regression per engine.",
-    "limits": "CI unverified. Original document retained in controlled external custody; digest match proves byte identity only, not authenticity or factual disbursement. No public upload or authorization. Need trusted claim-specific source and verification policy before mixed execution; earlier single/all-posting paths require a separate authenticity policy review. Aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
-    "next": "Verify exact CI; establish independently verifiable document provenance and explicit substantive review before integrating mixed settlement; test fail-closed evidence and remaining entrypoints."
+    "limits": "Exact targeted CI logs verified on both engines. Original document retained in controlled external custody; digest match proves byte identity only, not authenticity or factual disbursement. No public upload or authorization. Need trusted claim-specific source and verification policy before mixed execution; earlier single/all-posting paths require a separate authenticity policy review. Aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; establish independently verifiable document provenance and explicit substantive review before integrating mixed settlement; test fail-closed evidence and remaining entrypoints.",
+    "run": 45749573231,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139673836201,
+        "tests": 3,
+        "assertions": 74,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139673835956,
+        "tests": 3,
+        "assertions": 74,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_source_attestation": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "d6c6a00e1ec7942bcac985d4f6100889f4e199a1",
+    "branch": "release/prospective-refund-incident-source-attestation",
+    "source": "df92063cc5f9cabe1b3433e38d888b1808560d1e",
+    "scope": "Internal Ed25519 detached signature validation over canonical domain-separated exact claim document metadata and source reference; public keys from deployment configuration, empty default, synthetic test keys only. Validate prior immutable byte review, independent substantive reviewer, source reference non-reuse and exact replay. New protected audit, migration and preflight. One new targeted test plus document regression per engine.",
+    "limits": "CI unverified. No live trusted issuer onboarded. Trusted signature authenticates signed statement, not physical fact. Does not authorize closure, posting or spending. Historical key version/revocation policy, verified read-side source proof, mixed writer integration, earlier operative paths authenticity review, aggregate revisions, entrypoints, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; add trusted source proof revalidation and key lifecycle policy, then bind source attestations to mixed atomic settlement and reject stale/untrusted evidence."
   }
 }
