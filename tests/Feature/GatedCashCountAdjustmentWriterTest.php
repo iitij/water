@@ -3128,6 +3128,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_invoice_projection_db_fence_requires_allocation_and_reversal_evidence(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic projection protection tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-PROJECTION-GUARD']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assertTrue(app(\App\Services\InvoiceProjectionProtection::class)->active());
+        $tables = ['invoices', 'transactions', 'payments', 'payment_allocation_revisions', 'payment_allocations',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            try {
+                DB::transaction($action);
+                $this->fail('Unproved invoice projection accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Registered invoice projection requires financial evidence', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        $update = fn (array $fields) => DB::table('invoices')->where('id', $invoice->id)->update($fields);
+        $unchanged(fn () => $update(['amount_paid' => '0.50']));
+        $unchanged(fn () => $update(['status' => 'paid']));
+        $unchanged(fn () => $update(['status' => 'draft']));
+        $unchanged(fn () => $update(['status' => 'cancelled', 'voided_at' => now(), 'void_reason' => 'Unproved direct cancellation']));
+        $unchanged(fn () => $invoice->fresh()->forceFill(['amount_paid' => '0.50'])->saveQuietly());
+        app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.50',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $this->assertSame('0.50', $invoice->fresh()->amount_paid);
+        $unchanged(fn () => $update(['amount_paid' => '0.00']));
+        $unchanged(fn () => $update(['status' => 'issued']));
+        $unchanged(fn () => $update(['void_reason' => 'Unproved void metadata']));
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id, 'Independent documented invoice cancellation',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame('0.00', $invoice->fresh()->amount_paid);
+        $unchanged(fn () => $update(['status' => 'issued']));
+        $unchanged(fn () => $update(['void_reason' => 'Forged cancellation reason']));
+        $unchanged(fn () => $update(['amount_paid' => '0.50']));
+        $this->assertFalse($cancel()['registry_created']);
+        $this->assertSame(50, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_registered_document_db_fence_preserves_identity_and_meter_retirement(): void
     {
         [, , $account, , , $subscriber] = $this->held();
@@ -5501,7 +5552,14 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.50',
             '88888888-8888-4888-8888-888888888888', $this->nowAt());
         $this->assertSame('0.50', $invoice->fresh()->amount_paid);
-        DB::table('invoices')->where('id', $invoice->id)->update(['amount_paid' => '0.25']);
+        // Synthetic fault injection only: setUp recreates the isolated QA database.
+        // Keep the independent corruption diagnostic valid even with the new write guard.
+        DB::unprepared('DROP TRIGGER reg_invoice_projection_update');
+        try {
+            DB::table('invoices')->where('id', $invoice->id)->update(['amount_paid' => '0.25']);
+        } finally {
+            app(\App\Services\InvoiceProjectionProtection::class)->install();
+        }
         $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSubscriberCoverageDiagnostic::class)->inspect($context['period_id']));
         $this->assertSame([], $result['period_source_issues']);
         $this->assertFalse($result['scanned_accounts_match']);
