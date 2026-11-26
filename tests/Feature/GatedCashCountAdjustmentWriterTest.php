@@ -2659,6 +2659,98 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
+    public function test_release_reading_auto_invoice_filament_resumes_original_after_commit(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Reading', 'ViewAny:Reading', 'View:Reading', 'Create:Invoice'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        \App\Models\Tariff::create(['name' => 'Synthetic web auto invoice tariff', 'unit_price' => '0.10',
+            'start_date' => '2026-11-01', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-WEB-AUTO',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        config(['financial_candidate.invoices' => true]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $page = \App\Filament\Resources\ReadingResource\Pages\ListReadings::class;
+        $data = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id,
+            'reading_date' => '2026-11-24', 'period_start' => '2026-11-01', 'period_end' => '2026-11-24',
+            'previous_reading' => '0.00', 'current_reading' => '1.00'];
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        \Livewire\Livewire::test($page)->callAction('create', data: $data)->assertHasNoActionErrors();
+        $reading = \App\Models\Reading::where('meter_id', $meter->id)->sole();
+        $audit = AuditEvent::where('event', 'financial.reading_auto_invoice_intent')->where('entity_id', (string) $reading->id)->sole();
+        $uuid = $audit->after['operation_uuid'];
+        $this->assertSame((int) $actor->id, (int) $reading->created_by);
+        $this->assertSame((int) $actor->id, (int) $audit->actor_user_id);
+        $this->assertTrue($audit->after['eligible']);
+        $this->assertSame([(int) $reading->id], array_column($audit->after['pending'], 0));
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
+        $resume = \Filament\Actions\Testing\TestAction::make('resume_auto_invoice')->table($reading);
+        \Livewire\Livewire::test($page)->callAction($resume)->assertHasActionErrors();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        \Livewire\Livewire::test($page)->callAction($resume)->assertHasActionErrors();
+        $this->assertDatabaseCount('invoices', 0);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        $other = $this->actor();
+        foreach (['ViewAny:Reading', 'View:Reading', 'Create:Invoice'] as $permission) {
+            $other->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        $this->actingAs($other, 'web');
+        \Livewire\Livewire::test($page)->assertActionHidden($resume);
+        $this->actingAs($actor, 'web');
+        \Livewire\Livewire::test($page)->callAction($resume)->assertHasNoActionErrors();
+        $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
+        $this->assertSame('0.10', $invoice->total_amount);
+        $this->assertSame((int) $invoice->id, (int) $reading->fresh()->invoice_id);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
+        \Livewire\Livewire::test($page)->assertActionHidden($resume);
+        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(-10, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_release_reading_auto_invoice_filament_issues_after_successful_observation_commit(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        foreach (['Create:Reading', 'ViewAny:Reading', 'View:Reading', 'Create:Invoice'] as $permission) {
+            $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
+        }
+        \App\Models\Tariff::create(['name' => 'Synthetic web automatic tariff', 'unit_price' => '0.10',
+            'start_date' => '2026-11-01', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-WEB-AUTO-SUCCESS',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        config(['financial_candidate.invoices' => true]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($actor, 'web');
+        $page = \App\Filament\Resources\ReadingResource\Pages\ListReadings::class;
+        $data = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id,
+            'reading_date' => '2026-11-24', 'period_start' => '2026-11-01', 'period_end' => '2026-11-24',
+            'previous_reading' => '0.00', 'current_reading' => '1.00'];
+        \Livewire\Livewire::test($page)->callAction('create', data: array_replace($data, ['current_reading' => '-1.00']))
+            ->assertHasActionErrors();
+        $this->assertDatabaseCount('readings', 0);
+        $this->assertDatabaseMissing('audit_events', ['event' => 'financial.reading_auto_invoice_intent']);
+        $this->assertDatabaseCount('invoices', 0);
+        \Livewire\Livewire::test($page)->callAction('create', data: $data)->assertHasNoActionErrors();
+        $reading = \App\Models\Reading::where('meter_id', $meter->id)->sole();
+        $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
+        $audit = AuditEvent::where('event', 'financial.reading_auto_invoice_intent')->where('entity_id', (string) $reading->id)->sole();
+        $this->assertSame((int) $invoice->id, (int) $reading->invoice_id);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $audit->after['operation_uuid'], 'leg' => 'subscriber', 'amount_minor' => -10]);
+        $this->assertSame(-10, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('payments', 0);
+    }
+
     public function test_release_reading_auto_invoice_api_recovers_only_original_intent(): void
     {
         [, , $account, , , $subscriber] = $this->held();
