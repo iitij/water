@@ -13,6 +13,17 @@ final class TreasuryHeldCashCredit extends Model
         'amount', 'effective_on', 'reference', 'evidence'];
     protected $casts = ['amount' => 'decimal:2'];
 
+    public function save(array $options = [])
+    {
+        $writer = $options['financial_held_credit_writer'] ?? null;
+        unset($options['financial_held_credit_writer']);
+        if ($this->exists || ! ($writer instanceof \App\Services\TreasuryHeldCashLiabilityService
+            && $writer->allowsCreditCreation($this))) {
+            throw new \DomainException('held_cash_credit_document_writer_required');
+        }
+        return parent::save($options);
+    }
+
     protected static function booted(): void
     {
         $reject = static function (): void {

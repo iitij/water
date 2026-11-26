@@ -18,6 +18,23 @@ use Illuminate\Support\Facades\DB;
  */
 final class TreasuryHeldCashLiabilityService
 {
+    private ?\App\Models\TreasuryHeldCashCredit $issuingCredit = null;
+
+    public function allowsCreditCreation(\App\Models\TreasuryHeldCashCredit $document): bool
+    {
+        return DB::transactionLevel() > 0 && ! $document->exists && $this->issuingCredit === $document;
+    }
+
+    public function allowsCreditPosting(\App\Models\TreasuryHeldCashCredit $document): bool
+    {
+        return DB::transactionLevel() > 0 && $this->issuingCredit !== null && $this->issuingCredit->exists
+            && $document->exists && (int) $document->id === (int) $this->issuingCredit->id
+            && $document->operation_uuid === $this->issuingCredit->operation_uuid
+            && $document->assignment_uuid === $this->issuingCredit->assignment_uuid
+            && (int) $document->subscriber_id === (int) $this->issuingCredit->subscriber_id
+            && $document->amount === $this->issuingCredit->amount;
+    }
+
     public function __construct(
         private FinancialWriteGate $gate,
         private FinancialPostingRegistry $registry,
@@ -404,9 +421,16 @@ final class TreasuryHeldCashLiabilityService
                     && ! DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->exists(), 'held_cash_credit_conflict');
                 $ledger = app(TransactionService::class);
                 $before = $ledger->accountBalanceMinor($subscriber);
-                $doc = \App\Models\TreasuryHeldCashCredit::create($record);
-                $ledger->recordTransaction($subscriber, 'held_cash_credit', $record['amount'],
-                    'تسوية فائض نقدي محتجز لصالح المشترك', $doc);
+                $doc = new \App\Models\TreasuryHeldCashCredit($record);
+                $this->need($this->issuingCredit === null, 'held_cash_credit_mutation_scope');
+                $this->issuingCredit = $doc;
+                try {
+                    $this->need($doc->save(['financial_held_credit_writer' => $this]), 'held_cash_credit_document_not_persisted');
+                    $ledger->recordTransaction($subscriber, 'held_cash_credit', $record['amount'],
+                        'تسوية فائض نقدي محتجز لصالح المشترك', $doc, heldCreditWriter: $this);
+                } finally {
+                    $this->issuingCredit = null;
+                }
                 $this->need($this->registry->record($context, $uuid, $this->creditLegs($doc, $assignment, $lot), $now),
                     'held_cash_credit_conflict');
                 $this->treasury->requiredAudit('treasury.held_cash_credited', ['entity_type' => 'held_cash_credit',

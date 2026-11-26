@@ -596,6 +596,52 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $uuid, '2026-11-25', $this->nowAt());
     }
 
+    public function test_release_held_credit_model_fence_rejects_direct_document_and_ledger(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $writer = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        $record = ['operation_uuid' => self::OTHER, 'assignment_uuid' => self::NEXT,
+            'subscriber_id' => $subscriber->id, 'approved_by' => $actor->id, 'amount' => '0.20',
+            'effective_on' => '2026-11-25', 'reference' => 'QA-HELD-CREDIT-'.self::OTHER,
+            'evidence' => 'Independent documented owner consent to apply held cash against subscriber account'];
+        $tables = ['treasury_held_cash_credits', 'transactions', 'treasury_postings', 'payments',
+            'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (string $error, callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            $this->rejects($error, $action);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        $unchanged('held_cash_credit_document_writer_required', fn () => \App\Models\TreasuryHeldCashCredit::create($record));
+        $unchanged('held_cash_credit_document_writer_required', fn () => DB::transaction(fn () =>
+            (new \App\Models\TreasuryHeldCashCredit($record))->saveQuietly(['financial_held_credit_writer' => $writer])));
+        $result = $this->creditHeld($actor, 20);
+        $this->assertTrue($result['subscriber_credit_created']);
+        $doc = \App\Models\TreasuryHeldCashCredit::where('operation_uuid', self::OTHER)->sole();
+        $data = ['subscriber_id' => $subscriber->id, 'type' => 'held_cash_credit', 'amount' => '0.20',
+            'reference_type' => \App\Models\TreasuryHeldCashCredit::class, 'reference_id' => $doc->id];
+        $entry = \App\Models\Transaction::where('reference_type', \App\Models\TreasuryHeldCashCredit::class)
+            ->where('reference_id', $doc->id)->sole();
+        $unchanged('held_cash_credit_ledger_writer_required', fn () => \App\Models\Transaction::create($data));
+        $unchanged('held_cash_credit_ledger_writer_required', fn () => DB::transaction(fn () =>
+            (new \App\Models\Transaction($data))->saveQuietly(['financial_held_credit_writer' => $writer])));
+        $unchanged('held_cash_credit_ledger_writer_required', fn () => $ledger->recordTransaction($subscriber, 'held_cash_credit', '0.20', reference: $doc));
+        $unchanged('held_cash_credit_ledger_writer_required', fn () => DB::transaction(fn () =>
+            $ledger->recordTransaction($subscriber, 'held_cash_credit', '0.20', reference: $doc, heldCreditWriter: $writer)));
+        $unchanged('held_cash_credit_ledger_writer_required', fn () => $entry->fresh()->forceFill(['amount' => '1.00'])->saveQuietly());
+        $unchanged('held_cash_credit_document_writer_required', fn () => $doc->fresh()->forceFill(['amount' => '1.00'])->saveQuietly());
+        $this->assertFalse($this->creditHeld($actor, 20)['created']);
+        $this->assertSame(20, $ledger->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

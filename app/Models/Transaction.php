@@ -75,13 +75,40 @@ class Transaction extends Model
         }
     }
 
+    public static function assertHeldCreditPostingWriter(TreasuryHeldCashCredit $document, string $type, mixed $writer): void
+    {
+        if ($type !== 'held_cash_credit' || ! ($writer instanceof \App\Services\TreasuryHeldCashLiabilityService
+            && $writer->allowsCreditPosting($document))) {
+            throw new \DomainException('held_cash_credit_ledger_writer_required');
+        }
+    }
+
     public function save(array $options = [])
     {
         $writer = $options['financial_invoice_writer'] ?? null;
         $receiptService = $options['financial_receipt_service'] ?? null;
         $reversalWriter = $options['financial_receipt_reversal_writer'] ?? null;
         $correctionWriter = $options['financial_correction_writer'] ?? null;
-        unset($options['financial_invoice_writer'], $options['financial_receipt_service'], $options['financial_receipt_reversal_writer'], $options['financial_correction_writer']);
+        $heldCreditWriter = $options['financial_held_credit_writer'] ?? null;
+        unset($options['financial_invoice_writer'], $options['financial_receipt_service'], $options['financial_receipt_reversal_writer'], $options['financial_correction_writer'], $options['financial_held_credit_writer']);
+        $heldCreditRelated = $this->type === 'held_cash_credit' || $this->reference_type === TreasuryHeldCashCredit::class
+            || ($this->exists && ($this->getOriginal('type') === 'held_cash_credit'
+                || $this->getOriginal('reference_type') === TreasuryHeldCashCredit::class));
+        if ($heldCreditRelated || $heldCreditWriter !== null) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter, $correctionWriter, $heldCreditWriter) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+                if ($this->exists || $writer !== null || $receiptService !== null || $reversalWriter !== null
+                    || $correctionWriter !== null || $this->reference_type !== TreasuryHeldCashCredit::class) {
+                    throw new \DomainException('held_cash_credit_ledger_writer_required');
+                }
+                $document = TreasuryHeldCashCredit::query()->lockForUpdate()->find($this->reference_id);
+                if ($document === null) throw new \DomainException('held_cash_credit_ledger_writer_required');
+                self::assertHeldCreditPostingWriter($document, $this->type, $heldCreditWriter);
+                return parent::save($options);
+            });
+        }
         $correctionTypes = ['payment_refund', 'payment_transfer_in'];
         $correctionClasses = [PaymentRefund::class, PaymentAccountTransfer::class];
         $correctionRelated = in_array($this->type, $correctionTypes, true)

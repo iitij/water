@@ -115,11 +115,12 @@ class TransactionService
         ?GatedInvoiceTransferWriter $invoiceWriter = null,
         ?PaymentService $receiptService = null,
         GatedReceiptVoidWriter|GatedInvoiceTransferWriter|null $reversalWriter = null,
-        GatedRefundWriter|GatedInvoiceTransferWriter|null $correctionWriter = null
+        GatedRefundWriter|GatedInvoiceTransferWriter|null $correctionWriter = null,
+        ?TreasuryHeldCashLiabilityService $heldCreditWriter = null
     ): Transaction {
         $amount = FinancialAmount::validated($amount, 'transaction')->decimal();
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService, $reversalWriter, $correctionWriter) {
-            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment', 'payment_reversal', 'payment_refund', 'payment_transfer_in'], true)) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService, $reversalWriter, $correctionWriter, $heldCreditWriter) {
+            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment', 'payment_reversal', 'payment_refund', 'payment_transfer_in', 'held_cash_credit'], true)) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
@@ -140,6 +141,11 @@ class TransactionService
                 Transaction::assertCorrectionPostingWriter($reference, $type, $correctionWriter);
             } elseif ($correctionWriter !== null) {
                 throw new \DomainException('gated_correction_ledger_writer_required');
+            }
+            if ($reference instanceof TreasuryHeldCashCredit) {
+                Transaction::assertHeldCreditPostingWriter($reference, $type, $heldCreditWriter);
+            } elseif ($heldCreditWriter !== null) {
+                throw new \DomainException('held_cash_credit_ledger_writer_required');
             }
             if ($reference instanceof Invoice) {
                 Transaction::assertInvoicePostingWriter($reference, $type, $invoiceWriter);
@@ -182,7 +188,7 @@ class TransactionService
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 $transaction->forceFill(['retired_meter_id' => $reference->retired_meter_id, 'retired_meter_code' => $reference->retired_meter_code]);
             }
-            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter, 'financial_receipt_service' => $receiptService, 'financial_receipt_reversal_writer' => $reversalWriter, 'financial_correction_writer' => $correctionWriter]) || ! $transaction->exists || $transaction->getKey() === null) {
+            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter, 'financial_receipt_service' => $receiptService, 'financial_receipt_reversal_writer' => $reversalWriter, 'financial_correction_writer' => $correctionWriter, 'financial_held_credit_writer' => $heldCreditWriter]) || ! $transaction->exists || $transaction->getKey() === null) {
                 throw new \RuntimeException('Ledger posting was not persisted.');
             }
 

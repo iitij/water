@@ -1,7 +1,7 @@
-name: Prospective refund and transfer model fence
+name: Prospective held credit model fence
 on:
   push:
-    branches: ['release/prospective-refund-transfer-model-fence']
+    branches: ['release/prospective-held-credit-model-fence']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify correction document and ledger fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_correction_model_fence_|test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay|test_round136_cash_refund_records_both_legs_and_keeps_reserve|test_round136_bank_refund_requires_registered_collection_and_records_both_legs' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify held credit document and ledger fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_held_credit_model_fence_|test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation|test_held_source_documents_are_append_only_even_through_raw_database_writes' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -96,6 +96,6 @@ jobs:
           set -euo pipefail
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
-      - name: Verify correction document and ledger fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_correction_model_fence_|test_round135_transfer_registers_two_legs_and_rejects_conflicting_replay|test_round136_cash_refund_records_both_legs_and_keeps_reserve|test_round136_bank_refund_requires_registered_collection_and_records_both_legs' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify held credit document and ledger fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_held_credit_model_fence_|test_held_credit_settles_invoice_and_preserves_cash_and_original_allocation|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation|test_held_source_documents_are_append_only_even_through_raw_database_writes' tests/Feature/GatedCashCountAdjustmentWriterTest.php
 
