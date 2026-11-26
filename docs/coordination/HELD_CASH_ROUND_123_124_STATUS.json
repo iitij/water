@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify batch readiness 6011a6373560f882c71062d5b215e8d32515e50f exact CI; then atomic group settlement, all-writer protection, accounting closure, Flutter and production.",
+  "next": "Verify atomic batch candidate 71e484f8feaf2d573bc65217d49efb9899fd0889 exact CI; then batch negative controls and races, mixed classifications and revisions, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2737,12 +2737,38 @@
     ]
   },
   "release_refund_incident_batch_readiness": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "f8fd1d998f75d6bedd195a22acb1acf3d0276019",
     "branch": "release/prospective-refund-incident-batch-readiness",
     "source": "6011a6373560f882c71062d5b215e8d32515e50f",
     "scope": "Internal non-operative same-account same-day batch evidence review; all unresolved claims must be closed, classified posting_required, bound to unique current proposal IDs and common accepted observation after all decisions. Exact total shortage allocated once by distinct request/reference. Independent reviewer, latest source-backed balance and unused count required. No posting, approval or cash release. Three new cases plus two affected single-resolution regression cases per engine.",
-    "limits": "CI unverified. Only all-posting-required batch readiness, not mixed classification, batch revision, atomic group writer or proof of individual refund eligibility. No production activation, data modification or main merge. All-writer coverage, closure, Flutter and deployment remain open.",
-    "next": "Verify exact CI; then design atomic batch execution under a single financial gate, with per-receipt cumulative eligibility and group-level durable approval, followed by rollback and race tests. Handle mixed/no-posting batches and refreshed aggregate evidence separately."
+    "limits": "Exact targeted CI logs verified on both engines. Only all-posting-required batch readiness, not mixed classification, batch revision, atomic group writer or proof of individual refund eligibility. No production activation, data modification or main merge. All-writer coverage, closure, Flutter and deployment remain open.",
+    "next": "Verify exact CI; then design atomic batch execution under a single financial gate, with per-receipt cumulative eligibility and group-level durable approval, followed by rollback and race tests. Handle mixed/no-posting batches and refreshed aggregate evidence separately.",
+    "run": 45747775476,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139667900254,
+        "tests": 5,
+        "assertions": 126,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139667900624,
+        "tests": 5,
+        "assertions": 126,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_batch_posting": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "6011a6373560f882c71062d5b215e8d32515e50f",
+    "branch": "release/prospective-refund-incident-batch-posting",
+    "source": "71e484f8feaf2d573bc65217d49efb9899fd0889",
+    "scope": "Internal same-day all-posting-required batch in one scope-first transaction using private existing refund writer callback. Revalidate aggregate evidence, cumulative receipt eligibility, exact registered legs and final balance. Immutable group approval keyed to reviewed count with explicit proposal IDs and source hashes. Verify entire group on historical read/outflow and exact replay; reject individual replay of batch member. Two new cases including late group audit rollback plus three affected regression cases per engine.",
+    "limits": "CI unverified. No public batch API. Mixed classifications, aggregate proposal revisions, additional multi-receipt/eligibility and concurrency controls, all-writer direct-write protection, closure, Flutter and production remain open.",
+    "next": "Verify exact batch CI then complete batch negative controls, including cumulative receipt limit rollback, immutable group evidence and real MySQL concurrency; address remaining incident lifecycle and entrypoints."
   }
 }
