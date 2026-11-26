@@ -14,3 +14,5 @@ Four new cases and five directly affected regressions per engine (18 intended ca
 Limits: signed settlement service is internal; public signed API/document onboarding and client contract remain open. Current same-day count and trusted signer prerequisites mean unsupported factual disbursements remain unresolved with outflow fenced, rather than automatically posted or discarded. No live issuer keys, main merge, production change, actual reserve release or real data mutation. Historical remediation remains excluded.
 
 Next: inspect exact job logs, fix only confirmed defects, avoid stacking further product changes before runtime acceptance; review authorized staged entrypoints for signed evidence/settlement and unresolved factual-disbursement handling, then remaining writer fences, permanent closure, Flutter and production.
+
+SQLite raw log verified: exact candidate, PHP 8.4.28, PHPUnit 12.5.29, in-memory database, composer.lock SHA-256 62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335, 9 tests / 236 assertions, job success. MySQL last observed running target step; no result yet.
